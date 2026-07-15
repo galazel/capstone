@@ -1,7 +1,7 @@
 @theme {
 
-    --font-body: "Google Sans Flex", "Google Sans", Arial, sans-serif;
-    --font-display: "Google Sans Flex", "Google Sans", Arial, sans-serif;
+    --font-body: "Google Sans", "Google Sans Flex", Arial, sans-serif;
+    --font-display: "Google Sans", "Google Sans Flex", Arial, sans-serif;
     --font-mono: ui-monospace, "Roboto Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 
 

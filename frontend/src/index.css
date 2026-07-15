@@ -708,8 +708,8 @@ body.netacad-overlay-theme .netacad-toast-close {
 }
 
 @theme inline {
-    --font-sans: "Google Sans Flex", "Google Sans", Arial, ui-sans-serif, system-ui, sans-serif;
-    --font-heading: "Google Sans Flex", "Google Sans", Arial, ui-sans-serif, system-ui, sans-serif;
+    --font-sans: "Google Sans", "Google Sans Flex", Arial, ui-sans-serif, system-ui, sans-serif;
+    --font-heading: "Google Sans", "Google Sans Flex", Arial, ui-sans-serif, system-ui, sans-serif;
     --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
     --color-background: var(--background);
@@ -825,7 +825,7 @@ body.netacad-overlay-theme .netacad-toast-close {
     textarea,
     select {
         font: inherit;
-        font-family: "Google Sans Flex", "Google Sans", Arial, ui-sans-serif, system-ui, sans-serif;
+        font-family: "Google Sans", "Google Sans Flex", Arial, ui-sans-serif, system-ui, sans-serif;
     }
 }
 
