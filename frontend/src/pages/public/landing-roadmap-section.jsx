@@ -19,7 +19,7 @@ const STAGES = [
         number: "01",
         title: "Diagnostic assessment",
         description:
-            "Begin with a clear baseline. REBYU identifies the lessons and topics that need the most attention.",
+            "Start with a diagnostic assessment to establish your baseline. REBYU identifies the topics that need attention before building your learning path.",
         icon: Target,
         image: LANDING_IMAGES.roadmap.diagnostic,
         photographer: "Andy Barbour",
@@ -34,7 +34,7 @@ const STAGES = [
         number: "02",
         title: "Personalized study plan",
         description:
-            "Bayesian Knowledge Tracing (BKT) updates your estimated mastery from your answers, so weak topics become an ordered daily plan with focused lessons, review sessions, and assessment milestones.",
+            "Bayesian Knowledge Tracing (BKT) uses your answers to estimate mastery by topic. Those estimates turn your weaker areas into an ordered plan of lessons, reviews, and milestones.",
         icon: BookOpen,
         image: LANDING_IMAGES.roadmap.plan,
         photographer: "Kaboompics.com",
@@ -49,7 +49,7 @@ const STAGES = [
         number: "03",
         title: "Structured lessons",
         description:
-            "Move through certification, major category, middle category, and lesson content without losing your place.",
+            "Work through focused lessons and quizzes in the topics your plan prioritizes. Each response gives REBYU a clearer view of what you understand and what needs review.",
         icon: CheckCircle2,
         image: LANDING_IMAGES.roadmap.lessons,
         photographer: "Yan Krukau",
@@ -64,7 +64,7 @@ const STAGES = [
         number: "04",
         title: "Mock examinations",
         description:
-            "Practice with timed assessments after lesson quizzes and middle exams prepare you for the complete examination.",
+            "Put your progress to the test with timed mock examinations. Your results validate your preparation across the full certification scope and reveal any remaining gaps.",
         icon: Clock3,
         image: LANDING_IMAGES.roadmap.mockExam,
         photographer: "Alena Darmel",
@@ -79,7 +79,7 @@ const STAGES = [
         number: "05",
         title: "Exam readiness",
         description:
-            "Readiness, mastery, and recent performance show whether to continue, review, or schedule another mock exam.",
+            "REBYU combines your mastery estimates, recent performance, and mock-exam results to show whether you are ready—or exactly what to review next.",
         icon: TrendingUp,
         image: LANDING_IMAGES.roadmap.readiness,
         photographer: "Emily Ranquist",
@@ -227,7 +227,7 @@ export function RoadmapSection() {
                         One connected route from diagnosis to readiness.
                     </h2>
                     <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-[#66758A]">
-                        BKT helps REBYU estimate what you have mastered over time, so each next step is based on your latest performance.
+                        From your first diagnostic to your final mock exam, BKT keeps your learning path aligned with your latest performance.
                     </p>
                 </div>
 
