@@ -557,12 +557,12 @@ body.netacad-overlay-theme {
     background: #dce3e9;
 }
 
-body.netacad-overlay-theme [data-sonner-toaster] {
+[data-sonner-toaster] {
     --width: min(500px, calc(100vw - 32px));
     font-family: var(--font-sans);
 }
 
-body.netacad-overlay-theme [data-sonner-toast].netacad-toast {
+[data-sonner-toast].netacad-toast {
     min-height: 0;
     align-items: center;
     gap: 10px;
@@ -575,20 +575,20 @@ body.netacad-overlay-theme [data-sonner-toast].netacad-toast {
     box-shadow: 0 12px 32px rgb(15 23 42 / 0.12);
 }
 
-body.netacad-overlay-theme .netacad-toast-content {
+.netacad-toast-content {
     min-width: 0;
     flex: 1;
     padding-top: 0;
 }
 
-body.netacad-overlay-theme .netacad-toast-title {
+.netacad-toast-title {
     color: var(--foreground);
     font-size: 1rem;
     font-weight: 600;
     line-height: 1.3;
 }
 
-body.netacad-overlay-theme .netacad-toast-description {
+.netacad-toast-description {
     margin-top: 3px;
     color: var(--muted-foreground);
     font-size: 0.9rem;
@@ -596,7 +596,7 @@ body.netacad-overlay-theme .netacad-toast-description {
     overflow-wrap: anywhere;
 }
 
-body.netacad-overlay-theme .netacad-toast-icon {
+.netacad-toast-icon {
     display: flex;
     width: 20px;
     height: 20px;
@@ -606,8 +606,8 @@ body.netacad-overlay-theme .netacad-toast-icon {
     margin-top: 0;
 }
 
-body.netacad-overlay-theme .netacad-toast-action,
-body.netacad-overlay-theme .netacad-toast-cancel {
+.netacad-toast-action,
+.netacad-toast-cancel {
     align-self: center;
     flex-shrink: 0;
     height: 30px;
@@ -617,18 +617,18 @@ body.netacad-overlay-theme .netacad-toast-cancel {
     font-weight: 700;
 }
 
-body.netacad-overlay-theme .netacad-toast-action {
+.netacad-toast-action {
     background: var(--primary);
     color: var(--primary-foreground);
 }
 
-body.netacad-overlay-theme .netacad-toast-cancel {
+.netacad-toast-cancel {
     border: 1px solid var(--border);
     background: var(--secondary);
     color: var(--secondary-foreground);
 }
 
-body.netacad-overlay-theme .netacad-toast-close {
+.netacad-toast-close {
     position: absolute !important;
     top: 50% !important;
     right: 12px !important;
