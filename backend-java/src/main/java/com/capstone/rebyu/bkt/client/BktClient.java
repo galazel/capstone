@@ -140,21 +140,6 @@ public class BktClient {
         }
     }
 
-    /** Purge all BKT mastery data for a learner (per-table row counts are ignored). */
-    public void purgeLearner(Long learnerId) {
-        try {
-            webClient.delete()
-                    .uri(uriBuilder -> uriBuilder
-                            .path("/mastery/learners/{learnerId}")
-                            .build(learnerId))
-                    .retrieve()
-                    .toBodilessEntity()
-                    .block();
-        } catch (Exception e) {
-            throw new BktServiceException("Could not purge BKT data for learner " + learnerId, e);
-        }
-    }
-
     @SuppressWarnings("unchecked")
     private Map<String, Object> getMap(String path, String action) {
         try {

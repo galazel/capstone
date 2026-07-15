@@ -89,21 +89,6 @@ def list_mastery_history(
     return list(reversed(list(session.scalars(statement))))
 
 
-def purge_learner(session: Session, learner_id: int) -> dict[str, int]:
-    """Delete every row for a learner across all BKT tables, returning per-table row counts."""
-    counts: dict[str, int] = {}
-    for model in (
-        BktMasteryEvent,
-        BktProcessedEvent,
-        LearnerLessonMasteryHistory,
-        LearnerCategoryPriorityHistory,
-        LearnerCategoryPriority,
-        LearnerLessonMastery,
-    ):
-        result = session.execute(delete(model).where(model.learner_id == learner_id))
-        counts[model.__tablename__] = result.rowcount
-    session.commit()
-    return counts
 def any_active_training(session: Session) -> bool:
     return bool(
         session.scalar(
