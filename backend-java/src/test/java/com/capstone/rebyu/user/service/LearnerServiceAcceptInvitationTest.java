@@ -47,7 +47,8 @@ class LearnerServiceAcceptInvitationTest {
         orgCertRepository = mock(OrganizationCertificateRepository.class);
         service = new LearnerService(
                 learnerRepository, mock(LearnerMapper.class), invitationRepository,
-                enrollmentRepository, orgCertRepository, new InvitationTokenService());
+                enrollmentRepository, orgCertRepository, new InvitationTokenService(),
+                mock(AccountDeletionService.class));
     }
 
     private OrganizationCertificate orgCert() {

@@ -11,4 +11,6 @@ public interface EnterpriseGroupRepository extends JpaRepository<EnterpriseGroup
     List<EnterpriseGroup> findByOrgCert_OrgCertId(Long orgCertId);
 
     long countByEnterprise_EnterpriseIdAndStatus(Long enterpriseId, EnterpriseGroup.Status status);
+
+    boolean existsByCreatedBy_UserId(Long userId);
 }

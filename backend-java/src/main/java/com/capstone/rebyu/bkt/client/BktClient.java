@@ -89,6 +89,71 @@ public class BktClient {
                 + certificationId + "/confidence", "load confidence");
     }
 
+<<<<<<< Updated upstream
+=======
+    /** Typed lesson-level priorities for a learner + certification. */
+    public List<LessonPriorityView> getLessonPriorities(Long learnerId, Long certificationId) {
+        try {
+            return webClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/priorities/learners/{learnerId}/certifications/{certificationId}/lessons")
+                            .build(learnerId, certificationId))
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<List<LessonPriorityView>>() {
+                    })
+                    .block();
+        } catch (Exception e) {
+            throw new BktServiceException("Could not load lesson priorities for learner " + learnerId, e);
+        }
+    }
+
+    /** Typed certification confidence summary for a learner. */
+    public ConfidenceView getConfidenceView(Long learnerId, Long certificationId) {
+        try {
+            return webClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/priorities/learners/{learnerId}/certifications/{certificationId}/confidence")
+                            .build(learnerId, certificationId))
+                    .retrieve()
+                    .bodyToMono(ConfidenceView.class)
+                    .block();
+        } catch (Exception e) {
+            throw new BktServiceException("Could not load confidence view for learner " + learnerId, e);
+        }
+    }
+
+    /** Purge all BKT mastery data for a learner (per-table row counts are ignored). */
+    public void purgeLearner(Long learnerId) {
+        try {
+            webClient.delete()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/mastery/learners/{learnerId}")
+                            .build(learnerId))
+                    .retrieve()
+                    .toBodilessEntity()
+                    .block();
+        } catch (Exception e) {
+            throw new BktServiceException("Could not purge BKT data for learner " + learnerId, e);
+        }
+    }
+
+    /** Mastery history events for a learner + certification. */
+    public List<MasteryHistoryView> getMasteryHistory(Long learnerId, Long certificationId) {
+        try {
+            return webClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/mastery/learners/{learnerId}/certifications/{certificationId}/history")
+                            .build(learnerId, certificationId))
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<List<MasteryHistoryView>>() {
+                    })
+                    .block();
+        } catch (Exception e) {
+            throw new BktServiceException("Could not load mastery history for learner " + learnerId, e);
+        }
+    }
+
+>>>>>>> Stashed changes
     @SuppressWarnings("unchecked")
     private Map<String, Object> getMap(String path, String action) {
         try {

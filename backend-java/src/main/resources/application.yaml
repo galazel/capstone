@@ -75,7 +75,7 @@ app:
   cognito:
     region: ${COGNITO_REGION:us-east-1}
     user-pool-id: ${COGNITO_USER_POOL_ID:us-east-1_YhXCAZ9HF}
-  frontend-url: http://localhost:5173
+  frontend-url: ${FRONTEND_URL:http://localhost:5173}
   mail:
     from: nezer.resora@gmail.com
 

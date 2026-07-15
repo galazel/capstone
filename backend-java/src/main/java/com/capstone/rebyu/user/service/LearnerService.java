@@ -37,6 +37,7 @@ public class LearnerService {
             organizationCertificationLearnerRepository;
     private final OrganizationCertificateRepository organizationCertificateRepository;
     private final InvitationTokenService invitationTokenService;
+    private final AccountDeletionService accountDeletionService;
 
     public List<LearnerDto> getAll() {
         return learnerRepository.findAll()
@@ -207,7 +208,7 @@ public class LearnerService {
     }
 
     public void delete(Long id) {
-        learnerRepository.delete(findEntity(id));
+        accountDeletionService.deleteLearner(id);
     }
 
     private Learner findEntity(Long id) {

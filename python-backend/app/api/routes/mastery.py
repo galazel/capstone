@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session
 from app.core.security import require_service_key
 from app.db.models import BktMasteryEvent, LearnerLessonMastery
 from app.db.session import get_db
+<<<<<<< Updated upstream
 from app.repositories.bkt import list_learner_mastery
+=======
+from app.repositories.bkt import list_learner_mastery, list_mastery_history, purge_learner
+>>>>>>> Stashed changes
 from app.schemas.mastery import (
     LearnerLessonMasteryResponse,
     LearnerMasteryListResponse,
@@ -75,6 +79,17 @@ def get_lesson_mastery(
     if mastery is None:
         raise HTTPException(status_code=404, detail="Mastery record not found")
     return mastery
+
+
+@router.delete(
+    "/learners/{learner_id}",
+    status_code=status.HTTP_200_OK,
+)
+def purge_learner_data(
+    learner_id: int,
+    db: Session = Depends(get_db),
+) -> dict[str, int]:
+    return purge_learner(db, learner_id)
 
 
 @router.delete(

@@ -2,14 +2,18 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
+    BktMasteryEvent,
     BktModelArtifact,
     BktModelRun,
     BktParameter,
     BktParameterClass,
+    BktProcessedEvent,
+    LearnerCategoryPriority,
+    LearnerCategoryPriorityHistory,
     LearnerLessonMastery,
 )
 
@@ -68,6 +72,46 @@ def list_learner_mastery(
     return list(session.scalars(statement.order_by(LearnerLessonMastery.lesson_id)))
 
 
+<<<<<<< Updated upstream
+=======
+def list_mastery_history(
+    session: Session,
+    learner_id: int,
+    certification_id: int,
+    *,
+    limit: int = 100,
+) -> list[LearnerLessonMasteryHistory]:
+    """Return the most recent history rows, oldest-first, ready for a trend chart."""
+    statement = (
+        select(LearnerLessonMasteryHistory)
+        .where(
+            LearnerLessonMasteryHistory.learner_id == learner_id,
+            LearnerLessonMasteryHistory.certification_id == certification_id,
+        )
+        .order_by(LearnerLessonMasteryHistory.created_at.desc())
+        .limit(limit)
+    )
+    return list(reversed(list(session.scalars(statement))))
+
+
+def purge_learner(session: Session, learner_id: int) -> dict[str, int]:
+    """Delete every row for a learner across all BKT tables, returning per-table row counts."""
+    counts: dict[str, int] = {}
+    for model in (
+        BktMasteryEvent,
+        BktProcessedEvent,
+        LearnerLessonMasteryHistory,
+        LearnerCategoryPriorityHistory,
+        LearnerCategoryPriority,
+        LearnerLessonMastery,
+    ):
+        result = session.execute(delete(model).where(model.learner_id == learner_id))
+        counts[model.__tablename__] = result.rowcount
+    session.commit()
+    return counts
+
+
+>>>>>>> Stashed changes
 def any_active_training(session: Session) -> bool:
     return bool(
         session.scalar(

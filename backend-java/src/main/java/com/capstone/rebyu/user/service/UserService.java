@@ -17,6 +17,7 @@ import java.util.List;
 public class UserService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
+    private final AccountDeletionService accountDeletionService;
 
     public List<UserDto> getAll() {
         return userRepository.findAll().stream().map(userMapper::toDto).toList();
@@ -40,7 +41,7 @@ public class UserService {
     }
 
     public void delete(Long id) {
-        userRepository.delete(findEntity(id));
+        accountDeletionService.deleteUser(id);
     }
 
     private User findEntity(Long id) {
