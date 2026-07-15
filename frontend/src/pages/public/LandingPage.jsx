@@ -13,7 +13,8 @@ import {
   Menu,
   MessageCircle,
   ShieldCheck,
-  Users
+  Users,
+  X,
 
 } from "lucide-react";
 
@@ -102,7 +103,7 @@ const TEAM_MEMBERS = [
   },
 ];
 
-function BrandMark({ compact = false }) {
+function BrandMark({ compact = false, textClassName = "text-foreground" }) {
   return (
       <span className="flex items-center gap-2.5">
       <span
@@ -112,16 +113,18 @@ function BrandMark({ compact = false }) {
       >
         <GraduationCap className="size-5" aria-hidden="true" />
       </span>
-      <span className="font-heading text-lg font-bold tracking-tight text-foreground">
+      <span className={`font-heading text-lg font-bold tracking-tight ${textClassName}`}>
         REBYU
       </span>
     </span>
   );
 }
 
-function LandingNavbar({ shellRef, logoRef }) {
+function LandingNavbar({ isScrolled }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const mobileMenuRef = useRef(null);
+  const hasSolidBackground = mobileMenuOpen || isScrolled;
+  const headerTextClassName = hasSolidBackground ? "text-[#102A43]" : "text-white";
 
   useEffect(() => {
     if (!mobileMenuOpen) return undefined;
@@ -133,6 +136,27 @@ function LandingNavbar({ shellRef, logoRef }) {
       document.body.style.overflow = previousOverflow;
     };
   }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setMobileMenuOpen(false);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    const desktopBreakpoint = window.matchMedia("(min-width: 1280px)");
+    const closeAtDesktop = () => {
+      if (desktopBreakpoint.matches) setMobileMenuOpen(false);
+    };
+
+    desktopBreakpoint.addEventListener("change", closeAtDesktop);
+    return () => desktopBreakpoint.removeEventListener("change", closeAtDesktop);
+  }, []);
 
   useLayoutEffect(() => {
     if (!mobileMenuOpen || !mobileMenuRef.current) return undefined;
@@ -158,25 +182,19 @@ function LandingNavbar({ shellRef, logoRef }) {
   return (
       <header className="pointer-events-none fixed inset-x-0 top-0 z-50">
         <div
-            ref={shellRef}
-            style={{
-              willChange:
-                  "background-color, border-color, box-shadow, backdrop-filter",
-            }}
-            className={`pointer-events-auto w-full overflow-hidden border-b transition-colors duration-300 ${
-                mobileMenuOpen
+            className={`pointer-events-auto w-full border-b transition-[background-color,border-color,box-shadow,backdrop-filter] duration-300 ${
+                hasSolidBackground
                     ? "border-[#D8E7F2] bg-white/95 shadow-[0_6px_22px_rgba(16,42,67,0.08)] backdrop-blur-xl"
                     : "border-transparent bg-transparent"
             }`}
         >
           <div className="relative mx-auto flex h-[68px] w-full max-w-[1440px] items-center justify-between px-5 sm:px-8 lg:px-12">
             <Link
-                ref={logoRef}
                 to="/welcome"
                 onClick={closeMobileMenu}
                 className="relative z-10 flex origin-left items-center gap-2.5"
             >
-              <BrandMark />
+              <BrandMark textClassName={headerTextClassName} />
             </Link>
 
             <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 whitespace-nowrap xl:flex">
@@ -184,7 +202,9 @@ function LandingNavbar({ shellRef, logoRef }) {
                   <a
                       key={item.href}
                       href={item.href}
-                      className="relative whitespace-nowrap px-3 py-2 text-sm font-medium text-muted-foreground transition-colors after:absolute after:inset-x-3 after:bottom-0 after:h-px after:origin-left after:scale-x-0 after:bg-primary after:transition-transform hover:text-foreground hover:after:scale-x-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className={`relative whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors after:absolute after:inset-x-3 after:bottom-0 after:h-px after:origin-left after:scale-x-0 after:bg-primary after:transition-transform hover:after:scale-x-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                          hasSolidBackground ? "text-[#53657A] hover:text-[#102A43]" : "text-white/80 hover:text-white"
+                      }`}
                   >
                     {item.label}
                   </a>
@@ -195,7 +215,7 @@ function LandingNavbar({ shellRef, logoRef }) {
               <Button
                   asChild
                   variant="ghost"
-                  className="text-foreground hover:bg-transparent hover:text-primary"
+                  className={`${headerTextClassName} hover:bg-transparent hover:text-primary`}
               >
                 <Link to="/login">Log in</Link>
               </Button>
@@ -215,9 +235,10 @@ function LandingNavbar({ shellRef, logoRef }) {
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="relative z-10 ml-auto rounded-md text-foreground hover:bg-accent xl:hidden"
+                className={`relative z-10 ml-auto rounded-md ${headerTextClassName} hover:bg-white/15 hover:text-current xl:hidden`}
                 aria-label="Toggle navigation menu"
                 aria-expanded={mobileMenuOpen}
+                aria-controls="landing-mobile-navigation"
                 onClick={() => setMobileMenuOpen((open) => !open)}
             >
               {mobileMenuOpen ? (
@@ -231,7 +252,8 @@ function LandingNavbar({ shellRef, logoRef }) {
           {mobileMenuOpen ? (
               <div
                   ref={mobileMenuRef}
-                  className="overflow-hidden border-t border-[#D9E3F2] xl:hidden"
+                  id="landing-mobile-navigation"
+                  className="max-h-[calc(100dvh-68px)] overflow-y-auto overscroll-contain border-t border-[#D9E3F2] bg-white xl:hidden"
               >
                 <nav className="flex flex-col gap-1 p-4">
                   {NAV_ITEMS.map((item) => (
@@ -321,7 +343,7 @@ function HeroSection({ sectionRef, textRef }) {
         </div>
 
         <div className="pointer-events-none absolute -bottom-[4.5vw] right-0 z-10 w-full select-none overflow-hidden text-right" aria-hidden="true">
-          <p className="hero-word translate-x-[3vw] whitespace-nowrap pr-0 text-[clamp(7rem,23vw,22rem)] font-bold leading-[0.7] tracking-[-0.08em] text-white/[0.11]">
+          <p className="hero-word translate-x-[3vw] whitespace-nowrap pr-0 text-[clamp(9rem,29vw,30rem)] font-bold leading-[0.7] tracking-[-0.08em] text-white/[0.11]">
             REBYU
           </p>
         </div>
@@ -772,10 +794,17 @@ function Footer() {
 
 export default function LandingPage() {
   const rootRef = useRef(null);
-  const navShellRef = useRef(null);
-  const navLogoRef = useRef(null);
   const heroRef = useRef(null);
   const heroTextRef = useRef(null);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const updateHeaderState = () => setIsScrolled(window.scrollY > 48);
+    updateHeaderState();
+    window.addEventListener("scroll", updateHeaderState, { passive: true });
+
+    return () => window.removeEventListener("scroll", updateHeaderState);
+  }, []);
 
   useLayoutEffect(() => {
     const root = rootRef.current;
@@ -807,35 +836,6 @@ export default function LandingPage() {
           .from(".hero-actions", { opacity: 0, y: 14, duration: 0.45 }, "-=0.3")
           .from(".hero-detail", { opacity: 0, y: 10, duration: 0.4 }, "-=0.25")
           .from(".hero-word", { opacity: 0, y: 24, duration: 0.7 }, "-=0.45");
-
-      gsap.set(navShellRef.current, {
-        borderColor: "rgba(255,255,255,0)",
-        backgroundColor: "rgba(255,255,255,0)",
-        boxShadow: "0 0 0 rgba(11,31,58,0)",
-        backdropFilter: "blur(0px)",
-      });
-
-      gsap
-          .timeline({
-            scrollTrigger: {
-              trigger: heroRef.current,
-              start: "top top",
-              end: "+=220",
-              scrub: true,
-            },
-          })
-          .to(
-              navShellRef.current,
-              {
-                borderColor: "rgba(216,231,242,0.92)",
-                backgroundColor: "rgba(255,255,255,0.94)",
-                boxShadow: "0 6px 22px rgba(16,42,67,0.08)",
-                backdropFilter: "blur(14px)",
-                ease: "none",
-              },
-              0,
-          )
-          .to(navLogoRef.current, { scale: 0.97, ease: "none" }, 0);
 
       gsap.to(heroTextRef.current, {
         yPercent: -5,
@@ -876,7 +876,7 @@ export default function LandingPage() {
           ref={rootRef}
           className="min-h-screen overflow-x-hidden bg-background font-sans text-foreground selection:bg-primary/20 selection:text-foreground"
       >
-        <LandingNavbar shellRef={navShellRef} logoRef={navLogoRef} />
+        <LandingNavbar isScrolled={isScrolled} />
         <main>
           <HeroSection
               sectionRef={heroRef}
