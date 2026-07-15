@@ -34,7 +34,7 @@ const STAGES = [
         number: "02",
         title: "Personalized study plan",
         description:
-            "Your weak topics become an ordered daily plan with focused lessons, review sessions, and assessment milestones.",
+            "Bayesian Knowledge Tracing (BKT) updates your estimated mastery from your answers, so weak topics become an ordered daily plan with focused lessons, review sessions, and assessment milestones.",
         icon: BookOpen,
         image: LANDING_IMAGES.roadmap.plan,
         photographer: "Kaboompics.com",
@@ -226,6 +226,9 @@ export function RoadmapSection() {
                     <h2 className="mx-auto mt-4 max-w-2xl text-3xl font-bold tracking-[-0.04em] text-[#273452] sm:text-4xl">
                         One connected route from diagnosis to readiness.
                     </h2>
+                    <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-[#66758A]">
+                        BKT helps REBYU estimate what you have mastered over time, so each next step is based on your latest performance.
+                    </p>
                 </div>
 
                 <div className="relative">

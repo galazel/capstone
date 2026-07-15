@@ -314,7 +314,7 @@ function HeroSection({ sectionRef, textRef }) {
         >
             <div ref={textRef} className="relative w-full max-w-2xl text-left text-white">
               <p className="hero-kicker text-xs font-bold uppercase tracking-[0.16em] text-[#8DC7EF] sm:text-sm">
-                AI-powered certification review
+                Mastery-guided certification learning
               </p>
 
               <h1 className="hero-title mt-5 max-w-2xl text-5xl font-bold leading-[0.98] tracking-[-0.045em] text-white sm:text-6xl lg:text-7xl">
