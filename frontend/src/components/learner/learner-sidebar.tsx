@@ -2,7 +2,6 @@ import * as React from "react"
 import {
   AwardIcon,
   BookOpenCheckIcon,
-  BrainCircuitIcon,
   CircleAlertIcon,
   CrownIcon,
   MessagesSquareIcon,
@@ -10,6 +9,7 @@ import {
 } from "lucide-react"
 
 import { NavProjects } from "@/components/nav-projects"
+import { BrandLogo } from "@/components/brand-logo"
 import {
   Sidebar,
   SidebarContent,
@@ -94,9 +94,7 @@ export function LearnerAppSidebar({
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton size="lg" className="cursor-default hover:bg-transparent" aria-label="REBYU learner portal">
-                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                    <BrainCircuitIcon className="size-4" />
-                  </div>
+                  <BrandLogo className="size-8" />
 
                   <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-semibold">

@@ -11,6 +11,7 @@ import {
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
+import { BrandLogo } from "@/components/brand-logo"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -195,9 +196,7 @@ export default function EnterpriseRequestAccessPage() {
       <header className="border-b border-[#E0E7EF] bg-white">
         <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between px-5 sm:px-8">
           <Link to="/" className="flex items-center gap-2.5 font-heading text-lg font-bold tracking-tight">
-            <span className="flex size-9 items-center justify-center rounded-lg bg-[#2F7DD3] text-white">
-              <GraduationCap className="size-5" aria-hidden="true" />
-            </span>
+            <BrandLogo className="size-9" />
             REBYU
           </Link>
           <Link to="/" className="inline-flex items-center gap-2 text-sm font-medium text-[#66758A] hover:text-[#2F7DD3]">

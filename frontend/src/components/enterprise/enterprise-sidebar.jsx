@@ -11,12 +11,12 @@ import {
   ReceiptTextIcon,
   SettingsIcon,
   SparklesIcon,
-  TerminalIcon,
   UsersIcon,
   UsersRoundIcon,
 } from "lucide-react"
 
 import { NavProjects } from "@/components/nav-projects"
+import { BrandLogo } from "@/components/brand-logo"
 import {
   Sidebar,
   SidebarContent,
@@ -109,9 +109,7 @@ export function EnterpriseAppSidebar(props) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <NavLink to="/enterprise/dashboard">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <TerminalIcon className="size-4" />
-                </div>
+                <BrandLogo className="size-8" />
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">Rebyu</span>
                   <span className="truncate text-xs">Organization Portal</span>
@@ -130,9 +128,7 @@ export function EnterpriseAppSidebar(props) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg">
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-accent text-sidebar-accent-foreground">
-                <AwardIcon className="size-4" />
-              </div>
+              <BrandLogo className="size-8" />
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">REBYU</span>
                 <span className="truncate text-xs">Empowering teams</span>

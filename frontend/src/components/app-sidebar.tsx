@@ -4,6 +4,7 @@ import * as React from "react"
 import { NavLink } from "react-router-dom"
 
 import { NavProjects } from "@/components/nav-projects"
+import { BrandLogo } from "@/components/brand-logo"
 import {
   Sidebar,
   SidebarContent,
@@ -15,7 +16,6 @@ import {
 } from "@/components/ui/sidebar"
 
 import {
-  TerminalIcon,
   AwardIcon,
   TrophyIcon,
   ClipboardListIcon,
@@ -102,9 +102,7 @@ export function AppSidebar({
             <SidebarMenuItem>
               <SidebarMenuButton size="lg" asChild>
                 <NavLink to="/admin">
-                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                    <TerminalIcon className="size-4" />
-                  </div>
+                  <BrandLogo className="size-8" />
 
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-medium">Rebyu</span>

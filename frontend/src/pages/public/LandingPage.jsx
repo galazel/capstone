@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/components/brand-logo";
 import { FeatureBento } from "./landing-feature-bento.jsx";
 import { RoadmapSection } from "./landing-roadmap-section.jsx";
 import { LANDING_IMAGES } from "./landing-images.js";
@@ -106,13 +107,7 @@ const TEAM_MEMBERS = [
 function BrandMark({ compact = false, textClassName = "text-foreground" }) {
   return (
       <span className="flex items-center gap-2.5">
-      <span
-          className={`flex items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm ${
-              compact ? "size-8" : "size-9"
-          }`}
-      >
-        <GraduationCap className="size-5" aria-hidden="true" />
-      </span>
+      <BrandLogo className={compact ? "size-8" : "size-9"} />
       <span className={`font-heading text-lg font-bold tracking-tight ${textClassName}`}>
         REBYU
       </span>

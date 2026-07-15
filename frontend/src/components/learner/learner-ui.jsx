@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { BrandLogo } from "@/components/brand-logo"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -118,9 +119,7 @@ export function LearnerSidebar({ data, onNavigate }) {
 
       <div className="border-t border-zinc-100 p-5">
         <div className="flex items-center gap-3 rounded-2xl border border-zinc-100 bg-zinc-50 p-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-950 text-sm font-bold text-white">
-            R
-          </div>
+          <BrandLogo className="size-9" />
           <div>
             <p className="text-sm font-bold tracking-tight text-zinc-950">REBYU</p>
             <p className="text-xs text-zinc-500">Learner Portal</p>

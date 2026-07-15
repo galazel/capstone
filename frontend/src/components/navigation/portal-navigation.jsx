@@ -5,7 +5,6 @@ import {
   BarChart3,
   Bell,
   BookOpenCheck,
-  BrainCircuit,
   Building2,
   ChevronDown,
   CircleHelp,
@@ -25,6 +24,7 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { BrandLogo } from "@/components/brand-logo"
 import {
   Dialog,
   DialogContent,
@@ -113,9 +113,7 @@ function pathMatches(pathname, item) {
 function Brand({ role }) {
   return (
     <NavLink to={role === "LEARNER" ? "/learner/analytics" : role === "ENTERPRISE" ? "/enterprise/dashboard" : "/admin/dashboard"} className="flex shrink-0 items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={role === "LEARNER" ? "REBYU home and analytics" : "REBYU home"}>
-      <span className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-        <BrainCircuit className="size-4.5" aria-hidden="true" />
-      </span>
+      <BrandLogo className="size-8" />
       <span className="hidden leading-none sm:block">
         <span className="block font-heading text-[15px] font-bold tracking-tight">REBYU</span>
         <span className="mt-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">

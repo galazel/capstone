@@ -1,6 +1,7 @@
-import { ArrowLeft, Check, GraduationCap } from "lucide-react"
+import { ArrowLeft, Check } from "lucide-react"
 import { Link } from "react-router-dom"
 
+import { BrandLogo } from "@/components/brand-logo"
 import { LANDING_IMAGES } from "@/pages/public/landing-images.js"
 
 const BENEFITS = [
@@ -18,9 +19,7 @@ export default function AuthShell({ title, description, children, footer, compac
             to="/"
             className="flex items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5A9DDD]"
           >
-            <span className="flex size-9 items-center justify-center rounded-lg bg-[#2F7DD3] text-white">
-              <GraduationCap className="size-5" aria-hidden="true" />
-            </span>
+            <BrandLogo className="size-9" />
             <span className="font-heading text-xl font-bold tracking-[-0.025em]">REBYU</span>
           </Link>
 
