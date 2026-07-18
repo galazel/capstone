@@ -12,13 +12,14 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public record ConfidenceView(
         @JsonProperty("learner_id") Long learnerId,
         @JsonProperty("certification_id") Long certificationId,
-        @JsonProperty("confidence_score") Double confidenceScore,
+        @JsonProperty("overall_confidence") Double overall_confidence,
         @JsonProperty("average_mastery") Double averageMastery,
-        @JsonProperty("mastered_count") Integer masteredCount,
+        @JsonProperty("lessons_mastered") Integer lessons_mastered,
         @JsonProperty("good_count") Integer goodCount,
-        @JsonProperty("developing_count") Integer developingCount,
-        @JsonProperty("weak_count") Integer weakCount,
-        @JsonProperty("total_lessons") Integer totalLessons,
+        @JsonProperty("lessons_developing") Integer lessons_developing,
+        @JsonProperty("lessons_weak") Integer lessons_weak,
+        @JsonProperty("total_lessons") Integer total_lessons,
+        @JsonProperty("ready_for_certification") Boolean ready_for_certification,
         @JsonProperty("coverage_percentage") Double coveragePercentage
 ) {
 }

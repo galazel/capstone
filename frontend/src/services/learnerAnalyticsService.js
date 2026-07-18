@@ -45,6 +45,33 @@ export async function getReadiness(payload) {
   return base("learner/analytics/readiness", { method: "POST", data: payload })
 }
 
+/** Get mastery history for a learner-certification pair. */
+export async function getMasteryHistory(certificationId) {
+  return base(`bkt/me/history/${certificationId}`)
+}
+
+/** Get mastery for current learner (JWT-derived). */
+export async function getMyMastery(lessonIds) {
+  const params = new URLSearchParams()
+  if (lessonIds?.length) {
+    for (const lessonId of lessonIds) {
+      params.append("lessonId", String(lessonId))
+    }
+    return base(`bkt/me/mastery?${params.toString()}`)
+  }
+  return base("bkt/me/mastery")
+}
+
+/** Get priorities for current learner. */
+export async function getMyPriorities(certificationId) {
+  return base(`bkt/me/lessons/${certificationId}`)
+}
+
+/** Get confidence for current learner. */
+export async function getMyConfidence(certificationId) {
+  return base(`bkt/me/confidence/${certificationId}`)
+}
+
 // ---------------------------------------------------------------------------
 // Shared priority-tag presentation metadata. Text labels are always shown, so
 // meaning never depends on color alone (accessibility).
