@@ -75,6 +75,14 @@ public class LearnerPortalService {
         List<OrganizationCertificateDto> orgCertificates = orgCertsById.values().stream()
                 .map(orgCertMapper::toDto).toList();
 
+        // Fetch XP and coins (stubbed for now - would come from gamification service)
+        Long totalXp = 0L;
+        java.math.BigDecimal coinBalance = java.math.BigDecimal.ZERO;
+        Long aiCreditsRemaining = 0L;
+
+        // Fetch BKT mastery state per certification (stubbed for now)
+        Map<Long, Integer> masteryByCertification = new java.util.HashMap<>();
+
         return new LearnerPortalDto(
                 learnerRepository.findById(learnerId).map(learnerMapper::toDto).orElse(null),
                 userRepository.findById(userId).map(userMapper::toDto).orElse(null),
@@ -87,6 +95,10 @@ public class LearnerPortalService {
                 examResultRepository.findByLearner_LearnerId(learnerId).stream()
                         .map(examResultMapper::toDto).toList(),
                 orgCertLearnerEntities.stream().map(orgCertLearnerMapper::toDto).toList(),
-                orgCertificates);
+                orgCertificates,
+                totalXp,
+                coinBalance,
+                aiCreditsRemaining,
+                masteryByCertification);
     }
 }
