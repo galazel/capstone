@@ -10,6 +10,11 @@ public interface LearnerSubscriptionRepository extends JpaRepository<LearnerSubs
 
     List<LearnerSubscription> findByLearner_LearnerIdOrderByCreatedAtDesc(Long learnerId);
 
+    List<LearnerSubscription> findByLearner_LearnerId(Long learnerId);
+
     /** The learner's most recent subscription, whatever its status. */
     Optional<LearnerSubscription> findFirstByLearner_LearnerIdOrderByCreatedAtDesc(Long learnerId);
+
+    /** Lookup subscription by PayMongo subscription ID. */
+    Optional<LearnerSubscription> findByProviderSubscriptionId(String providerSubscriptionId);
 }
