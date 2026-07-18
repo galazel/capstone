@@ -1,0 +1,103 @@
+# PHASE 4: Monitoring & Observability Configuration
+
+monitoring:
+  enabled: true
+
+  # Application Performance Monitoring
+  apm:
+    service: datadog
+    enabled: true
+    sample-rate: 0.1  # 10% of requests for cost efficiency
+
+  # Error Tracking
+  error-tracking:
+    service: sentry
+    enabled: true
+    environment: production
+
+  # Logging
+  logging:
+    level: INFO
+    format: json  # ELK-friendly
+    outputs:
+      - console
+      - file: /var/log/rebyu/app.log
+
+  # Metrics Collection
+  metrics:
+    enabled: true
+    export-interval: 60s
+
+    application:
+      - http_requests_total
+      - http_request_duration_seconds
+      - database_queries_total
+      - database_query_duration_seconds
+      - cache_hits_total
+      - cache_misses_total
+
+    business:
+      - users_total
+      - organizations_total
+      - revenue_monthly
+      - subscriptions_active
+      - assessment_submissions_total
+
+    system:
+      - jvm_memory_usage
+      - jvm_threads
+      - cpu_usage
+      - disk_usage
+      - database_connections
+
+# Alerting Rules
+alerts:
+  - name: HighErrorRate
+    condition: error_rate > 0.01  # 1%
+    severity: critical
+
+  - name: HighLatency
+    condition: p95_latency_ms > 500
+    severity: warning
+
+  - name: DatabaseDown
+    condition: database_connection_pool_exhausted
+    severity: critical
+
+  - name: LowDiskSpace
+    condition: disk_usage_percent > 90
+    severity: warning
+
+  - name: LowMemory
+    condition: jvm_memory_usage_percent > 85
+    severity: warning
+
+# Dashboards
+dashboards:
+  - name: platform_health
+    metrics:
+      - uptime_percent
+      - error_rate
+      - p95_latency
+      - active_users
+
+  - name: revenue
+    metrics:
+      - mrr
+      - active_subscriptions
+      - churn_rate
+      - average_contract_value
+
+  - name: performance
+    metrics:
+      - api_latency
+      - database_query_time
+      - cache_hit_rate
+      - memory_usage
+
+  - name: user_activity
+    metrics:
+      - daily_active_users
+      - weekly_active_users
+      - assessment_completions
+      - lesson_progress

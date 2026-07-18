@@ -1,0 +1,86 @@
+# PHASE 4: Security Headers Configuration
+
+security:
+  headers:
+    # Strict Transport Security
+    hsts:
+      enabled: true
+      max-age: 31536000  # 1 year
+      include-subdomains: true
+      preload: true
+
+    # Content Security Policy
+    csp:
+      enabled: true
+      directives:
+        default-src: ["'self'"]
+        script-src: ["'self'", "'unsafe-inline'", "*.paymongo.com"]
+        style-src: ["'self'", "'unsafe-inline'"]
+        img-src: ["'self'", "data:", "https:"]
+        font-src: ["'self'", "data:"]
+        connect-src: ["'self'", "*.paymongo.com", "*.stripe.com"]
+        frame-ancestors: ["'none'"]
+        object-src: ["'none'"]
+        base-uri: ["'self'"]
+        form-action: ["'self'"]
+
+    # X-Frame-Options (Clickjacking protection)
+    x-frame-options: DENY
+
+    # X-Content-Type-Options (MIME sniffing protection)
+    x-content-type-options: nosniff
+
+    # X-XSS-Protection
+    x-xss-protection: "1; mode=block"
+
+    # Referrer-Policy
+    referrer-policy: "strict-origin-when-cross-origin"
+
+    # Permissions-Policy
+    permissions-policy: "geolocation=(), microphone=(), camera=()"
+
+# CORS Configuration
+cors:
+  allowed-origins:
+    - "https://rebyu.com"
+    - "https://www.rebyu.com"
+    - "https://admin.rebyu.com"
+  allowed-methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+  allowed-headers: ["Content-Type", "Authorization"]
+  expose-headers: ["X-Total-Count", "X-Page-Number"]
+  max-age: 3600
+  allow-credentials: true
+
+# Rate Limiting
+rate-limiting:
+  enabled: true
+  default-limit: 100  # per minute
+  burst-size: 10
+  endpoints:
+    /api/auth/login:
+      limit: 5
+      window: 60s
+    /api/payments/checkout:
+      limit: 20
+      window: 60s
+    /api/assessments/*/submit:
+      limit: 10
+      window: 60s
+
+# Encryption
+encryption:
+  at-rest:
+    enabled: true
+    algorithm: AES-256-GCM
+  in-transit:
+    tls-version: "1.3"
+    cipher-suites:
+      - "TLS_AES_256_GCM_SHA384"
+      - "TLS_CHACHA20_POLY1305_SHA256"
+
+# Audit Logging
+audit:
+  enabled: true
+  log-all-mutations: true
+  retention-days: 2555  # 7 years
+  immutable: true
