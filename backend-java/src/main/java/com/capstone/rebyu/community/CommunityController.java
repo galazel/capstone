@@ -69,6 +69,13 @@ public class CommunityController {
         return Map.of("attachmentKey", service.uploadAttachment(file));
     }
 
+    @PutMapping("/posts/{id}")
+    public CommunityService.Post updatePost(
+            @AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
+            @RequestBody CommunityService.PostRequest request) {
+        return service.updatePost(me(jwt), id, request);
+    }
+
     @DeleteMapping("/posts/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deletePost(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {

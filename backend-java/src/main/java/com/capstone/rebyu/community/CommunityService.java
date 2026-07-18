@@ -184,6 +184,19 @@ public class CommunityService {
         catch (NumberFormatException ex) { throw new IllegalArgumentException("Shared study set is invalid"); }
     }
 
+    @Transactional
+    public Post updatePost(Long learnerId, Long postId, PostRequest request) {
+        CommunityPost post = postRepository.findById(postId)
+                .orElseThrow(() -> new EntityNotFoundException("Post not found"));
+        if (!post.getAuthor().getLearnerId().equals(learnerId)) {
+            throw new IllegalArgumentException("You can only edit your own post");
+        }
+        post.setTitle(request.title());
+        post.setDescription(request.description());
+        postRepository.save(post);
+        return toPost(learnerId, post);
+    }
+
     public void deletePost(Long learnerId, Long postId) {
         long deleted = postRepository.deleteByPostIdAndAuthor_LearnerId(postId, learnerId);
         if (deleted == 0) {
