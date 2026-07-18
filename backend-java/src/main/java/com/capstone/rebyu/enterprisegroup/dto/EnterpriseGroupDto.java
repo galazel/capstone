@@ -16,7 +16,9 @@ import java.time.LocalDateTime;
 public class EnterpriseGroupDto {
     private Long enterpriseGroupId;
 
-    @NotNull
+    // Always overwritten server-side from the caller's JWT (see
+    // EnterpriseGroupController.create), so must stay nullable -- the client
+    // never supplies it.
     private Long enterpriseId;
 
     @NotNull
@@ -29,7 +31,7 @@ public class EnterpriseGroupDto {
     @Size(max = 500)
     private String groupDescription;
 
-    @NotNull
+    // Same as enterpriseId: always overwritten server-side, must stay nullable.
     private Long createdBy;
 
     private LocalDateTime createdAt;

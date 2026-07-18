@@ -119,10 +119,6 @@ export function generateQuestionDrafts({
     })
 }
 
-export function getCertificationKnowledgeStatus(certificationId) {
-    return base(`certifications/${certificationId}/knowledge-status`)
-}
-
 export async function saveChoices(choices) {
     return await base("choices", {
         method: "POST",

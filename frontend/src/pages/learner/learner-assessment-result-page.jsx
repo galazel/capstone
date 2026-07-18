@@ -22,12 +22,14 @@ import { cn } from "@/lib/utils"
 import CodeMirrorProgrammingWorkspace from "@/components/assessments/attempt/code-mirror-programming-workspace.jsx"
 import PerformanceBreakdown from "@/components/assessments/attempt/performance-breakdown.jsx"
 import CertificationAnalyticsPanel from "@/components/analytics/certification-analytics-panel.jsx"
-import { getCurrentLearnerIdentity } from "@/services/learnerService.js"
+import {
+  getCurrentLearner,
+  getCurrentLearnerIdentity,
+} from "@/services/learnerService.js"
 import {
   getAssessmentTypeLabel,
   getAttemptResult,
 } from "@/services/assessmentService.js"
-import { base } from "@/services/base"
 import LearnerPremiumGuard from "@/components/learner/learner-premium-guard.jsx"
 import { FEATURES } from "@/services/subscriptionService.js"
 
@@ -44,18 +46,14 @@ export default function LearnerAssessmentResultPage() {
   const navigate = useNavigate()
 
   const identity = getCurrentLearnerIdentity()
-  const learnersQuery = useQuery({
-    queryKey: ["learners"],
-    queryFn: () => base("learners"),
+  const currentLearnerQuery = useQuery({
+    queryKey: ["current-learner"],
+    queryFn: getCurrentLearner,
     retry: 1,
     enabled: identity.learnerId == null,
   })
   const learnerId =
-    identity.learnerId ??
-    (Array.isArray(learnersQuery.data)
-      ? learnersQuery.data[0]?.learnerId
-      : null) ??
-    null
+    identity.learnerId ?? currentLearnerQuery.data?.learnerId ?? null
 
   const resultQuery = useQuery({
     queryKey: ["attempt-result", attemptId, learnerId],
@@ -64,7 +62,7 @@ export default function LearnerAssessmentResultPage() {
     retry: 1,
   })
 
-  if (resultQuery.isLoading || (learnerId == null && learnersQuery.isLoading)) {
+  if (resultQuery.isLoading || (learnerId == null && currentLearnerQuery.isLoading)) {
     return (
       <div className="mx-auto max-w-4xl space-y-4 p-6">
         <Skeleton className="h-10 w-2/3" />

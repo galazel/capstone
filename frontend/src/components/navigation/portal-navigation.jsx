@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { NavLink, useLocation, useNavigate } from "react-router-dom"
 import {
   Award,
+  Crown,
   BarChart3,
   Bell,
   BookOpenCheck,
@@ -15,6 +16,9 @@ import {
   LayoutDashboard,
   Menu,
   ReceiptText,
+  ShieldAlert,
+  ServerCog,
+  Sparkles,
   Search,
   Settings,
   Swords,
@@ -47,6 +51,7 @@ const learnerNavigation = [
   { label: "My Learning", href: "/learner/learning", match: ["/learner/learning", "/learner/lessons"], icon: BookOpenCheck },
   { label: "Challenges", href: "/learner/challenges", icon: Swords },
   { label: "Community", href: "/learner/community", icon: UsersRound },
+  { label: "Rankings", href: "/learner/rankings", icon: Crown },
 ]
 
 const adminGroups = [
@@ -70,6 +75,9 @@ const adminGroups = [
     items: [
       { label: "Institutions", href: "/admin/organizations", icon: Building2 },
       { label: "Partnership requests", href: "/admin/partnership-requests", icon: Handshake },
+      { label: "Community moderation", href: "/admin/community-moderation", icon: ShieldAlert },
+      { label: "BKT delivery", href: "/admin/bkt-delivery", icon: ServerCog },
+      { label: "Gamification", href: "/admin/gamification-settings", icon: Sparkles },
       { label: "Learners", href: "/admin/learners", icon: Users },
     ],
   },

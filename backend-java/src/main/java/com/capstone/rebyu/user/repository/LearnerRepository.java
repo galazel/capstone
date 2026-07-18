@@ -9,5 +9,7 @@ public interface LearnerRepository extends JpaRepository<Learner, Long> {
 
     Optional<Learner> findByUser_UserId(Long userId);
 
+    java.util.List<Learner> findByLearnerIdIn(java.util.Collection<Long> learnerIds);
+
     boolean existsByUsername(String username);
 }

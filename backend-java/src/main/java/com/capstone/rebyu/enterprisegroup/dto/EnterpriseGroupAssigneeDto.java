@@ -25,12 +25,17 @@ public class EnterpriseGroupAssigneeDto {
     private Long orgCertId;
     private Long learnerId;
 
-    @NotNull
+    // Always overwritten server-side from the caller's JWT (see
+    // EnterpriseGroupAssigneeController.create), so must stay nullable --
+    // the client never supplies it.
     private Long assignedBy;
 
     private LocalDateTime assignedAt;
 
     private EnterpriseGroupAssignee.Status status = EnterpriseGroupAssignee.Status.active;
+
+    // Peer-leader distinction within the group; defaults to a regular member.
+    private EnterpriseGroupAssignee.Role role = EnterpriseGroupAssignee.Role.member;
 
     private LocalDateTime removedAt;
 }

@@ -39,8 +39,7 @@ import {
 } from "@/components/enterprise/enterprise-ui.jsx"
 import { useEnterpriseData } from "@/hooks/use-enterprise-data.js"
 import {
-  getPartnershipRequestItems,
-  getPartnershipRequests,
+  getPartnershipRequestTransactions,
   submitPartnershipRequestTransaction,
 } from "@/services/enterpriseService.js"
 
@@ -63,7 +62,6 @@ function RequestPartnershipDialog({ open, onOpenChange, enterprise, data }) {
     mutationFn: () => {
       const start = new Date()
       return submitPartnershipRequestTransaction({
-        enterpriseId: enterprise.enterpriseId,
         idempotencyKey,
         items: items.map((item) => {
           const end = new Date(start)
@@ -78,8 +76,6 @@ function RequestPartnershipDialog({ open, onOpenChange, enterprise, data }) {
       })
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["partnership-requests"] })
-      queryClient.invalidateQueries({ queryKey: ["partnership-request-items"] })
       queryClient.invalidateQueries({
         queryKey: ["partnership-request-transactions"],
       })
@@ -249,36 +245,21 @@ export default function EnterprisePartnershipPage() {
   const data = useEnterpriseData(enterprise?.enterpriseId)
   const [requestOpen, setRequestOpen] = useState(false)
 
+  // Enterprise-scoped endpoint (enterpriseId derived server-side from the JWT) --
+  // NOT the unfiltered generic CRUD list, which would leak every tenant's requests.
   const requestsQuery = useQuery({
-    queryKey: ["partnership-requests"],
-    queryFn: getPartnershipRequests,
-    enabled: enterprise != null,
-    retry: 1,
-  })
-  const itemsQuery = useQuery({
-    queryKey: ["partnership-request-items"],
-    queryFn: getPartnershipRequestItems,
+    queryKey: ["partnership-request-transactions"],
+    queryFn: getPartnershipRequestTransactions,
     enabled: enterprise != null,
     retry: 1,
   })
 
   const requests = useMemo(() => {
     const list = Array.isArray(requestsQuery.data) ? requestsQuery.data : []
-    return list
-      .filter((request) => request.enterpriseId === enterprise?.enterpriseId)
-      .sort((a, b) => new Date(b.submittedAt ?? 0) - new Date(a.submittedAt ?? 0))
-  }, [requestsQuery.data, enterprise])
-
-  const itemsByRequest = useMemo(() => {
-    const list = Array.isArray(itemsQuery.data) ? itemsQuery.data : []
-    const map = new Map()
-    list.forEach((item) => {
-      const existing = map.get(item.requestId) ?? []
-      existing.push(item)
-      map.set(item.requestId, existing)
-    })
-    return map
-  }, [itemsQuery.data])
+    return [...list].sort(
+      (a, b) => new Date(b.submittedAt ?? 0) - new Date(a.submittedAt ?? 0)
+    )
+  }, [requestsQuery.data])
 
   if (enterpriseLoading) return <EnterpriseLoadingSkeleton />
   if (enterpriseError) {
@@ -306,7 +287,7 @@ export default function EnterprisePartnershipPage() {
         }
       />
 
-      {requestsQuery.isLoading || itemsQuery.isLoading ? (
+      {requestsQuery.isLoading ? (
         <EnterpriseLoadingSkeleton rows={3} />
       ) : requestsQuery.isError ? (
         <EnterpriseErrorState onRetry={requestsQuery.refetch} />
@@ -324,7 +305,7 @@ export default function EnterprisePartnershipPage() {
       ) : (
         <div className="space-y-4">
           {requests.map((request) => {
-            const items = itemsByRequest.get(request.requestId) ?? []
+            const items = Array.isArray(request.items) ? request.items : []
             return (
               <Card key={request.requestId}>
                 <CardHeader>

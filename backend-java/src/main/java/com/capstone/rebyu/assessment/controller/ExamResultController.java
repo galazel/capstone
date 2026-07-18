@@ -1,12 +1,15 @@
 package com.capstone.rebyu.assessment.controller;
 
 
-import com.capstone.rebyu.assessment.entity.Exam;
 import com.capstone.rebyu.assessment.dto.ExamResultDto;
 import com.capstone.rebyu.assessment.service.ExamResultService;
+import com.capstone.rebyu.auth.dto.CurrentUserDto;
+import com.capstone.rebyu.auth.service.CognitoAuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -16,15 +19,28 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ExamResultController {
     private final ExamResultService examResultService;
+    private final CognitoAuthService auth;
 
+    // Cross-learner results data: the unfiltered list/lookup exposes every learner's
+    // exam results, so reads are admin-only. Learners read their own via
+    // /api/learners/me/portal; enterprise managers via /api/enterprise/me/learners/{id}/exam-results.
     @GetMapping
-    public List<ExamResultDto> getAll() {
+    public List<ExamResultDto> getAll(@AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return examResultService.getAll();
     }
 
     @GetMapping("/{learnerId}/{examId}/{attemptNo}")
-    public ExamResultDto getById(@PathVariable Long learnerId, @PathVariable Long examId, @PathVariable Integer attemptNo) {
+    public ExamResultDto getById(@PathVariable Long learnerId, @PathVariable Long examId,
+                                  @PathVariable Integer attemptNo, @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return examResultService.getById(learnerId, examId, attemptNo);
+    }
+
+    private void requireAdmin(Jwt jwt) {
+        if (jwt == null) throw new IllegalArgumentException("Authentication is required");
+        CurrentUserDto user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
+        if (!"ADMIN".equalsIgnoreCase(user.role())) throw new IllegalArgumentException("Admin access is required");
     }
 
     @PostMapping

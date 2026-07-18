@@ -2,26 +2,21 @@ import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 
 import { getAllCertifications } from "@/services/certificationService"
-import {
-  getAllLearners,
-  getEnterpriseInvoices,
-  getLearnerInvitations,
-  getOrganizationCertificates,
-  getOrganizationCertificationLearners,
-} from "@/services/enterpriseService.js"
+import { getEnterprisePortalOverview } from "@/services/enterpriseService.js"
 
 function asArray(value) {
   return Array.isArray(value) ? value : []
 }
 
-// Shared tenant-scoped data for the organization portal. The backend exposes
-// flat CRUD lists, so scoping to the current organization happens here.
+// Shared tenant-scoped data for the organization portal. All org-scoped lists come
+// pre-filtered from the backend (/api/enterprise/me/overview resolves the enterprise
+// from the caller's JWT) -- the browser never fetches global lists and filters them.
 export function useEnterpriseData(enterpriseId) {
   const enabled = enterpriseId != null
 
-  const orgCertsQuery = useQuery({
-    queryKey: ["organization-certificates"],
-    queryFn: getOrganizationCertificates,
+  const overviewQuery = useQuery({
+    queryKey: ["enterprise-overview", enterpriseId],
+    queryFn: getEnterprisePortalOverview,
     enabled,
     retry: 1,
   })
@@ -33,39 +28,9 @@ export function useEnterpriseData(enterpriseId) {
     retry: 1,
   })
 
-  const invitationsQuery = useQuery({
-    queryKey: ["learner-invitations"],
-    queryFn: getLearnerInvitations,
-    enabled,
-    retry: 1,
-  })
-
-  const assignmentsQuery = useQuery({
-    queryKey: ["organization-certification-learners"],
-    queryFn: getOrganizationCertificationLearners,
-    enabled,
-    retry: 1,
-  })
-
-  const learnersQuery = useQuery({
-    queryKey: ["learners"],
-    queryFn: getAllLearners,
-    enabled,
-    retry: 1,
-  })
-
-  const invoicesQuery = useQuery({
-    queryKey: ["enterprise-invoices"],
-    queryFn: getEnterpriseInvoices,
-    enabled,
-    retry: 1,
-  })
-
   const derived = useMemo(() => {
-    const orgCerts = asArray(orgCertsQuery.data).filter(
-      (cert) => cert.enterpriseId === enterpriseId
-    )
-    const orgCertIds = new Set(orgCerts.map((cert) => cert.orgCertId))
+    const overview = overviewQuery.data ?? {}
+    const orgCerts = asArray(overview.orgCerts)
 
     const certificationById = new Map(
       asArray(certificationsQuery.data).map((certification) => [
@@ -74,23 +39,8 @@ export function useEnterpriseData(enterpriseId) {
       ])
     )
 
-    const invitations = asArray(invitationsQuery.data).filter((invitation) =>
-      orgCertIds.has(invitation.orgCertId)
-    )
-
-    const assignments = asArray(assignmentsQuery.data).filter((assignment) =>
-      orgCertIds.has(assignment.orgCertId)
-    )
-
     const learnerById = new Map(
-      asArray(learnersQuery.data).map((learner) => [
-        learner.learnerId,
-        learner,
-      ])
-    )
-
-    const invoices = asArray(invoicesQuery.data).filter(
-      (invoice) => invoice.enterpriseId === enterpriseId
+      asArray(overview.learners).map((learner) => [learner.learnerId, learner])
     )
 
     const orgCertById = new Map(orgCerts.map((cert) => [cert.orgCertId, cert]))
@@ -99,41 +49,22 @@ export function useEnterpriseData(enterpriseId) {
       orgCerts,
       orgCertById,
       certificationById,
-      invitations,
-      assignments,
+      invitations: asArray(overview.invitations),
+      assignments: asArray(overview.assignments),
       learnerById,
-      invoices,
+      invoices: asArray(overview.invoices),
     }
-  }, [
-    enterpriseId,
-    orgCertsQuery.data,
-    certificationsQuery.data,
-    invitationsQuery.data,
-    assignmentsQuery.data,
-    learnersQuery.data,
-    invoicesQuery.data,
-  ])
+  }, [certificationsQuery.data, overviewQuery.data])
 
-  const queries = [
-    orgCertsQuery,
-    certificationsQuery,
-    invitationsQuery,
-    assignmentsQuery,
-    learnersQuery,
-    invoicesQuery,
-  ]
+  const queries = [overviewQuery, certificationsQuery]
 
   return {
     ...derived,
     isLoading: queries.some((query) => query.isLoading),
     isError: queries.some((query) => query.isError),
     refetchAll: () => queries.forEach((query) => query.refetch()),
-    orgCertsQuery,
+    overviewQuery,
     certificationsQuery,
-    invitationsQuery,
-    assignmentsQuery,
-    learnersQuery,
-    invoicesQuery,
   }
 }
 

@@ -94,15 +94,14 @@ export default function EnterpriseSettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Account</CardTitle>
+          <CardTitle>Organization access</CardTitle>
           <CardDescription>
-            Account management (members, roles, and security) becomes available
-            once organization sign-in is enabled.
+            Your organization portal is connected to the active enterprise account.
           </CardDescription>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          You are previewing the organization portal without a signed-in
-          account.
+          Manage learner access through Invitations and Groups. Billing and
+          certification capacity are managed through the linked pages above.
         </CardContent>
       </Card>
     </div>

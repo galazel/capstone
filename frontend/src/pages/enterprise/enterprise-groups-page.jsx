@@ -53,13 +53,12 @@ import {
   getLearnerDisplayName,
   useEnterpriseData,
 } from "@/hooks/use-enterprise-data.js"
-import { useAuth } from "@/context/auth-context.jsx"
 import {
   addEnterpriseGroupAssignee,
   archiveEnterpriseGroup,
   assignEnterpriseGroupAuthority,
+  changeEnterpriseGroupAssigneeRole,
   createEnterpriseGroup,
-  getAllUsers,
   getEnterpriseGroupAssignees,
   getEnterpriseGroupAuthorities,
   getEnterpriseGroups,
@@ -72,7 +71,7 @@ function backendMessage(error, fallback) {
   return error?.response?.data?.message ?? fallback
 }
 
-function CreateGroupDialog({ open, onOpenChange, enterpriseId, userId, orgCerts, certificationById }) {
+function CreateGroupDialog({ open, onOpenChange, orgCerts, certificationById }) {
   const queryClient = useQueryClient()
   const [orgCertId, setOrgCertId] = useState("")
   const [groupName, setGroupName] = useState("")
@@ -89,11 +88,9 @@ function CreateGroupDialog({ open, onOpenChange, enterpriseId, userId, orgCerts,
   const createMutation = useMutation({
     mutationFn: () =>
       createEnterpriseGroup({
-        enterpriseId,
         orgCertId: Number(orgCertId),
         groupName: groupName.trim(),
         groupDescription: groupDescription.trim() || null,
-        createdBy: userId,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["enterprise-groups"] })
@@ -218,7 +215,6 @@ function ManageGroupDialog({
   group,
   open,
   onOpenChange,
-  userId,
   members,
   userById,
   assignments,
@@ -270,7 +266,6 @@ function ManageGroupDialog({
       assignEnterpriseGroupAuthority({
         enterpriseGroupId: groupId,
         userId: Number(authorityUserId),
-        assignedBy: userId,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["enterprise-group-authorities", groupId] })
@@ -295,7 +290,6 @@ function ManageGroupDialog({
       addEnterpriseGroupAssignee({
         enterpriseGroupId: groupId,
         orgCertLearnerId: Number(orgCertLearnerId),
-        assignedBy: userId,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["enterprise-group-assignees", groupId] })
@@ -312,6 +306,15 @@ function ManageGroupDialog({
       toast.success("Learner removed from group.")
     },
     onError: (err) => toast.error(backendMessage(err, "Unable to remove learner.")),
+  })
+
+  const changeRoleMutation = useMutation({
+    mutationFn: ({ assigneeId, role }) =>
+      changeEnterpriseGroupAssigneeRole(assigneeId, role),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["enterprise-group-assignees", groupId] })
+    },
+    onError: (err) => toast.error(backendMessage(err, "Unable to update this learner's role.")),
   })
 
   const memberLabel = (memberUserId) =>
@@ -452,27 +455,46 @@ function ManageGroupDialog({
               </p>
             ) : (
               <ul className="divide-y rounded-lg border">
-                {activeAssignees.map((assignee) => (
-                  <li
-                    key={assignee.enterpriseGroupAssigneeId}
-                    className="flex items-center justify-between gap-2 px-3 py-2"
-                  >
-                    <span className="text-sm">
-                      {getLearnerDisplayName(learnerById.get(assignee.learnerId))}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        removeLearnerMutation.mutate(assignee.enterpriseGroupAssigneeId)
-                      }
-                      disabled={removeLearnerMutation.isPending}
+                {activeAssignees.map((assignee) => {
+                  const isLead = assignee.role === "lead"
+                  return (
+                    <li
+                      key={assignee.enterpriseGroupAssigneeId}
+                      className="flex items-center justify-between gap-2 px-3 py-2"
                     >
-                      <Trash2 className="size-4" aria-hidden="true" />
-                      Remove
-                    </Button>
-                  </li>
-                ))}
+                      <span className="flex items-center gap-2 text-sm">
+                        {getLearnerDisplayName(learnerById.get(assignee.learnerId))}
+                        {isLead ? <Badge variant="secondary">Lead</Badge> : null}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            changeRoleMutation.mutate({
+                              assigneeId: assignee.enterpriseGroupAssigneeId,
+                              role: isLead ? "member" : "lead",
+                            })
+                          }
+                          disabled={changeRoleMutation.isPending}
+                        >
+                          {isLead ? "Make member" : "Make lead"}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            removeLearnerMutation.mutate(assignee.enterpriseGroupAssigneeId)
+                          }
+                          disabled={removeLearnerMutation.isPending}
+                        >
+                          <Trash2 className="size-4" aria-hidden="true" />
+                          Remove
+                        </Button>
+                      </div>
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </section>
@@ -485,9 +507,7 @@ function ManageGroupDialog({
 export default function EnterpriseGroupsPage() {
   const { enterprise, enterpriseLoading, enterpriseError, refetchEnterprise } =
     useOutletContext()
-  const { user } = useAuth()
   const enterpriseId = enterprise?.enterpriseId
-  const userId = user?.userId ?? null
 
   const data = useEnterpriseData(enterpriseId)
   const [createOpen, setCreateOpen] = useState(false)
@@ -509,28 +529,18 @@ export default function EnterpriseGroupsPage() {
     retry: 1,
   })
 
-  const usersQuery = useQuery({
-    queryKey: ["users"],
-    queryFn: getAllUsers,
-    enabled: enterpriseId != null,
-    retry: 1,
-  })
+  const members = Array.isArray(membersQuery.data) ? membersQuery.data : []
 
+  // Member/authority labels come from the tenant-scoped members list (which now carries
+  // each member's email) -- no global users fetch needed.
   const userById = useMemo(
-    () =>
-      new Map(
-        (Array.isArray(usersQuery.data) ? usersQuery.data : []).map((u) => [
-          u.userId,
-          u,
-        ])
-      ),
-    [usersQuery.data]
+    () => new Map(members.map((m) => [m.userId, m])),
+    [members]
   )
 
   const groups = (Array.isArray(groupsQuery.data) ? groupsQuery.data : []).filter(
     (group) => group.status === "active"
   )
-  const members = Array.isArray(membersQuery.data) ? membersQuery.data : []
 
   if (enterpriseLoading || (enterprise && data.isLoading)) {
     return <EnterpriseLoadingSkeleton />
@@ -626,8 +636,6 @@ export default function EnterpriseGroupsPage() {
       <CreateGroupDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        enterpriseId={enterpriseId}
-        userId={userId}
         orgCerts={data.orgCerts}
         certificationById={data.certificationById}
       />
@@ -636,7 +644,6 @@ export default function EnterpriseGroupsPage() {
         group={manageGroup}
         open={manageGroup != null}
         onOpenChange={(open) => !open && setManageGroup(null)}
-        userId={userId}
         members={members}
         userById={userById}
         assignments={data.assignments}

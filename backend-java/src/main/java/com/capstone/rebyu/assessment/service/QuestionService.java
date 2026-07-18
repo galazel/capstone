@@ -57,6 +57,11 @@ public class QuestionService {
     public QuestionDto create(QuestionDto dto) {
         log.info("Creating new question");
         validateLesson(dto);
+        if (dto.getParentQuestionId() == null && dto.getQuestionText() != null) {
+            if (questionRepository.findDuplicate(dto.getLessonId(), dto.getQuestionText(), dto.getQuestionType()).isPresent()) {
+                throw new IllegalArgumentException("A question with this text already exists in this lesson");
+            }
+        }
         Question entity = questionMapper.toEntity(dto);
         entity.setQuestionId(null);
         resolveParent(entity, dto.getParentQuestionId());

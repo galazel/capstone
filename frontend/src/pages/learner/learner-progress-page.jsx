@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react"
 import { useNavigate, useOutletContext } from "react-router-dom"
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery } from "@tanstack/react-query"
 import {
   ArcElement,
   BarElement,
@@ -15,6 +15,7 @@ import {
 } from "chart.js"
 import { Bar, Doughnut, Line } from "react-chartjs-2"
 import { BookOpen, Target } from "lucide-react"
+import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -32,6 +33,7 @@ import {
 import LearnerPremiumGuard from "@/components/learner/learner-premium-guard.jsx"
 import { FEATURES } from "@/services/subscriptionService.js"
 import { getProgressAnalytics } from "@/services/learnerAnalyticsService.js"
+import { convertCoinsToAiCredits, getMyRewardBalance, getMyRewardLedger } from "@/services/gamificationService.js"
 
 ChartJS.register(
     CategoryScale,
@@ -745,6 +747,13 @@ export default function LearnerProgressPage() {
   const studyStreak = getNumber(analytics?.studyStreakDays, 0)
   const readinessLevel = clampPercent(analytics?.readinessPercentage)
   const bktUnavailable = analytics != null && analytics.bktAvailable === false
+  const rewardsQuery = useQuery({ queryKey: ["my-reward-balance"], queryFn: getMyRewardBalance })
+  const rewardLedgerQuery = useQuery({ queryKey: ["my-reward-ledger"], queryFn: getMyRewardLedger })
+  const convertCoinsMutation = useMutation({
+    mutationFn: () => convertCoinsToAiCredits(10, globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`),
+    onSuccess: (result) => { rewardsQuery.refetch(); rewardLedgerQuery.refetch(); toast.success(result.converted ? `Converted 10 coins into ${result.aiCreditsReceived} AI credit.` : "That conversion was already processed.") },
+    onError: (error) => toast.error(error?.message || "Could not convert coins."),
+  })
 
   return (
       <LearnerPremiumGuard
@@ -753,6 +762,15 @@ export default function LearnerProgressPage() {
           description="Unlock mastery, weakness analysis, performance trends, confidence, and recommended next actions with Pro or institution access."
       >
         <div className="space-y-8 font-sans">
+        <section className="grid gap-3 sm:grid-cols-3" aria-label="Learning rewards">
+          {[
+            ["XP", rewardsQuery.data?.xp ?? 0, "Permanent learning progression"],
+            ["Coins", rewardsQuery.data?.coins ?? 0, "Community reward balance"],
+            ["AI credits", rewardsQuery.data?.aiCredits ?? 0, "Tutor generation balance"],
+          ].map(([label, value, caption]) => <div key={label} className="rounded-xl border bg-background p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p><p className="mt-1 text-2xl font-bold">{Number(value).toLocaleString()}</p><p className="mt-1 text-xs text-muted-foreground">{caption}</p></div>)}
+        </section>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 px-4 py-3 text-sm"><p className="text-muted-foreground">Convert 10 Community Coins into 1 AI Credit for Tutor generation.</p><Button size="sm" variant="outline" disabled={(rewardsQuery.data?.coins ?? 0) < 10 || convertCoinsMutation.isPending} onClick={() => convertCoinsMutation.mutate()}>Convert 10 coins</Button></div>
+        {(rewardLedgerQuery.data?.length ?? 0) > 0 ? <section className="rounded-xl border bg-background p-4"><h2 className="text-sm font-semibold">Recent reward activity</h2><div className="mt-3 space-y-2">{rewardLedgerQuery.data.slice(0, 5).map((entry, index) => <div key={`${entry.createdAt}-${index}`} className="flex items-center justify-between gap-3 text-sm"><span className="truncate text-muted-foreground">{entry.reason.replaceAll("_", " ")}</span><span className={entry.amount > 0 ? "font-semibold text-emerald-700" : "font-semibold text-rose-700"}>{entry.amount > 0 ? "+" : ""}{entry.amount} {entry.currency.replace("_", " ")}</span></div>)}</div></section> : null}
         <div className="flex justify-end">
           <Select
               value={selectedCertificationId}

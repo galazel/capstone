@@ -2,6 +2,7 @@ package com.capstone.rebyu.community;
 
 import com.capstone.rebyu.auth.dto.CurrentUserDto;
 import com.capstone.rebyu.auth.service.CognitoAuthService;
+import com.capstone.rebyu.learningtools.StudyPracticeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -20,6 +21,7 @@ public class CommunityController {
 
     private final CommunityService service;
     private final CognitoAuthService auth;
+    private final StudyPracticeService practiceService;
 
     @GetMapping("/posts")
     public List<CommunityService.Post> posts(
@@ -35,6 +37,28 @@ public class CommunityController {
     public CommunityService.Post createPost(
             @AuthenticationPrincipal Jwt jwt, @RequestBody CommunityService.PostRequest request) {
         return service.createPost(me(jwt), request);
+    }
+
+    @GetMapping("/notifications")
+    public List<CommunityService.LearnerNotification> notifications(@AuthenticationPrincipal Jwt jwt) { return service.notifications(me(jwt)); }
+
+    @PostMapping("/posts/shared-study-item/{libraryItemId}")
+    @ResponseStatus(HttpStatus.CREATED)
+    public CommunityService.Post shareStudyItem(
+            @AuthenticationPrincipal Jwt jwt, @PathVariable Long libraryItemId,
+            @RequestBody CommunityService.ShareStudyItemRequest request) {
+        return service.shareStudyItem(me(jwt), libraryItemId, request.circleId());
+    }
+
+    @PostMapping("/posts/{postId}/practice")
+    public StudyPracticeService.Attempt startSharedPractice(@AuthenticationPrincipal Jwt jwt, @PathVariable Long postId) {
+        return practiceService.startCommunityAttempt(me(jwt), service.sharedStudySetId(postId));
+    }
+
+    @PostMapping("/posts/{postId}/report")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void reportPost(@AuthenticationPrincipal Jwt jwt, @PathVariable Long postId, @RequestBody CommunityService.ReportRequest request) {
+        service.reportPost(me(jwt), postId, request);
     }
 
     /** Upload a PDF/DOCX before creating a post; the returned key is passed as attachmentKey. */

@@ -19,9 +19,11 @@ import {
 } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
-import { getCurrentLearnerIdentity } from "@/services/learnerService.js"
+import {
+  getCurrentLearner,
+  getCurrentLearnerIdentity,
+} from "@/services/learnerService.js"
 import { getAssessmentAttempts } from "@/services/assessmentService.js"
-import { base } from "@/services/base"
 
 function formatDuration(totalSeconds) {
   if (totalSeconds == null) return "—"
@@ -51,18 +53,14 @@ export default function LearnerAssessmentHistoryPage() {
   const { examId } = useParams()
 
   const identity = getCurrentLearnerIdentity()
-  const learnersQuery = useQuery({
-    queryKey: ["learners"],
-    queryFn: () => base("learners"),
+  const currentLearnerQuery = useQuery({
+    queryKey: ["current-learner"],
+    queryFn: getCurrentLearner,
     retry: 1,
     enabled: identity.learnerId == null,
   })
   const learnerId =
-    identity.learnerId ??
-    (Array.isArray(learnersQuery.data)
-      ? learnersQuery.data[0]?.learnerId
-      : null) ??
-    null
+    identity.learnerId ?? currentLearnerQuery.data?.learnerId ?? null
 
   const attemptsQuery = useQuery({
     queryKey: ["assessment-attempts", examId, learnerId],
@@ -71,7 +69,7 @@ export default function LearnerAssessmentHistoryPage() {
     retry: 1,
   })
 
-  if (attemptsQuery.isLoading || (learnerId == null && learnersQuery.isLoading)) {
+  if (attemptsQuery.isLoading || (learnerId == null && currentLearnerQuery.isLoading)) {
     return (
       <div className="mx-auto max-w-4xl space-y-4 p-6">
         <Skeleton className="h-10 w-2/3" />

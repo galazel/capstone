@@ -1,5 +1,6 @@
 package com.capstone.rebyu.community.entity;
 
+import com.capstone.rebyu.learningtools.entity.LearnerLibraryItem;
 import com.capstone.rebyu.user.entity.Learner;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -51,6 +52,16 @@ public class CommunityPost {
     /** S3 key of a real uploaded PDF/DOCX; null when the post has no attachment. */
     @Column(name = "attachment_key", length = 500)
     private String attachmentKey;
+
+    /** Set when this post shares a generated quiz/flashcard set (V29). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "shared_library_item_id")
+    private LearnerLibraryItem sharedLibraryItem;
+
+    /** VISIBLE | HIDDEN (see V33 CHECK constraint). */
+    @Column(name = "moderation_status", nullable = false, length = 16)
+    @Builder.Default
+    private String moderationStatus = "VISIBLE";
 
     @Column(name = "created_at", nullable = false)
     @Builder.Default

@@ -22,8 +22,11 @@ public final class PartnershipTransactionDtos {
     ) {
     }
 
+    // enterpriseId is always overwritten server-side from the caller's JWT
+    // (see PartnershipTransactionController.submit) before this reaches the
+    // service, so it must stay nullable here -- the client never supplies it.
     public record SubmitPartnershipRequestDto(
-            @NotNull Long enterpriseId,
+            Long enterpriseId,
             @NotEmpty List<PartnershipItemRequestDto> items,
             String idempotencyKey
     ) {

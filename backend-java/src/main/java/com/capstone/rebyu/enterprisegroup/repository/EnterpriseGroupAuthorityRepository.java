@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface EnterpriseGroupAuthorityRepository extends JpaRepository<EnterpriseGroupAuthority, Long> {
     List<EnterpriseGroupAuthority> findByEnterpriseGroup_EnterpriseGroupId(Long enterpriseGroupId);
@@ -16,6 +17,13 @@ public interface EnterpriseGroupAuthorityRepository extends JpaRepository<Enterp
 
     boolean existsByEnterpriseGroupAndUserAndStatus(
             EnterpriseGroup enterpriseGroup, User user, EnterpriseGroupAuthority.Status status);
+
+    /**
+     * Finds any existing membership (active or archived) for this (group, user) pair,
+     * regardless of status, so re-assignment can reactivate an archived row in place
+     * instead of inserting a logically duplicate one.
+     */
+    Optional<EnterpriseGroupAuthority> findByEnterpriseGroupAndUser(EnterpriseGroup enterpriseGroup, User user);
 
     /** Distinct active authority users across all of an enterprise's groups. */
     @Query("""

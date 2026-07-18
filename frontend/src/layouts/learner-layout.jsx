@@ -34,6 +34,7 @@ import { CalendarDays } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useLearnerEntitlements } from "@/hooks/use-learner-entitlements.js"
+import { getCommunityNotifications } from "@/services/communityService.js"
 
 function getInitials(name = "", email = "") {
   const source = name || email || "Learner"
@@ -78,6 +79,7 @@ export default function LearnerLayout() {
     staleTime: 15_000,
     retry: 1,
   })
+  const communityNotificationsQuery = useQuery({ queryKey: ["learner-community-notifications"], queryFn: getCommunityNotifications, refetchInterval: 30_000, staleTime: 15_000 })
   const certificationById = new Map(
     (query.data?.certifications ?? []).map((certification) => [
       String(certification.certificationId),
@@ -113,7 +115,8 @@ export default function LearnerLayout() {
         href: `/learner/certifications/${enrollment.certificationId}`,
       }
     })
-  const notifications = [...pendingInvitationNotifications, ...assignmentNotifications]
+  const moderationNotifications = (Array.isArray(communityNotificationsQuery.data) ? communityNotificationsQuery.data : []).map((notification) => ({ ...notification, type: "certification" }))
+  const notifications = [...moderationNotifications, ...pendingInvitationNotifications, ...assignmentNotifications]
     .sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0))
 
   const outletContext = useMemo(

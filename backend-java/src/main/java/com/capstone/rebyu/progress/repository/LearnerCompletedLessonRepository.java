@@ -10,4 +10,6 @@ public interface LearnerCompletedLessonRepository extends JpaRepository<LearnerC
 
     List<LearnerCompletedLesson> findByLearner_LearnerIdAndLesson_MiddleCategory_MajorCategory_Certification_CertificationId(
             Long learnerId, Long certificationId);
+
+    List<LearnerCompletedLesson> findByLearner_LearnerId(Long learnerId);
 }

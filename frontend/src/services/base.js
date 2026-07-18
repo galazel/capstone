@@ -27,6 +27,7 @@ export async function base(endpoint, options = {}) {
       headers.Authorization = `Bearer ${token}`
     }
   }
+  const hadToken = Boolean(headers.Authorization)
 
   try {
     const response = await axios({
@@ -39,6 +40,17 @@ export async function base(endpoint, options = {}) {
 
     return response.data
   } catch (error) {
+    // A 401 on a request we sent WITH a token means the session expired or was
+    // revoked mid-use. Send the user back to sign in (guarded against loops).
+    if (
+      error.response?.status === 401 &&
+      hadToken &&
+      !window.location.pathname.startsWith("/login")
+    ) {
+      sessionStorage.setItem("rebyu_session_expired", "1")
+      window.location.assign("/login")
+    }
+
     console.error(
         `API request failed: ${options.method || "GET"} /${endpoint}`,
         error.response?.data || error.message

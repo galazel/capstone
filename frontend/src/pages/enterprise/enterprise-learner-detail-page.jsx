@@ -24,27 +24,25 @@ import {
   getLearnerDisplayName,
   useEnterpriseData,
 } from "@/hooks/use-enterprise-data.js"
-import { base } from "@/services/base"
+import { getEnterpriseLearnerExamResults } from "@/services/enterpriseService.js"
 
 function useLearnerInsights(learnerId, enabled) {
+  // Scoped + ownership-checked on the server: returns only this learner's results,
+  // and only if the learner belongs to the caller's own enterprise (404 otherwise).
   const resultsQuery = useQuery({
-    queryKey: ["exam-results"],
-    queryFn: () => base("exam-results"),
-    enabled,
+    queryKey: ["enterprise-learner-exam-results", learnerId],
+    queryFn: () => getEnterpriseLearnerExamResults(learnerId),
+    enabled: enabled && learnerId != null,
     retry: 1,
   })
 
-  return useMemo(() => {
-    const idNum = Number(learnerId)
-    const filterByLearner = (list) =>
-      (Array.isArray(list) ? list : []).filter(
-        (item) => Number(item.learnerId) === idNum
-      )
-    return {
-      results: filterByLearner(resultsQuery.data),
+  return useMemo(
+    () => ({
+      results: Array.isArray(resultsQuery.data) ? resultsQuery.data : [],
       isLoading: resultsQuery.isLoading,
-    }
-  }, [learnerId, resultsQuery])
+    }),
+    [resultsQuery.data, resultsQuery.isLoading]
+  )
 }
 
 export default function EnterpriseLearnerDetailPage() {

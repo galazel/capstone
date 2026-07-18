@@ -1,5 +1,5 @@
-import { API, base } from "./base.js"
-import { getFileViewUrl } from "./fileService.js"
+import { base } from "./base.js"
+import { getFileDownloadUrl, getFileViewUrl } from "./fileService.js"
 
 export function getCurrentLearnerIdentity() {
   const read = (...keys) => {
@@ -24,18 +24,6 @@ export function getCurrentLearnerIdentity() {
   }
 }
 
-export function getFileDownloadUrl(key) {
-  return `${API}/files/download?key=${encodeURIComponent(key)}`
-}
-
-export function getAllLearners() {
-  return base("learners")
-}
-
-export function getAllUsers() {
-  return base("users")
-}
-
 export function updateLearner(id, data) {
   return base(`learners/${id}`, {
     method: "PUT",
@@ -50,14 +38,6 @@ export function updateUser(id, data) {
   })
 }
 
-export function getAllLearnerCertifications() {
-  return base("learner-certifications")
-}
-
-export function getAllCompletedLessons() {
-  return base("learner-completed-lessons")
-}
-
 export function markLessonComplete(data) {
   return base("learner-completed-lessons", {
     method: "POST",
@@ -65,16 +45,20 @@ export function markLessonComplete(data) {
   })
 }
 
-export function getAllActivityLogs() {
-  return base("activity-logs")
-}
-
 export function getAllExams() {
   return base("exams")
 }
 
-export function getAllExamResults() {
-  return base("exam-results")
+// Tenant-scoped learner snapshot: the caller's own learner/user record, enrollments,
+// completed lessons, activity logs, exam results, and org allocations (learnerId/userId
+// resolved from the JWT). Replaces fetching global lists and filtering in the browser.
+export function getLearnerPortalScoped() {
+  return base("learners/me/portal")
+}
+
+// The caller's own learner record (JWT-derived) -- use instead of fetching all learners.
+export function getCurrentLearner() {
+  return base("learners/me")
 }
 
 export function getLessonById(id) {
@@ -167,46 +151,27 @@ function computeStudyStreak(activityLogs) {
 export async function getLearnerPortalData() {
   const identity = getCurrentLearnerIdentity()
 
-  const [
-    learners,
-    users,
-    certifications,
-    learnerCertifications,
-    completedLessons,
-    activityLogs,
-    exams,
-    examResults,
-    orgCertLearners,
-    orgCertificates,
-  ] = await Promise.all([
-    getAllLearners(),
-    getAllUsers(),
+  // All learner-private data comes pre-scoped from the backend (learnerId/userId
+  // resolved from the JWT); only the certification/exam catalogs are public.
+  const [portal, certifications, exams] = await Promise.all([
+    getLearnerPortalScoped(),
     base("certifications"),
-    identity.learnerId != null
-      ? base(`learner/enrollments?learnerId=${identity.learnerId}`)
-      : getAllLearnerCertifications(),
-    getAllCompletedLessons(),
-    getAllActivityLogs(),
     getAllExams(),
-    getAllExamResults(),
-    // Enterprise-assigned enrollments (created when a learner accepts an
-    // organization invitation) plus the org allocations that map an
-    // orgCertId to a certificationId.
-    base("organization-certification-learners").catch(() => []),
-    base("organization-certificates").catch(() => []),
   ])
 
-  const learner =
-    asArray(learners).find((item) => isSameId(item.learnerId, identity.learnerId)) ??
-    asArray(learners).find((item) => isSameId(item.userId, identity.userId)) ??
-    null
+  const learnerCertifications = asArray(portal.learnerCertifications)
+  const completedLessons = asArray(portal.completedLessons)
+  const activityLogs = asArray(portal.activityLogs)
+  const examResults = asArray(portal.examResults)
+  const orgCertLearners = asArray(portal.orgCertLearners)
+  const orgCertificates = asArray(portal.orgCertificates)
 
   // The learners table is authoritative. Never fall back to a stale legacy
   // localStorage value when no learner profile exists for the signed-in user.
+  const learner = portal.learner ?? null
   const learnerId = learner?.learnerId ?? null
   const userId = learner?.userId ?? identity.userId
-  const user =
-    asArray(users).find((item) => isSameId(item.userId, userId)) ?? null
+  const user = portal.user ?? null
 
   const purchaseEnrollments = asArray(learnerCertifications).filter((item) =>
     isSameId(item.learnerId, learnerId)

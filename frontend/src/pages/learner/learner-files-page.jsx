@@ -15,6 +15,7 @@ import {
   Trash2,
   Link,
   StickyNote,
+  History,
 } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 
@@ -264,7 +265,7 @@ export default function LearnerFilesPage() {
   return (
       <div className="space-y-6">
         <LearnerPageHeader title="Library" subtitle="Access your generated quizzes, flashcards, study files, and saved community resources.">
-          <Button type="button" onClick={() => setAddOpen(true)}><Plus className="mr-2 h-4 w-4" />Add resource</Button>
+          <div className="flex gap-2"><Button type="button" variant="outline" onClick={() => navigate("/learner/practice-history")}><History className="mr-2 h-4 w-4" />Practice history</Button><Button type="button" onClick={() => setAddOpen(true)}><Plus className="mr-2 h-4 w-4" />Add resource</Button></div>
         </LearnerPageHeader>
 
         <div className="flex flex-wrap items-center gap-2 border-b border-zinc-200 pb-4">

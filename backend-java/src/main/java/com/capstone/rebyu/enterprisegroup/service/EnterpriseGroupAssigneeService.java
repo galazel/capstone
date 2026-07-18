@@ -43,13 +43,19 @@ public class EnterpriseGroupAssigneeService {
         return enterpriseGroupAssigneeMapper.toDto(findEntity(id));
     }
 
-    public EnterpriseGroupAssigneeDto create(EnterpriseGroupAssigneeDto dto) {
+    public EnterpriseGroupAssigneeDto create(EnterpriseGroupAssigneeDto dto, Long callerEnterpriseId) {
         log.info("Adding learner (orgCertLearnerId={}) to groupId={}",
                 dto.getOrgCertLearnerId(), dto.getEnterpriseGroupId());
 
         EnterpriseGroup group = enterpriseGroupRepository.findById(dto.getEnterpriseGroupId())
                 .orElseThrow(() -> new EntityNotFoundException(
                         "EnterpriseGroup not found: " + dto.getEnterpriseGroupId()));
+
+        if (group.getEnterprise() == null
+                || !group.getEnterprise().getEnterpriseId().equals(callerEnterpriseId)) {
+            throw new EntityNotFoundException(
+                    "EnterpriseGroup not found: " + dto.getEnterpriseGroupId());
+        }
 
         OrganizationCertificationLearner learner = organizationCertificationLearnerRepository
                 .findById(dto.getOrgCertLearnerId())
@@ -65,15 +71,33 @@ public class EnterpriseGroupAssigneeService {
                     "This learner does not have access to the certification this group belongs to.");
         }
 
-        if (enterpriseGroupAssigneeRepository.existsByEnterpriseGroupAndOrgCertLearner(group, learner)) {
-            throw new BusinessRuleException.EnterpriseGroupRuleException(
-                    "This learner is already assigned to this group.");
+        // Reactivate an archived assignment instead of colliding with it — the
+        // partial unique index (uq_enterprise_group_assignee_active) only
+        // guards active rows, so a stale archived row must be found and
+        // revived explicitly rather than inserted alongside.
+        var existing = enterpriseGroupAssigneeRepository.findByEnterpriseGroupAndOrgCertLearner(group, learner);
+        if (existing.isPresent()) {
+            EnterpriseGroupAssignee row = existing.get();
+            if (row.getStatus() == EnterpriseGroupAssignee.Status.active) {
+                throw new BusinessRuleException.EnterpriseGroupRuleException(
+                        "This learner is already assigned to this group.");
+            }
+            row.setStatus(EnterpriseGroupAssignee.Status.active);
+            row.setRemovedAt(null);
+            row.setAssignedAt(LocalDateTime.now());
+            row.setAssignedBy(com.capstone.rebyu.user.entity.User.builder().userId(dto.getAssignedBy()).build());
+            row.setRole(dto.getRole() != null ? dto.getRole() : EnterpriseGroupAssignee.Role.member);
+            EnterpriseGroupAssigneeDto reactivated =
+                    enterpriseGroupAssigneeMapper.toDto(enterpriseGroupAssigneeRepository.save(row));
+            log.info("Reactivated enterprise group assignee id: {}", reactivated.getEnterpriseGroupAssigneeId());
+            return reactivated;
         }
 
         EnterpriseGroupAssignee entity = enterpriseGroupAssigneeMapper.toEntity(dto);
         entity.setEnterpriseGroupAssigneeId(null);
         entity.setAssignedAt(dto.getAssignedAt() != null ? dto.getAssignedAt() : LocalDateTime.now());
         entity.setStatus(EnterpriseGroupAssignee.Status.active);
+        entity.setRole(dto.getRole() != null ? dto.getRole() : EnterpriseGroupAssignee.Role.member);
         entity.setRemovedAt(null);
         EnterpriseGroupAssigneeDto result =
                 enterpriseGroupAssigneeMapper.toDto(enterpriseGroupAssigneeRepository.save(entity));
@@ -82,12 +106,31 @@ public class EnterpriseGroupAssigneeService {
     }
 
     /** Archive (soft-remove) a learner from a group. */
-    public void delete(Long id) {
+    public void delete(Long id, Long callerEnterpriseId) {
         log.info("Removing enterprise group assignee id: {}", id);
         EnterpriseGroupAssignee entity = findEntity(id);
+        requireSameEnterprise(entity, callerEnterpriseId);
         entity.setStatus(EnterpriseGroupAssignee.Status.archived);
         entity.setRemovedAt(LocalDateTime.now());
         enterpriseGroupAssigneeRepository.save(entity);
+    }
+
+    /** Change a learner's standing within the group (peer lead vs. regular member). */
+    public EnterpriseGroupAssigneeDto changeRole(
+            Long id, EnterpriseGroupAssignee.Role newRole, Long callerEnterpriseId) {
+        EnterpriseGroupAssignee entity = findEntity(id);
+        requireSameEnterprise(entity, callerEnterpriseId);
+        entity.setRole(newRole);
+        return enterpriseGroupAssigneeMapper.toDto(enterpriseGroupAssigneeRepository.save(entity));
+    }
+
+    private void requireSameEnterprise(EnterpriseGroupAssignee entity, Long callerEnterpriseId) {
+        EnterpriseGroup group = entity.getEnterpriseGroup();
+        if (group == null || group.getEnterprise() == null
+                || !group.getEnterprise().getEnterpriseId().equals(callerEnterpriseId)) {
+            throw new EntityNotFoundException(
+                    "EnterpriseGroupAssignee not found: " + entity.getEnterpriseGroupAssigneeId());
+        }
     }
 
     private EnterpriseGroupAssignee findEntity(Long id) {

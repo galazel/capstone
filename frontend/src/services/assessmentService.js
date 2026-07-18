@@ -236,10 +236,6 @@ export function getLearnerEnrollments(learnerId) {
   return base(`learner/enrollments?learnerId=${learnerId}`)
 }
 
-export function getCertificationKnowledgeStatus(certificationId) {
-  return base(`certifications/${certificationId}/knowledge-status`)
-}
-
 // Well-known assessment type labels stored in exam_types.exam_type_text.
 export const ASSESSMENT_TYPES = [
   { value: "DIAGNOSTIC", label: "Diagnostic" },

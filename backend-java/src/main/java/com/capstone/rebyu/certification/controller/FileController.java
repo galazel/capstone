@@ -1,5 +1,7 @@
 package com.capstone.rebyu.certification.controller;
 
+import com.capstone.rebyu.auth.dto.CurrentUserDto;
+import com.capstone.rebyu.auth.service.CognitoAuthService;
 import com.capstone.rebyu.certification.dto.CertificationDto;
 import com.capstone.rebyu.certification.dto.FileDto;
 import com.capstone.rebyu.certification.service.LessonImageService;
@@ -10,6 +12,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -25,15 +29,18 @@ public class FileController {
     private final S3StorageService s3StorageService;
     private final LessonImageService lessonImageService;
     private final LessonVideoService lessonVideoService;
+    private final CognitoAuthService auth;
 
     public FileController(
             S3StorageService s3StorageService,
             LessonImageService lessonImageService,
-            LessonVideoService lessonVideoService
+            LessonVideoService lessonVideoService,
+            CognitoAuthService auth
     ) {
         this.s3StorageService = s3StorageService;
         this.lessonImageService = lessonImageService;
         this.lessonVideoService = lessonVideoService;
+        this.auth = auth;
     }
 
     @PostMapping(
@@ -42,8 +49,10 @@ public class FileController {
             produces = MediaType.TEXT_PLAIN_VALUE
     )
     public ResponseEntity<String> upload(
-            @ModelAttribute FileDto fileDto
+            @ModelAttribute FileDto fileDto,
+            @AuthenticationPrincipal Jwt jwt
     ) throws Exception {
+        requireAdmin(jwt);
         validateLessonMediaUpload(fileDto);
 
         String key = s3StorageService.uploadFile(fileDto);
@@ -61,8 +70,10 @@ public class FileController {
             produces = MediaType.TEXT_PLAIN_VALUE
     )
     public ResponseEntity<String> uploadCertification(
-            @ModelAttribute CertificationDto certificationDto
+            @ModelAttribute CertificationDto certificationDto,
+            @AuthenticationPrincipal Jwt jwt
     ) throws Exception {
+        requireAdmin(jwt);
         log.info("Uploading certification image");
 
         String key = s3StorageService.uploadFile(certificationDto);
@@ -74,8 +85,10 @@ public class FileController {
 
     @GetMapping("/view")
     public ResponseEntity<byte[]> viewFile(
-            @RequestParam("key") String key
+            @RequestParam("key") String key,
+            @AuthenticationPrincipal Jwt jwt
     ) {
+        requireAuth(jwt);
         byte[] data = s3StorageService.downloadFile(key);
 
         String contentType = URLConnection.guessContentTypeFromName(key);
@@ -92,8 +105,10 @@ public class FileController {
 
     @GetMapping("/download")
     public ResponseEntity<byte[]> download(
-            @RequestParam("key") String key
+            @RequestParam("key") String key,
+            @AuthenticationPrincipal Jwt jwt
     ) {
+        requireAuth(jwt);
         byte[] data = s3StorageService.downloadFile(key);
 
         return ResponseEntity.ok()
@@ -105,13 +120,30 @@ public class FileController {
                 .body(data);
     }
 
+    // Arbitrary-key deletion is destructive and has no per-owner check at this
+    // generic layer (the key alone doesn't identify which lesson/enterprise/
+    // learner it belongs to), so it's restricted to ADMIN rather than left
+    // fully public -- previously anyone on the internet could delete any file
+    // in the bucket by guessing/observing its key.
     @DeleteMapping
     public ResponseEntity<Void> delete(
-            @RequestParam("key") String key
+            @RequestParam("key") String key,
+            @AuthenticationPrincipal Jwt jwt
     ) {
+        requireAdmin(jwt);
         s3StorageService.deleteFile(key);
 
         return ResponseEntity.noContent().build();
+    }
+
+    private void requireAdmin(Jwt jwt) {
+        if (jwt == null) throw new IllegalArgumentException("Authentication is required");
+        CurrentUserDto user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
+        if (!"ADMIN".equalsIgnoreCase(user.role())) throw new IllegalArgumentException("Admin access is required");
+    }
+
+    private void requireAuth(Jwt jwt) {
+        if (jwt == null) throw new IllegalArgumentException("Authentication is required");
     }
 
     private void saveLessonMediaReference(

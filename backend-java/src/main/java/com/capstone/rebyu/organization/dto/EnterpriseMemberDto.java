@@ -20,6 +20,10 @@ public class EnterpriseMemberDto {
     @NotNull
     private Long userId;
 
+    // Read-only, denormalized from the member's user account so the org portal can
+    // label members/authorities without fetching the global users list.
+    private String email;
+
     @NotNull
     private EnterpriseMember.MemberRole memberRole;
 

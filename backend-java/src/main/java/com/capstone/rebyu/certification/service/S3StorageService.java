@@ -13,24 +13,48 @@ import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.UUID;
 
 @Service
 public class S3StorageService {
 
     private final S3Client s3Client;
+    private final S3Presigner s3Presigner;
     private final String bucketName;
     private final LessonImageService lessonImageService;
     private final LessonVideoService lessonVideoService;
 
-    public S3StorageService(S3Client s3Client, @Value("${aws.s3.bucket-name}") String bucketName,
+    public S3StorageService(S3Client s3Client, S3Presigner s3Presigner,
+                            @Value("${aws.s3.bucket-name}") String bucketName,
                             LessonImageService lessonImageService, LessonVideoService lessonVideoService) {
         this.s3Client = s3Client;
+        this.s3Presigner = s3Presigner;
         this.bucketName = bucketName;
         this.lessonImageService = lessonImageService;
         this.lessonVideoService = lessonVideoService;
+    }
+
+    /**
+     * A short-lived presigned GET URL for a private object, forcing a download with the
+     * given filename. The signature lives in the URL, so it works from an {@code <a href>}
+     * without an Authorization header, yet expires quickly and can't be reused indefinitely.
+     */
+    public String presignDownloadUrl(String key, String downloadFilename, Duration ttl) {
+        GetObjectRequest.Builder getRequest = GetObjectRequest.builder().bucket(bucketName).key(key);
+        if (downloadFilename != null && !downloadFilename.isBlank()) {
+            getRequest.responseContentDisposition(
+                    "attachment; filename=\"" + downloadFilename.replace("\"", "") + "\"");
+        }
+        GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
+                .signatureDuration(ttl)
+                .getObjectRequest(getRequest.build())
+                .build();
+        return s3Presigner.presignGetObject(presignRequest).url().toString();
     }
 
     public String uploadFile(FileDto fileDto) throws Exception {

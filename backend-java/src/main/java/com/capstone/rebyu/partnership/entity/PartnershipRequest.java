@@ -80,4 +80,10 @@ public class PartnershipRequest {
     // Prevents duplicate submissions of the same partnership request.
     @Column(name = "idempotency_key", unique = true, length = 64)
     private String idempotencyKey;
+
+    // Optimistic lock so two near-simultaneous approve/reject calls on the
+    // same request can't both succeed (mirrors OrganizationCertificate.version).
+    @Version
+    @Column(name = "version")
+    private Long version;
 }

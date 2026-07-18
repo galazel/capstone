@@ -33,9 +33,14 @@ public class PartnershipRequestService {
     }
 
     public PartnershipRequestDto update(Long id, PartnershipRequestDto dto) {
-        findEntity(id);
+        PartnershipRequest existing = findEntity(id);
         PartnershipRequest entity = partnershipRequestMapper.toEntity(dto);
         entity.setRequestId(id);
+        // Status transitions must only ever happen through AdminPartnershipService's
+        // approve/reject workflow (which triggers the real Enterprise/certificate
+        // side effects). Ignore any status the client sent on this generic CRUD
+        // path so it can't be used to fake an approval without those side effects.
+        entity.setStatus(existing.getStatus());
         return partnershipRequestMapper.toDto(partnershipRequestRepository.save(entity));
     }
 

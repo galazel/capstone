@@ -26,6 +26,14 @@ export default function LoginPage() {
     }
   }, [navigate, status, user?.role])
 
+  // Surfaced once when a request was rejected mid-session (token expired/revoked).
+  useEffect(() => {
+    if (sessionStorage.getItem("rebyu_session_expired")) {
+      sessionStorage.removeItem("rebyu_session_expired")
+      setError("Your session expired. Please sign in again.")
+    }
+  }, [])
+
   async function handleSubmit(event) {
     event.preventDefault()
 

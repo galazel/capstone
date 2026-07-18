@@ -15,6 +15,14 @@ public interface OrganizationCertificationLearnerRepository extends JpaRepositor
     List<OrganizationCertificationLearner> findByLearner_LearnerIdAndStatus(
             Long learnerId, OrganizationCertificationLearner.Status status);
 
+    List<OrganizationCertificationLearner> findByLearner_LearnerId(Long learnerId);
+
+    /** All learner allocations under one enterprise — the tenant-scoped portal view. */
+    List<OrganizationCertificationLearner> findByOrgCert_Enterprise_EnterpriseId(Long enterpriseId);
+
+    /** True when a learner holds any allocation under the given enterprise (tenant membership check). */
+    boolean existsByLearner_LearnerIdAndOrgCert_Enterprise_EnterpriseId(Long learnerId, Long enterpriseId);
+
     /** Unique active learners under an enterprise — the institutional seat unit. */
     @Query("""
             SELECT COUNT(DISTINCT o.learner.learnerId)

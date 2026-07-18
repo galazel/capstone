@@ -17,33 +17,20 @@ export function getEnterpriseMembers(enterpriseId) {
   return base(`enterprise-members/enterprise/${enterpriseId}`)
 }
 
-// Certification allocations (slots per certification for an organization)
-export function getOrganizationCertificates() {
-  return base("organization-certificates")
+// Tenant-scoped portal snapshot: org certs, learner assignments, learner summaries,
+// invitations, and invoices for the caller's own enterprise (derived from the JWT).
+export function getEnterprisePortalOverview() {
+  return base("enterprise/me/overview")
 }
 
-export function getOrganizationCertificationLearners() {
-  return base("organization-certification-learners")
+// Exam results for one of the caller's own learners (404 for learners outside the tenant).
+export function getEnterpriseLearnerExamResults(learnerId) {
+  return base(`enterprise/me/learners/${learnerId}/exam-results`)
 }
 
-// Learner invitations
+// Learner invitations (read-only; the dashboard's "Recent invitations" widget)
 export function getLearnerInvitations() {
   return base("learner-invitations")
-}
-
-export function createLearnerInvitation(invitation) {
-  return base("learner-invitations", { method: "POST", data: invitation })
-}
-
-export function updateLearnerInvitation(invitationId, invitation) {
-  return base(`learner-invitations/${invitationId}`, {
-    method: "PUT",
-    data: invitation,
-  })
-}
-
-export function deleteLearnerInvitation(invitationId) {
-  return base(`learner-invitations/${invitationId}`, { method: "DELETE" })
 }
 
 // Enterprise learner groups (per certification allocation)
@@ -107,45 +94,17 @@ export function removeEnterpriseGroupAssignee(assigneeId) {
   return base(`enterprise-group-assignees/${assigneeId}`, { method: "DELETE" })
 }
 
-// Billing
-export function getEnterpriseInvoices() {
-  return base("enterprise-invoices")
-}
-
-export function getEnterpriseInvoiceItems() {
-  return base("enterprise-invoice-items")
-}
-
-// Partnership
-export function getPartnershipRequests() {
-  return base("partnership-requests")
-}
-
-export function createPartnershipRequest(request) {
-  return base("partnership-requests", { method: "POST", data: request })
-}
-
-export function updatePartnershipRequest(requestId, request) {
-  return base(`partnership-requests/${requestId}`, {
-    method: "PUT",
-    data: request,
+// role: "lead" | "member" -- peer-leader distinction within the group.
+export function changeEnterpriseGroupAssigneeRole(assigneeId, role) {
+  return base(`enterprise-group-assignees/${assigneeId}/role`, {
+    method: "PATCH",
+    data: { role },
   })
 }
 
-export function getPartnershipRequestItems() {
-  return base("partnership-request-items")
-}
-
-export function createPartnershipRequestItem(item) {
-  return base("partnership-request-items", { method: "POST", data: item })
-}
-
-export function getPartnershipMeetings() {
-  return base("partnership-meetings")
-}
-
 // Transaction Three: submit a partnership request and all of its line items
-// atomically, with idempotency to prevent duplicate submissions.
+// atomically, with idempotency to prevent duplicate submissions. enterpriseId
+// is derived server-side from the caller's JWT, not sent by the client.
 export function submitPartnershipRequestTransaction(request) {
   return base("enterprise/partnership-requests", {
     method: "POST",
@@ -153,8 +112,8 @@ export function submitPartnershipRequestTransaction(request) {
   })
 }
 
-export function getPartnershipRequestTransactions(enterpriseId) {
-  return base(`enterprise/partnership-requests?enterpriseId=${enterpriseId}`)
+export function getPartnershipRequestTransactions() {
+  return base("enterprise/partnership-requests")
 }
 
 // Renewals
@@ -169,11 +128,8 @@ export function createRenewalRequest(request) {
   })
 }
 
-// People (shared endpoints, filtered client-side to the organization)
-export function getAllLearners() {
-  return base("learners")
-}
-
-export function getAllUsers() {
-  return base("users")
-}
+export function getEnterpriseFiles() { return base("enterprise/files") }
+// Returns a short-lived presigned download URL, scoped to the caller's own enterprise.
+export function getEnterpriseFileDownloadUrl(id) { return base(`enterprise/files/${id}/download-url`) }
+export function uploadEnterpriseFile(file) { const formData = new FormData(); formData.append("file", file); return base("enterprise/files", { method: "POST", data: formData }) }
+export function deleteEnterpriseFile(id) { return base(`enterprise/files/${id}`, { method: "DELETE" }) }

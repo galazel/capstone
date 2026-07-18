@@ -48,7 +48,10 @@ import ProgrammingQuestionLayout from "@/components/assessments/attempt/programm
 import QuestionNavigator from "@/components/assessments/attempt/question-navigator.jsx"
 import SubQuestionTabs from "@/components/assessments/attempt/sub-question-tabs.jsx"
 import { getFileViewUrl } from "@/services/fileService.js"
-import { getCurrentLearnerIdentity } from "@/services/learnerService.js"
+import {
+  getCurrentLearner,
+  getCurrentLearnerIdentity,
+} from "@/services/learnerService.js"
 import {
   autosaveAttemptAnswers,
   getAssessmentTypeLabel,
@@ -58,7 +61,6 @@ import {
   startAssessmentAttempt,
   submitAssessmentAttempt,
 } from "@/services/assessmentService.js"
-import { base } from "@/services/base"
 
 function formatClock(totalSeconds) {
   const minutes = Math.floor(totalSeconds / 60)
@@ -437,16 +439,14 @@ export default function LearnerAssessmentAttemptPage() {
   const queryClient = useQueryClient()
 
   const identity = getCurrentLearnerIdentity()
-  const learnersQuery = useQuery({
-    queryKey: ["learners"],
-    queryFn: () => base("learners"),
+  const currentLearnerQuery = useQuery({
+    queryKey: ["current-learner"],
+    queryFn: getCurrentLearner,
     retry: 1,
     enabled: identity.learnerId == null,
   })
   const learnerId =
-      identity.learnerId ??
-      (Array.isArray(learnersQuery.data) ? learnersQuery.data[0]?.learnerId : null) ??
-      null
+      identity.learnerId ?? currentLearnerQuery.data?.learnerId ?? null
 
   // Server-driven attempt state
   const [attempt, setAttempt] = useState(null)

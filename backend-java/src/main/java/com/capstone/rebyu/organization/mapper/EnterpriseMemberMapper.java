@@ -9,6 +9,7 @@ import org.mapstruct.Mapping;
 public interface EnterpriseMemberMapper {
     @Mapping(source = "enterprise.enterpriseId", target = "enterpriseId")
     @Mapping(source = "user.userId", target = "userId")
+    @Mapping(source = "user.email", target = "email")
     EnterpriseMemberDto toDto(EnterpriseMember entity);
 
     @Mapping(source = "enterpriseId", target = "enterprise.enterpriseId")

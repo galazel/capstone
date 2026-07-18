@@ -35,6 +35,12 @@ export async function getCommunityPosts({ type, search, saved } = {}) {
 export const getCommunityCircles = () => base("community/circles")
 export const createCommunityPost = async (payload) => postView(await base("community/posts", { method: "POST", data: payload }))
 export const createCommunityCircle = (payload) => base("community/circles", { method: "POST", data: payload })
+export const shareCommunityStudyItem = async (libraryItemId, circleId = null) =>
+  postView(await base(`community/posts/shared-study-item/${libraryItemId}`, { method: "POST", data: { circleId } }))
+export const startSharedCommunityPractice = (postId) => base(`community/posts/${postId}/practice`, { method: "POST" })
+export const reportCommunityPost = (postId, reason, details = null) =>
+  base(`community/posts/${postId}/report`, { method: "POST", data: { reason, details } })
+export const getCommunityNotifications = () => base("community/notifications")
 export const toggleCommunityLike = (id) => base(`community/posts/${id}/like`, { method: "POST" })
 export const toggleCommunitySave = (id) => base(`community/posts/${id}/save`, { method: "POST" })
 export const toggleCircleMembership = (id) => base(`community/circles/${id}/membership`, { method: "POST" })

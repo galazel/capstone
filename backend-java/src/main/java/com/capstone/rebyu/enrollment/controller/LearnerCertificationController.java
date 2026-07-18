@@ -1,10 +1,14 @@
 package com.capstone.rebyu.enrollment.controller;
 
+import com.capstone.rebyu.auth.dto.CurrentUserDto;
+import com.capstone.rebyu.auth.service.CognitoAuthService;
 import com.capstone.rebyu.enrollment.dto.LearnerCertificationDto;
 import com.capstone.rebyu.enrollment.service.LearnerCertificationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -14,15 +18,27 @@ import java.util.List;
 @RequiredArgsConstructor
 public class LearnerCertificationController {
     private final LearnerCertificationService learnerCertificationService;
+    private final CognitoAuthService auth;
 
+    // Cross-learner enrollment data: the unfiltered list/lookup exposes every learner's
+    // purchased enrollments, so reads are admin-only. Learners get their own via
+    // /api/learners/me/portal; enterprise managers via the scoped enterprise endpoints.
     @GetMapping
-    public List<LearnerCertificationDto> getAll() {
+    public List<LearnerCertificationDto> getAll(@AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return learnerCertificationService.getAll();
     }
 
     @GetMapping("/{id}")
-    public LearnerCertificationDto getById(@PathVariable Long id) {
+    public LearnerCertificationDto getById(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return learnerCertificationService.getById(id);
+    }
+
+    private void requireAdmin(Jwt jwt) {
+        if (jwt == null) throw new IllegalArgumentException("Authentication is required");
+        CurrentUserDto user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
+        if (!"ADMIN".equalsIgnoreCase(user.role())) throw new IllegalArgumentException("Admin access is required");
     }
 
     @PostMapping

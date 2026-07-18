@@ -2,13 +2,16 @@ package com.capstone.rebyu.notification.controller;
 
 import com.capstone.rebyu.notification.dto.LearnerInvitationDto;
 import com.capstone.rebyu.notification.service.LearnerInvitationService;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+// Read-only: the write endpoints (create/update/delete) were removed because they let
+// anyone forge a valid, self-computed invitation token for any certification with no
+// auth check. The real invitation-sending flow lives in EnterpriseInvitationService.
+// getAll/getById are kept because the enterprise dashboard's "Recent invitations" widget
+// (use-enterprise-data.js -> enterprise-dashboard-page.jsx) still reads from this path.
 @RestController
 @RequestMapping("/api/learner-invitations")
 @RequiredArgsConstructor
@@ -23,22 +26,5 @@ public class LearnerInvitationController {
     @GetMapping("/{id}")
     public LearnerInvitationDto getById(@PathVariable Long id) {
         return learnerInvitationService.getById(id);
-    }
-
-    @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    public LearnerInvitationDto create(@Valid @RequestBody LearnerInvitationDto dto) {
-        return learnerInvitationService.create(dto);
-    }
-
-    @PutMapping("/{id}")
-    public LearnerInvitationDto update(@PathVariable Long id, @Valid @RequestBody LearnerInvitationDto dto) {
-        return learnerInvitationService.update(id, dto);
-    }
-
-    @DeleteMapping("/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long id) {
-        learnerInvitationService.delete(id);
     }
 }

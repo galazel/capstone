@@ -53,6 +53,7 @@ import {
 import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
 import { useLearnerEntitlements } from "@/hooks/use-learner-entitlements.js"
 import { generateStudyAid } from "@/services/learnerToolsService.js"
+import { getMyRewardBalance } from "@/services/gamificationService.js"
 
 const AI_TUTOR_ENDPOINT = "ai/tutor"
 
@@ -611,6 +612,7 @@ function GeminiStyleTutor({
   const [pending, setPending] = useState(false)
   const [generating, setGenerating] = useState(null)
   const entitlements = useLearnerEntitlements()
+  const rewardsQuery = useQuery({ queryKey: ["my-reward-balance"], queryFn: getMyRewardBalance, enabled: entitlements.hasPremium })
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -685,6 +687,10 @@ function GeminiStyleTutor({
     if (!entitlements.hasPremium) {
       return
     }
+    if (rewardsQuery.isSuccess && (rewardsQuery.data?.aiCredits ?? 0) < 1) {
+      toast.error("You need at least 1 AI Credit to generate a study aid. Convert Coins on your dashboard or wait for your next Pro grant.")
+      return
+    }
     if (generating) return
     setGenerating(type)
     try {
@@ -696,6 +702,7 @@ function GeminiStyleTutor({
         text: `Your ${label} has been generated and saved to Library.\n\n${item.description}`,
       }])
       toast.success(`${type === "quiz" ? "Quiz" : "Flashcards"} saved to Library.`)
+      rewardsQuery.refetch()
     } catch (error) {
       toast.error(error?.response?.data?.message ?? "The study aid could not be generated.")
     } finally {
@@ -873,7 +880,7 @@ function GeminiStyleTutor({
                 <DropdownMenuContent align="start" className="w-64">
                   <DropdownMenuLabel>
                     <span className="block text-sm">Create with AI</span>
-                    <span className="mt-0.5 block text-xs font-normal text-muted-foreground">Generated items are saved to Library.</span>
+                    <span className="mt-0.5 block text-xs font-normal text-muted-foreground">Generated items are saved to Library. {entitlements.hasPremium ? `${rewardsQuery.data?.aiCredits ?? 0} AI Credits available.` : "Pro required."}</span>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -881,7 +888,7 @@ function GeminiStyleTutor({
                       if (!entitlements.hasPremium) event.preventDefault()
                       createStudyAid("quiz")
                     }}
-                    disabled={Boolean(generating)}
+                    disabled={Boolean(generating) || (entitlements.hasPremium && rewardsQuery.isSuccess && (rewardsQuery.data?.aiCredits ?? 0) < 1)}
                   >
                     <BookOpenCheck className="mr-2 size-4" />
                     <span className="flex-1">Generate quiz</span>
@@ -892,7 +899,7 @@ function GeminiStyleTutor({
                       if (!entitlements.hasPremium) event.preventDefault()
                       createStudyAid("flashcard")
                     }}
-                    disabled={Boolean(generating)}
+                    disabled={Boolean(generating) || (entitlements.hasPremium && rewardsQuery.isSuccess && (rewardsQuery.data?.aiCredits ?? 0) < 1)}
                   >
                     <Layers3 className="mr-2 size-4" />
                     <span className="flex-1">Generate flashcards</span>

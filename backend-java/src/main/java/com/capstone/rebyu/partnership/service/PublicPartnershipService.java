@@ -17,8 +17,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -45,18 +50,40 @@ public class PublicPartnershipService {
         }
 
         String email = request.organizationEmail().trim().toLowerCase(Locale.ROOT);
+        String organizationName = request.organizationName().trim();
+        LocalDateTime now = LocalDateTime.now();
+
+        // This is a public, unauthenticated endpoint: there is no client session to
+        // persist a client-supplied key across retries the way
+        // PartnershipRequestTransactionService.submit() does for authenticated
+        // enterprise clients. Instead, derive a deterministic key from the
+        // submission content itself (organization email + name + the current day
+        // bucket), so a genuine double-click or network retry within the same day
+        // collides with the first request, while the same organization submitting
+        // again days later is treated as a new, legitimate request.
+        String idempotencyKey = computeIdempotencyKey(email, organizationName, now);
+        Optional<PartnershipRequest> existingByKey = requestRepository.findByIdempotencyKey(idempotencyKey);
+        if (existingByKey.isPresent()) {
+            // Idempotent retry: return the original request's response as if this
+            // call had succeeded, rather than treating it as a conflict.
+            return toResponse(existingByKey.get());
+        }
 
         // Prevent stacking duplicate pending requests from the same organization.
+        // Best-effort check-then-act guard only: two concurrent submissions with
+        // DIFFERENT content (so they don't collide on the idempotency key above)
+        // could both pass this check before either commits. Fully closing that race
+        // would need a partial unique index on (organization_email) WHERE status =
+        // 'PENDING', added in a future migration.
         if (requestRepository.existsByOrganizationEmailIgnoreCaseAndStatus(
                 email, PartnershipRequest.Status.PENDING)) {
             throw new BusinessRuleException.InvalidPartnershipRequestException(
                     "A partnership request from this organization is already pending review.");
         }
 
-        LocalDateTime now = LocalDateTime.now();
         PartnershipRequest partnershipRequest = PartnershipRequest.builder()
                 .referenceNumber(generateReferenceNumber())
-                .organizationName(request.organizationName().trim())
+                .organizationName(organizationName)
                 .organizationEmail(email)
                 .contactPersonName(request.contactPersonName().trim())
                 .contactNumber(request.contactNumber().trim())
@@ -64,7 +91,7 @@ public class PublicPartnershipService {
                 .businessDescription(request.businessDescription().trim())
                 .submittedAt(now)
                 .status(PartnershipRequest.Status.PENDING)
-                .idempotencyKey(UUID.randomUUID().toString())
+                .idempotencyKey(idempotencyKey)
                 .build();
         partnershipRequest = requestRepository.save(partnershipRequest);
 
@@ -129,5 +156,50 @@ public class PublicPartnershipService {
                     .substring(0, 8).toUpperCase(Locale.ROOT);
         } while (requestRepository.findByReferenceNumber(candidate).isPresent());
         return candidate;
+    }
+
+    /**
+     * Deterministic idempotency key for a public submission: a SHA-256 hex digest
+     * of the normalized organization email, organization name, and a coarse
+     * day-level time bucket. Same-day resubmissions of the same organization
+     * details collide (recognized as a repeat); resubmissions on a later day do
+     * not (treated as a new request).
+     */
+    private String computeIdempotencyKey(String normalizedEmail, String organizationName, LocalDateTime submittedAt) {
+        String dayBucket = submittedAt.toLocalDate().toString();
+        String normalized = normalizedEmail + "|" + organizationName + "|" + dayBucket;
+        return sha256Hex(normalized);
+    }
+
+    private String sha256Hex(String input) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                hex.append(String.format("%02x", b));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 algorithm is not available", e);
+        }
+    }
+
+    /** Maps an existing request to the same response shape as a successful submission. */
+    private PublicPartnershipRequestResponse toResponse(PartnershipRequest partnershipRequest) {
+        List<PartnershipRequestItem> items =
+                itemRepository.findByPartnershipRequest_RequestId(partnershipRequest.getRequestId());
+        int totalSlots = 0;
+        for (PartnershipRequestItem item : items) {
+            totalSlots += item.getSlots() == null ? 0 : item.getSlots();
+        }
+        return new PublicPartnershipRequestResponse(
+                partnershipRequest.getReferenceNumber(),
+                partnershipRequest.getOrganizationName(),
+                partnershipRequest.getSubmittedAt(),
+                partnershipRequest.getStatus().name(),
+                items.size(),
+                totalSlots
+        );
     }
 }

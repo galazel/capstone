@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface QuestionRepository extends JpaRepository<Question, Long> {
     List<Question> findByLesson_LessonId(Long lessonId);
@@ -34,4 +35,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM Question q WHERE q.questionId = :id")
     void deleteByQuestionId(@Param("id") Long id);
+
+    @Query("SELECT q FROM Question q WHERE q.lesson.lessonId = :lessonId AND q.questionText = :questionText AND q.questionType = :questionType AND q.parentQuestion IS NULL LIMIT 1")
+    Optional<Question> findDuplicate(@Param("lessonId") Long lessonId, @Param("questionText") String questionText, @Param("questionType") String questionType);
 }

@@ -1,34 +1,60 @@
 package com.capstone.rebyu.community;
 
 import com.capstone.rebyu.certification.service.S3StorageService;
+import com.capstone.rebyu.community.entity.CommunityCircle;
+import com.capstone.rebyu.community.entity.CommunityCircleMember;
+import com.capstone.rebyu.community.entity.CommunityCircleMemberId;
+import com.capstone.rebyu.community.entity.CommunityComment;
+import com.capstone.rebyu.community.entity.CommunityPost;
+import com.capstone.rebyu.community.entity.CommunityPostLike;
+import com.capstone.rebyu.community.entity.CommunityPostMemberId;
+import com.capstone.rebyu.community.entity.CommunityPostReport;
+import com.capstone.rebyu.community.entity.CommunitySavedPost;
+import com.capstone.rebyu.community.entity.LearnerCommunityNotification;
+import com.capstone.rebyu.community.repository.CommunityCircleMemberRepository;
+import com.capstone.rebyu.community.repository.CommunityCircleRepository;
+import com.capstone.rebyu.community.repository.CommunityCircleRow;
+import com.capstone.rebyu.community.repository.CommunityCommentRepository;
+import com.capstone.rebyu.community.repository.CommunityPostLikeRepository;
+import com.capstone.rebyu.community.repository.CommunityPostReportRepository;
+import com.capstone.rebyu.community.repository.CommunityPostRepository;
+import com.capstone.rebyu.community.repository.CommunityPostRow;
+import com.capstone.rebyu.community.repository.CommunitySavedPostRepository;
+import com.capstone.rebyu.community.repository.LearnerCommunityNotificationRepository;
+import com.capstone.rebyu.learningtools.entity.LearnerLibraryItem;
+import com.capstone.rebyu.learningtools.repository.LearnerLibraryItemRepository;
+import com.capstone.rebyu.user.entity.Learner;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
  * Learner community: discussion/resource posts, study circles, likes, saves,
- * and comments. Backed by plain JDBC over the {@code community_*} tables
- * (V24/V25/V27) rather than JPA entities — the schema is small and read-heavy
- * with a few bespoke toggle/aggregate queries that don't benefit much from an
- * ORM layer.
+ * and comments. Backed by JPA entities/repositories over the {@code community_*}
+ * tables (V24/V25/V27/V29/V32-V34).
  */
 @Service
 @RequiredArgsConstructor
 public class CommunityService {
 
     private static final List<String> ALLOWED_POST_TYPES =
-            List.of("discussion", "quizzes", "notes", "docx");
+            List.of("discussion", "quiz", "flashcard", "quizzes", "notes", "docx");
 
-    private final JdbcTemplate jdbc;
+    private final CommunityPostRepository postRepository;
+    private final CommunityCircleRepository circleRepository;
+    private final CommunityCircleMemberRepository circleMemberRepository;
+    private final CommunityCommentRepository commentRepository;
+    private final CommunityPostLikeRepository postLikeRepository;
+    private final CommunitySavedPostRepository savedPostRepository;
+    private final CommunityPostReportRepository reportRepository;
+    private final LearnerCommunityNotificationRepository notificationRepository;
+    private final LearnerLibraryItemRepository libraryItemRepository;
     private final S3StorageService s3StorageService;
 
     public record PostRequest(
@@ -38,6 +64,11 @@ public class CommunityService {
     public record CircleRequest(String name, String description, String topic) {}
 
     public record CommentRequest(String body, Long parentCommentId) {}
+    public record ShareStudyItemRequest(Long circleId) {}
+    public record ReportRequest(String reason, String details) {}
+    public record ReportView(Long reportId, Long postId, String postTitle, String authorName, String reporterName,
+                             String reason, String details, String status, OffsetDateTime createdAt) {}
+    public record LearnerNotification(Long id, String title, String description, OffsetDateTime createdAt, String href) {}
 
     public record Post(
             Long postId, String authorName, String initials, String community, OffsetDateTime createdAt,
@@ -57,56 +88,34 @@ public class CommunityService {
     // Posts
     // ------------------------------------------------------------------
 
-    private static final String POST_SELECT = """
-            SELECT p.*, concat(l.first_name, ' ', l.last_name) author_name, c.name community,
-              (SELECT count(*) FROM community_post_likes x WHERE x.post_id=p.post_id) reactions,
-              (SELECT count(*) FROM community_comments x WHERE x.post_id=p.post_id) comments,
-              EXISTS(SELECT 1 FROM community_post_likes x WHERE x.post_id=p.post_id AND x.learner_id=:learnerId) liked,
-              EXISTS(SELECT 1 FROM community_saved_posts x WHERE x.post_id=p.post_id AND x.learner_id=:learnerId) saved,
-              (p.author_learner_id=:learnerId) owned_by_me
-            FROM community_posts p
-            JOIN learners l ON l.learner_id=p.author_learner_id
-            LEFT JOIN community_circles c ON c.circle_id=p.circle_id
-            """;
-
     public List<Post> posts(Long learnerId, String type, String search, boolean savedOnly) {
         String normalizedType = normalizeFilter(type, "for-you");
         String normalizedSearch = normalizeFilter(search, null);
-
-        StringBuilder sql = new StringBuilder(sqlWithLearnerId(POST_SELECT, learnerId))
-                .append(" WHERE 1=1");
-        List<Object> args = new java.util.ArrayList<>(List.of(learnerId, learnerId, learnerId));
-
-        if (normalizedType != null) {
-            sql.append(" AND p.post_type=?");
-            args.add(normalizedType);
-        }
-        if (normalizedSearch != null) {
-            sql.append(" AND lower(p.title || ' ' || p.body || ' ' || concat(l.first_name,' ',l.last_name)) LIKE ?");
-            args.add("%" + normalizedSearch.toLowerCase() + "%");
-        }
-        if (savedOnly) {
-            sql.append(" AND EXISTS(SELECT 1 FROM community_saved_posts s WHERE s.post_id=p.post_id AND s.learner_id=?)");
-            args.add(learnerId);
-        }
-        sql.append(" ORDER BY p.created_at DESC LIMIT 200");
-
-        return jdbc.query(sql.toString(), this::mapPost, args.toArray());
+        String searchPattern = normalizedSearch == null ? null : "%" + normalizedSearch.toLowerCase() + "%";
+        return postRepository.feed(learnerId, normalizedType, searchPattern, savedOnly).stream()
+                .map(CommunityService::mapPostRow)
+                .toList();
     }
 
     private Post postById(Long learnerId, Long postId) {
-        String sql = sqlWithLearnerId(POST_SELECT, learnerId) + " WHERE p.post_id=?";
-        List<Post> found = jdbc.query(sql, this::mapPost, learnerId, learnerId, learnerId, postId);
-        if (found.isEmpty()) {
-            throw new EntityNotFoundException("Post not found: " + postId);
-        }
-        return found.get(0);
+        return postRepository.findRowById(postId, learnerId)
+                .map(CommunityService::mapPostRow)
+                .filter(p -> "VISIBLE".equals(p.postType()) || "VISIBLE".equals(getPostStatus(postId)))
+                .orElseThrow(() -> new EntityNotFoundException("Post not found: " + postId));
     }
 
-    /** Positional "?" placeholders throughout; this just documents the three
-     *  learnerId occurrences already baked into {@link #POST_SELECT}. */
-    private String sqlWithLearnerId(String sql, Long learnerId) {
-        return sql.replace(":learnerId", "?");
+    private void requirePostVisible(Long postId) {
+        CommunityPost post = postRepository.findById(postId)
+                .orElseThrow(() -> new EntityNotFoundException("Post not found: " + postId));
+        if (!"VISIBLE".equals(post.getModerationStatus())) {
+            throw new EntityNotFoundException("This post is not available");
+        }
+    }
+
+    private String getPostStatus(Long postId) {
+        return postRepository.findById(postId)
+                .map(CommunityPost::getModerationStatus)
+                .orElse("HIDDEN");
     }
 
     @Transactional
@@ -122,26 +131,115 @@ public class CommunityService {
             requireCircleMember(learnerId, request.circleId());
         }
 
-        Long postId = jdbc.queryForObject("""
-                INSERT INTO community_posts
-                    (author_learner_id, circle_id, post_type, title, body,
-                     attachment_name, attachment_type, attachment_key)
-                VALUES (?,?,?,?,?,?,?,?)
-                RETURNING post_id
-                """, Long.class,
-                learnerId, request.circleId(), type, request.title().trim(), request.description().trim(),
-                blankToNull(request.attachmentName()), blankToNull(request.attachmentType()),
-                blankToNull(request.attachmentKey()));
+        CommunityCircle circle = request.circleId() == null ? null : circleRef(request.circleId());
+        CommunityPost post = CommunityPost.builder()
+                .author(Learner.builder().learnerId(learnerId).build())
+                .circle(circle)
+                .postType(type)
+                .title(request.title().trim())
+                .body(request.description().trim())
+                .attachmentName(blankToNull(request.attachmentName()))
+                .attachmentType(blankToNull(request.attachmentType()))
+                .attachmentKey(blankToNull(request.attachmentKey()))
+                .build();
+        CommunityPost saved = postRepository.save(post);
+        return postById(learnerId, saved.getPostId());
+    }
 
-        return postById(learnerId, postId);
+    @Transactional
+    public Post shareStudyItem(Long learnerId, Long libraryItemId, Long circleId) {
+        if (circleId != null) requireCircleMember(learnerId, circleId);
+        LearnerLibraryItem item = libraryItemRepository.findByLibraryItemIdAndLearner_LearnerId(libraryItemId, learnerId)
+                .filter(i -> List.of("quiz", "flashcard").contains(i.getItemType()))
+                .orElseThrow(() -> new IllegalArgumentException("Generated quiz or flashcards not found"));
+        CommunityCircle circle = circleId == null ? null : circleRef(circleId);
+        CommunityPost post = CommunityPost.builder()
+                .author(Learner.builder().learnerId(learnerId).build())
+                .circle(circle)
+                .postType(item.getItemType())
+                .title(item.getTitle())
+                .body(item.getDescription())
+                .sharedLibraryItem(item)
+                .build();
+        CommunityPost saved = postRepository.save(post);
+        return postById(learnerId, saved.getPostId());
+    }
+
+    /** Resolves a post's structured study set without disclosing it directly to the client. */
+    public Long sharedStudySetId(Long postId) {
+        CommunityPost post = postRepository.findById(postId)
+                .orElseThrow(() -> new IllegalArgumentException("This post does not contain an answerable study set"));
+        // Must match the moderation_status='VISIBLE' guard in posts() -- a hidden post (e.g.
+        // flagged for leaked exam content or copyright) must stop being copyable into new
+        // learners' study sets, not just stop appearing in the feed.
+        if (!"VISIBLE".equals(post.getModerationStatus())
+                || !List.of("quiz", "flashcard").contains(post.getPostType())
+                || post.getSharedLibraryItem() == null) {
+            throw new IllegalArgumentException("This post does not contain an answerable study set");
+        }
+        String route = post.getSharedLibraryItem().getResourceUrl();
+        String prefix = "/learner/practice/";
+        if (route == null || !route.startsWith(prefix)) throw new IllegalArgumentException("This older study post cannot be practised yet");
+        try { return Long.valueOf(route.substring(prefix.length())); }
+        catch (NumberFormatException ex) { throw new IllegalArgumentException("Shared study set is invalid"); }
     }
 
     public void deletePost(Long learnerId, Long postId) {
-        int deleted = jdbc.update(
-                "DELETE FROM community_posts WHERE post_id=? AND author_learner_id=?", postId, learnerId);
+        long deleted = postRepository.deleteByPostIdAndAuthor_LearnerId(postId, learnerId);
         if (deleted == 0) {
             throw new IllegalArgumentException("You can only delete your own post");
         }
+    }
+
+    @Transactional
+    public void reportPost(Long learnerId, Long postId, ReportRequest request) {
+        if (request == null || request.reason() == null || !List.of("SPAM", "HARASSMENT", "COPYRIGHT", "EXAM_CONTENT", "OTHER").contains(request.reason())) {
+            throw new IllegalArgumentException("Choose a valid report reason");
+        }
+        if (!postRepository.existsById(postId)) throw new EntityNotFoundException("Post not found");
+        reportRepository.upsertReport(postId, learnerId, request.reason(), blankToNull(request.details()));
+    }
+
+    public List<ReportView> reports(String status) {
+        String normalized = status == null || status.isBlank() ? "OPEN" : status.toUpperCase();
+        if (!List.of("OPEN", "RESOLVED", "DISMISSED").contains(normalized)) throw new IllegalArgumentException("Invalid report status");
+        return reportRepository.findByStatusOrderByCreatedAtAsc(normalized).stream()
+                .map(r -> new ReportView(r.getReportId(), r.getPost().getPostId(), r.getPost().getTitle(),
+                        fullName(r.getPost().getAuthor()), fullName(r.getReporter()), r.getReason(), r.getDetails(),
+                        r.getStatus(), r.getCreatedAt()))
+                .toList();
+    }
+
+    @Transactional
+    public void reviewReport(Long reportId, String status, Long adminUserId) {
+        String normalized = status == null ? "" : status.toUpperCase();
+        if (!List.of("RESOLVED", "DISMISSED").contains(normalized)) throw new IllegalArgumentException("Report status must be RESOLVED or DISMISSED");
+        CommunityPostReport report = reportRepository.findById(reportId)
+                .orElseThrow(() -> new EntityNotFoundException("Report not found"));
+        report.setStatus(normalized);
+        report.setReviewedAt(OffsetDateTime.now());
+        report.setReviewedBy(adminUserId == null ? null : com.capstone.rebyu.user.entity.User.builder().userId(adminUserId).build());
+        reportRepository.save(report);
+    }
+
+    @Transactional
+    public void hidePost(Long postId) {
+        CommunityPost post = postRepository.findById(postId)
+                .orElseThrow(() -> new EntityNotFoundException("Post not found"));
+        post.setModerationStatus("HIDDEN");
+        postRepository.save(post);
+        notificationRepository.save(LearnerCommunityNotification.builder()
+                .learner(post.getAuthor())
+                .title("Your community post was hidden")
+                .body("Your post '" + post.getTitle() + "' was hidden after a moderation review.")
+                .href("/learner/community")
+                .build());
+    }
+
+    public List<LearnerNotification> notifications(Long learnerId) {
+        return notificationRepository.findTop20ByLearner_LearnerIdOrderByCreatedAtDesc(learnerId).stream()
+                .map(n -> new LearnerNotification(n.getNotificationId(), n.getTitle(), n.getBody(), n.getCreatedAt(), n.getHref()))
+                .toList();
     }
 
     /** Uploads a PDF/DOCX attachment and returns its key. Call before {@link #createPost}. */
@@ -161,78 +259,67 @@ public class CommunityService {
     // ------------------------------------------------------------------
 
     public boolean toggleLike(Long learnerId, Long postId) {
-        return toggle("community_post_likes", learnerId, postId);
+        requirePostVisible(postId);
+        if (postLikeRepository.existsByPost_PostIdAndLearner_LearnerId(postId, learnerId)) {
+            postLikeRepository.deleteByPost_PostIdAndLearner_LearnerId(postId, learnerId);
+            return false;
+        }
+        postLikeRepository.save(CommunityPostLike.builder()
+                .id(new CommunityPostMemberId(postId, learnerId))
+                .post(postRef(postId)).learner(Learner.builder().learnerId(learnerId).build())
+                .build());
+        return true;
     }
 
     public boolean toggleSave(Long learnerId, Long postId) {
-        return toggle("community_saved_posts", learnerId, postId);
-    }
-
-    /** Returns true when the row now exists (i.e. the toggle turned it "on"). */
-    @Transactional
-    protected boolean toggle(String table, Long learnerId, Long postId) {
-        int deleted = jdbc.update(
-                "DELETE FROM " + table + " WHERE post_id=? AND learner_id=?", postId, learnerId);
-        if (deleted == 0) {
-            jdbc.update("INSERT INTO " + table + "(post_id, learner_id) VALUES (?, ?)", postId, learnerId);
+        requirePostVisible(postId);
+        if (savedPostRepository.existsByPost_PostIdAndLearner_LearnerId(postId, learnerId)) {
+            savedPostRepository.deleteByPost_PostIdAndLearner_LearnerId(postId, learnerId);
+            return false;
         }
-        return deleted == 0;
+        savedPostRepository.save(CommunitySavedPost.builder()
+                .id(new CommunityPostMemberId(postId, learnerId))
+                .post(postRef(postId)).learner(Learner.builder().learnerId(learnerId).build())
+                .build());
+        return true;
     }
 
     // ------------------------------------------------------------------
     // Comments
     // ------------------------------------------------------------------
 
-    private static final String COMMENT_SELECT = """
-            SELECT c.*, concat(l.first_name, ' ', l.last_name) author_name
-            FROM community_comments c
-            JOIN learners l ON l.learner_id = c.author_learner_id
-            """;
-
     public List<Comment> comments(Long learnerId, Long postId) {
-        return jdbc.query(
-                COMMENT_SELECT + " WHERE c.post_id=? ORDER BY c.created_at",
-                (r, n) -> mapComment(r, learnerId), postId);
+        requirePostVisible(postId);
+        return commentRepository.findByPost_PostIdOrderByCreatedAtAsc(postId).stream()
+                .map(c -> mapComment(c, learnerId))
+                .toList();
     }
 
     public Comment addComment(Long learnerId, Long postId, CommentRequest request) {
+        requirePostVisible(postId);
         requireText(request.body(), "Comment");
-        Long commentId = jdbc.queryForObject("""
-                INSERT INTO community_comments(post_id, author_learner_id, parent_comment_id, body)
-                VALUES (?, ?, ?, ?)
-                RETURNING comment_id
-                """, Long.class, postId, learnerId, request.parentCommentId(), request.body().trim());
-
-        return jdbc.queryForObject(
-                COMMENT_SELECT + " WHERE c.comment_id=?",
-                (r, n) -> mapComment(r, learnerId), commentId);
+        CommunityComment parent = request.parentCommentId() == null ? null : commentRef(request.parentCommentId());
+        CommunityComment comment = CommunityComment.builder()
+                .post(postRef(postId))
+                .author(Learner.builder().learnerId(learnerId).build())
+                .parentComment(parent)
+                .body(request.body().trim())
+                .build();
+        return mapComment(commentRepository.save(comment), learnerId);
     }
 
     // ------------------------------------------------------------------
     // Circles
     // ------------------------------------------------------------------
 
-    private static final String CIRCLE_SELECT = """
-            SELECT c.*,
-              (SELECT count(*) FROM community_circle_members m WHERE m.circle_id=c.circle_id) members,
-              EXISTS(SELECT 1 FROM community_circle_members m WHERE m.circle_id=c.circle_id AND m.learner_id=?) joined,
-              (c.owner_learner_id=?) owner
-            FROM community_circles c
-            """;
-
     public List<Circle> circles(Long learnerId) {
-        return jdbc.query(
-                CIRCLE_SELECT + " ORDER BY members DESC, c.created_at DESC",
-                this::mapCircle, learnerId, learnerId);
+        return circleRepository.feed(learnerId).stream().map(CommunityService::mapCircleRow).toList();
     }
 
     private Circle circleById(Long learnerId, Long circleId) {
-        List<Circle> found = jdbc.query(
-                CIRCLE_SELECT + " WHERE c.circle_id=?", this::mapCircle, learnerId, learnerId, circleId);
-        if (found.isEmpty()) {
-            throw new EntityNotFoundException("Study circle not found: " + circleId);
-        }
-        return found.get(0);
+        return circleRepository.findRowById(circleId, learnerId)
+                .map(CommunityService::mapCircleRow)
+                .orElseThrow(() -> new EntityNotFoundException("Study circle not found: " + circleId));
     }
 
     @Transactional
@@ -241,43 +328,51 @@ public class CommunityService {
         requireText(request.description(), "Description");
         requireText(request.topic(), "Topic");
 
-        Long circleId = jdbc.queryForObject(
-                "INSERT INTO community_circles(owner_learner_id, name, description, topic) VALUES (?,?,?,?) RETURNING circle_id",
-                Long.class, learnerId, request.name().trim(), request.description().trim(), request.topic().trim());
+        CommunityCircle circle = CommunityCircle.builder()
+                .owner(Learner.builder().learnerId(learnerId).build())
+                .name(request.name().trim())
+                .description(request.description().trim())
+                .topic(request.topic().trim())
+                .build();
+        CommunityCircle saved = circleRepository.save(circle);
 
-        jdbc.update("INSERT INTO community_circle_members(circle_id, learner_id) VALUES (?, ?)", circleId, learnerId);
-        jdbc.update("""
-                INSERT INTO community_posts(author_learner_id, circle_id, post_type, title, body)
-                VALUES (?, ?, 'circle', ?, ?)
-                """, learnerId, circleId, request.name().trim() + " is now open", request.description().trim());
+        circleMemberRepository.save(CommunityCircleMember.builder()
+                .id(new CommunityCircleMemberId(saved.getCircleId(), learnerId))
+                .circle(saved).learner(Learner.builder().learnerId(learnerId).build())
+                .build());
 
-        return circleById(learnerId, circleId);
+        postRepository.save(CommunityPost.builder()
+                .author(Learner.builder().learnerId(learnerId).build())
+                .circle(saved)
+                .postType("circle")
+                .title(request.name().trim() + " is now open")
+                .body(request.description().trim())
+                .build());
+
+        return circleById(learnerId, saved.getCircleId());
     }
 
     /** Owners are always members and cannot leave their own circle. Returns the joined state. */
     @Transactional
     public boolean toggleJoin(Long learnerId, Long circleId) {
-        Long owner = jdbc.query(
-                "SELECT owner_learner_id FROM community_circles WHERE circle_id=?",
-                (r, n) -> r.getLong("owner_learner_id"), circleId).stream().findFirst()
+        CommunityCircle circle = circleRepository.findById(circleId)
                 .orElseThrow(() -> new EntityNotFoundException("Study circle not found: " + circleId));
-
-        if (owner.equals(learnerId)) {
+        if (circle.getOwner().getLearnerId().equals(learnerId)) {
             return true;
         }
-        int deleted = jdbc.update(
-                "DELETE FROM community_circle_members WHERE circle_id=? AND learner_id=?", circleId, learnerId);
-        if (deleted == 0) {
-            jdbc.update("INSERT INTO community_circle_members(circle_id, learner_id) VALUES (?, ?)", circleId, learnerId);
+        if (circleMemberRepository.existsByCircle_CircleIdAndLearner_LearnerId(circleId, learnerId)) {
+            circleMemberRepository.deleteById(new CommunityCircleMemberId(circleId, learnerId));
+            return false;
         }
-        return deleted == 0;
+        circleMemberRepository.save(CommunityCircleMember.builder()
+                .id(new CommunityCircleMemberId(circleId, learnerId))
+                .circle(circle).learner(Learner.builder().learnerId(learnerId).build())
+                .build());
+        return true;
     }
 
     private void requireCircleMember(Long learnerId, Long circleId) {
-        Integer count = jdbc.queryForObject(
-                "SELECT count(*) FROM community_circle_members WHERE circle_id=? AND learner_id=?",
-                Integer.class, circleId, learnerId);
-        if (count == null || count == 0) {
+        if (!circleMemberRepository.existsByCircle_CircleIdAndLearner_LearnerId(circleId, learnerId)) {
             throw new IllegalArgumentException("Join the study circle before posting");
         }
     }
@@ -286,52 +381,47 @@ public class CommunityService {
     // Mapping / helpers
     // ------------------------------------------------------------------
 
-    private Post mapPost(ResultSet row, int rowNum) throws SQLException {
-        String authorName = row.getString("author_name");
-        return new Post(
-                row.getLong("post_id"),
-                authorName,
-                initials(authorName),
-                row.getString("community"),
-                row.getObject("created_at", OffsetDateTime.class),
-                row.getString("title"),
-                row.getString("body"),
-                row.getString("post_type"),
-                (Long) row.getObject("circle_id"),
-                row.getString("attachment_name"),
-                row.getString("attachment_type"),
-                row.getString("attachment_key"),
-                row.getLong("reactions"),
-                row.getLong("comments"),
-                row.getBoolean("liked"),
-                row.getBoolean("saved"),
-                row.getBoolean("owned_by_me"));
+    private static Post mapPostRow(CommunityPostRow row) {
+        return new Post(row.getPostId(), row.getAuthorName(), initials(row.getAuthorName()), row.getCommunity(),
+                row.getCreatedAt(), row.getTitle(), row.getBody(), row.getPostType(), row.getCircleId(),
+                row.getAttachmentName(), row.getAttachmentType(), row.getAttachmentKey(), row.getReactions(),
+                row.getComments(), row.getLiked(), row.getSaved(), row.getOwnedByMe());
     }
 
-    private Circle mapCircle(ResultSet row, int rowNum) throws SQLException {
-        String name = row.getString("name");
-        return new Circle(
-                row.getLong("circle_id"),
-                initials(name),
-                name,
-                row.getString("description"),
-                row.getString("topic"),
-                row.getLong("members"),
-                row.getBoolean("joined"),
-                row.getBoolean("owner"));
+    private static Circle mapCircleRow(CommunityCircleRow row) {
+        return new Circle(row.getCircleId(), initials(row.getName()), row.getName(), row.getDescription(),
+                row.getTopic(), row.getMembers(), row.getJoined(), row.getOwner());
     }
 
-    private Comment mapComment(ResultSet row, Long viewerLearnerId) throws SQLException {
-        String authorName = row.getString("author_name");
-        return new Comment(
-                row.getLong("comment_id"),
-                row.getLong("post_id"),
-                (Long) row.getObject("parent_comment_id"),
-                authorName,
-                initials(authorName),
-                row.getString("body"),
-                row.getObject("created_at", OffsetDateTime.class),
-                viewerLearnerId.equals(row.getLong("author_learner_id")));
+    private Comment mapComment(CommunityComment comment, Long viewerLearnerId) {
+        String authorName = fullName(comment.getAuthor());
+        return new Comment(comment.getCommentId(), comment.getPost().getPostId(),
+                comment.getParentComment() == null ? null : comment.getParentComment().getCommentId(),
+                authorName, initials(authorName), comment.getBody(), comment.getCreatedAt(),
+                viewerLearnerId.equals(comment.getAuthor().getLearnerId()));
+    }
+
+    private static String fullName(Learner learner) {
+        return (learner.getFirstName() == null ? "" : learner.getFirstName())
+                + " " + (learner.getLastName() == null ? "" : learner.getLastName());
+    }
+
+    private CommunityPost postRef(Long postId) {
+        CommunityPost ref = new CommunityPost();
+        ref.setPostId(postId);
+        return ref;
+    }
+
+    private CommunityCircle circleRef(Long circleId) {
+        CommunityCircle ref = new CommunityCircle();
+        ref.setCircleId(circleId);
+        return ref;
+    }
+
+    private CommunityComment commentRef(Long commentId) {
+        CommunityComment ref = new CommunityComment();
+        ref.setCommentId(commentId);
+        return ref;
     }
 
     /** "for-you" is the client's "no filter" tab; treat it (and blank) as no type filter. */

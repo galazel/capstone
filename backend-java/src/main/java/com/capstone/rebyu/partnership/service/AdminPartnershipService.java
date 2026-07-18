@@ -176,6 +176,30 @@ public class AdminPartnershipService {
                     .joinedAt(LocalDateTime.now())
                     .build();
             enterpriseMemberRepository.save(member);
+        } else {
+            // Cognito reported the account already exists (UsernameExistsException
+            // was caught upstream: no new sub was minted and nothing was emailed).
+            // The enterprise and its certificate slots were still created above --
+            // without linking an owner here, the enterprise would be permanently
+            // orphaned with nobody able to manage it. Link the existing local User
+            // for that email if one exists; CognitoAuthService will already
+            // resolve sign-in for that account by its Cognito sub/email.
+            User existingUser = userRepository.findByEmailIgnoreCase(request.getOrganizationEmail())
+                    .orElse(null);
+            if (existingUser != null) {
+                EnterpriseMember member = EnterpriseMember.builder()
+                        .enterprise(enterprise)
+                        .user(existingUser)
+                        .memberRole(EnterpriseMember.MemberRole.owner)
+                        .isPrimaryContact(true)
+                        .joinedAt(LocalDateTime.now())
+                        .build();
+                enterpriseMemberRepository.save(member);
+            } else {
+                log.warn("Cognito account already exists for {} but no local User is linked to it; "
+                                + "enterprise {} was created with no owner and requires manual linking.",
+                        request.getOrganizationEmail(), enterprise.getEnterpriseId());
+            }
         }
         return result;
     }
@@ -226,9 +250,17 @@ public class AdminPartnershipService {
         Enterprise byEmail = enterpriseRepository
                 .findByPrimaryContactEmailIgnoreCase(request.getOrganizationEmail())
                 .orElse(null);
-        if (byEmail != null) {
+        if (byEmail != null
+                && byEmail.getEnterpriseName() != null
+                && byEmail.getEnterpriseName().trim().equalsIgnoreCase(
+                        request.getOrganizationName() == null ? "" : request.getOrganizationName().trim())) {
             return byEmail;
         }
+        // Either no existing Enterprise shares this contact email, or one does
+        // but its name doesn't match this request's organization name -- that
+        // means a different organization simply reuses the same contact
+        // email, so it must not be silently merged into the existing one.
+        // Fall through to create a new Enterprise below.
 
         // Ensure the unique enterprise_name does not collide.
         String name = request.getOrganizationName();

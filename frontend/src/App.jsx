@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react"
 import { Navigate, Routes, Route } from "react-router-dom"
 import ProtectedRoute from "./components/ProtectedRoute"
+import { LoadingScreen } from "./components/loading-screen.jsx"
 import { roleHomePath, useAuth } from "./context/auth-context.jsx"
 
 const DashboardLayout = lazy(() => import("./layouts/DashboardLayout"))
@@ -20,6 +21,9 @@ const Organizations = lazy(() => import("./pages/admin/Organizations"))
 const ViewCertificationAdmin = lazy(() => import("./pages/admin/ViewCertificationAdmin"))
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"))
 const PartnershipRequests = lazy(() => import("./pages/admin/PartnershipRequests"))
+const CommunityModeration = lazy(() => import("./pages/admin/CommunityModeration.jsx"))
+const BktDeliveryStatus = lazy(() => import("./pages/admin/BktDeliveryStatus.jsx"))
+const GamificationSettings = lazy(() => import("./pages/admin/GamificationSettings.jsx"))
 const AcceptEnterpriseInvitationPage = lazy(() => import("./pages/admin/AcceptEnterpriseInvitationPage"))
 const LandingPage = lazy(() => import("./pages/public/LandingPage"))
 const CreateLessons = lazy(() => import("./pages/admin/CreateLessons"))
@@ -37,6 +41,10 @@ const LearnerAccountPage = lazy(() => import("./pages/learner/learner-account-pa
 const LearnerAssessmentAttemptPage = lazy(() => import("./pages/learner/learner-assessment-attempt-page.jsx"))
 const LearnerAssessmentResultPage = lazy(() => import("./pages/learner/learner-assessment-result-page.jsx"))
 const LearnerAssessmentHistoryPage = lazy(() => import("./pages/learner/learner-assessment-history-page.jsx"))
+const LearnerPracticeAttemptPage = lazy(() => import("./pages/learner/learner-practice-attempt-page.jsx"))
+const LearnerPracticeHistoryPage = lazy(() => import("./pages/learner/learner-practice-history-page.jsx"))
+const LearnerPracticeReviewPage = lazy(() => import("./pages/learner/learner-practice-review-page.jsx"))
+const LearnerRankingsPage = lazy(() => import("./pages/learner/learner-rankings-page.jsx"))
 const MistakesBank = lazy(() => import("./pages/learner/learner-mistakes-bank.jsx"))
 const Community = lazy(() => import("./pages/learner/learner-community-qa.jsx"))
 const EnterpriseDashboardPage = lazy(() => import("./pages/enterprise/enterprise-dashboard-page.jsx"))
@@ -54,27 +62,14 @@ const EnterpriseOrganizationPage = lazy(() => import("./pages/enterprise/enterpr
 const EnterpriseSettingsPage = lazy(() => import("./pages/enterprise/enterprise-settings-page.jsx"))
 const EnterpriseRequestAccessPage = lazy(() => import("./pages/public/enterprise-request-access-page.jsx"))
 const CompilerArea = lazy(() => import("./components/challenges/compiler-area.jsx"))
-
-
-function RoleHomeRedirect() {
-    const { user, status } = useAuth()
-
-    if (status === "loading") {
-        return null
-    }
-
-    if (status === "authenticated") {
-        return <Navigate to={roleHomePath(user?.role)} replace />
-    }
-
-    return <Navigate to="/login" replace />
-}
+const NotFoundPage = lazy(() => import("./pages/public/not-found-page.jsx"))
+const ForbiddenPage = lazy(() => import("./pages/public/forbidden-page.jsx"))
 
 function GuestOnlyRoute({ children }) {
     const { user, status } = useAuth()
 
     if (status === "loading") {
-        return null
+        return <LoadingScreen />
     }
 
     if (status === "authenticated") {
@@ -86,7 +81,7 @@ function GuestOnlyRoute({ children }) {
 
 export function App() {
     return (
-      <Suspense fallback={null}>
+      <Suspense fallback={<LoadingScreen />}>
         <Routes>
             <Route path="/" element={<GuestOnlyRoute><LandingPage /></GuestOnlyRoute>} />
             <Route path="/welcome" element={<Navigate to="/" replace />} />
@@ -115,6 +110,9 @@ export function App() {
                     <Route path="question-bank" element={<QuestionBank />} />
                     <Route path="organizations" element={<Organizations />} />
                     <Route path="partnership-requests" element={<PartnershipRequests />} />
+                    <Route path="community-moderation" element={<CommunityModeration />} />
+                    <Route path="bkt-delivery" element={<BktDeliveryStatus />} />
+                    <Route path="gamification-settings" element={<GamificationSettings />} />
                     <Route path="learners" element={<Learners />} />
                     <Route path="analytics" element={<Analytics />} />
                     <Route
@@ -157,6 +155,7 @@ export function App() {
                     <Route path="library" element={<LearnerFilesPage />} />
                     <Route path="mistakes" element={<MistakesBank />} />
                     <Route path="community" element={<Community />} />
+                    <Route path="rankings" element={<LearnerRankingsPage />} />
                     <Route path="account" element={<LearnerAccountPage />} />
                 </Route>
 
@@ -173,6 +172,9 @@ export function App() {
                     path="/learner/assessments/:examId/history"
                     element={<LearnerAssessmentHistoryPage />}
                 />
+                <Route path="/learner/practice/:studySetId" element={<LearnerPracticeAttemptPage />} />
+                <Route path="/learner/practice-history" element={<LearnerPracticeHistoryPage />} />
+                <Route path="/learner/practice-review/:attemptId" element={<LearnerPracticeReviewPage />} />
 
                 {/* Sprint Challenge destination — the standalone compiler
                     playground the challenges carousel links to. */}
@@ -204,7 +206,8 @@ export function App() {
                 </Route>
             </Route>
 
-            <Route path="*" element={<RoleHomeRedirect />} />
+            <Route path="/403" element={<ForbiddenPage />} />
+            <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
     )

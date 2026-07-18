@@ -10,9 +10,13 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+// Uniqueness is enforced by a partial index (uq_enterprise_group_assignee_active,
+// scoped to status='active') rather than a @Table-level constraint here, so a
+// learner removed from a group can be re-added without colliding with their
+// own archived row. Do not add a uniqueConstraints attribute back -- Hibernate's
+// ddl-auto=update would create its own non-partial constraint alongside it.
 @Entity
-@Table(name = "enterprise_group_assignees",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"enterprise_group_id", "org_cert_learner_id"}))
+@Table(name = "enterprise_group_assignees")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -21,6 +25,10 @@ public class EnterpriseGroupAssignee {
 
     public enum Status {
         active, archived
+    }
+
+    public enum Role {
+        lead, member
     }
 
     @Id
@@ -45,6 +53,10 @@ public class EnterpriseGroupAssignee {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private Status status = Status.active;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private Role role = Role.member;
 
     @Column(name = "removed_at")
     private LocalDateTime removedAt;

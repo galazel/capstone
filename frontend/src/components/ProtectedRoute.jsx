@@ -1,12 +1,13 @@
 import { Navigate, Outlet } from "react-router-dom"
 
-import { roleHomePath, useAuth } from "@/context/auth-context.jsx"
+import { LoadingScreen } from "@/components/loading-screen.jsx"
+import { useAuth } from "@/context/auth-context.jsx"
 
 function ProtectedRoute({ allowedRoles }) {
   const { user, status } = useAuth()
 
   if (status === "loading") {
-    return null
+    return <LoadingScreen />
   }
 
   if (status !== "authenticated") {
@@ -15,7 +16,7 @@ function ProtectedRoute({ allowedRoles }) {
 
   const role = (user?.role ?? "LEARNER").toUpperCase()
   if (!allowedRoles.includes(role)) {
-    return <Navigate to={roleHomePath(role)} replace />
+    return <Navigate to="/403" replace />
   }
 
   return <Outlet />

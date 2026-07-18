@@ -20,7 +20,9 @@ public class EnterpriseGroupAuthorityDto {
     @NotNull
     private Long userId;
 
-    @NotNull
+    // Always overwritten server-side from the caller's JWT (see
+    // EnterpriseGroupAuthorityController.create), so must stay nullable --
+    // the client never supplies it.
     private Long assignedBy;
 
     private LocalDateTime assignedAt;

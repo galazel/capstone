@@ -24,8 +24,11 @@ public final class EnterpriseInvitationDtos {
     ) {
     }
 
+    // enterpriseId is always overwritten server-side from the caller's JWT
+    // (see EnterpriseInvitationController.send) before this reaches the
+    // service, so it must stay nullable here -- the client never supplies it.
     public record SendInvitationsRequest(
-            @NotNull Long enterpriseId,
+            Long enterpriseId,
             @NotNull Long orgCertId,
             @NotEmpty List<String> emails
     ) {

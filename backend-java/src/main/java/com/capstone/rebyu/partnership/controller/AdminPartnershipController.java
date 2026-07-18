@@ -1,5 +1,7 @@
 package com.capstone.rebyu.partnership.controller;
 
+import com.capstone.rebyu.auth.dto.CurrentUserDto;
+import com.capstone.rebyu.auth.service.CognitoAuthService;
 import com.capstone.rebyu.partnership.dto.AdminPartnershipDtos.PartnershipRequestDetailDto;
 import com.capstone.rebyu.partnership.dto.AdminPartnershipDtos.PartnershipRequestSummaryDto;
 import com.capstone.rebyu.partnership.dto.AdminPartnershipDtos.ReviewPartnershipRequest;
@@ -24,15 +26,21 @@ import java.util.List;
 public class AdminPartnershipController {
 
     private final AdminPartnershipService adminPartnershipService;
+    private final CognitoAuthService auth;
 
     @GetMapping
     public List<PartnershipRequestSummaryDto> list(
-            @RequestParam(value = "status", required = false) String status) {
+            @RequestParam(value = "status", required = false) String status,
+            @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return adminPartnershipService.list(status);
     }
 
     @GetMapping("/{requestId}")
-    public PartnershipRequestDetailDto detail(@PathVariable Long requestId) {
+    public PartnershipRequestDetailDto detail(
+            @PathVariable Long requestId,
+            @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return adminPartnershipService.getDetail(requestId);
     }
 
@@ -41,6 +49,7 @@ public class AdminPartnershipController {
             @PathVariable Long requestId,
             @RequestBody(required = false) ReviewPartnershipRequest body,
             @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return adminPartnershipService.approve(
                 requestId,
                 body != null ? body.remarks() : null,
@@ -52,18 +61,26 @@ public class AdminPartnershipController {
             @PathVariable Long requestId,
             @RequestBody(required = false) ReviewPartnershipRequest body,
             @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return adminPartnershipService.reject(
                 requestId,
                 body != null ? body.remarks() : null,
                 reviewerName(jwt));
     }
 
-    // Records who reviewed the request from the validated token when present.
-    private String reviewerName(Jwt jwt) {
+    private void requireAdmin(Jwt jwt) {
         if (jwt == null) {
-            return "admin";
+            throw new IllegalArgumentException("Authentication is required");
         }
-        Object email = jwt.getClaims().get("email");
-        return email != null ? email.toString() : "admin";
+        CurrentUserDto user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
+        if (!"ADMIN".equalsIgnoreCase(user.role())) {
+            throw new IllegalArgumentException("Admin access is required");
+        }
+    }
+
+    // Records who reviewed the request from the authenticated caller.
+    private String reviewerName(Jwt jwt) {
+        CurrentUserDto user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
+        return user.email();
     }
 }

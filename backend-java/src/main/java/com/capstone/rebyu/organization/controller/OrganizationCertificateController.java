@@ -1,10 +1,14 @@
 package com.capstone.rebyu.organization.controller;
 
+import com.capstone.rebyu.auth.dto.CurrentUserDto;
+import com.capstone.rebyu.auth.service.CognitoAuthService;
 import com.capstone.rebyu.organization.dto.OrganizationCertificateDto;
 import com.capstone.rebyu.organization.service.OrganizationCertificateService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -14,15 +18,27 @@ import java.util.List;
 @RequiredArgsConstructor
 public class OrganizationCertificateController {
     private final OrganizationCertificateService organizationCertificateService;
+    private final CognitoAuthService auth;
 
+    // Cross-tenant allocation data: the unfiltered list exposes every organization's
+    // certificate allocations, so it's admin-only. Enterprises read their own via
+    // /api/enterprise/me/overview; learners via /api/learners/me/portal.
     @GetMapping
-    public List<OrganizationCertificateDto> getAll() {
+    public List<OrganizationCertificateDto> getAll(@AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return organizationCertificateService.getAll();
     }
 
     @GetMapping("/{id}")
-    public OrganizationCertificateDto getById(@PathVariable Long id) {
+    public OrganizationCertificateDto getById(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return organizationCertificateService.getById(id);
+    }
+
+    private void requireAdmin(Jwt jwt) {
+        if (jwt == null) throw new IllegalArgumentException("Authentication is required");
+        CurrentUserDto user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
+        if (!"ADMIN".equalsIgnoreCase(user.role())) throw new IllegalArgumentException("Admin access is required");
     }
 
     @PostMapping

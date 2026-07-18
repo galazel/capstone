@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import {
     Bookmark,
     BookOpen,
@@ -50,6 +51,8 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { getFileDownloadUrl } from "@/services/fileService"
 import { getAllCertifications } from "@/services/certificationService"
+import { getLibraryItems } from "@/services/learnerToolsService"
+import { getLeaderboard } from "@/services/gamificationService"
 import {
     addCommunityComment,
     createCommunityCircle,
@@ -62,32 +65,30 @@ import {
     toggleCommunityLike,
     toggleCommunitySave,
     uploadCommunityAttachment,
+    shareCommunityStudyItem,
+    startSharedCommunityPractice,
+    reportCommunityPost,
 } from "@/services/communityService"
 
 const FEED_TABS = [
     { value: "for-you", label: "For you" },
     { value: "discussion", label: "Discussions" },
-    { value: "quizzes", label: "Quizzes" },
-    { value: "notes", label: "PDFs & notes" },
-    { value: "docx", label: "DOCX" },
+    { value: "quiz", label: "Quizzes" },
+    { value: "flashcard", label: "Flashcards" },
     { value: "circle", label: "Study circles" },
 ]
 
 const POST_TYPE_STYLES = {
     discussion: "border-blue-200 bg-blue-50 text-blue-700",
-    image: "border-sky-200 bg-sky-50 text-sky-700",
-    quizzes: "border-blue-200 bg-blue-50 text-blue-700",
-    notes: "border-amber-200 bg-amber-50 text-amber-700",
-    docx: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    quiz: "border-blue-200 bg-blue-50 text-blue-700",
+    flashcard: "border-violet-200 bg-violet-50 text-violet-700",
     circle: "border-cyan-200 bg-cyan-50 text-cyan-700",
 }
 
 const POST_TYPE_LABELS = {
     discussion: "Discussion",
-    image: "Photo",
-    quizzes: "Quiz",
-    notes: "PDF / Notes",
-    docx: "DOCX",
+    quiz: "Quiz",
+    flashcard: "Flashcards",
     circle: "Study Circle",
 }
 
@@ -130,6 +131,8 @@ function CommunityPost({
                            onOpenComments,
                            onJoinCircle,
                            onDelete,
+                           onStartPractice,
+                           onReport,
                        }) {
     const linkedCircle = post.circleId
         ? circles.find((circle) => circle.circleId === post.circleId)
@@ -190,6 +193,8 @@ function CommunityPost({
                                 <Share2 className="mr-2 h-4 w-4" />
                                 Copy link
                             </DropdownMenuItem>
+
+                            {!post.ownedByMe ? <DropdownMenuItem onSelect={() => onReport(post.postId)} className="text-destructive focus:text-destructive">Report post</DropdownMenuItem> : null}
 
                             {post.ownedByMe ? (
                                 <>
@@ -280,6 +285,12 @@ function CommunityPost({
                     </div>
                 ) : null}
 
+                {["quiz", "flashcard"].includes(post.postType) ? (
+                    <Button type="button" className="mt-4" onClick={() => onStartPractice(post.postId)}>
+                        <BookOpen className="mr-2 h-4 w-4" />Start practice
+                    </Button>
+                ) : null}
+
                 <div className="mt-4 flex items-center justify-between gap-4 text-xs text-muted-foreground">
                     <button
                         type="button"
@@ -327,9 +338,13 @@ function CommunityPost({
 }
 
 export default function Community() {
+    const navigate = useNavigate()
     const [posts, setPosts] = useState([])
     const [circles, setCircles] = useState([])
     const [certifications, setCertifications] = useState([])
+    const [studyItems, setStudyItems] = useState([])
+    const [communityLeaderboard, setCommunityLeaderboard] = useState([])
+    const [selectedStudyItemId, setSelectedStudyItemId] = useState("")
     const [activeTab, setActiveTab] = useState("for-you")
     const [showSavedOnly, setShowSavedOnly] = useState(false)
     const [searchValue, setSearchValue] = useState("")
@@ -352,16 +367,24 @@ export default function Community() {
     const [commentPost, setCommentPost] = useState(null)
     const [comments, setComments] = useState([])
     const [commentBody, setCommentBody] = useState("")
+    const [reportPostId, setReportPostId] = useState(null)
+    const [reportReason, setReportReason] = useState("SPAM")
+    const [reportDetails, setReportDetails] = useState("")
 
     useEffect(() => {
-        Promise.all([getCommunityPosts(), getCommunityCircles(), getAllCertifications()])
-            .then(([nextPosts, nextCircles, nextCertifications]) => {
+        Promise.all([getCommunityPosts(), getCommunityCircles(), getAllCertifications(), getLibraryItems()])
+            .then(([nextPosts, nextCircles, nextCertifications, nextStudyItems]) => {
                 setPosts(nextPosts)
                 setCircles(nextCircles)
                 setCertifications(Array.isArray(nextCertifications) ? nextCertifications : [])
+                setStudyItems((Array.isArray(nextStudyItems) ? nextStudyItems : []).filter((item) => ["quiz", "flashcard"].includes(item.kind)))
                 if (nextCircles[0]) setShareCommunity(String(nextCircles[0].circleId))
             })
             .catch(() => toast.error("The community could not be loaded."))
+    }, [])
+
+    useEffect(() => {
+        getLeaderboard("community").then((entries) => setCommunityLeaderboard(Array.isArray(entries) ? entries : [])).catch(() => {})
     }, [])
 
     const topicOptions = useMemo(() => {
@@ -395,6 +418,7 @@ export default function Community() {
     function openComposer(type) {
         setShareType(type)
         setAttachedFile(null)
+        setSelectedStudyItemId("")
         setComposerOpen(true)
     }
 
@@ -415,6 +439,27 @@ export default function Community() {
             )
         } catch {
             toast.error("Could not update your reaction.")
+        }
+    }
+
+    async function startPractice(postId) {
+        try {
+            const attempt = await startSharedCommunityPractice(postId)
+            navigate(`/learner/practice/${attempt.studySetId}`)
+        } catch {
+            toast.error("This shared study item is not ready for practice yet.")
+        }
+    }
+
+    async function submitReport() {
+        if (!reportPostId) return
+        try {
+            await reportCommunityPost(reportPostId, reportReason, reportDetails)
+            setReportPostId(null)
+            setReportDetails("")
+            toast.success("Post reported. Our team can review it.")
+        } catch {
+            toast.error("This post could not be reported.")
         }
     }
 
@@ -467,6 +512,22 @@ export default function Community() {
     }
 
     async function publishPost() {
+        if (["quiz", "flashcard"].includes(shareType)) {
+            if (!selectedStudyItemId) {
+                toast.error("Choose a generated study item to share.")
+                return
+            }
+            try {
+                const nextPost = await shareCommunityStudyItem(Number(selectedStudyItemId), shareCommunity ? Number(shareCommunity) : null)
+                setPosts((current) => [nextPost, ...current])
+                setSelectedStudyItemId("")
+                setComposerOpen(false)
+                toast.success("Study item shared with the community.")
+            } catch {
+                toast.error("The study item could not be shared.")
+            }
+            return
+        }
         if (!shareTitle.trim() || !shareDescription.trim()) {
             toast.error("Add a title and description.")
             return
@@ -626,12 +687,10 @@ export default function Community() {
                                 Start a discussion or share a review resource...
                             </div>
                         </button>
-                        <div className="mt-4 grid gap-1 border-t pt-3 sm:grid-cols-5">
+                        <div className="mt-4 grid gap-1 border-t pt-3 sm:grid-cols-3">
                             <Button type="button" variant="ghost" size="sm" onClick={() => openComposer("discussion")}><MessageCircle className="mr-2 size-4 text-blue-600" />Discussion</Button>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => openComposer("image")}><ImageIcon className="mr-2 size-4 text-sky-600" />Photo</Button>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => openComposer("quizzes")}><BookOpen className="mr-2 size-4 text-blue-600" />Share quiz</Button>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => openComposer("notes")}><FileText className="mr-2 size-4 text-orange-600" />PDF / notes</Button>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => openComposer("docx")}><FileArchive className="mr-2 size-4 text-emerald-600" />DOCX</Button>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => openComposer("quiz")}><BookOpen className="mr-2 size-4 text-blue-600" />Share quiz</Button>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => openComposer("flashcard")}><Sparkles className="mr-2 size-4 text-violet-600" />Share flashcards</Button>
                         </div>
                     </section>
 
@@ -648,10 +707,8 @@ export default function Community() {
                             <div className="mt-4 flex gap-1 overflow-x-auto pb-1">
                                 {[
                                     { value: "discussion", label: "Discussion", icon: MessageCircle },
-                                    { value: "image", label: "Photo", icon: ImageIcon },
-                                    { value: "quizzes", label: "Quiz", icon: BookOpen },
-                                    { value: "notes", label: "PDF / Notes", icon: FileText },
-                                    { value: "docx", label: "DOCX", icon: FileArchive },
+                                    { value: "quiz", label: "Quiz", icon: BookOpen },
+                                    { value: "flashcard", label: "Flashcards", icon: Sparkles },
                                 ].map((type) => {
                                     const Icon = type.icon
                                     return <Button key={type.value} type="button" variant={shareType === type.value ? "secondary" : "ghost"} size="sm" className="shrink-0" onClick={() => { setShareType(type.value); setAttachedFile(null) }}><Icon className="mr-1.5 size-4" />{type.label}</Button>
@@ -663,8 +720,12 @@ export default function Community() {
                                     <SelectTrigger><SelectValue placeholder="Choose a study circle (optional)" /></SelectTrigger>
                                     <SelectContent>{circles.filter((circle) => circle.joined || circle.owner).map((circle) => <SelectItem key={circle.circleId} value={String(circle.circleId)}>{circle.name}</SelectItem>)}</SelectContent>
                                 </Select>
-                                <Input value={shareTitle} onChange={(event) => setShareTitle(event.target.value)} placeholder={shareType === "discussion" ? "An interesting title" : "Post title"} />
-                                <Textarea value={shareDescription} onChange={(event) => setShareDescription(event.target.value)} placeholder="What do you want to discuss or share?" className="min-h-32 resize-y" />
+                                {["quiz", "flashcard"].includes(shareType) ? (
+                                    <Select value={selectedStudyItemId} onValueChange={setSelectedStudyItemId}>
+                                        <SelectTrigger><SelectValue placeholder={`Choose generated ${shareType === "quiz" ? "quiz" : "flashcards"}`} /></SelectTrigger>
+                                        <SelectContent>{studyItems.filter((item) => item.kind === shareType).map((item) => <SelectItem key={item.id} value={String(item.id)}>{item.title}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                ) : <><Input value={shareTitle} onChange={(event) => setShareTitle(event.target.value)} placeholder="An interesting title" /><Textarea value={shareDescription} onChange={(event) => setShareDescription(event.target.value)} placeholder="What do you want to discuss?" className="min-h-32 resize-y" /></>}
 
                                 {ATTACHABLE_TYPES.has(shareType) ? (
                                     <div>
@@ -680,7 +741,7 @@ export default function Community() {
 
                             <div className="mt-4 flex justify-end gap-2 border-t border-border/70 pt-4">
                                 <Button type="button" variant="ghost" onClick={() => { setComposerOpen(false); setAttachedFile(null) }}>Cancel</Button>
-                                <Button type="button" onClick={publishPost} disabled={isUploadingAttachment || !shareTitle.trim() || !shareDescription.trim()}><Send className="mr-2 size-4" />Post</Button>
+                                <Button type="button" onClick={publishPost} disabled={isUploadingAttachment || (["quiz", "flashcard"].includes(shareType) ? !selectedStudyItemId : !shareTitle.trim() || !shareDescription.trim())}><Send className="mr-2 size-4" />Post</Button>
                             </div>
                         </section>
                     ) : null}
@@ -728,6 +789,8 @@ export default function Community() {
                                     onJoinCircle={toggleJoinCircle}
                                     onOpenComments={openComments}
                                     onDelete={removePost}
+                                    onStartPractice={startPractice}
+                                    onReport={setReportPostId}
                                 />
                             ))}
                         </div>
@@ -747,6 +810,14 @@ export default function Community() {
                 </main>
 
                 <aside className="sticky top-24 hidden space-y-4 lg:block">
+                    <section className="rounded-md border bg-background p-4 shadow-sm">
+                        <div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-amber-500" /><h2 className="text-sm font-semibold">Community ranking</h2></div>
+                        <p className="mt-1 text-xs text-muted-foreground">XP earned from shared quiz practice.</p>
+                        <div className="mt-3 space-y-2">
+                            {communityLeaderboard.map((entry) => <div key={entry.learnerId} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs ${entry.currentLearner ? "bg-primary/10 font-semibold" : ""}`}><span className="w-5 text-center font-bold text-muted-foreground">{entry.rank}</span><span className="min-w-0 flex-1 truncate">{entry.learnerName}</span><span className="font-semibold">{Number(entry.xp).toLocaleString()} XP</span></div>)}
+                            {communityLeaderboard.length === 0 ? <p className="py-2 text-xs text-muted-foreground">Complete a shared quiz to begin the ranking.</p> : null}
+                        </div>
+                    </section>
                     <section className="rounded-md border bg-background p-4 shadow-sm">
                         <div className="flex items-center justify-between gap-3">
                             <div>
@@ -1078,6 +1149,17 @@ export default function Community() {
                             <Send className="h-4 w-4" />
                         </Button>
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={reportPostId != null} onOpenChange={(open) => { if (!open) setReportPostId(null) }}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader><DialogTitle>Report post</DialogTitle><DialogDescription>Tell us why this post should be reviewed.</DialogDescription></DialogHeader>
+                    <div className="space-y-4">
+                        <div className="space-y-2"><Label>Reason</Label><Select value={reportReason} onValueChange={setReportReason}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="SPAM">Spam or misleading</SelectItem><SelectItem value="HARASSMENT">Harassment</SelectItem><SelectItem value="COPYRIGHT">Copyright concern</SelectItem><SelectItem value="EXAM_CONTENT">Active exam content</SelectItem><SelectItem value="OTHER">Other</SelectItem></SelectContent></Select></div>
+                        <div className="space-y-2"><Label htmlFor="report-details">Details (optional)</Label><Textarea id="report-details" value={reportDetails} onChange={(event) => setReportDetails(event.target.value)} placeholder="Add context that helps an admin review it." /></div>
+                    </div>
+                    <DialogFooter><Button variant="outline" onClick={() => setReportPostId(null)}>Cancel</Button><Button variant="destructive" onClick={submitReport}>Submit report</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

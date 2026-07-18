@@ -6,6 +6,10 @@ import com.capstone.rebyu.auth.dto.CurrentUserDto;
 import com.capstone.rebyu.auth.service.CognitoAuthService;
 import com.capstone.rebyu.billing.entitlement.PremiumAccessRequiredException;
 import com.capstone.rebyu.billing.service.LearnerEntitlementService;
+import com.capstone.rebyu.gamification.RewardService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -26,8 +30,11 @@ public class LearnerToolsController {
     private final CognitoAuthService auth;
     private final AiChatService aiChatService;
     private final LearnerEntitlementService entitlementService;
+    private final StudyPracticeService practiceService;
+    private final ObjectMapper objectMapper;
+    private final RewardService rewards;
 
-    public record StudyAidRequest(String type, String lessonName, Long lessonId) {}
+    public record StudyAidRequest(String type, String lessonName, Long lessonId, String requestId) {}
 
     @GetMapping("/library")
     public List<LearnerToolsService.LibraryItem> library(@AuthenticationPrincipal Jwt jwt) {
@@ -83,15 +90,75 @@ public class LearnerToolsController {
         String lesson = request.lessonName() == null || request.lessonName().isBlank()
                 ? "this lesson" : request.lessonName().trim();
         String instruction = "quiz".equals(type)
-                ? "Create a five-question multiple-choice practice quiz for this lesson. Include four choices per question, then put an answer key with short explanations at the end."
-                : "Create ten concise study flashcards for this lesson. Format every card as Front: question or term, then Back: answer or explanation.";
+                ? """
+                Create a five-question multiple-choice practice quiz for this lesson. Reply with JSON only, no markdown:
+                {"title":"...","items":[{"question":"...","choices":["...","...","...","..."],"correctAnswer":"one exact choice","explanation":"...","difficulty":"AVERAGE"}]}
+                Every question must have exactly four choices and correctAnswer must exactly match one choice.
+                """
+                : """
+                Create ten concise study flashcards for this lesson. Reply with JSON only, no markdown:
+                {"title":"...","items":[{"question":"front / question","answer":"back / answer","explanation":"...","difficulty":"AVERAGE"}]}
+                """;
 
         var response = aiChatService.chat(
                 new ChatRequest(instruction, "study-aid-" + learnerId + "-" + System.nanoTime(), lesson));
-        String title = ("quiz".equals(type) ? "Practice Quiz: " : "Flashcards: ") + lesson;
+        String requestId = request.requestId() == null || request.requestId().isBlank() ? java.util.UUID.randomUUID().toString() : request.requestId();
+        boolean charged = rewards.spendAiCredit(learnerId, requestId);
+        try {
+            var studySet = persistGeneratedSet(learnerId, type, lesson, request.lessonId(), response.getReply());
+            return service.createLibraryItem(learnerId,
+                    new LearnerToolsService.LibraryRequest(type, studySet.title(),
+                            "Generated from " + lesson + ". Open it to begin a practice attempt.",
+                            "/learner/practice/" + studySet.id(), studySet.certificationId(), request.lessonId()));
+        } catch (RuntimeException exception) {
+            if (charged) rewards.refundAiCredit(learnerId, requestId);
+            throw exception;
+        }
+    }
 
-        return service.createLibraryItem(learnerId,
-                new LearnerToolsService.LibraryRequest(type, title, response.getReply(), null, null, request.lessonId()));
+    private StudyPracticeService.StudySet persistGeneratedSet(Long learnerId, String type, String lesson,
+                                                               Long lessonId, String rawReply) {
+        try {
+            JsonNode root = objectMapper.readTree(extractJson(rawReply));
+            String title = root.path("title").asText(("quiz".equals(type) ? "Practice Quiz: " : "Flashcards: ") + lesson);
+            JsonNode nodes = root.path("items");
+            if (!nodes.isArray()) throw new IllegalArgumentException("The AI response did not contain study items");
+            List<StudyPracticeService.GeneratedItem> items = new java.util.ArrayList<>();
+            for (JsonNode node : nodes) {
+                String difficulty = node.path("difficulty").asText("AVERAGE").toUpperCase();
+                if (!List.of("EASY", "AVERAGE", "HARD").contains(difficulty)) difficulty = "AVERAGE";
+                if ("quiz".equals(type)) {
+                    String correct = node.path("correctAnswer").asText();
+                    ArrayNode choices = objectMapper.createArrayNode();
+                    for (JsonNode choice : node.path("choices")) {
+                        String text = choice.asText();
+                        choices.add(objectMapper.createObjectNode().put("text", text).put("isCorrect", text.equals(correct)));
+                    }
+                    items.add(new StudyPracticeService.GeneratedItem("MCQ", node.path("question").asText(),
+                            objectMapper.writeValueAsString(choices), correct, null,
+                            node.path("explanation").asText(), difficulty));
+                } else {
+                    String answer = node.path("answer").asText();
+                    items.add(new StudyPracticeService.GeneratedItem("FLASHCARD", node.path("question").asText(),
+                            null, answer, null, node.path("explanation").asText(), difficulty));
+                }
+            }
+            return practiceService.createGeneratedStudySet(learnerId, "quiz".equals(type) ? "QUIZ" : "FLASHCARD", title, lessonId, items);
+        } catch (Exception ex) {
+            if (ex instanceof IllegalArgumentException illegalArgumentException) throw illegalArgumentException;
+            throw new IllegalStateException("The AI returned an invalid study set. Please generate it again.", ex);
+        }
+    }
+
+    private static String extractJson(String value) {
+        if (value == null) throw new IllegalArgumentException("The AI returned an empty response");
+        String trimmed = value.trim();
+        if (trimmed.startsWith("```")) {
+            int firstLine = trimmed.indexOf('\n');
+            int lastFence = trimmed.lastIndexOf("```");
+            if (firstLine >= 0 && lastFence > firstLine) trimmed = trimmed.substring(firstLine + 1, lastFence).trim();
+        }
+        return trimmed;
     }
 
     private Long me(Jwt jwt) {
