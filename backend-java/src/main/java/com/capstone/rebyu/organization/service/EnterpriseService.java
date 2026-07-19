@@ -4,6 +4,8 @@ import com.capstone.rebyu.organization.dto.EnterpriseDto;
 import com.capstone.rebyu.organization.mapper.EnterpriseMapper;
 import com.capstone.rebyu.organization.entity.Enterprise;
 import com.capstone.rebyu.organization.repository.EnterpriseRepository;
+import com.capstone.rebyu.organization.repository.OrganizationCertificateRepository;
+import com.capstone.rebyu.enrollment.repository.OrganizationCertificationLearnerRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,15 +21,39 @@ import java.util.List;
 public class EnterpriseService {
     private final EnterpriseRepository enterpriseRepository;
     private final EnterpriseMapper enterpriseMapper;
+    private final OrganizationCertificateRepository organizationCertificateRepository;
+    private final OrganizationCertificationLearnerRepository organizationCertificationLearnerRepository;
 
     public List<EnterpriseDto> getAll() {
         log.debug("Fetching all enterprises");
-        return enterpriseRepository.findAll().stream().map(enterpriseMapper::toDto).toList();
+        return enterpriseRepository.findAll().stream()
+                .map(this::toDtoWithAggregates)
+                .toList();
     }
 
     public EnterpriseDto getById(Long id) {
         log.debug("Fetching enterprise id: {}", id);
-        return enterpriseMapper.toDto(findEntity(id));
+        return toDtoWithAggregates(findEntity(id));
+    }
+
+    /**
+     * The mapper only carries the entity's own columns; the admin list also
+     * needs learner/certification counts and a status, none of which exist on
+     * Enterprise itself.
+     */
+    private EnterpriseDto toDtoWithAggregates(Enterprise entity) {
+        EnterpriseDto dto = enterpriseMapper.toDto(entity);
+        dto.setCertificationCount(
+                organizationCertificateRepository.findByEnterprise_EnterpriseId(entity.getEnterpriseId()).size());
+        long learnerCount = organizationCertificationLearnerRepository
+                .findByOrgCert_Enterprise_EnterpriseId(entity.getEnterpriseId())
+                .stream()
+                .map(l -> l.getLearner().getLearnerId())
+                .distinct()
+                .count();
+        dto.setLearnerCount((int) learnerCount);
+        dto.setStatus(entity.isVerified() ? "active" : "pending");
+        return dto;
     }
 
     public EnterpriseDto create(EnterpriseDto dto) {

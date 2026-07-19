@@ -41,4 +41,10 @@ public class EnterpriseDto {
     private String primaryContactPhone;
 
     private LocalDateTime joinedAt;
+
+    // Display-only aggregates for the admin organizations list; computed in
+    // EnterpriseService, never accepted on create/update.
+    private Integer learnerCount;
+    private Integer certificationCount;
+    private String status;
 }

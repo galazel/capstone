@@ -160,6 +160,7 @@ const statusStyles = {
 
 function getOrganizationId(organization, index) {
   return (
+      organization.enterpriseId ??
       organization.organizationId ??
       organization.id ??
       `organization-${index}`
@@ -168,6 +169,7 @@ function getOrganizationId(organization, index) {
 
 function getOrganizationName(organization) {
   return (
+      organization.enterpriseName ??
       organization.organizationName ??
       organization.name ??
       organization.title ??
@@ -252,10 +254,16 @@ export default function Organizations({
     return list.filter((organization) => {
       const name = getOrganizationName(organization).toLowerCase()
       const contactPerson = String(
-          organization.contactPerson ?? organization.contactName ?? ""
+          organization.primaryContactName ??
+          organization.contactPerson ??
+          organization.contactName ??
+          ""
       ).toLowerCase()
       const email = String(
-          organization.contactEmail ?? organization.email ?? ""
+          organization.primaryContactEmail ??
+          organization.contactEmail ??
+          organization.email ??
+          ""
       ).toLowerCase()
       const industry = String(organization.industry ?? "").toLowerCase()
       const status = String(organization.status ?? "pending").toLowerCase()
@@ -490,13 +498,15 @@ export default function Organizations({
                             <TableCell>
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-medium text-foreground">
-                                  {organization.contactPerson ??
+                                  {organization.primaryContactName ??
+                                      organization.contactPerson ??
                                       organization.contactName ??
                                       "Not assigned"}
                                 </p>
 
                                 <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                  {organization.contactEmail ??
+                                  {organization.primaryContactEmail ??
+                                      organization.contactEmail ??
                                       organization.email ??
                                       "No email provided"}
                                 </p>
@@ -523,6 +533,7 @@ export default function Organizations({
 
                             <TableCell className="text-sm text-muted-foreground">
                               {formatDate(
+                                  organization.joinedAt ??
                                   organization.createdAt ??
                                   organization.dateCreated ??
                                   organization.createdDate
