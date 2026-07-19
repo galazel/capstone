@@ -41,6 +41,15 @@ public class EnterpriseGroup {
     @Column(name = "group_description", length = 500)
     private String groupDescription;
 
+    // A sub-allocation carved out of (and capped by) the org cert's own
+    // totalSlots -- the group's own leader can only invite learners up to
+    // this limit, not the whole certification allocation's remaining pool.
+    @Column(name = "total_slots", nullable = false)
+    private Integer totalSlots = 0;
+
+    @Column(name = "used_slots", nullable = false)
+    private Integer usedSlots = 0;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by", nullable = false)
     private User createdBy;

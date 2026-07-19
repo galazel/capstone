@@ -68,6 +68,7 @@ import {
   inviteEnterpriseMember,
   removeEnterpriseGroupAssignee,
   removeEnterpriseGroupAuthority,
+  updateEnterpriseGroup,
 } from "@/services/enterpriseService.js"
 import {
   cancelEnterpriseInvitation,
@@ -83,7 +84,12 @@ function CreateGroupDialog({ open, onOpenChange, orgCerts, certificationById, lo
   const [orgCertId, setOrgCertId] = useState("")
   const [groupName, setGroupName] = useState("")
   const [groupDescription, setGroupDescription] = useState("")
+  const [totalSlots, setTotalSlots] = useState("")
   const [error, setError] = useState("")
+
+  const selectedOrgCert = orgCerts.find(
+    (orgCert) => String(orgCert.orgCertId) === orgCertId
+  )
 
   // Arriving from a specific certification's card: the allocation is fixed,
   // not picked from a dropdown.
@@ -97,6 +103,7 @@ function CreateGroupDialog({ open, onOpenChange, orgCerts, certificationById, lo
     setOrgCertId(lockedOrgCertId != null ? String(lockedOrgCertId) : "")
     setGroupName("")
     setGroupDescription("")
+    setTotalSlots("")
     setError("")
   }
 
@@ -106,6 +113,7 @@ function CreateGroupDialog({ open, onOpenChange, orgCerts, certificationById, lo
         orgCertId: Number(orgCertId),
         groupName: groupName.trim(),
         groupDescription: groupDescription.trim() || null,
+        totalSlots: Number(totalSlots),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["enterprise-groups"] })
@@ -128,6 +136,17 @@ function CreateGroupDialog({ open, onOpenChange, orgCerts, certificationById, lo
     }
     if (!groupName.trim()) {
       setError("Enter a group name.")
+      return
+    }
+    const slots = Number(totalSlots)
+    if (!totalSlots || !Number.isInteger(slots) || slots < 1) {
+      setError("Enter a number of slots (at least 1).")
+      return
+    }
+    if (selectedOrgCert && slots > selectedOrgCert.totalSlots) {
+      setError(
+        `This group can have at most ${selectedOrgCert.totalSlots} slot(s) -- the certification's own allocation limit.`
+      )
       return
     }
     createMutation.mutate()
@@ -195,6 +214,24 @@ function CreateGroupDialog({ open, onOpenChange, orgCerts, certificationById, lo
             />
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="group-slots">Learner slots</Label>
+            <Input
+              id="group-slots"
+              type="number"
+              min={1}
+              max={selectedOrgCert?.totalSlots}
+              value={totalSlots}
+              onChange={(e) => setTotalSlots(e.target.value)}
+              placeholder="e.g. 30"
+            />
+            {selectedOrgCert ? (
+              <p className="text-xs text-muted-foreground">
+                Up to {selectedOrgCert.totalSlots} slot(s) available on this certification allocation.
+              </p>
+            ) : null}
+          </div>
+
           {error ? (
             <p className="text-sm text-destructive" role="alert">
               {error}
@@ -251,6 +288,30 @@ function ManageGroupDialog({
   const [inviteLastName, setInviteLastName] = useState("")
   const [inviteEmail, setInviteEmail] = useState("")
   const [learnerInviteEmail, setLearnerInviteEmail] = useState("")
+  const [editingSlots, setEditingSlots] = useState(false)
+  const [slotsInput, setSlotsInput] = useState("")
+
+  useEffect(() => {
+    if (open && group) {
+      setSlotsInput(String(group.totalSlots ?? 0))
+      setEditingSlots(false)
+    }
+  }, [open, group])
+
+  const updateSlotsMutation = useMutation({
+    mutationFn: (nextTotalSlots) =>
+      updateEnterpriseGroup(groupId, {
+        groupName: group.groupName,
+        groupDescription: group.groupDescription,
+        totalSlots: nextTotalSlots,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["enterprise-groups"] })
+      toast.success("Slot limit updated.")
+      setEditingSlots(false)
+    },
+    onError: (err) => toast.error(backendMessage(err, "Unable to update the slot limit.")),
+  })
 
   const authoritiesQuery = useQuery({
     queryKey: ["enterprise-group-authorities", groupId],
@@ -286,7 +347,12 @@ function ManageGroupDialog({
   const pendingGroupInvitations = groupInvitations.filter((inv) => inv.status === "PENDING")
 
   const orgCert = orgCertById?.get(group?.orgCertId)
-  const remainingSlots = orgCert?.remainingSlots ?? 0
+  // The group's own slot cap is the binding constraint a leader actually
+  // faces (never more than the certification's own remaining slots either --
+  // the backend enforces both).
+  const groupTotalSlots = group?.totalSlots ?? 0
+  const groupUsedSlots = group?.usedSlots ?? 0
+  const remainingSlots = Math.max(0, groupTotalSlots - groupUsedSlots)
 
   const assignedOrgCertLearnerIds = new Set(
     activeAssignees.map((a) => a.orgCertLearnerId)
@@ -428,6 +494,50 @@ function ManageGroupDialog({
         </DialogHeader>
 
         <div className="space-y-6">
+          {/* Slots */}
+          <section className="flex items-center justify-between gap-3 rounded-lg border p-3">
+            <div>
+              <p className="text-sm font-medium">
+                {groupUsedSlots} / {groupTotalSlots} slot{groupTotalSlots === 1 ? "" : "s"} used
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Caps how many learners this group's leader can invite.
+              </p>
+            </div>
+            {isOwner ? (
+              editingSlots ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={groupUsedSlots}
+                    max={orgCert?.totalSlots}
+                    value={slotsInput}
+                    onChange={(e) => setSlotsInput(e.target.value)}
+                    className="w-20"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => updateSlotsMutation.mutate(Number(slotsInput))}
+                    disabled={
+                      !slotsInput ||
+                      Number(slotsInput) < groupUsedSlots ||
+                      updateSlotsMutation.isPending
+                    }
+                  >
+                    Save
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingSlots(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <Button size="sm" variant="outline" onClick={() => setEditingSlots(true)}>
+                  Edit slots
+                </Button>
+              )
+            ) : null}
+          </section>
+
           {/* Authorities */}
           <section className="space-y-3">
             <div className="flex items-center gap-2">
@@ -876,9 +986,13 @@ export default function EnterpriseGroupsPage() {
                       `Certification #${orgCert?.certificationId ?? "?"}`}
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="flex-1">
+                <CardContent className="flex-1 space-y-1">
                   <p className="text-sm text-muted-foreground">
                     {group.groupDescription || "No description."}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {group.usedSlots ?? 0} / {group.totalSlots ?? 0} slot
+                    {(group.totalSlots ?? 0) === 1 ? "" : "s"} used
                   </p>
                 </CardContent>
                 <CardFooter className="gap-2">

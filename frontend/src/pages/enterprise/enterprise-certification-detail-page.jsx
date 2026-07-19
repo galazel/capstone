@@ -309,6 +309,10 @@ export default function EnterpriseCertificationDetailPage() {
                     <CardDescription>
                       {group.groupDescription || "No description."}
                     </CardDescription>
+                    <p className="text-xs text-muted-foreground">
+                      {group.usedSlots ?? 0} / {group.totalSlots ?? 0} slot
+                      {(group.totalSlots ?? 0) === 1 ? "" : "s"} used
+                    </p>
                   </CardHeader>
                 </Card>
               ))}

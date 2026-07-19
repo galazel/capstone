@@ -1,5 +1,6 @@
 package com.capstone.rebyu.enterprisegroup.service;
 
+import com.capstone.rebyu.common.BusinessRuleException;
 import com.capstone.rebyu.enterprisegroup.dto.EnterpriseGroupDto;
 import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup;
 import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroupAuthority;
@@ -102,6 +103,16 @@ public class EnterpriseGroupService {
             throw new EntityNotFoundException("OrganizationCertificate not found: " + dto.getOrgCertId());
         }
 
+        // A single group can't be handed more slots than the certification
+        // allocation itself has -- a real (if generous) sanity bound. It does
+        // NOT sum across sibling groups; that would require re-validating every
+        // other group whenever one changes.
+        if (dto.getTotalSlots() > orgCert.getTotalSlots()) {
+            throw new BusinessRuleException.EnterpriseGroupRuleException(
+                    "This group can have at most " + orgCert.getTotalSlots()
+                            + " slot(s) -- the certification's own allocation limit.");
+        }
+
         EnterpriseGroup entity = enterpriseGroupMapper.toEntity(dto);
         entity.setEnterpriseGroupId(null);
         // The mapper builds DETACHED stubs for the orgCert/enterprise FKs (id
@@ -112,6 +123,7 @@ public class EnterpriseGroupService {
         entity.setEnterprise(orgCert.getEnterprise());
         entity.setCreatedAt(dto.getCreatedAt() != null ? dto.getCreatedAt() : LocalDateTime.now());
         entity.setStatus(dto.getStatus() != null ? dto.getStatus() : EnterpriseGroup.Status.active);
+        entity.setUsedSlots(0);
         EnterpriseGroupDto result = enterpriseGroupMapper.toDto(enterpriseGroupRepository.save(entity));
         log.info("Enterprise group created with id: {}", result.getEnterpriseGroupId());
         return result;
@@ -119,11 +131,26 @@ public class EnterpriseGroupService {
 
     public EnterpriseGroupDto update(Long id, EnterpriseGroupDto dto, Long callerEnterpriseId) {
         log.info("Updating enterprise group id: {}", id);
-        // Mutate editable fields only; createdBy/createdAt/enterprise/orgCert are immutable.
+        // Mutate editable fields only; createdBy/createdAt/enterprise/orgCert/
+        // usedSlots are immutable here -- usedSlots only changes via invitations.
         EnterpriseGroup entity = findEntity(id);
         requireSameEnterprise(entity, callerEnterpriseId);
         entity.setGroupName(dto.getGroupName());
         entity.setGroupDescription(dto.getGroupDescription());
+        if (dto.getTotalSlots() != null) {
+            if (dto.getTotalSlots() < entity.getUsedSlots()) {
+                throw new BusinessRuleException.EnterpriseGroupRuleException(
+                        "This group already has " + entity.getUsedSlots()
+                                + " slot(s) in use -- lower the limit no further than that.");
+            }
+            OrganizationCertificate orgCert = entity.getOrgCert();
+            if (orgCert != null && dto.getTotalSlots() > orgCert.getTotalSlots()) {
+                throw new BusinessRuleException.EnterpriseGroupRuleException(
+                        "This group can have at most " + orgCert.getTotalSlots()
+                                + " slot(s) -- the certification's own allocation limit.");
+            }
+            entity.setTotalSlots(dto.getTotalSlots());
+        }
         if (dto.getStatus() != null) {
             entity.setStatus(dto.getStatus());
         }

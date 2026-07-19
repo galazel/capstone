@@ -6,6 +6,7 @@ import com.capstone.rebyu.enrollment.repository.OrganizationCertificationLearner
 import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup;
 import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroupAssignee;
 import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupAssigneeRepository;
+import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupRepository;
 import com.capstone.rebyu.notification.entity.LearnerInvitation;
 import com.capstone.rebyu.notification.repository.LearnerInvitationRepository;
 import com.capstone.rebyu.notification.service.InvitationTokenService;
@@ -41,6 +42,7 @@ public class LearnerService {
     private final OrganizationCertificateRepository organizationCertificateRepository;
     private final InvitationTokenService invitationTokenService;
     private final EnterpriseGroupAssigneeRepository enterpriseGroupAssigneeRepository;
+    private final EnterpriseGroupRepository enterpriseGroupRepository;
 
     public List<LearnerDto> getAll() {
         return learnerRepository.findAll()
@@ -128,6 +130,7 @@ public class LearnerService {
             invitation.setStatus(LearnerInvitation.Status.EXPIRED);
             learnerInvitationRepository.save(invitation);
             restoreSlot(invitation.getOrgCert());
+            restoreGroupSlot(invitation.getEnterpriseGroup());
             throw new InvitationAcceptanceException(
                     InvitationAcceptanceException.Code.INVITATION_EXPIRED,
                     "This invitation has expired.");
@@ -217,6 +220,15 @@ public class LearnerService {
                 orgCert.getCertification().getCertificationId(),
                 orgCert.getCertification().getTitle(),
                 enrollment.getOrgCertLearnerId());
+    }
+
+    /** Restores exactly one reserved slot on the group; used_slots never goes negative. */
+    private void restoreGroupSlot(EnterpriseGroup group) {
+        if (group == null) {
+            return;
+        }
+        group.setUsedSlots(Math.max(0, group.getUsedSlots() - 1));
+        enterpriseGroupRepository.save(group);
     }
 
     /** Restores exactly one reserved slot; used_slots never goes negative. */

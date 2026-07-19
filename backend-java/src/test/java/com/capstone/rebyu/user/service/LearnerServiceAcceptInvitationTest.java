@@ -5,6 +5,7 @@ import com.capstone.rebyu.common.InvitationAcceptanceException;
 import com.capstone.rebyu.enrollment.entity.OrganizationCertificationLearner;
 import com.capstone.rebyu.enrollment.repository.OrganizationCertificationLearnerRepository;
 import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupAssigneeRepository;
+import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupRepository;
 import com.capstone.rebyu.notification.entity.LearnerInvitation;
 import com.capstone.rebyu.notification.repository.LearnerInvitationRepository;
 import com.capstone.rebyu.notification.service.InvitationTokenService;
@@ -49,7 +50,8 @@ class LearnerServiceAcceptInvitationTest {
         service = new LearnerService(
                 learnerRepository, mock(LearnerMapper.class), invitationRepository,
                 enrollmentRepository, orgCertRepository, new InvitationTokenService(),
-                mock(EnterpriseGroupAssigneeRepository.class));
+                mock(EnterpriseGroupAssigneeRepository.class),
+                mock(EnterpriseGroupRepository.class));
     }
 
     private OrganizationCertificate orgCert() {

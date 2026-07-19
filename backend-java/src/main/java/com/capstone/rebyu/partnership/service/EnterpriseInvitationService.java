@@ -81,6 +81,7 @@ public class EnterpriseInvitationService {
                 OrganizationCertificate orgCert = invitation.getOrgCert();
                 orgCert.setUsedSlots(Math.max(0, orgCert.getUsedSlots() - 1));
                 organizationCertificateRepository.save(orgCert);
+                restoreGroupSlot(invitation.getEnterpriseGroup());
                 log.info("Invitation {} expired; 1 slot restored on orgCert {}",
                         invitation.getInvitationId(), orgCert.getOrgCertId());
             }
@@ -139,6 +140,15 @@ public class EnterpriseInvitationService {
                             + remaining + " slot(s) remaining.");
         }
 
+        // The group's OWN cap -- a sub-limit within the certification's pool,
+        // set by the owner when the group was created (or edited since).
+        int remainingInGroup = group.getTotalSlots() - group.getUsedSlots();
+        if (toInvite.size() > remainingInGroup) {
+            throw new BusinessRuleException.InvalidPartnershipRequestException(
+                    "The number of invitations exceeds this group's own slot limit. "
+                            + remainingInGroup + " slot(s) remaining in this group.");
+        }
+
         LocalDateTime now = LocalDateTime.now();
         List<InvitationDto> created = new ArrayList<>();
         for (String email : toInvite) {
@@ -179,6 +189,8 @@ public class EnterpriseInvitationService {
         // remaining_slots is a DB-computed column, so only used_slots changes.
         orgCert.setUsedSlots(orgCert.getUsedSlots() + toInvite.size());
         organizationCertificateRepository.save(orgCert);
+        group.setUsedSlots(group.getUsedSlots() + toInvite.size());
+        enterpriseGroupRepository.save(group);
 
         log.info("Enterprise {} sent {} invitation(s) for orgCert {} ({} skipped)",
                 request.enterpriseId(), created.size(), orgCert.getOrgCertId(), skipped.size());
@@ -210,6 +222,7 @@ public class EnterpriseInvitationService {
             invitationRepository.save(invitation);
             orgCert.setUsedSlots(Math.max(0, orgCert.getUsedSlots() - 1));
             organizationCertificateRepository.save(orgCert);
+            restoreGroupSlot(group);
             log.info("Invitation {} cancelled; 1 slot restored on orgCert {}",
                     invitationId, orgCert.getOrgCertId());
         } else {
@@ -217,6 +230,15 @@ public class EnterpriseInvitationService {
                     "Only a pending invitation can be cancelled.");
         }
         return toInvitationDto(invitation);
+    }
+
+    /** Restores exactly one reserved slot on the group; used_slots never goes negative. */
+    private void restoreGroupSlot(EnterpriseGroup group) {
+        if (group == null) {
+            return;
+        }
+        group.setUsedSlots(Math.max(0, group.getUsedSlots() - 1));
+        enterpriseGroupRepository.save(group);
     }
 
     /** Only an active authority (leader) of this group may send/cancel its invitations. */

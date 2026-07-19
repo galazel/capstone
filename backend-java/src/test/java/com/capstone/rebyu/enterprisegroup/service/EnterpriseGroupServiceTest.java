@@ -3,6 +3,7 @@ package com.capstone.rebyu.enterprisegroup.service;
 import com.capstone.rebyu.enterprisegroup.dto.EnterpriseGroupDto;
 import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup;
 import com.capstone.rebyu.enterprisegroup.mapper.EnterpriseGroupMapper;
+import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupAuthorityRepository;
 import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupRepository;
 import com.capstone.rebyu.organization.entity.Enterprise;
 import com.capstone.rebyu.organization.entity.OrganizationCertificate;
@@ -40,7 +41,8 @@ class EnterpriseGroupServiceTest {
         orgCertRepository = mock(OrganizationCertificateRepository.class);
         mapper = mock(EnterpriseGroupMapper.class);
 
-        service = new EnterpriseGroupService(groupRepository, orgCertRepository, mapper);
+        service = new EnterpriseGroupService(
+                groupRepository, mock(EnterpriseGroupAuthorityRepository.class), orgCertRepository, mapper);
 
         when(mapper.toDto(any(EnterpriseGroup.class))).thenAnswer(inv -> {
             EnterpriseGroup entity = inv.getArgument(0);
@@ -48,6 +50,8 @@ class EnterpriseGroupServiceTest {
             dto.setEnterpriseGroupId(entity.getEnterpriseGroupId());
             dto.setGroupName(entity.getGroupName());
             dto.setGroupDescription(entity.getGroupDescription());
+            dto.setTotalSlots(entity.getTotalSlots());
+            dto.setUsedSlots(entity.getUsedSlots());
             dto.setStatus(entity.getStatus());
             return dto;
         });
@@ -57,6 +61,7 @@ class EnterpriseGroupServiceTest {
                     .enterpriseGroupId(dto.getEnterpriseGroupId())
                     .groupName(dto.getGroupName())
                     .groupDescription(dto.getGroupDescription())
+                    .totalSlots(dto.getTotalSlots() != null ? dto.getTotalSlots() : 0)
                     .status(dto.getStatus())
                     .build();
         });
@@ -67,12 +72,15 @@ class EnterpriseGroupServiceTest {
         enterprise.setEnterpriseId(enterpriseId);
         OrganizationCertificate orgCert = new OrganizationCertificate();
         orgCert.setOrgCertId(ORG_CERT_ID);
+        orgCert.setTotalSlots(100);
         return EnterpriseGroup.builder()
                 .enterpriseGroupId(GROUP_ID)
                 .enterprise(enterprise)
                 .orgCert(orgCert)
                 .groupName("Original Name")
                 .groupDescription("Original Description")
+                .totalSlots(10)
+                .usedSlots(0)
                 .status(EnterpriseGroup.Status.active)
                 .build();
     }
@@ -83,6 +91,7 @@ class EnterpriseGroupServiceTest {
         return OrganizationCertificate.builder()
                 .orgCertId(ORG_CERT_ID)
                 .enterprise(enterprise)
+                .totalSlots(100)
                 .build();
     }
 
@@ -92,6 +101,7 @@ class EnterpriseGroupServiceTest {
         dto.setOrgCertId(ORG_CERT_ID);
         dto.setGroupName("New Group");
         dto.setGroupDescription("New Description");
+        dto.setTotalSlots(10);
         return dto;
     }
 
