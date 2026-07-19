@@ -20,7 +20,6 @@ import {
   ServerCog,
   Sparkles,
   Search,
-  Settings,
   Swords,
   Users,
   UsersRound,
@@ -83,6 +82,10 @@ const adminGroups = [
   },
 ]
 
+// Groups now live inside Certifications (you create a group from within the
+// certification it belongs to), so there's no standalone "Groups" nav item.
+// Items flagged ownerOnly are hidden for a group leader / other enterprise
+// member -- only the organization owner sees them.
 const enterpriseGroups = [
   {
     label: "Overview",
@@ -96,19 +99,19 @@ const enterpriseGroups = [
     items: [
       { label: "Certifications", href: "/enterprise/certifications", icon: Award },
       { label: "Learners", href: "/enterprise/learners", icon: Users },
-      { label: "Groups", href: "/enterprise/groups", icon: UsersRound },
+      { label: "Question Bank", href: "/enterprise/question-bank", icon: FileQuestion },
       { label: "Invitations", href: "/enterprise/invitations", icon: Bell },
       { label: "Files", href: "/enterprise/files", icon: Files },
     ],
   },
   {
     label: "Organization",
+    ownerOnly: true,
     items: [
       { label: "Partnership", href: "/enterprise/partnership", icon: Handshake },
       { label: "License", href: "/enterprise/license", icon: Award },
       { label: "Billing", href: "/enterprise/billing", icon: ReceiptText },
       { label: "Profile", href: "/enterprise/organization", icon: Building2 },
-      { label: "Settings", href: "/enterprise/settings", icon: Settings },
     ],
   },
 ]
@@ -192,10 +195,15 @@ export function CommandPalette({ open, onOpenChange, items }) {
   )
 }
 
-export function PortalTopNavigation({ role, actions, organizationName }) {
+export function PortalTopNavigation({ role, actions, organizationName, enterpriseMemberRole }) {
   const location = useLocation()
   const [commandOpen, setCommandOpen] = useState(false)
-  const groups = role === "ADMIN" ? adminGroups : enterpriseGroups
+  const isEnterpriseOwner = enterpriseMemberRole === "owner"
+  const allGroups = role === "ADMIN" ? adminGroups : enterpriseGroups
+  const groups =
+    role === "ENTERPRISE" && !isEnterpriseOwner
+      ? allGroups.filter((group) => !group.ownerOnly)
+      : allGroups
   const commandItems = role === "LEARNER" ? learnerNavigation.map((item) => ({ ...item, group: "Learner" })) : groups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.label })))
 
   useEffect(() => {

@@ -81,4 +81,10 @@ public abstract class BusinessRuleException extends RuntimeException {
             super(message);
         }
     }
+
+    public static class QuestionAccessException extends BusinessRuleException {
+        public QuestionAccessException(String message) {
+            super(message);
+        }
+    }
 }

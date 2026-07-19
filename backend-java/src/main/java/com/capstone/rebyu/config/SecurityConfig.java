@@ -120,6 +120,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/bkt/**").authenticated()
                         .requestMatchers("/api/admin/community/reports/**").authenticated()
                         .requestMatchers("/api/admin/gamification-settings/**").authenticated()
+                        // The question bank (including choices/correct answers) had no
+                        // auth at all -- anyone could read, create, edit, or delete any
+                        // question. Now admin- or enterprise-scoped at the controller;
+                        // block anonymous access here too.
+                        .requestMatchers("/api/questions/**").authenticated()
                         // File view/download stay public (embedded directly as <img src>/
                         // download links with no Authorization header attached), but
                         // uploading (content-planting) and deleting an arbitrary file by

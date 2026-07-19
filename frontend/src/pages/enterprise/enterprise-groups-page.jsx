@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react"
-import { useOutletContext } from "react-router-dom"
+import { useEffect, useMemo, useState } from "react"
+import { Link, useOutletContext, useSearchParams } from "react-router-dom"
+import { ArrowLeftIcon } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Loader2, Mail, Plus, Trash2, UserCog, UserPlus, Users2, UsersRound } from "lucide-react"
 import { toast } from "sonner"
@@ -77,15 +78,23 @@ function backendMessage(error, fallback) {
   return error?.response?.data?.message ?? fallback
 }
 
-function CreateGroupDialog({ open, onOpenChange, orgCerts, certificationById }) {
+function CreateGroupDialog({ open, onOpenChange, orgCerts, certificationById, lockedOrgCertId }) {
   const queryClient = useQueryClient()
   const [orgCertId, setOrgCertId] = useState("")
   const [groupName, setGroupName] = useState("")
   const [groupDescription, setGroupDescription] = useState("")
   const [error, setError] = useState("")
 
+  // Arriving from a specific certification's card: the allocation is fixed,
+  // not picked from a dropdown.
+  useEffect(() => {
+    if (open) {
+      setOrgCertId(lockedOrgCertId != null ? String(lockedOrgCertId) : "")
+    }
+  }, [open, lockedOrgCertId])
+
   const reset = () => {
-    setOrgCertId("")
+    setOrgCertId(lockedOrgCertId != null ? String(lockedOrgCertId) : "")
     setGroupName("")
     setGroupDescription("")
     setError("")
@@ -144,7 +153,11 @@ function CreateGroupDialog({ open, onOpenChange, orgCerts, certificationById }) 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="group-cert">Certification allocation</Label>
-            <Select value={orgCertId} onValueChange={setOrgCertId}>
+            <Select
+              value={orgCertId}
+              onValueChange={setOrgCertId}
+              disabled={lockedOrgCertId != null}
+            >
               <SelectTrigger id="group-cert" className="w-full">
                 <SelectValue placeholder="Select certification allocation" />
               </SelectTrigger>
@@ -262,6 +275,10 @@ function ManageGroupDialog({
   // Only this group's leader may invite/cancel its learner invitations -- the
   // enterprise account itself is read-only here.
   const isLeader = activeAuthorities.some((a) => a.userId === user?.userId)
+  // Assigning/removing a group's leader (and creating a new leader's account)
+  // is an organization-management action -- owner-only, same as Billing/
+  // Partnership/Organization profile.
+  const isOwner = user?.enterpriseMemberRole === "owner"
 
   const groupInvitations = (Array.isArray(invitations) ? invitations : []).filter(
     (inv) => inv.enterpriseGroupId === groupId
@@ -420,104 +437,112 @@ function ManageGroupDialog({
               </h3>
             </div>
 
-            <div className="flex gap-2">
-              <Select value={authorityUserId} onValueChange={setAuthorityUserId}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select an organization member" />
-                </SelectTrigger>
-                <SelectContent>
-                  {members.length === 0 ? (
-                    <SelectItem value="none" disabled>
-                      No members available
-                    </SelectItem>
-                  ) : (
-                    members.map((member) => (
-                      <SelectItem key={member.userId} value={String(member.userId)}>
-                        {memberLabel(member.userId)} · {member.memberRole}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => assignAuthorityMutation.mutate()}
-                disabled={!authorityUserId || assignAuthorityMutation.isPending}
-              >
-                <Plus className="size-4" aria-hidden="true" />
-                Assign
-              </Button>
-            </div>
-
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground"
-              onClick={() => setShowInviteForm((prev) => !prev)}
-            >
-              <UserPlus className="size-4" aria-hidden="true" />
-              {showInviteForm ? "Cancel" : "This person doesn't have an account yet"}
-            </Button>
-
-            {showInviteForm ? (
-              <div className="space-y-3 rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">
-                  Create a new login account for a group leader. They'll receive their
-                  username and a temporary password by email.
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="invite-first-name">First name</Label>
-                    <Input
-                      id="invite-first-name"
-                      value={inviteFirstName}
-                      onChange={(e) => setInviteFirstName(e.target.value)}
-                      placeholder="Juan"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="invite-last-name">Last name</Label>
-                    <Input
-                      id="invite-last-name"
-                      value={inviteLastName}
-                      onChange={(e) => setInviteLastName(e.target.value)}
-                      placeholder="Dela Cruz"
-                    />
-                  </div>
+            {isOwner ? (
+              <>
+                <div className="flex gap-2">
+                  <Select value={authorityUserId} onValueChange={setAuthorityUserId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select an organization member" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {members.length === 0 ? (
+                        <SelectItem value="none" disabled>
+                          No members available
+                        </SelectItem>
+                      ) : (
+                        members.map((member) => (
+                          <SelectItem key={member.userId} value={String(member.userId)}>
+                            {memberLabel(member.userId)} · {member.memberRole}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => assignAuthorityMutation.mutate()}
+                    disabled={!authorityUserId || assignAuthorityMutation.isPending}
+                  >
+                    <Plus className="size-4" aria-hidden="true" />
+                    Assign
+                  </Button>
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor="invite-email">Email</Label>
-                  <Input
-                    id="invite-email"
-                    type="email"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="leader@example.com"
-                  />
-                </div>
+
                 <Button
                   type="button"
-                  onClick={() => inviteMemberMutation.mutate()}
-                  disabled={
-                    !inviteFirstName.trim() ||
-                    !inviteLastName.trim() ||
-                    !inviteEmail.trim() ||
-                    inviteMemberMutation.isPending
-                  }
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                  onClick={() => setShowInviteForm((prev) => !prev)}
                 >
-                  {inviteMemberMutation.isPending ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                      Creating account...
-                    </>
-                  ) : (
-                    "Create account"
-                  )}
+                  <UserPlus className="size-4" aria-hidden="true" />
+                  {showInviteForm ? "Cancel" : "This person doesn't have an account yet"}
                 </Button>
-              </div>
-            ) : null}
+
+                {showInviteForm ? (
+                  <div className="space-y-3 rounded-lg border p-3">
+                    <p className="text-xs text-muted-foreground">
+                      Create a new login account for a group leader. They'll receive their
+                      username and a temporary password by email.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="invite-first-name">First name</Label>
+                        <Input
+                          id="invite-first-name"
+                          value={inviteFirstName}
+                          onChange={(e) => setInviteFirstName(e.target.value)}
+                          placeholder="Juan"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="invite-last-name">Last name</Label>
+                        <Input
+                          id="invite-last-name"
+                          value={inviteLastName}
+                          onChange={(e) => setInviteLastName(e.target.value)}
+                          placeholder="Dela Cruz"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="invite-email">Email</Label>
+                      <Input
+                        id="invite-email"
+                        type="email"
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        placeholder="leader@example.com"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={() => inviteMemberMutation.mutate()}
+                      disabled={
+                        !inviteFirstName.trim() ||
+                        !inviteLastName.trim() ||
+                        !inviteEmail.trim() ||
+                        inviteMemberMutation.isPending
+                      }
+                    >
+                      {inviteMemberMutation.isPending ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                          Creating account...
+                        </>
+                      ) : (
+                        "Create account"
+                      )}
+                    </Button>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Only the organization owner can assign this group's leader.
+              </p>
+            )}
 
             {authoritiesQuery.isLoading ? (
               <p className="text-sm text-muted-foreground">Loading authorities...</p>
@@ -534,17 +559,19 @@ function ManageGroupDialog({
                     className="flex items-center justify-between gap-2 px-3 py-2"
                   >
                     <span className="text-sm">{memberLabel(authority.userId)}</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        removeAuthorityMutation.mutate(authority.enterpriseGroupAuthorityId)
-                      }
-                      disabled={removeAuthorityMutation.isPending}
-                    >
-                      <Trash2 className="size-4" aria-hidden="true" />
-                      Remove
-                    </Button>
+                    {isOwner ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          removeAuthorityMutation.mutate(authority.enterpriseGroupAuthorityId)
+                        }
+                        disabled={removeAuthorityMutation.isPending}
+                      >
+                        <Trash2 className="size-4" aria-hidden="true" />
+                        Remove
+                      </Button>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -730,6 +757,12 @@ export default function EnterpriseGroupsPage() {
   const { enterprise, enterpriseLoading, enterpriseError, refetchEnterprise } =
     useOutletContext()
   const enterpriseId = enterprise?.enterpriseId
+  const [searchParams] = useSearchParams()
+  // Reached from a specific certification's card on the Certifications page --
+  // groups are always created/viewed in the context of one allocation. Without
+  // this param (a stale bookmark, e.g.), every group across the org is shown.
+  const scopedOrgCertIdParam = searchParams.get("orgCertId")
+  const scopedOrgCertId = scopedOrgCertIdParam ? Number(scopedOrgCertIdParam) : null
 
   const data = useEnterpriseData(enterpriseId)
   const [createOpen, setCreateOpen] = useState(false)
@@ -761,8 +794,14 @@ export default function EnterpriseGroupsPage() {
   )
 
   const groups = (Array.isArray(groupsQuery.data) ? groupsQuery.data : []).filter(
-    (group) => group.status === "active"
+    (group) =>
+      group.status === "active" &&
+      (scopedOrgCertId == null || group.orgCertId === scopedOrgCertId)
   )
+
+  const scopedCertification = scopedOrgCertId != null
+    ? data.certificationById.get(data.orgCertById.get(scopedOrgCertId)?.certificationId)
+    : null
 
   if (enterpriseLoading || (enterprise && data.isLoading)) {
     return <EnterpriseLoadingSkeleton />
@@ -783,8 +822,18 @@ export default function EnterpriseGroupsPage() {
 
   return (
     <div className="space-y-6">
+      {scopedOrgCertId != null ? (
+        <Link
+          to="/enterprise/certifications"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeftIcon className="size-4" aria-hidden="true" />
+          Back to Certifications
+        </Link>
+      ) : null}
+
       <EnterprisePageHeader
-        title="Groups"
+        title={scopedCertification ? `Groups — ${scopedCertification.title}` : "Groups"}
         subtitle="Organize learners into groups under a certification allocation and delegate management to an authority."
         actions={
           <Button onClick={() => setCreateOpen(true)} disabled={!hasAllocations}>
@@ -860,6 +909,7 @@ export default function EnterpriseGroupsPage() {
         onOpenChange={setCreateOpen}
         orgCerts={data.orgCerts}
         certificationById={data.certificationById}
+        lockedOrgCertId={scopedOrgCertId}
       />
 
       <ManageGroupDialog

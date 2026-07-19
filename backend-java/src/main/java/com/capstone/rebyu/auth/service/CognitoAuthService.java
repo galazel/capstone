@@ -236,11 +236,12 @@ public class CognitoAuthService {
 
         // Enterprise members carry their organization so the portal can scope
         // to it; their role comes from the ENTERPRISE user type.
-        Long enterpriseId = enterpriseMemberRepository.findByUser_UserId(user.getUserId())
+        EnterpriseMember membership = enterpriseMemberRepository.findByUser_UserId(user.getUserId())
                 .stream()
                 .findFirst()
-                .map(member -> member.getEnterprise().getEnterpriseId())
                 .orElse(null);
+        Long enterpriseId = membership != null ? membership.getEnterprise().getEnterpriseId() : null;
+        String enterpriseMemberRole = membership != null ? membership.getMemberRole().name() : null;
 
         return new CurrentUserDto(
                 user.getUserId(),
@@ -248,6 +249,7 @@ public class CognitoAuthService {
                 user.getUserType() != null ? user.getUserType().getUserTypeText() : LEARNER_USER_TYPE,
                 learner != null ? learner.getLearnerId() : null,
                 enterpriseId,
+                enterpriseMemberRole,
                 firstName,
                 lastName,
                 displayName

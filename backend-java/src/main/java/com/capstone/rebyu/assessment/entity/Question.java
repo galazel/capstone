@@ -2,6 +2,7 @@ package com.capstone.rebyu.assessment.entity;
 
 
 import com.capstone.rebyu.certification.entity.Lesson;
+import com.capstone.rebyu.user.entity.User;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -11,6 +12,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -74,4 +76,16 @@ public class Question {
 
     @OneToOne(mappedBy = "question", orphanRemoval = true, cascade = CascadeType.ALL)
     private TextQuestionConfig textQuestionConfig;
+
+    // Nullable: questions created before authorship tracking have no known
+    // author. Admin, an enterprise owner, or a group leader can all author
+    // questions now, so the question bank needs to record who added what.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private User createdBy;
+
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
 }

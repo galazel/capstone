@@ -9,6 +9,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
@@ -16,6 +17,12 @@ import java.util.List;
 @AllArgsConstructor
 public class QuestionDto {
     private Long questionId;
+
+    // Read-only: always server-set from the caller's JWT on create, ignored on
+    // update. Null for questions created before authorship tracking existed.
+    private Long createdByUserId;
+    private String createdByEmail;
+    private LocalDateTime createdAt;
 
     private Long parentQuestionId;
 

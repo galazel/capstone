@@ -15,12 +15,16 @@ import com.capstone.rebyu.certification.entity.Lesson;
 import com.capstone.rebyu.certification.entity.MajorCategory;
 import com.capstone.rebyu.certification.entity.MiddleCategory;
 import com.capstone.rebyu.certification.repository.LessonRepository;
+import com.capstone.rebyu.common.BusinessRuleException;
+import com.capstone.rebyu.organization.repository.OrganizationCertificateRepository;
+import com.capstone.rebyu.user.entity.User;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -38,6 +42,7 @@ public class QuestionService {
     private final ExamQuestionRepository examQuestionRepository;
     private final LearnerExamDetailRepository learnerExamDetailRepository;
     private final QuestionMapper questionMapper;
+    private final OrganizationCertificateRepository organizationCertificateRepository;
 
     public List<QuestionDto> getAll() {
         log.debug("Fetching all questions");
@@ -54,9 +59,16 @@ public class QuestionService {
         return questionMapper.toDto(findEntity(id));
     }
 
-    public QuestionDto create(QuestionDto dto) {
+    /**
+     * @param creatorUserId        the authenticated caller who authored this question.
+     * @param restrictToEnterpriseId non-null for an ENTERPRISE caller (owner or group
+     *                             leader): the question's lesson must belong to a
+     *                             certification this organization has purchased
+     *                             access to. Null for an ADMIN caller (no restriction).
+     */
+    public QuestionDto create(QuestionDto dto, Long creatorUserId, Long restrictToEnterpriseId) {
         log.info("Creating new question");
-        validateLesson(dto);
+        validateLesson(dto, restrictToEnterpriseId);
         if (dto.getParentQuestionId() == null && dto.getQuestionText() != null) {
             if (questionRepository.findDuplicate(dto.getLessonId(), dto.getQuestionText(), dto.getQuestionType()).isPresent()) {
                 throw new IllegalArgumentException("A question with this text already exists in this lesson");
@@ -64,16 +76,29 @@ public class QuestionService {
         }
         Question entity = questionMapper.toEntity(dto);
         entity.setQuestionId(null);
+        entity.setCreatedBy(User.builder().userId(creatorUserId).build());
+        entity.setCreatedAt(LocalDateTime.now());
         resolveParent(entity, dto.getParentQuestionId());
         QuestionDto result = questionMapper.toDto(questionRepository.save(entity));
-        log.info("Question created with id: {}", result.getQuestionId());
+        log.info("Question created with id: {} by userId={}", result.getQuestionId(), creatorUserId);
         return result;
     }
 
-    public QuestionDto update(Long id, QuestionDto dto) {
+    /**
+     * @param isAdmin              an admin may edit any question; an ENTERPRISE
+     *                             caller (owner or group leader) may only edit
+     *                             questions they themselves created.
+     * @param restrictToEnterpriseId non-null for an ENTERPRISE caller -- same
+     *                             certification-access check as {@link #create}.
+     */
+    public QuestionDto update(
+            Long id, QuestionDto dto, Long callerUserId, boolean isAdmin, Long restrictToEnterpriseId) {
         log.info("Updating question id: {}", id);
-        validateLesson(dto);
+        validateLesson(dto, restrictToEnterpriseId);
         Question entity = findEntity(id);
+        if (!isAdmin) {
+            requireOwnAuthorship(entity, callerUserId);
+        }
         entity.setQuestionType(dto.getQuestionType());
         entity.setDifficultyLevel(dto.getDifficultyLevel());
         entity.setQuestionText(dto.getQuestionText());
@@ -91,8 +116,10 @@ public class QuestionService {
      * supplies a certificationId — that the lesson actually belongs to that
      * certification. This backs the rule that every generated or manually
      * created question must carry a lessonId within the selected certification.
+     * When restrictToEnterpriseId is set, also enforces that the organization
+     * actually has purchased access to that certification.
      */
-    private void validateLesson(QuestionDto dto) {
+    private void validateLesson(QuestionDto dto, Long restrictToEnterpriseId) {
         if (dto.getLessonId() == null) {
             throw new IllegalArgumentException("A lessonId is required to save a question.");
         }
@@ -100,23 +127,44 @@ public class QuestionService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Lesson not found: " + dto.getLessonId()));
 
-        if (dto.getCertificationId() == null) {
-            return; // existence verified; certification scoping not requested
-        }
         Long resolvedCertificationId = Optional.ofNullable(lesson.getMiddleCategory())
                 .map(MiddleCategory::getMajorCategory)
                 .map(MajorCategory::getCertification)
                 .map(Certification::getCertificationId)
                 .orElse(null);
-        if (!dto.getCertificationId().equals(resolvedCertificationId)) {
+
+        if (dto.getCertificationId() != null
+                && !dto.getCertificationId().equals(resolvedCertificationId)) {
             throw new IllegalArgumentException(
                     "Lesson " + dto.getLessonId() + " does not belong to certification "
                             + dto.getCertificationId() + ".");
         }
+
+        if (restrictToEnterpriseId != null) {
+            boolean hasAccess = resolvedCertificationId != null
+                    && organizationCertificateRepository.findByEnterprise_EnterpriseIdAndCertification_CertificationId(
+                            restrictToEnterpriseId, resolvedCertificationId).isPresent();
+            if (!hasAccess) {
+                throw new BusinessRuleException.QuestionAccessException(
+                        "Your organization does not have access to this certification.");
+            }
+        }
     }
 
-    public void delete(Long id) {
+    private void requireOwnAuthorship(Question entity, Long callerUserId) {
+        if (entity.getCreatedBy() == null
+                || !entity.getCreatedBy().getUserId().equals(callerUserId)) {
+            throw new BusinessRuleException.QuestionAccessException(
+                    "You can only modify questions you created.");
+        }
+    }
+
+    public void delete(Long id, Long callerUserId, boolean isAdmin) {
         log.info("Deleting question id: {}", id);
+        Question entity = findEntity(id);
+        if (!isAdmin) {
+            requireOwnAuthorship(entity, callerUserId);
+        }
         validateQuestionTreeCanBeDeleted(id);
         deleteQuestionTree(id);
         log.info("Question id: {} deleted", id);

@@ -21,11 +21,17 @@ public abstract class QuestionMapper {
 
     @Mapping(source = "lesson.lessonId", target = "lessonId")
     @Mapping(source = "parentQuestion.questionId", target = "parentQuestionId")
+    @Mapping(source = "createdBy.userId", target = "createdByUserId")
+    @Mapping(source = "createdBy.email", target = "createdByEmail")
     public abstract QuestionDto toDto(Question entity);
 
+    // createdBy/createdAt are never taken from client input -- the service
+    // sets them explicitly from the authenticated caller on create.
     @Mapping(source = "lessonId", target = "lesson.lessonId")
     @Mapping(target = "parentQuestion", ignore = true)
     @Mapping(target = "choices", ignore = true)
+    @Mapping(target = "createdBy", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
     public abstract Question toEntity(QuestionDto dto);
 
     @AfterMapping

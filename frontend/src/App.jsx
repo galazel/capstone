@@ -61,7 +61,7 @@ const EnterprisePartnershipPage = lazy(() => import("./pages/enterprise/enterpri
 const EnterpriseBillingPage = lazy(() => import("./pages/enterprise/enterprise-billing-page.jsx"))
 const EnterpriseFilesPage = lazy(() => import("./pages/enterprise/enterprise-files-page.jsx"))
 const EnterpriseOrganizationPage = lazy(() => import("./pages/enterprise/enterprise-organization-page.jsx"))
-const EnterpriseSettingsPage = lazy(() => import("./pages/enterprise/enterprise-settings-page.jsx"))
+const EnterpriseQuestionBankPage = lazy(() => import("./pages/enterprise/enterprise-question-bank-page.jsx"))
 const EnterpriseRequestAccessPage = lazy(() => import("./pages/public/enterprise-request-access-page.jsx"))
 const CompilerArea = lazy(() => import("./components/challenges/compiler-area.jsx"))
 const NotFoundPage = lazy(() => import("./pages/public/not-found-page.jsx"))
@@ -207,14 +207,18 @@ export function App() {
                         path="certifications"
                         element={<EnterpriseCertificationsPage />}
                     />
+                    {/* Deep-linked from a specific certification on the
+                        Certifications page (?orgCertId=...) -- groups are
+                        always created/viewed in the context of one
+                        certification allocation. */}
                     <Route path="groups" element={<EnterpriseGroupsPage />} />
+                    <Route path="question-bank" element={<EnterpriseQuestionBankPage />} />
                     <Route path="license" element={<EnterpriseLicensePage />} />
                     <Route path="analytics" element={<EnterpriseAnalyticsPage />} />
                     <Route path="partnership" element={<EnterprisePartnershipPage />} />
                     <Route path="billing" element={<EnterpriseBillingPage />} />
                     <Route path="files" element={<EnterpriseFilesPage />} />
                     <Route path="organization" element={<EnterpriseOrganizationPage />} />
-                    <Route path="settings" element={<EnterpriseSettingsPage />} />
                 </Route>
             </Route>
 
