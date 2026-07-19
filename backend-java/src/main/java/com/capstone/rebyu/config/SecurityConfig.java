@@ -132,6 +132,20 @@ public class SecurityConfig {
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/exams", "/api/exams/**").authenticated()
                         .requestMatchers(org.springframework.http.HttpMethod.PUT, "/api/exams/**").authenticated()
                         .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/api/exams/**").authenticated()
+                        // Certification/category/lesson WRITES had no auth at all -- anyone
+                        // could create/edit/delete/publish any certification, category, or
+                        // lesson platform-wide. Now admin-only at the controller; block
+                        // anonymous writes here too. GET stays open -- the catalog is browsed
+                        // from the public partnership-request page and by every signed-in role.
+                        .requestMatchers(org.springframework.http.HttpMethod.POST,
+                                "/api/certifications", "/api/certifications/generate",
+                                "/api/major-categories", "/api/middle-categories", "/api/lessons").authenticated()
+                        .requestMatchers(org.springframework.http.HttpMethod.PUT,
+                                "/api/certifications/**", "/api/major-categories/**",
+                                "/api/middle-categories/**", "/api/lessons/**").authenticated()
+                        .requestMatchers(org.springframework.http.HttpMethod.DELETE,
+                                "/api/certifications/**", "/api/major-categories/**",
+                                "/api/middle-categories/**", "/api/lessons/**").authenticated()
                         // File view/download stay public (embedded directly as <img src>/
                         // download links with no Authorization header attached), but
                         // uploading (content-planting) and deleting an arbitrary file by
