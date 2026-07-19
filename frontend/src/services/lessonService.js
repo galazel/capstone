@@ -30,6 +30,10 @@ export async function createLesson(data) {
   })
 }
 
+export async function deleteLesson(id) {
+  return await base(`lessons/${id}`, { method: "DELETE" })
+}
+
 export async function generateLessonFromFiles(lessonId, files) {
   const formData = new FormData()
 

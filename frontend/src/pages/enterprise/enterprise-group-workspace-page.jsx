@@ -3,15 +3,17 @@ import { Link, useNavigate, useParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   ArrowLeftIcon,
-  BookOpenIcon,
+  BookOpen,
+  ChevronDown,
+  ChevronRight,
   ClipboardCheckIcon,
   FileQuestionIcon,
-  FolderTreeIcon,
+  FolderTree,
   Loader2,
   MailIcon,
   MegaphoneIcon,
   PinIcon,
-  PlusIcon,
+  Plus,
   Trash2,
   UserPlusIcon,
   UsersIcon,
@@ -36,9 +38,9 @@ import {
 } from "@/components/enterprise/enterprise-ui.jsx"
 import { getExamTypes, getExams } from "@/services/assessmentService.js"
 import { getAllCertifications } from "@/services/certificationService.js"
-import { createMajorCategory } from "@/services/majorCategoryService.js"
-import { createMiddleCategory } from "@/services/middleCategoryService.js"
-import { createLesson } from "@/services/lessonService.js"
+import { createMajorCategory, deleteMajorCategory } from "@/services/majorCategoryService.js"
+import { createMiddleCategory, deleteMiddleCategory } from "@/services/middleCategoryService.js"
+import { createLesson, deleteLesson } from "@/services/lessonService.js"
 import {
   archiveGroupAnnouncement,
   createGroupAnnouncement,
@@ -204,6 +206,38 @@ function AnnouncementsTab({ groupId }) {
   )
 }
 
+/** Small inline "type a name, Add / Cancel" row, reused at all three levels. */
+function InlineAddRow({ placeholder, onSubmit, onCancel, isPending }) {
+  const [value, setValue] = useState("")
+  const submit = () => {
+    if (value.trim()) onSubmit(value.trim())
+  }
+  return (
+    <div className="flex gap-2">
+      <Input
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault()
+            submit()
+          } else if (e.key === "Escape") {
+            onCancel()
+          }
+        }}
+        placeholder={placeholder}
+      />
+      <Button size="sm" onClick={submit} disabled={!value.trim() || isPending}>
+        Add
+      </Button>
+      <Button size="sm" variant="ghost" onClick={onCancel}>
+        Cancel
+      </Button>
+    </div>
+  )
+}
+
 /**
  * A group's own authored content -- Major Categories owned by this group
  * (ownerGroupId === groupId), created and edited alongside the read-only
@@ -211,39 +245,47 @@ function AnnouncementsTab({ groupId }) {
  * categories/lessons inherit ownership from their major category, so no
  * ownerGroupId is passed for those creates -- see MiddleCategoryService/
  * LessonService.
+ *
+ * The building UI deliberately mirrors the admin's CertificationModules
+ * component (collapsible numbered major cards, folder-tree modules, lesson
+ * rows, dashed add buttons, floating "+") so authoring content feels the
+ * same in both places -- the difference is each action here persists
+ * immediately (ownership must be resolved server-side per create).
  */
 function ContentTab({ groupId, certification, onContentChanged }) {
   const navigate = useNavigate()
-  const [newMajorTitle, setNewMajorTitle] = useState("")
+  const [addingMajor, setAddingMajor] = useState(false)
+  const [collapsedMajors, setCollapsedMajors] = useState(() => new Set())
+  const [collapsedMiddles, setCollapsedMiddles] = useState(() => new Set())
   const [addingMiddleTo, setAddingMiddleTo] = useState(null)
-  const [newMiddleTitle, setNewMiddleTitle] = useState("")
   const [addingLessonTo, setAddingLessonTo] = useState(null)
-  const [newLessonName, setNewLessonName] = useState("")
 
   const ownMajorCategories = (certification?.majorCategory ?? []).filter(
     (major) => major.ownerGroupId === groupId
   )
 
+  const toggle = (setter, id) =>
+    setter((current) => {
+      const next = new Set(current)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+
   const createMajorMutation = useMutation({
-    mutationFn: () =>
-      createMajorCategory(
-        { certificationId: certification.certificationId, title: newMajorTitle.trim() },
-        groupId
-      ),
+    mutationFn: (title) =>
+      createMajorCategory({ certificationId: certification.certificationId, title }, groupId),
     onSuccess: () => {
       toast.success("Category created.")
-      setNewMajorTitle("")
+      setAddingMajor(false)
       onContentChanged()
     },
     onError: (err) => toast.error(backendMessage(err, "Unable to create this category.")),
   })
 
   const createMiddleMutation = useMutation({
-    mutationFn: (majorCategoryId) =>
-      createMiddleCategory({ majorCategoryId, title: newMiddleTitle.trim() }),
+    mutationFn: ({ majorCategoryId, title }) => createMiddleCategory({ majorCategoryId, title }),
     onSuccess: () => {
       toast.success("Module created.")
-      setNewMiddleTitle("")
       setAddingMiddleTo(null)
       onContentChanged()
     },
@@ -251,11 +293,9 @@ function ContentTab({ groupId, certification, onContentChanged }) {
   })
 
   const createLessonMutation = useMutation({
-    mutationFn: (middleCategoryId) =>
-      createLesson({ middleCategoryId, name: newLessonName.trim() }),
+    mutationFn: ({ middleCategoryId, name }) => createLesson({ middleCategoryId, name }),
     onSuccess: (lesson) => {
       toast.success("Lesson created.")
-      setNewLessonName("")
       setAddingLessonTo(null)
       onContentChanged()
       navigate(`/enterprise/lessons/${encodeURIComponent(lesson.name)}/create`, {
@@ -265,163 +305,299 @@ function ContentTab({ groupId, certification, onContentChanged }) {
     onError: (err) => toast.error(backendMessage(err, "Unable to create this lesson.")),
   })
 
+  const deleteMajorMutation = useMutation({
+    mutationFn: (id) => deleteMajorCategory(id),
+    onSuccess: () => {
+      toast.success("Category deleted.")
+      onContentChanged()
+    },
+    onError: (err) => toast.error(backendMessage(err, "Unable to delete this category.")),
+  })
+
+  const deleteMiddleMutation = useMutation({
+    mutationFn: (id) => deleteMiddleCategory(id),
+    onSuccess: () => {
+      toast.success("Module deleted.")
+      onContentChanged()
+    },
+    onError: (err) => toast.error(backendMessage(err, "Unable to delete this module.")),
+  })
+
+  const deleteLessonMutation = useMutation({
+    mutationFn: (id) => deleteLesson(id),
+    onSuccess: () => {
+      toast.success("Lesson deleted.")
+      onContentChanged()
+    },
+    onError: (err) => toast.error(backendMessage(err, "Unable to delete this lesson.")),
+  })
+
   if (!certification) {
     return (
       <EnterpriseEmptyState
-        icon={FileQuestionIcon}
+        icon={FolderTree}
         title="No certification linked to this group yet"
         description="Content can be authored once this group's certification allocation is set."
       />
     )
   }
 
+  const openLesson = (lesson) =>
+    navigate(`/enterprise/lessons/${encodeURIComponent(lesson.name)}/create`, {
+      state: { lessonId: lesson.lessonId, lessonName: lesson.name },
+    })
+
   return (
-    <div className="space-y-5">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Add a category</CardTitle>
-          <CardDescription>
-            Your own major category, kept separate from the official curriculum above and
-            visible only to your group.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex gap-2">
-          <Input
-            value={newMajorTitle}
-            onChange={(e) => setNewMajorTitle(e.target.value)}
-            placeholder="e.g. Extra practice: Networking basics"
+    <section className="w-full">
+      <div className="mb-4 rounded-2xl border border-zinc-200 bg-zinc-50/70 p-5 dark:border-zinc-800 dark:bg-zinc-900/40">
+        <h2 className="text-base font-semibold text-foreground">Your group's content</h2>
+        <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+          Build your own categories, modules, and lessons for this group. They sit alongside
+          the official curriculum but stay visible only to your group.
+        </p>
+        <p className="mt-3 text-xs font-medium text-muted-foreground/70">
+          {ownMajorCategories.length} categor{ownMajorCategories.length === 1 ? "y" : "ies"}
+        </p>
+      </div>
+
+      {addingMajor ? (
+        <div className="mb-3">
+          <InlineAddRow
+            placeholder="Major category title"
+            onSubmit={(title) => createMajorMutation.mutate(title)}
+            onCancel={() => setAddingMajor(false)}
+            isPending={createMajorMutation.isPending}
           />
-          <Button
-            type="button"
-            onClick={() => createMajorMutation.mutate()}
-            disabled={!newMajorTitle.trim() || createMajorMutation.isPending}
-          >
-            <PlusIcon className="size-4" aria-hidden="true" />
-            Add
+        </div>
+      ) : null}
+
+      {ownMajorCategories.length === 0 && !addingMajor ? (
+        <div className="flex min-h-[240px] flex-col items-center justify-center px-6 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-card text-foreground shadow-sm">
+            <FolderTree size={24} />
+          </div>
+          <h3 className="mt-4 text-base font-semibold text-foreground">
+            Start building your group's content
+          </h3>
+          <p className="mt-1 max-w-sm text-sm leading-6 text-muted-foreground">
+            Use the button below to create your first major category, then add modules and
+            lessons under it.
+          </p>
+          <Button className="mt-4" onClick={() => setAddingMajor(true)}>
+            <Plus className="size-4" aria-hidden="true" />
+            Add category
           </Button>
-        </CardContent>
-      </Card>
-
-      {ownMajorCategories.length === 0 ? (
-        <EnterpriseEmptyState
-          icon={FolderTreeIcon}
-          title="No group content yet"
-          description="Add your first category above, then build out modules and lessons under it."
-        />
+        </div>
       ) : (
-        <div className="space-y-3">
-          {ownMajorCategories.map((major) => (
-            <Card key={major.majorCategoryId}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">{major.title}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {(major.middleCategory ?? []).map((middle) => (
-                  <div key={middle.middleCategoryId} className="rounded-lg border p-3">
-                    <p className="flex items-center gap-2 text-sm font-medium">
-                      <FolderTreeIcon className="size-4 text-muted-foreground" aria-hidden="true" />
-                      {middle.title}
+        <div className="space-y-4">
+          {ownMajorCategories.map((major, majorIndex) => {
+            const middles = major.middleCategory ?? []
+            const majorOpen = !collapsedMajors.has(major.majorCategoryId)
+            return (
+              <div
+                key={major.majorCategoryId}
+                className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
+              >
+                <div className="flex items-center gap-3 px-4 py-4">
+                  <button
+                    type="button"
+                    onClick={() => toggle(setCollapsedMajors, major.majorCategoryId)}
+                    aria-label="Show or hide modules"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted"
+                  >
+                    {majorOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                  </button>
+                  <span className="w-8 text-xl font-semibold tracking-tight text-muted-foreground/60">
+                    {String(majorIndex + 1).padStart(2, "0")}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">{major.title}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {middles.length} {middles.length === 1 ? "module" : "modules"}
                     </p>
-                    <div className="mt-2 space-y-1.5">
-                      {(middle.lessons ?? []).map((lesson) => (
-                        <button
-                          key={lesson.lessonId}
-                          type="button"
-                          onClick={() =>
-                            navigate(`/enterprise/lessons/${encodeURIComponent(lesson.name)}/create`, {
-                              state: { lessonId: lesson.lessonId, lessonName: lesson.name },
-                            })
-                          }
-                          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted"
-                        >
-                          <BookOpenIcon className="size-3.5" aria-hidden="true" />
-                          {lesson.name}
-                        </button>
-                      ))}
-                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      aria-label="Add module"
+                      onClick={() => {
+                        setAddingMiddleTo(major.majorCategoryId)
+                        setCollapsedMajors((c) => {
+                          const n = new Set(c)
+                          n.delete(major.majorCategoryId)
+                          return n
+                        })
+                      }}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                    >
+                      <Plus size={17} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Delete category"
+                      onClick={() => deleteMajorMutation.mutate(major.majorCategoryId)}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-red-50 hover:text-red-600"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
 
-                    {addingLessonTo === middle.middleCategoryId ? (
-                      <div className="mt-2 flex gap-2">
-                        <Input
-                          autoFocus
-                          value={newLessonName}
-                          onChange={(e) => setNewLessonName(e.target.value)}
-                          placeholder="Lesson name"
-                        />
-                        <Button
-                          size="sm"
-                          onClick={() => createLessonMutation.mutate(middle.middleCategoryId)}
-                          disabled={!newLessonName.trim() || createLessonMutation.isPending}
+                {majorOpen ? (
+                  <div className="space-y-3 border-t border-border bg-muted/30 px-4 py-4">
+                    {middles.map((middle) => {
+                      const lessons = middle.lessons ?? []
+                      const middleOpen = !collapsedMiddles.has(middle.middleCategoryId)
+                      return (
+                        <div
+                          key={middle.middleCategoryId}
+                          className="overflow-hidden rounded-xl border border-border bg-card"
                         >
-                          Add
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            setAddingLessonTo(null)
-                            setNewLessonName("")
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
+                          <div className="flex items-center gap-3 px-3 py-3">
+                            <button
+                              type="button"
+                              onClick={() => toggle(setCollapsedMiddles, middle.middleCategoryId)}
+                              aria-label="Show or hide lessons"
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted"
+                            >
+                              {middleOpen ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
+                            </button>
+                            <FolderTree size={16} className="shrink-0 text-muted-foreground" />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium text-foreground">
+                                {middle.title}
+                              </p>
+                              <p className="mt-0.5 text-xs text-muted-foreground">
+                                {lessons.length} {lessons.length === 1 ? "lesson" : "lessons"}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                aria-label="Add lesson"
+                                onClick={() => {
+                                  setAddingLessonTo(middle.middleCategoryId)
+                                  setCollapsedMiddles((c) => {
+                                    const n = new Set(c)
+                                    n.delete(middle.middleCategoryId)
+                                    return n
+                                  })
+                                }}
+                                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                              >
+                                <Plus size={16} />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label="Delete module"
+                                onClick={() => deleteMiddleMutation.mutate(middle.middleCategoryId)}
+                                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-red-50 hover:text-red-600"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {middleOpen ? (
+                            <div className="space-y-2 border-t border-border bg-muted/20 px-3 py-3">
+                              {lessons.map((lesson, lessonIndex) => (
+                                <div
+                                  key={lesson.lessonId}
+                                  className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5"
+                                >
+                                  <span className="w-5 text-xs font-semibold text-muted-foreground/60">
+                                    {String(lessonIndex + 1).padStart(2, "0")}
+                                  </span>
+                                  <BookOpen size={15} className="shrink-0 text-muted-foreground" />
+                                  <button
+                                    type="button"
+                                    onClick={() => openLesson(lesson)}
+                                    className="min-w-0 flex-1 truncate text-left text-sm text-foreground hover:underline"
+                                  >
+                                    {lesson.name}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    aria-label="Delete lesson"
+                                    onClick={() => deleteLessonMutation.mutate(lesson.lessonId)}
+                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-red-50 hover:text-red-600"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </div>
+                              ))}
+
+                              {addingLessonTo === middle.middleCategoryId ? (
+                                <InlineAddRow
+                                  placeholder="Lesson name"
+                                  onSubmit={(name) =>
+                                    createLessonMutation.mutate({
+                                      middleCategoryId: middle.middleCategoryId,
+                                      name,
+                                    })
+                                  }
+                                  onCancel={() => setAddingLessonTo(null)}
+                                  isPending={createLessonMutation.isPending}
+                                />
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setAddingLessonTo(middle.middleCategoryId)}
+                                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-card px-4 py-2.5 text-sm font-medium text-muted-foreground transition hover:border-foreground/40 hover:text-foreground"
+                                >
+                                  <Plus size={15} />
+                                  {lessons.length ? "Add another lesson" : "Add first lesson"}
+                                </button>
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+                      )
+                    })}
+
+                    {addingMiddleTo === major.majorCategoryId ? (
+                      <InlineAddRow
+                        placeholder="Module title"
+                        onSubmit={(title) =>
+                          createMiddleMutation.mutate({
+                            majorCategoryId: major.majorCategoryId,
+                            title,
+                          })
+                        }
+                        onCancel={() => setAddingMiddleTo(null)}
+                        isPending={createMiddleMutation.isPending}
+                      />
                     ) : (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="mt-2"
-                        onClick={() => setAddingLessonTo(middle.middleCategoryId)}
+                      <button
+                        type="button"
+                        onClick={() => setAddingMiddleTo(major.majorCategoryId)}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-card px-4 py-3 text-sm font-medium text-muted-foreground transition hover:border-foreground/40 hover:text-foreground"
                       >
-                        <PlusIcon className="size-3.5" aria-hidden="true" />
-                        Add lesson
-                      </Button>
+                        <Plus size={16} />
+                        {middles.length ? "Add another module" : "Add first module"}
+                      </button>
                     )}
                   </div>
-                ))}
-
-                {addingMiddleTo === major.majorCategoryId ? (
-                  <div className="flex gap-2">
-                    <Input
-                      autoFocus
-                      value={newMiddleTitle}
-                      onChange={(e) => setNewMiddleTitle(e.target.value)}
-                      placeholder="Module title"
-                    />
-                    <Button
-                      size="sm"
-                      onClick={() => createMiddleMutation.mutate(major.majorCategoryId)}
-                      disabled={!newMiddleTitle.trim() || createMiddleMutation.isPending}
-                    >
-                      Add
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        setAddingMiddleTo(null)
-                        setNewMiddleTitle("")
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setAddingMiddleTo(major.majorCategoryId)}
-                  >
-                    <PlusIcon className="size-4" aria-hidden="true" />
-                    Add module
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                ) : null}
+              </div>
+            )
+          })}
         </div>
       )}
-    </div>
+
+      {/* Floating add-category button, matching the admin CertificationModules FAB. */}
+      {ownMajorCategories.length > 0 ? (
+        <button
+          type="button"
+          onClick={() => setAddingMajor(true)}
+          title="Add category"
+          aria-label="Add category"
+          className="fixed bottom-8 right-8 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-foreground text-background shadow-lg transition duration-200 hover:scale-105 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-4"
+        >
+          <Plus size={24} strokeWidth={2.5} />
+        </button>
+      ) : null}
+    </section>
   )
 }
 

@@ -63,6 +63,9 @@ public class LessonService {
         Lesson entity = lessonMapper.toEntity(dto);
         entity.setLessonId(null);
         entity.setMiddleCategory(middleCategory);
+        // lesson_component_structure is NOT NULL; the create form only sends
+        // a name, so default the (empty) body here just like saveLessonComponent.
+        entity.setLessonComponentStructure(normalizeStructure(entity.getLessonComponentStructure()));
 
         return lessonMapper.toDto(lessonRepository.save(entity));
     }
@@ -83,6 +86,11 @@ public class LessonService {
         Lesson entity = lessonMapper.toEntity(dto);
         entity.setLessonId(id);
         entity.setMiddleCategory(targetMiddleCategory);
+        // Never wipe an existing body to NULL when the edit form omits it --
+        // fall back to the existing structure, then to an empty document.
+        String structure = entity.getLessonComponentStructure();
+        entity.setLessonComponentStructure(normalizeStructure(
+                structure != null ? structure : existing.getLessonComponentStructure()));
 
         return lessonMapper.toDto(lessonRepository.save(entity));
     }
@@ -129,6 +137,11 @@ public class LessonService {
                 lessonImageService.getImageKeysByLessonId(id),
                 lessonVideoService.getVideoKeysByLessonId(id)
         );
+    }
+
+    /** An empty JSON document ("[]") for a null/blank lesson body. */
+    private String normalizeStructure(String structure) {
+        return structure == null || structure.isBlank() ? "[]" : structure;
     }
 
     private Long ownerGroupId(MiddleCategory middleCategory) {

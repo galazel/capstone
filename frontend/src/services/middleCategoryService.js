@@ -8,3 +8,7 @@ export async function createMiddleCategory(data) {
     data,
   })
 }
+
+export async function deleteMiddleCategory(id) {
+  return await base(`middle-categories/${id}`, { method: "DELETE" })
+}

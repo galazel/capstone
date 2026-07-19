@@ -9,3 +9,7 @@ export async function createMajorCategory(data, ownerGroupId) {
     data,
   })
 }
+
+export async function deleteMajorCategory(id) {
+  return await base(`major-categories/${id}`, { method: "DELETE" })
+}
