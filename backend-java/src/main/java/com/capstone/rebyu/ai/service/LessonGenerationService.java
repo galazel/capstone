@@ -188,20 +188,29 @@ public class LessonGenerationService {
         log.info("Generating lesson draft for lessonId={} ({}) images={}",
                 lessonId, ctx.lessonTitle(), availableImages.size());
 
+        // TOOL-CALLING PATH: The model calls LessonComponentDraftTools to build sections
+        // and content tools, which accumulate in the request-scoped collector. The text
+        // return value is ignored. An attempt counts only if it produces real content.
         List<GeneratedLessonSectionDraftDto> sections = null;
-        for (int attempt = 1; attempt <= 2 && (sections == null || sections.isEmpty()); attempt++) {
-            String raw = availableImages.isEmpty()
-                    ? lessonGenerationAssistant.generateLessonDraft(requestJson, referenceContext)
-                    : generateLessonDraftWithImages(requestJson, referenceContext, availableImages);
-            sections = lessonDraftJsonParser.parseSections(raw, warnings);
-            if (sections.isEmpty()) {
-                log.warn("Attempt {}/2 produced no lesson sections for lessonId={}; raw excerpt: {}",
-                        attempt, lessonId,
-                        raw == null ? "null"
-                                : raw.substring(0, Math.min(raw.length(), 500)));
+        for (int attempt = 1; attempt <= 3 && sections == null; attempt++) {
+            lessonDraftCollector.clear();
+            try {
+                lessonGenerationAssistant.generateLessonDraft(requestJson, referenceContext);
+            } catch (Exception toolFailure) {
+                log.warn("Tool-calling attempt {}/3 failed for lessonId={}: {}",
+                        attempt, lessonId, toolFailure.getMessage());
+            }
+            List<GeneratedLessonSectionDraftDto> collected = lessonDraftCollector.getSections();
+            boolean hasContent = collected.stream()
+                    .anyMatch(section -> section.content() != null && !section.content().isEmpty());
+            if (hasContent) {
+                sections = collected;
+            } else {
+                log.warn("Tool-calling attempt {}/3 produced no lesson content for lessonId={}",
+                        attempt, lessonId);
             }
         }
-        if (sections == null || sections.isEmpty()) {
+        if (sections == null) {
             throw new InvalidAiResponseException("The AI did not create any lesson sections.");
         }
 
