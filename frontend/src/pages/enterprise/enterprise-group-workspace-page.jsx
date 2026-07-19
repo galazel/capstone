@@ -74,7 +74,7 @@ function lessonTitle(lesson) {
  * looks the same in both places. No edit/create actions here -- an Enterprise
  * Member views the official curriculum but cannot change it.
  */
-function OfficialMiddleCard({ middleCategory }) {
+function OfficialMiddleCard({ middleCategory, buildLessonHref }) {
   const [isOpen, setIsOpen] = useState(false)
   const lessons = middleCategory.lessons ?? []
 
@@ -116,20 +116,22 @@ function OfficialMiddleCard({ middleCategory }) {
           ) : (
             <div className="space-y-2">
               {lessons.map((lesson, lessonIndex) => (
-                <div
+                <Link
                   key={lesson.lessonId ?? lessonIndex}
-                  className="flex items-center gap-3 rounded-xl border border-transparent bg-background px-4 py-3"
+                  to={buildLessonHref(lesson.lessonId)}
+                  className="group flex items-center gap-3 rounded-xl border border-transparent bg-background px-4 py-3 transition hover:border-border hover:bg-muted/40"
                 >
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-xs font-bold text-muted-foreground">
                     {lessonIndex + 1}
                   </span>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-foreground">
                       {lessonTitle(lesson)}
                     </p>
                     <p className="mt-0.5 text-xs text-muted-foreground">Lesson {lessonIndex + 1}</p>
                   </div>
-                </div>
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition group-hover:opacity-100" />
+                </Link>
               ))}
             </div>
           )}
@@ -139,7 +141,7 @@ function OfficialMiddleCard({ middleCategory }) {
   )
 }
 
-function OfficialMajorSection({ majorCategory, majorIndex }) {
+function OfficialMajorSection({ majorCategory, majorIndex, buildLessonHref }) {
   const middleCategories = majorCategory.middleCategory ?? []
 
   return (
@@ -161,6 +163,7 @@ function OfficialMajorSection({ majorCategory, majorIndex }) {
             <OfficialMiddleCard
               key={middleCategory.middleCategoryId ?? middleIndex}
               middleCategory={middleCategory}
+              buildLessonHref={buildLessonHref}
             />
           ))}
         </div>
@@ -1024,15 +1027,27 @@ export default function EnterpriseGroupWorkspacePage() {
         {/*
         */}
         <TabsContent value="curriculum" className="mt-5 space-y-6">
-          <div>
-            <p className="text-sm font-medium text-primary">Certification curriculum</p>
-            <h2 className="mt-1 font-heading text-2xl font-bold tracking-tight text-foreground">
-              {certification?.title ?? "Course Modules"}
-            </h2>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-              Read-only guide to the major categories, modules, and lessons under this
-              certification — {officialLessonCount} lesson(s) in total.
-            </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-primary">Certification curriculum</p>
+              <h2 className="mt-1 font-heading text-2xl font-bold tracking-tight text-foreground">
+                {certification?.title ?? "Course Modules"}
+              </h2>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+                Read-only guide to the major categories, modules, and lessons under this
+                certification — {officialLessonCount} lesson(s) in total.
+              </p>
+            </div>
+            {certification ? (
+              <Button asChild variant="outline">
+                <Link
+                  to={`/enterprise/certifications/${certification.certificationId}/view?groupId=${id}`}
+                >
+                  <BookOpen className="size-4" aria-hidden="true" />
+                  Read content
+                </Link>
+              </Button>
+            ) : null}
           </div>
 
           {officialMajors.length === 0 ? (
@@ -1054,6 +1069,9 @@ export default function EnterpriseGroupWorkspacePage() {
                   key={majorCategory.majorCategoryId ?? majorIndex}
                   majorCategory={majorCategory}
                   majorIndex={majorIndex}
+                  buildLessonHref={(lessonId) =>
+                    `/enterprise/certifications/${certification.certificationId}/view?groupId=${id}&lessonId=${lessonId}`
+                  }
                 />
               ))}
             </div>

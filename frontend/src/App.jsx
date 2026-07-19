@@ -56,6 +56,7 @@ const EnterpriseLearnersPage = lazy(() => import("./pages/enterprise/enterprise-
 const EnterpriseLearnerDetailPage = lazy(() => import("./pages/enterprise/enterprise-learner-detail-page.jsx"))
 const EnterpriseCertificationsPage = lazy(() => import("./pages/enterprise/enterprise-certifications-page.jsx"))
 const EnterpriseCertificationDetailPage = lazy(() => import("./pages/enterprise/enterprise-certification-detail-page.jsx"))
+const EnterpriseCertificationViewerPage = lazy(() => import("./pages/enterprise/enterprise-certification-viewer-page.jsx"))
 const EnterpriseGroupsPage = lazy(() => import("./pages/enterprise/enterprise-groups-page.jsx"))
 const EnterpriseLicensePage = lazy(() => import("./pages/enterprise/enterprise-license-page.jsx"))
 const EnterpriseAnalyticsPage = lazy(() => import("./pages/enterprise/enterprise-analytics-page.jsx"))
@@ -248,6 +249,12 @@ export function App() {
                         underlying save/load endpoints already authorize group-owned
                         content for Enterprise Members. */}
                     <Route path="lessons/:name/create" element={<CreateLessons />} />
+                    {/* Read-only Cisco-style two-pane content reader (outline +
+                        lesson body). ?groupId= mixes in the group's own content. */}
+                    <Route
+                        path="certifications/:certificationId/view"
+                        element={<EnterpriseCertificationViewerPage />}
+                    />
                     <Route path="question-bank" element={<EnterpriseQuestionBankPage />} />
                     <Route path="license" element={<EnterpriseLicensePage />} />
                     <Route path="analytics" element={<EnterpriseAnalyticsPage />} />
