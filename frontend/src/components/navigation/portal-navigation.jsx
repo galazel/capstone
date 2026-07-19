@@ -113,13 +113,15 @@ const enterpriseGroups = [
   },
 ]
 
-// Facilitators work inside an assigned group. Their curriculum, content and
-// learners are reached from that workspace rather than institution-wide pages.
+// Enterprise Members (group leaders) only ever act within their assigned
+// groups, so their nav is just that -- never the institution-wide Learners /
+// Certifications / Question Bank / Organization pages.
 const enterpriseMemberGroups = [
   {
-    label: "My workspace",
+    label: "Workspace",
     items: [
-      { label: "My Groups", href: "/enterprise/dashboard", icon: LayoutDashboard },
+      { label: "My Groups", href: "/enterprise/member", icon: UsersRound },
+      { label: "Files", href: "/enterprise/files", icon: Files },
     ],
   },
 ]

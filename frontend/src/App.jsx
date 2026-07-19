@@ -69,6 +69,15 @@ const CompilerArea = lazy(() => import("./components/challenges/compiler-area.js
 const NotFoundPage = lazy(() => import("./pages/public/not-found-page.jsx"))
 const ForbiddenPage = lazy(() => import("./pages/public/forbidden-page.jsx"))
 
+// Owners land on the institution dashboard; Enterprise Members (group leaders)
+// land on their own "My Groups" workspace list -- they never see the
+// institution-wide dashboard.
+function EnterpriseHome() {
+    const { user } = useAuth()
+    const target = user?.enterpriseMemberRole === "owner" ? "dashboard" : "member"
+    return <Navigate to={target} replace />
+}
+
 function GuestOnlyRoute({ children }) {
     const { user, status } = useAuth()
 
@@ -207,8 +216,11 @@ export function App() {
 
             <Route element={<ProtectedRoute allowedRoles={["ENTERPRISE"]} />}>
                 <Route path="/enterprise" element={<EnterpriseLayout />}>
-                    <Route index element={<Navigate to="dashboard" replace />} />
+                    <Route index element={<EnterpriseHome />} />
                     <Route path="dashboard" element={<EnterpriseDashboardEntry />} />
+                    {/* Enterprise Member (group leader) home; the per-group
+                        workspace route is defined alongside the groups routes below. */}
+                    <Route path="member" element={<EnterpriseMemberDashboardPage />} />
                     <Route path="learners" element={<EnterpriseLearnersPage />} />
                     <Route
                         path="learners/:learnerId"
