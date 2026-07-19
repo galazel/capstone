@@ -68,6 +68,32 @@ export function getLearnerInvitations() {
   return base("learner-invitations")
 }
 
+// Group-owned announcements. The backend scopes these to the caller's own
+// group (owner or assigned leader); a member can only reach their groups.
+export function getGroupAnnouncements(groupId) {
+  return base(`enterprise-groups/${groupId}/announcements`)
+}
+
+export function createGroupAnnouncement(groupId, { title, body, pinned }) {
+  return base(`enterprise-groups/${groupId}/announcements`, {
+    method: "POST",
+    data: { title, body, pinned },
+  })
+}
+
+export function updateGroupAnnouncement(groupId, announcementId, { title, body, pinned }) {
+  return base(`enterprise-groups/${groupId}/announcements/${announcementId}`, {
+    method: "PUT",
+    data: { title, body, pinned },
+  })
+}
+
+export function archiveGroupAnnouncement(groupId, announcementId) {
+  return base(`enterprise-groups/${groupId}/announcements/${announcementId}`, {
+    method: "DELETE",
+  })
+}
+
 // Enterprise learner groups (per certification allocation)
 export function getEnterpriseGroups({ enterpriseId, orgCertId } = {}) {
   const params = new URLSearchParams()
