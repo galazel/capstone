@@ -14,7 +14,15 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/** Reads stay public (browsed platform-wide); WRITES had no auth at all -- now admin-only. */
+/**
+ * Reads stay public (browsed platform-wide). WRITES had no auth at all --
+ * now either ADMIN (official content) or an Enterprise Member acting on
+ * their own group's content, authorized by walking up to the ancestor
+ * MajorCategory's ownerGroup -- see LessonService. This includes the lesson
+ * body editing endpoints (saveLessonComponent), since a member authoring
+ * their own lesson needs to actually be able to edit its content, not just
+ * create the shell.
+ */
 @RestController
 @RequestMapping("/api/lessons")
 @RequiredArgsConstructor
@@ -43,8 +51,9 @@ public class LessonController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public LessonDto create(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody LessonDto dto) {
-        requireAdmin(jwt);
-        return lessonService.create(dto);
+        CurrentUserDto user = requireAdminOrEnterprise(jwt);
+        boolean isAdmin = isAdmin(user);
+        return lessonService.create(dto, isAdmin, user.enterpriseId(), user.userId(), isOwner(user));
     }
 
     @PutMapping("/{id}")
@@ -53,15 +62,17 @@ public class LessonController {
             @PathVariable Long id,
             @Valid @RequestBody LessonDto dto
     ) {
-        requireAdmin(jwt);
-        return lessonService.update(id, dto);
+        CurrentUserDto user = requireAdminOrEnterprise(jwt);
+        boolean isAdmin = isAdmin(user);
+        return lessonService.update(id, dto, isAdmin, user.enterpriseId(), user.userId(), isOwner(user));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
-        requireAdmin(jwt);
-        lessonService.delete(id);
+        CurrentUserDto user = requireAdminOrEnterprise(jwt);
+        boolean isAdmin = isAdmin(user);
+        lessonService.delete(id, isAdmin, user.enterpriseId(), user.userId(), isOwner(user));
     }
 
     @PutMapping("/lesson/{id}")
@@ -71,8 +82,9 @@ public class LessonController {
             @PathVariable Long id,
             @RequestBody LessonDto lessonDto
     ) {
-        requireAdmin(jwt);
-        lessonService.saveLessonComponent(id, lessonDto);
+        CurrentUserDto user = requireAdminOrEnterprise(jwt);
+        boolean isAdmin = isAdmin(user);
+        lessonService.saveLessonComponent(id, lessonDto, isAdmin, user.enterpriseId(), user.userId(), isOwner(user));
     }
 
     @GetMapping("/lesson/{id}")
@@ -82,13 +94,22 @@ public class LessonController {
         return lessonService.getLessonComponent(id);
     }
 
-    private void requireAdmin(Jwt jwt) {
+    private CurrentUserDto requireAdminOrEnterprise(Jwt jwt) {
         if (jwt == null) {
             throw new IllegalArgumentException("Authentication is required");
         }
         CurrentUserDto user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
-        if (!"ADMIN".equalsIgnoreCase(user.role())) {
-            throw new IllegalArgumentException("Admin access is required");
+        if (!isAdmin(user) && !"ENTERPRISE".equalsIgnoreCase(user.role())) {
+            throw new IllegalArgumentException("Admin or enterprise access is required");
         }
+        return user;
+    }
+
+    private boolean isAdmin(CurrentUserDto user) {
+        return "ADMIN".equalsIgnoreCase(user.role());
+    }
+
+    private boolean isOwner(CurrentUserDto user) {
+        return "owner".equalsIgnoreCase(user.enterpriseMemberRole());
     }
 }

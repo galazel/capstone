@@ -15,7 +15,12 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/** Reads stay public (browsed platform-wide); WRITES had no auth at all -- now admin-only. */
+/**
+ * Reads stay public (browsed platform-wide). WRITES had no auth at all --
+ * now either ADMIN (official content, ownerGroupId omitted) or an Enterprise
+ * Member acting on their own group's content (ownerGroupId required, checked
+ * against the caller's own group access -- see MajorCategoryService).
+ */
 @RestController
 @RequestMapping("/api/major-categories")
 @RequiredArgsConstructor
@@ -35,32 +40,48 @@ public class MajorCategoryController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public MajorCategoryDto create(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody MajorCategoryDto dto) {
-        requireAdmin(jwt);
-        return majorCategoryService.create(dto);
+    public MajorCategoryDto create(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody MajorCategoryDto dto,
+            @RequestParam(required = false) Long ownerGroupId) {
+        CurrentUserDto user = requireAdminOrEnterprise(jwt);
+        boolean isAdmin = isAdmin(user);
+        return majorCategoryService.create(
+                dto, isAdmin, user.enterpriseId(), user.userId(), isOwner(user), ownerGroupId);
     }
 
     @PutMapping("/{id}")
     public MajorCategoryDto update(
             @AuthenticationPrincipal Jwt jwt, @PathVariable Long id, @Valid @RequestBody MajorCategoryDto dto) {
-        requireAdmin(jwt);
-        return majorCategoryService.update(id, dto);
+        CurrentUserDto user = requireAdminOrEnterprise(jwt);
+        boolean isAdmin = isAdmin(user);
+        return majorCategoryService.update(id, dto, isAdmin, user.enterpriseId(), user.userId(), isOwner(user));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
-        requireAdmin(jwt);
-        majorCategoryService.delete(id);
+        CurrentUserDto user = requireAdminOrEnterprise(jwt);
+        boolean isAdmin = isAdmin(user);
+        majorCategoryService.delete(id, isAdmin, user.enterpriseId(), user.userId(), isOwner(user));
     }
 
-    private void requireAdmin(Jwt jwt) {
+    private CurrentUserDto requireAdminOrEnterprise(Jwt jwt) {
         if (jwt == null) {
             throw new IllegalArgumentException("Authentication is required");
         }
         CurrentUserDto user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
-        if (!"ADMIN".equalsIgnoreCase(user.role())) {
-            throw new IllegalArgumentException("Admin access is required");
+        if (!isAdmin(user) && !"ENTERPRISE".equalsIgnoreCase(user.role())) {
+            throw new IllegalArgumentException("Admin or enterprise access is required");
         }
+        return user;
+    }
+
+    private boolean isAdmin(CurrentUserDto user) {
+        return "ADMIN".equalsIgnoreCase(user.role());
+    }
+
+    private boolean isOwner(CurrentUserDto user) {
+        return "owner".equalsIgnoreCase(user.enterpriseMemberRole());
     }
 }

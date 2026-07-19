@@ -21,6 +21,15 @@ export async function getAllLessons(){
   })
 }
 
+// ownerGroupId is resolved server-side from the lesson's ancestor
+// MajorCategory -- this call itself only needs middleCategoryId.
+export async function createLesson(data) {
+  return await base("lessons", {
+    method: "POST",
+    data,
+  })
+}
+
 export async function generateLessonFromFiles(lessonId, files) {
   const formData = new FormData()
 

@@ -243,6 +243,11 @@ export function App() {
                         certification allocation. */}
                     <Route path="groups" element={<EnterpriseGroupsPage />} />
                     <Route path="groups/:groupId" element={<EnterpriseGroupWorkspacePage />} />
+                    {/* Reuses the admin lesson editor -- it reads lesson id/context
+                        from navigation state, not from the route prefix, and the
+                        underlying save/load endpoints already authorize group-owned
+                        content for Enterprise Members. */}
+                    <Route path="lessons/:name/create" element={<CreateLessons />} />
                     <Route path="question-bank" element={<EnterpriseQuestionBankPage />} />
                     <Route path="license" element={<EnterpriseLicensePage />} />
                     <Route path="analytics" element={<EnterpriseAnalyticsPage />} />

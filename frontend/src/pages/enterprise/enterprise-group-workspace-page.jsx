@@ -1,14 +1,17 @@
 import { useState } from "react"
-import { Link, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   ArrowLeftIcon,
+  BookOpenIcon,
   ClipboardCheckIcon,
   FileQuestionIcon,
+  FolderTreeIcon,
   Loader2,
   MailIcon,
   MegaphoneIcon,
   PinIcon,
+  PlusIcon,
   Trash2,
   UserPlusIcon,
   UsersIcon,
@@ -33,6 +36,9 @@ import {
 } from "@/components/enterprise/enterprise-ui.jsx"
 import { getExamTypes, getExams } from "@/services/assessmentService.js"
 import { getAllCertifications } from "@/services/certificationService.js"
+import { createMajorCategory } from "@/services/majorCategoryService.js"
+import { createMiddleCategory } from "@/services/middleCategoryService.js"
+import { createLesson } from "@/services/lessonService.js"
 import {
   archiveGroupAnnouncement,
   createGroupAnnouncement,
@@ -189,6 +195,227 @@ function AnnouncementsTab({ groupId }) {
               </CardHeader>
               <CardContent className="whitespace-pre-wrap text-sm text-muted-foreground">
                 {item.body}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * A group's own authored content -- Major Categories owned by this group
+ * (ownerGroupId === groupId), created and edited alongside the read-only
+ * official curriculum, never mixed into it for anyone else. Middle
+ * categories/lessons inherit ownership from their major category, so no
+ * ownerGroupId is passed for those creates -- see MiddleCategoryService/
+ * LessonService.
+ */
+function ContentTab({ groupId, certification, onContentChanged }) {
+  const navigate = useNavigate()
+  const [newMajorTitle, setNewMajorTitle] = useState("")
+  const [addingMiddleTo, setAddingMiddleTo] = useState(null)
+  const [newMiddleTitle, setNewMiddleTitle] = useState("")
+  const [addingLessonTo, setAddingLessonTo] = useState(null)
+  const [newLessonName, setNewLessonName] = useState("")
+
+  const ownMajorCategories = (certification?.majorCategory ?? []).filter(
+    (major) => major.ownerGroupId === groupId
+  )
+
+  const createMajorMutation = useMutation({
+    mutationFn: () =>
+      createMajorCategory(
+        { certificationId: certification.certificationId, title: newMajorTitle.trim() },
+        groupId
+      ),
+    onSuccess: () => {
+      toast.success("Category created.")
+      setNewMajorTitle("")
+      onContentChanged()
+    },
+    onError: (err) => toast.error(backendMessage(err, "Unable to create this category.")),
+  })
+
+  const createMiddleMutation = useMutation({
+    mutationFn: (majorCategoryId) =>
+      createMiddleCategory({ majorCategoryId, title: newMiddleTitle.trim() }),
+    onSuccess: () => {
+      toast.success("Module created.")
+      setNewMiddleTitle("")
+      setAddingMiddleTo(null)
+      onContentChanged()
+    },
+    onError: (err) => toast.error(backendMessage(err, "Unable to create this module.")),
+  })
+
+  const createLessonMutation = useMutation({
+    mutationFn: (middleCategoryId) =>
+      createLesson({ middleCategoryId, name: newLessonName.trim() }),
+    onSuccess: (lesson) => {
+      toast.success("Lesson created.")
+      setNewLessonName("")
+      setAddingLessonTo(null)
+      onContentChanged()
+      navigate(`/enterprise/lessons/${encodeURIComponent(lesson.name)}/create`, {
+        state: { lessonId: lesson.lessonId, lessonName: lesson.name },
+      })
+    },
+    onError: (err) => toast.error(backendMessage(err, "Unable to create this lesson.")),
+  })
+
+  if (!certification) {
+    return (
+      <EnterpriseEmptyState
+        icon={FileQuestionIcon}
+        title="No certification linked to this group yet"
+        description="Content can be authored once this group's certification allocation is set."
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-5">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Add a category</CardTitle>
+          <CardDescription>
+            Your own major category, kept separate from the official curriculum above and
+            visible only to your group.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex gap-2">
+          <Input
+            value={newMajorTitle}
+            onChange={(e) => setNewMajorTitle(e.target.value)}
+            placeholder="e.g. Extra practice: Networking basics"
+          />
+          <Button
+            type="button"
+            onClick={() => createMajorMutation.mutate()}
+            disabled={!newMajorTitle.trim() || createMajorMutation.isPending}
+          >
+            <PlusIcon className="size-4" aria-hidden="true" />
+            Add
+          </Button>
+        </CardContent>
+      </Card>
+
+      {ownMajorCategories.length === 0 ? (
+        <EnterpriseEmptyState
+          icon={FolderTreeIcon}
+          title="No group content yet"
+          description="Add your first category above, then build out modules and lessons under it."
+        />
+      ) : (
+        <div className="space-y-3">
+          {ownMajorCategories.map((major) => (
+            <Card key={major.majorCategoryId}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">{major.title}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {(major.middleCategory ?? []).map((middle) => (
+                  <div key={middle.middleCategoryId} className="rounded-lg border p-3">
+                    <p className="flex items-center gap-2 text-sm font-medium">
+                      <FolderTreeIcon className="size-4 text-muted-foreground" aria-hidden="true" />
+                      {middle.title}
+                    </p>
+                    <div className="mt-2 space-y-1.5">
+                      {(middle.lessons ?? []).map((lesson) => (
+                        <button
+                          key={lesson.lessonId}
+                          type="button"
+                          onClick={() =>
+                            navigate(`/enterprise/lessons/${encodeURIComponent(lesson.name)}/create`, {
+                              state: { lessonId: lesson.lessonId, lessonName: lesson.name },
+                            })
+                          }
+                          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted"
+                        >
+                          <BookOpenIcon className="size-3.5" aria-hidden="true" />
+                          {lesson.name}
+                        </button>
+                      ))}
+                    </div>
+
+                    {addingLessonTo === middle.middleCategoryId ? (
+                      <div className="mt-2 flex gap-2">
+                        <Input
+                          autoFocus
+                          value={newLessonName}
+                          onChange={(e) => setNewLessonName(e.target.value)}
+                          placeholder="Lesson name"
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => createLessonMutation.mutate(middle.middleCategoryId)}
+                          disabled={!newLessonName.trim() || createLessonMutation.isPending}
+                        >
+                          Add
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setAddingLessonTo(null)
+                            setNewLessonName("")
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="mt-2"
+                        onClick={() => setAddingLessonTo(middle.middleCategoryId)}
+                      >
+                        <PlusIcon className="size-3.5" aria-hidden="true" />
+                        Add lesson
+                      </Button>
+                    )}
+                  </div>
+                ))}
+
+                {addingMiddleTo === major.majorCategoryId ? (
+                  <div className="flex gap-2">
+                    <Input
+                      autoFocus
+                      value={newMiddleTitle}
+                      onChange={(e) => setNewMiddleTitle(e.target.value)}
+                      placeholder="Module title"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => createMiddleMutation.mutate(major.majorCategoryId)}
+                      disabled={!newMiddleTitle.trim() || createMiddleMutation.isPending}
+                    >
+                      Add
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setAddingMiddleTo(null)
+                        setNewMiddleTitle("")
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setAddingMiddleTo(major.majorCategoryId)}
+                  >
+                    <PlusIcon className="size-4" aria-hidden="true" />
+                    Add module
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ))}
@@ -405,6 +632,7 @@ function LearnersTab({ groupId, group, learners }) {
 export default function EnterpriseGroupWorkspacePage() {
   const { groupId } = useParams()
   const id = Number(groupId)
+  const queryClient = useQueryClient()
   const groupQuery = useQuery({
     queryKey: ["enterprise-group", id],
     queryFn: () => getEnterpriseGroupById(id),
@@ -415,9 +643,13 @@ export default function EnterpriseGroupWorkspacePage() {
     queryFn: () => getEnterpriseGroupAssignees({ groupId: id }),
     enabled: Number.isFinite(id),
   })
+  // includeGroupId mixes this group's own authored content in alongside the
+  // official curriculum -- omitted everywhere else in the app, so every
+  // other reader is unaffected. See CertificationController/Service.
   const certificationsQuery = useQuery({
-    queryKey: ["certifications"],
-    queryFn: getAllCertifications,
+    queryKey: ["certifications", "group", id],
+    queryFn: () => getAllCertifications(id),
+    enabled: Number.isFinite(id),
     staleTime: 5 * 60_000,
   })
   const examsQuery = useQuery({
@@ -565,13 +797,20 @@ export default function EnterpriseGroupWorkspacePage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="content" className="mt-5">
+        <TabsContent value="content" className="mt-5 space-y-4">
+          <ContentTab
+            groupId={id}
+            certification={certification}
+            onContentChanged={() =>
+              queryClient.invalidateQueries({ queryKey: ["certifications", "group", id] })
+            }
+          />
           <EnterpriseEmptyState
             icon={FileQuestionIcon}
-            title="Group content workspace"
-            description="Group-specific lessons and assessments will appear here. Questions can be prepared from the shared question bank today."
+            title="Need questions for an assessment?"
+            description="Prepare questions from the shared question bank, then build an assessment from your own content."
             action={
-              <Button asChild>
+              <Button asChild variant="outline">
                 <Link to="/enterprise/question-bank">
                   <FileQuestionIcon className="size-4" />
                   Open Question Bank
