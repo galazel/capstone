@@ -81,10 +81,10 @@ function MiddleCategoryRow({ middleCategory, orgCertId }) {
                   <Link
                     to={`/enterprise/question-bank?certificationId=${
                       middleCategory.__certificationId
-                    }&lessonId=${lesson.lessonId}`}
+                    }&lessonId=${lesson.lessonId}&add=1`}
                   >
                     <FileQuestionIcon className="size-4" aria-hidden="true" />
-                    Add question
+                    Add Question
                   </Link>
                 </Button>
               </div>

@@ -336,22 +336,32 @@ export default function EnterpriseQuestionBankPage() {
   const data = useEnterpriseData(enterpriseId)
   const [searchParams] = useSearchParams()
   const preselectedCertId = searchParams.get("certificationId")
+  const preselectedLessonId = searchParams.get("lessonId")
+  const shouldAutoOpenForm = searchParams.get("add") === "1"
 
   const [selectedCertId, setSelectedCertId] = useState(preselectedCertId ?? "")
-  const [selectedLessonId, setSelectedLessonId] = useState("")
-
-  // Arriving from a certification's detail page with a certification already
-  // chosen for us.
-  useEffect(() => {
-    if (preselectedCertId) {
-      setSelectedCertId(preselectedCertId)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preselectedCertId])
+  const [selectedLessonId, setSelectedLessonId] = useState(preselectedLessonId ?? "")
   const [formOpen, setFormOpen] = useState(false)
   const [editingQuestion, setEditingQuestion] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const queryClient = useQueryClient()
+
+  // Arriving from a certification's detail page with a certification (and
+  // lesson) already chosen for us -- and the manual "Add Question" form
+  // ready to go, matching admin's one-click add-question button.
+  useEffect(() => {
+    if (preselectedCertId) {
+      setSelectedCertId(preselectedCertId)
+    }
+    if (preselectedLessonId) {
+      setSelectedLessonId(preselectedLessonId)
+    }
+    if (shouldAutoOpenForm && preselectedLessonId) {
+      setEditingQuestion(null)
+      setFormOpen(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preselectedCertId, preselectedLessonId, shouldAutoOpenForm])
 
   const certificationsQuery = useQuery({
     queryKey: ["certifications-full"],
