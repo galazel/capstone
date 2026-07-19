@@ -10,4 +10,5 @@ import java.util.List;
 public interface EnterpriseMemberRepository extends JpaRepository<EnterpriseMember, Long> {
     List<EnterpriseMember> findByEnterprise_EnterpriseId(Long enterpriseId);
     List<EnterpriseMember> findByUser_UserId(Long userId);
+    List<EnterpriseMember> findByEnterprise_EnterpriseIdAndUser_UserId(Long enterpriseId, Long userId);
 }
