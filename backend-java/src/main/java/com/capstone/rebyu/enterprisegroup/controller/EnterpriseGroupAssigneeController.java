@@ -5,6 +5,7 @@ import com.capstone.rebyu.auth.service.CognitoAuthService;
 import com.capstone.rebyu.enterprisegroup.dto.EnterpriseGroupAssigneeDto;
 import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroupAssignee;
 import com.capstone.rebyu.enterprisegroup.service.EnterpriseGroupAssigneeService;
+import com.capstone.rebyu.enterprisegroup.service.EnterpriseGroupService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -21,10 +22,21 @@ import java.util.Map;
 public class EnterpriseGroupAssigneeController {
 
     private final EnterpriseGroupAssigneeService enterpriseGroupAssigneeService;
+    private final EnterpriseGroupService enterpriseGroupService;
     private final CognitoAuthService auth;
 
     @GetMapping
-    public List<EnterpriseGroupAssigneeDto> getAll(@RequestParam(required = false) Long groupId) {
+    public List<EnterpriseGroupAssigneeDto> getAll(
+            @AuthenticationPrincipal Jwt jwt, @RequestParam(required = false) Long groupId) {
+        CurrentUserDto caller = requireEnterpriseCaller(jwt);
+        if (groupId == null) {
+            throw new IllegalArgumentException("A groupId is required.");
+        }
+        enterpriseGroupService.getAccessibleById(
+                groupId,
+                caller.enterpriseId(),
+                caller.userId(),
+                "owner".equalsIgnoreCase(caller.enterpriseMemberRole()));
         return enterpriseGroupAssigneeService.getAll(groupId);
     }
 

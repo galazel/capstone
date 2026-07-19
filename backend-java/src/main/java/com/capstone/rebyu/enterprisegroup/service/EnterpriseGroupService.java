@@ -2,6 +2,8 @@ package com.capstone.rebyu.enterprisegroup.service;
 
 import com.capstone.rebyu.enterprisegroup.dto.EnterpriseGroupDto;
 import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup;
+import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroupAuthority;
+import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupAuthorityRepository;
 import com.capstone.rebyu.enterprisegroup.mapper.EnterpriseGroupMapper;
 import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupRepository;
 import com.capstone.rebyu.organization.entity.OrganizationCertificate;
@@ -23,6 +25,7 @@ import java.util.Objects;
 public class EnterpriseGroupService {
 
     private final EnterpriseGroupRepository enterpriseGroupRepository;
+    private final EnterpriseGroupAuthorityRepository enterpriseGroupAuthorityRepository;
     private final OrganizationCertificateRepository organizationCertificateRepository;
     private final EnterpriseGroupMapper enterpriseGroupMapper;
 
@@ -40,6 +43,40 @@ public class EnterpriseGroupService {
                     .toList();
         }
         return groups.stream().map(enterpriseGroupMapper::toDto).toList();
+    }
+
+    /**
+     * Owners may see every group in their institution. Other Enterprise Members
+     * receive only the groups for which they are an active authority.
+     */
+    @Transactional(readOnly = true)
+    public List<EnterpriseGroupDto> getAccessible(
+            Long enterpriseId, Long userId, boolean owner, Long orgCertId) {
+        List<EnterpriseGroup> groups = owner
+                ? enterpriseGroupRepository.findByEnterprise_EnterpriseId(enterpriseId)
+                : enterpriseGroupRepository.findActiveAuthorizedGroups(
+                        enterpriseId,
+                        userId,
+                        EnterpriseGroup.Status.active,
+                        EnterpriseGroupAuthority.Status.active);
+        return groups.stream()
+                .filter(group -> orgCertId == null || Objects.equals(group.getOrgCert().getOrgCertId(), orgCertId))
+                .map(enterpriseGroupMapper::toDto)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public EnterpriseGroupDto getAccessibleById(Long id, Long enterpriseId, Long userId, boolean owner) {
+        EnterpriseGroup entity = findEntity(id);
+        requireSameEnterprise(entity, enterpriseId);
+        boolean hasAccess = owner || enterpriseGroupAuthorityRepository.existsByEnterpriseGroupAndUserAndStatus(
+                entity,
+                com.capstone.rebyu.user.entity.User.builder().userId(userId).build(),
+                EnterpriseGroupAuthority.Status.active);
+        if (!hasAccess) {
+            throw new EntityNotFoundException("EnterpriseGroup not found: " + id);
+        }
+        return enterpriseGroupMapper.toDto(entity);
     }
 
     @Transactional(readOnly = true)
@@ -67,6 +104,12 @@ public class EnterpriseGroupService {
 
         EnterpriseGroup entity = enterpriseGroupMapper.toEntity(dto);
         entity.setEnterpriseGroupId(null);
+        // The mapper builds DETACHED stubs for the orgCert/enterprise FKs (id
+        // set, @Version null). Persisting the group against those stubs throws
+        // "uninitialized version value 'null'". Attach the managed orgCert we
+        // already loaded (and its managed enterprise) instead.
+        entity.setOrgCert(orgCert);
+        entity.setEnterprise(orgCert.getEnterprise());
         entity.setCreatedAt(dto.getCreatedAt() != null ? dto.getCreatedAt() : LocalDateTime.now());
         entity.setStatus(dto.getStatus() != null ? dto.getStatus() : EnterpriseGroup.Status.active);
         EnterpriseGroupDto result = enterpriseGroupMapper.toDto(enterpriseGroupRepository.save(entity));

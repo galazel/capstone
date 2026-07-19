@@ -24,6 +24,9 @@ public class EnterpriseGroupDto {
     @NotNull
     private Long orgCertId;
 
+    /** Read-only certification behind the group's organization allocation. */
+    private Long certificationId;
+
     @NotBlank
     @Size(max = 150)
     private String groupName;

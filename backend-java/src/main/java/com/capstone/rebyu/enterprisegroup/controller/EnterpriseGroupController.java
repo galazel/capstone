@@ -25,12 +25,15 @@ public class EnterpriseGroupController {
     public List<EnterpriseGroupDto> getAll(
             @AuthenticationPrincipal Jwt jwt,
             @RequestParam(required = false) Long orgCertId) {
-        return enterpriseGroupService.getAll(myEnterpriseId(jwt), orgCertId);
+        CurrentUserDto user = enterpriseUser(jwt);
+        return enterpriseGroupService.getAccessible(
+                user.enterpriseId(), user.userId(), isOwner(user), orgCertId);
     }
 
     @GetMapping("/{id}")
     public EnterpriseGroupDto getById(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
-        return enterpriseGroupService.getById(id, myEnterpriseId(jwt));
+        CurrentUserDto user = enterpriseUser(jwt);
+        return enterpriseGroupService.getAccessibleById(id, user.enterpriseId(), user.userId(), isOwner(user));
     }
 
     @PostMapping
@@ -40,8 +43,9 @@ public class EnterpriseGroupController {
         // could otherwise spoof another tenant or impersonate another user
         // when creating a group. Resolve both from the authenticated caller
         // and overwrite whatever was supplied in the request.
-        Long enterpriseId = myEnterpriseId(jwt);
-        CurrentUserDto user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
+        CurrentUserDto user = enterpriseUser(jwt);
+        requireOwner(user);
+        Long enterpriseId = user.enterpriseId();
         dto.setEnterpriseId(enterpriseId);
         dto.setCreatedBy(user.userId());
         return enterpriseGroupService.create(dto);
@@ -50,16 +54,24 @@ public class EnterpriseGroupController {
     @PutMapping("/{id}")
     public EnterpriseGroupDto update(
             @AuthenticationPrincipal Jwt jwt, @PathVariable Long id, @Valid @RequestBody EnterpriseGroupDto dto) {
-        return enterpriseGroupService.update(id, dto, myEnterpriseId(jwt));
+        CurrentUserDto user = enterpriseUser(jwt);
+        requireOwner(user);
+        return enterpriseGroupService.update(id, dto, user.enterpriseId());
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
-        enterpriseGroupService.delete(id, myEnterpriseId(jwt));
+        CurrentUserDto user = enterpriseUser(jwt);
+        requireOwner(user);
+        enterpriseGroupService.delete(id, user.enterpriseId());
     }
 
     private Long myEnterpriseId(Jwt jwt) {
+        return enterpriseUser(jwt).enterpriseId();
+    }
+
+    private CurrentUserDto enterpriseUser(Jwt jwt) {
         if (jwt == null) {
             throw new IllegalArgumentException("Authentication is required");
         }
@@ -67,6 +79,17 @@ public class EnterpriseGroupController {
         if (user.enterpriseId() == null) {
             throw new IllegalArgumentException("An enterprise account is required");
         }
-        return user.enterpriseId();
+        return user;
+    }
+
+    private boolean isOwner(CurrentUserDto user) {
+        return "owner".equalsIgnoreCase(user.enterpriseMemberRole());
+    }
+
+    private void requireOwner(CurrentUserDto user) {
+        if (!isOwner(user)) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "Only Institution Administrators can manage groups.");
+        }
     }
 }

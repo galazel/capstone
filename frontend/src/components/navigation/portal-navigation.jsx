@@ -113,6 +113,17 @@ const enterpriseGroups = [
   },
 ]
 
+// Facilitators work inside an assigned group. Their curriculum, content and
+// learners are reached from that workspace rather than institution-wide pages.
+const enterpriseMemberGroups = [
+  {
+    label: "My workspace",
+    items: [
+      { label: "My Groups", href: "/enterprise/dashboard", icon: LayoutDashboard },
+    ],
+  },
+]
+
 function pathMatches(pathname, item) {
   const candidates = item.match ?? [item.href]
   return candidates.some((path) => pathname === path || (path !== "/admin" && pathname.startsWith(`${path}/`)))
@@ -197,10 +208,9 @@ export function PortalTopNavigation({ role, actions, organizationName, enterpris
   const [commandOpen, setCommandOpen] = useState(false)
   const isEnterpriseOwner = enterpriseMemberRole === "owner"
   const allGroups = role === "ADMIN" ? adminGroups : enterpriseGroups
-  const groups =
-    role === "ENTERPRISE" && !isEnterpriseOwner
-      ? allGroups.filter((group) => !group.ownerOnly)
-      : allGroups
+  const groups = role === "ENTERPRISE" && !isEnterpriseOwner
+    ? enterpriseMemberGroups
+    : allGroups
   const commandItems = role === "LEARNER" ? learnerNavigation.map((item) => ({ ...item, group: "Learner" })) : groups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.label })))
 
   useEffect(() => {

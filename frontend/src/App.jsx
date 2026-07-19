@@ -50,6 +50,8 @@ const LearnerRankingsPage = lazy(() => import("./pages/learner/learner-rankings-
 const MistakesBank = lazy(() => import("./pages/learner/learner-mistakes-bank.jsx"))
 const Community = lazy(() => import("./pages/learner/learner-community-qa.jsx"))
 const EnterpriseDashboardPage = lazy(() => import("./pages/enterprise/enterprise-dashboard-page.jsx"))
+const EnterpriseMemberDashboardPage = lazy(() => import("./pages/enterprise/enterprise-member-dashboard-page.jsx"))
+const EnterpriseGroupWorkspacePage = lazy(() => import("./pages/enterprise/enterprise-group-workspace-page.jsx"))
 const EnterpriseLearnersPage = lazy(() => import("./pages/enterprise/enterprise-learners-page.jsx"))
 const EnterpriseLearnerDetailPage = lazy(() => import("./pages/enterprise/enterprise-learner-detail-page.jsx"))
 const EnterpriseCertificationsPage = lazy(() => import("./pages/enterprise/enterprise-certifications-page.jsx"))
@@ -79,6 +81,13 @@ function GuestOnlyRoute({ children }) {
     }
 
     return children
+}
+
+function EnterpriseDashboardEntry() {
+    const { user } = useAuth()
+    return user?.enterpriseMemberRole === "owner"
+        ? <EnterpriseDashboardPage />
+        : <EnterpriseMemberDashboardPage />
 }
 
 export function App() {
@@ -199,7 +208,7 @@ export function App() {
             <Route element={<ProtectedRoute allowedRoles={["ENTERPRISE"]} />}>
                 <Route path="/enterprise" element={<EnterpriseLayout />}>
                     <Route index element={<Navigate to="dashboard" replace />} />
-                    <Route path="dashboard" element={<EnterpriseDashboardPage />} />
+                    <Route path="dashboard" element={<EnterpriseDashboardEntry />} />
                     <Route path="learners" element={<EnterpriseLearnersPage />} />
                     <Route
                         path="learners/:learnerId"
@@ -221,6 +230,7 @@ export function App() {
                         always created/viewed in the context of one
                         certification allocation. */}
                     <Route path="groups" element={<EnterpriseGroupsPage />} />
+                    <Route path="groups/:groupId" element={<EnterpriseGroupWorkspacePage />} />
                     <Route path="question-bank" element={<EnterpriseQuestionBankPage />} />
                     <Route path="license" element={<EnterpriseLicensePage />} />
                     <Route path="analytics" element={<EnterpriseAnalyticsPage />} />

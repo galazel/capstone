@@ -4,6 +4,7 @@ import com.capstone.rebyu.auth.dto.CurrentUserDto;
 import com.capstone.rebyu.auth.service.CognitoAuthService;
 import com.capstone.rebyu.enterprisegroup.dto.EnterpriseGroupAuthorityDto;
 import com.capstone.rebyu.enterprisegroup.service.EnterpriseGroupAuthorityService;
+import com.capstone.rebyu.enterprisegroup.service.EnterpriseGroupService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -19,12 +20,20 @@ import java.util.List;
 public class EnterpriseGroupAuthorityController {
 
     private final EnterpriseGroupAuthorityService enterpriseGroupAuthorityService;
+    private final EnterpriseGroupService enterpriseGroupService;
     private final CognitoAuthService auth;
 
     @GetMapping
     public List<EnterpriseGroupAuthorityDto> getAll(
+            @AuthenticationPrincipal Jwt jwt,
             @RequestParam(required = false) Long groupId,
             @RequestParam(required = false) Long userId) {
+        CurrentUserDto caller = enterpriseUser(jwt);
+        if (groupId == null) {
+            throw new IllegalArgumentException("A groupId is required.");
+        }
+        enterpriseGroupService.getAccessibleById(
+                groupId, caller.enterpriseId(), caller.userId(), isOwner(caller));
         return enterpriseGroupAuthorityService.getAll(groupId, userId);
     }
 
@@ -39,6 +48,7 @@ public class EnterpriseGroupAuthorityController {
             @Valid @RequestBody EnterpriseGroupAuthorityDto dto,
             @AuthenticationPrincipal Jwt jwt) {
         Long callerEnterpriseId = myEnterpriseId(jwt);
+        requireOwner(enterpriseUser(jwt));
         // Never trust assignedBy from the client -- always the authenticated caller.
         dto.setAssignedBy(callerUserId(jwt));
         return enterpriseGroupAuthorityService.create(dto, callerEnterpriseId);
@@ -47,10 +57,15 @@ public class EnterpriseGroupAuthorityController {
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
+        requireOwner(enterpriseUser(jwt));
         enterpriseGroupAuthorityService.delete(id, myEnterpriseId(jwt));
     }
 
     private Long myEnterpriseId(Jwt jwt) {
+        return enterpriseUser(jwt).enterpriseId();
+    }
+
+    private CurrentUserDto enterpriseUser(Jwt jwt) {
         if (jwt == null) {
             throw new IllegalArgumentException("Authentication is required");
         }
@@ -58,7 +73,7 @@ public class EnterpriseGroupAuthorityController {
         if (user.enterpriseId() == null) {
             throw new IllegalArgumentException("An enterprise account is required");
         }
-        return user.enterpriseId();
+        return user;
     }
 
     // Records who actually performed the assignment from the authenticated caller.
@@ -68,5 +83,16 @@ public class EnterpriseGroupAuthorityController {
         }
         CurrentUserDto user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
         return user.userId();
+    }
+
+    private boolean isOwner(CurrentUserDto user) {
+        return "owner".equalsIgnoreCase(user.enterpriseMemberRole());
+    }
+
+    private void requireOwner(CurrentUserDto user) {
+        if (!isOwner(user)) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "Only Institution Administrators can assign group authorities.");
+        }
     }
 }
