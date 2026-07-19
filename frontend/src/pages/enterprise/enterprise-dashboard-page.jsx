@@ -193,7 +193,7 @@ export default function EnterpriseDashboardPage() {
                     No invitations sent yet.
                     <div className="mt-3">
                       <Button asChild size="sm" variant="outline">
-                        <Link to="/enterprise/invitations">
+                        <Link to="/enterprise/certifications">
                           Invite a learner
                         </Link>
                       </Button>
@@ -229,7 +229,7 @@ export default function EnterpriseDashboardPage() {
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
               <Button asChild variant="outline" size="sm">
-                <Link to="/enterprise/invitations">Invite learners</Link>
+                <Link to="/enterprise/certifications">Invite learners</Link>
               </Button>
               <Button asChild variant="outline" size="sm">
                 <Link to="/enterprise/learners">View learners</Link>

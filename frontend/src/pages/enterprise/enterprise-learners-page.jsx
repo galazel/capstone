@@ -177,7 +177,7 @@ export default function EnterpriseLearnersPage() {
               action={
                 data.assignments.length === 0 ? (
                   <Button asChild size="sm">
-                    <Link to="/enterprise/invitations">Invite learners</Link>
+                    <Link to="/enterprise/certifications">Invite learners</Link>
                   </Button>
                 ) : null
               }

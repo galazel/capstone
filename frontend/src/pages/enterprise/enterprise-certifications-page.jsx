@@ -105,16 +105,16 @@ export default function EnterpriseCertificationsPage() {
                   </p>
                 </CardContent>
                 <CardFooter className="gap-2">
+                  <Button asChild size="sm">
+                    <Link to={`/enterprise/certifications/${orgCert.orgCertId}`}>
+                      View certification
+                    </Link>
+                  </Button>
                   <Button asChild variant="outline" size="sm">
                     <Link
                       to={`/enterprise/learners?certification=${orgCert.certificationId}`}
                     >
                       View learners
-                    </Link>
-                  </Button>
-                  <Button asChild variant="outline" size="sm">
-                    <Link to={`/enterprise/groups?orgCertId=${orgCert.orgCertId}`}>
-                      Groups
                     </Link>
                   </Button>
                 </CardFooter>

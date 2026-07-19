@@ -52,8 +52,8 @@ const Community = lazy(() => import("./pages/learner/learner-community-qa.jsx"))
 const EnterpriseDashboardPage = lazy(() => import("./pages/enterprise/enterprise-dashboard-page.jsx"))
 const EnterpriseLearnersPage = lazy(() => import("./pages/enterprise/enterprise-learners-page.jsx"))
 const EnterpriseLearnerDetailPage = lazy(() => import("./pages/enterprise/enterprise-learner-detail-page.jsx"))
-const EnterpriseInvitationsPage = lazy(() => import("./pages/enterprise/enterprise-invitations-page.jsx"))
 const EnterpriseCertificationsPage = lazy(() => import("./pages/enterprise/enterprise-certifications-page.jsx"))
+const EnterpriseCertificationDetailPage = lazy(() => import("./pages/enterprise/enterprise-certification-detail-page.jsx"))
 const EnterpriseGroupsPage = lazy(() => import("./pages/enterprise/enterprise-groups-page.jsx"))
 const EnterpriseLicensePage = lazy(() => import("./pages/enterprise/enterprise-license-page.jsx"))
 const EnterpriseAnalyticsPage = lazy(() => import("./pages/enterprise/enterprise-analytics-page.jsx"))
@@ -205,10 +205,16 @@ export function App() {
                         path="learners/:learnerId"
                         element={<EnterpriseLearnerDetailPage />}
                     />
-                    <Route path="invitations" element={<EnterpriseInvitationsPage />} />
                     <Route
                         path="certifications"
                         element={<EnterpriseCertificationsPage />}
+                    />
+                    {/* Curriculum, groups, and invitations for one certification
+                        allocation -- content, group creation, and invitations all
+                        live within the certification they belong to. */}
+                    <Route
+                        path="certifications/:orgCertId"
+                        element={<EnterpriseCertificationDetailPage />}
                     />
                     {/* Deep-linked from a specific certification on the
                         Certifications page (?orgCertId=...) -- groups are

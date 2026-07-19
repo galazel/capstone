@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react"
-import { useOutletContext } from "react-router-dom"
+import { useEffect, useMemo, useState } from "react"
+import { useOutletContext, useSearchParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { FileQuestionIcon, Loader2, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
@@ -334,9 +334,20 @@ export default function EnterpriseQuestionBankPage() {
   const { user } = useAuth()
   const enterpriseId = enterprise?.enterpriseId
   const data = useEnterpriseData(enterpriseId)
+  const [searchParams] = useSearchParams()
+  const preselectedCertId = searchParams.get("certificationId")
 
-  const [selectedCertId, setSelectedCertId] = useState("")
+  const [selectedCertId, setSelectedCertId] = useState(preselectedCertId ?? "")
   const [selectedLessonId, setSelectedLessonId] = useState("")
+
+  // Arriving from a certification's detail page with a certification already
+  // chosen for us.
+  useEffect(() => {
+    if (preselectedCertId) {
+      setSelectedCertId(preselectedCertId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preselectedCertId])
   const [formOpen, setFormOpen] = useState(false)
   const [editingQuestion, setEditingQuestion] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
