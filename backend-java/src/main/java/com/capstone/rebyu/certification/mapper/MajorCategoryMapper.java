@@ -13,9 +13,13 @@ import org.mapstruct.MappingTarget;
 @Mapper(componentModel = "spring", uses = MiddleCategoryMapper.class)
 public interface MajorCategoryMapper {
     @Mapping(source = "certification.certificationId", target = "certificationId")
+    @Mapping(source = "ownerGroup.enterpriseGroupId", target = "ownerGroupId")
     MajorCategoryDto toDto(MajorCategory entity);
 
+    // ownerGroup is never client-settable through this DTO -- it's assigned
+    // exclusively by the (not yet built) member-content creation path.
     @Mapping(source = "certificationId", target = "certification.certificationId")
+    @Mapping(target = "ownerGroup", ignore = true)
     MajorCategory toEntity(MajorCategoryDto dto);
 
     @AfterMapping

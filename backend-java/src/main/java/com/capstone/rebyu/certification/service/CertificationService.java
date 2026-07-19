@@ -42,19 +42,48 @@ public class CertificationService {
     private final ExamRepository examRepository;
     private final ExamQuestionRepository examQuestionRepository;
 
+    /**
+     * @param includeGroupId when null, only official (platform-wide) content is
+     *                       returned at every level of the curriculum tree --
+     *                       today's exact behavior, since no row has a non-null
+     *                       ownerGroup yet. When set, content owned by that
+     *                       specific group is ALSO included (mixed in alongside
+     *                       the official curriculum). The caller (controller) is
+     *                       responsible for verifying the requester may actually
+     *                       act on that group before passing it here.
+     */
     @Transactional(readOnly = true)
-    public List<CertificationDto> getAll() {
+    public List<CertificationDto> getAll(Long includeGroupId) {
         return certificationRepository.findAll()
                 .stream()
-                .map(certificationMapper::toDto)
+                .map(certification -> toFilteredDto(certification, includeGroupId))
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public CertificationDto getById(Long id) {
+    public CertificationDto getById(Long id, Long includeGroupId) {
         Certification certification = certificationRepository.findByIdWithFullTree(id)
                 .orElseThrow(() -> new EntityNotFoundException("Certification not found with ID: " + id));
-        return certificationMapper.toDto(certification);
+        return toFilteredDto(certification, includeGroupId);
+    }
+
+    /**
+     * Strips out group-owned major categories (and everything nested under
+     * them) except the one group the caller was authorized for, if any. This
+     * is the ONLY place member-authored content is prevented from leaking
+     * into every other organization's view of a certification.
+     */
+    private CertificationDto toFilteredDto(Certification certification, Long includeGroupId) {
+        CertificationDto dto = certificationMapper.toDto(certification);
+        if (dto.getMajorCategory() != null) {
+            dto.setMajorCategory(
+                    dto.getMajorCategory().stream()
+                            .filter(major -> major.getOwnerGroupId() == null
+                                    || major.getOwnerGroupId().equals(includeGroupId))
+                            .toList()
+            );
+        }
+        return dto;
     }
 
     public CertificationDto create(CertificationDto dto) {

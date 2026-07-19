@@ -1,7 +1,12 @@
 import { base } from "./base"
 
-export async function getAllCertifications() {
-    return await base("certifications")
+// Omit includeGroupId for the official curriculum only (what every existing
+// caller does). Pass a group id to also mix in that group's own
+// Enterprise-Member-authored content -- the caller must be able to act on
+// that group (its leader, or the institution owner), enforced server-side.
+export async function getAllCertifications(includeGroupId) {
+    const query = includeGroupId != null ? `?includeGroupId=${includeGroupId}` : ""
+    return await base(`certifications${query}`)
 }
 
 export async function addCertification(data) {
