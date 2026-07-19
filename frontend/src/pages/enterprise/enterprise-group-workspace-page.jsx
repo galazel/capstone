@@ -3,11 +3,14 @@ import { Link, useParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   ArrowLeftIcon,
+  ClipboardCheckIcon,
   FileQuestionIcon,
   Loader2,
+  MailIcon,
   MegaphoneIcon,
   PinIcon,
   Trash2,
+  UserPlusIcon,
   UsersIcon,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -25,8 +28,10 @@ import {
   EnterpriseErrorState,
   EnterpriseLoadingSkeleton,
   EnterprisePageHeader,
+  EnterpriseStatusBadge,
   formatDateTime,
 } from "@/components/enterprise/enterprise-ui.jsx"
+import { getExamTypes, getExams } from "@/services/assessmentService.js"
 import { getAllCertifications } from "@/services/certificationService.js"
 import {
   archiveGroupAnnouncement,
@@ -35,6 +40,15 @@ import {
   getEnterpriseGroupById,
   getGroupAnnouncements,
 } from "@/services/enterpriseService.js"
+import {
+  cancelEnterpriseInvitation,
+  getEnterpriseInvitations,
+  sendEnterpriseInvitations,
+} from "@/services/partnershipService.js"
+
+function asArray(value) {
+  return Array.isArray(value) ? value : []
+}
 
 function lessonCount(certification) {
   return (certification?.majorCategory ?? []).reduce(
@@ -184,6 +198,210 @@ function AnnouncementsTab({ groupId }) {
   )
 }
 
+function LearnersTab({ groupId, group, learners }) {
+  const queryClient = useQueryClient()
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [draftEmail, setDraftEmail] = useState("")
+  const [emails, setEmails] = useState([])
+  const [error, setError] = useState("")
+
+  const invitationsQuery = useQuery({
+    queryKey: ["group-invitations", groupId],
+    queryFn: () => getEnterpriseInvitations(),
+    enabled: Number.isFinite(groupId),
+  })
+  const groupInvitations = (
+    Array.isArray(invitationsQuery.data) ? invitationsQuery.data : []
+  ).filter((inv) => inv.enterpriseGroupId === groupId)
+  const pendingInvitations = groupInvitations.filter((inv) => inv.status === "PENDING")
+
+  const remainingSlots = Math.max(0, (group.totalSlots ?? 0) - (group.usedSlots ?? 0))
+
+  const resetForm = () => {
+    setDraftEmail("")
+    setEmails([])
+    setError("")
+  }
+
+  const addEmail = (value) => {
+    const email = value.trim().toLowerCase()
+    if (!email) return
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError(`"${email}" is not a valid email.`)
+      return
+    }
+    if (emails.includes(email)) {
+      setError("That email is already in the list.")
+      return
+    }
+    if (emails.length >= remainingSlots) {
+      setError(`Only ${remainingSlots} slot(s) remaining in this group.`)
+      return
+    }
+    setEmails((current) => [...current, email])
+    setDraftEmail("")
+    setError("")
+  }
+
+  const inviteMutation = useMutation({
+    mutationFn: () => sendEnterpriseInvitations({ enterpriseGroupId: groupId, emails }),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ["group-invitations", groupId] })
+      queryClient.invalidateQueries({ queryKey: ["enterprise-group", groupId] })
+      toast.success(
+        `${response.created} invitation(s) sent.` +
+          (response.skipped?.length ? ` ${response.skipped.length} skipped.` : "")
+      )
+      resetForm()
+      setInviteOpen(false)
+    },
+    onError: (err) => toast.error(backendMessage(err, "Unable to send invitations.")),
+  })
+
+  const cancelMutation = useMutation({
+    mutationFn: (invitationId) => cancelEnterpriseInvitation(invitationId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["group-invitations", groupId] })
+      queryClient.invalidateQueries({ queryKey: ["enterprise-group", groupId] })
+      toast.success("Invitation cancelled. Slot restored.")
+    },
+    onError: (err) => toast.error(backendMessage(err, "Unable to cancel this invitation.")),
+  })
+
+  return (
+    <div className="space-y-5">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
+          <div>
+            <CardTitle className="text-base">Invite learners</CardTitle>
+            <CardDescription>
+              {remainingSlots} of {group.totalSlots ?? 0} slot(s) remaining in this group.
+            </CardDescription>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => setInviteOpen((prev) => !prev)}
+            disabled={remainingSlots <= 0}
+          >
+            <UserPlusIcon className="size-4" aria-hidden="true" />
+            {inviteOpen ? "Cancel" : "Invite"}
+          </Button>
+        </CardHeader>
+        {inviteOpen ? (
+          <CardContent className="space-y-3">
+            <div className="flex gap-2">
+              <Input
+                type="email"
+                value={draftEmail}
+                onChange={(e) => setDraftEmail(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === ",") {
+                    e.preventDefault()
+                    addEmail(draftEmail)
+                  }
+                }}
+                placeholder="learner@example.com"
+              />
+              <Button type="button" variant="outline" onClick={() => addEmail(draftEmail)}>
+                Add
+              </Button>
+            </div>
+            {emails.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {emails.map((email) => (
+                  <Badge key={email} variant="secondary" className="gap-1 py-1">
+                    {email}
+                    <button
+                      type="button"
+                      onClick={() => setEmails((current) => current.filter((e) => e !== email))}
+                      aria-label={`Remove ${email}`}
+                      className="rounded-full outline-none hover:text-destructive"
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
+            {error ? (
+              <p className="text-sm text-destructive" role="alert">
+                {error}
+              </p>
+            ) : null}
+            <Button
+              onClick={() => inviteMutation.mutate()}
+              disabled={emails.length === 0 || inviteMutation.isPending}
+            >
+              {inviteMutation.isPending ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  Sending...
+                </>
+              ) : (
+                `Send ${emails.length || ""} invitation${emails.length === 1 ? "" : "s"}`
+              )}
+            </Button>
+          </CardContent>
+        ) : null}
+      </Card>
+
+      {pendingInvitations.length > 0 ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Pending invitations</CardTitle>
+          </CardHeader>
+          <CardContent className="divide-y p-0">
+            {pendingInvitations.map((inv) => (
+              <div
+                key={inv.invitationId}
+                className="flex items-center justify-between gap-2 px-4 py-2.5"
+              >
+                <div className="flex items-center gap-2 text-sm">
+                  <MailIcon className="size-4 text-muted-foreground" aria-hidden="true" />
+                  {inv.email}
+                  <EnterpriseStatusBadge status={inv.status} />
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => cancelMutation.mutate(inv.invitationId)}
+                  disabled={cancelMutation.isPending}
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                  Cancel
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {learners.length ? (
+        learners.map((learner) => (
+          <Card key={learner.enterpriseGroupAssigneeId}>
+            <CardContent className="flex items-center gap-3 p-4">
+              <UsersIcon className="size-5 text-primary" />
+              <div>
+                <p className="font-medium">Learner #{learner.learnerId}</p>
+                <p className="text-sm text-muted-foreground">
+                  {learner.role === "lead" ? "Peer lead" : "Learner"} · Added{" "}
+                  {new Date(learner.assignedAt).toLocaleDateString()}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        ))
+      ) : pendingInvitations.length === 0 ? (
+        <EnterpriseEmptyState
+          icon={UsersIcon}
+          title="No learners yet"
+          description="Invite your first learner into this group above."
+        />
+      ) : null}
+    </div>
+  )
+}
+
 export default function EnterpriseGroupWorkspacePage() {
   const { groupId } = useParams()
   const id = Number(groupId)
@@ -202,8 +420,24 @@ export default function EnterpriseGroupWorkspacePage() {
     queryFn: getAllCertifications,
     staleTime: 5 * 60_000,
   })
+  const examsQuery = useQuery({
+    queryKey: ["exams"],
+    queryFn: getExams,
+    staleTime: 60_000,
+  })
+  const examTypesQuery = useQuery({
+    queryKey: ["exam-types"],
+    queryFn: getExamTypes,
+    staleTime: 5 * 60_000,
+  })
 
-  if (groupQuery.isLoading || assigneesQuery.isLoading || certificationsQuery.isLoading) {
+  if (
+    groupQuery.isLoading ||
+    assigneesQuery.isLoading ||
+    certificationsQuery.isLoading ||
+    examsQuery.isLoading ||
+    examTypesQuery.isLoading
+  ) {
     return <EnterpriseLoadingSkeleton />
   }
   if (groupQuery.isError) {
@@ -235,6 +469,16 @@ export default function EnterpriseGroupWorkspacePage() {
     (major) => major.middleCategory ?? []
   )
 
+  const examTypeById = new Map(
+    asArray(examTypesQuery.data).map((type) => [type.examTypeId, type.examTypeText])
+  )
+  // Official assessments for this certification -- diagnostics, mock exams,
+  // and other exam types the admin published. Read-only here, same as the
+  // rest of the official curriculum.
+  const certificationExams = asArray(examsQuery.data).filter(
+    (exam) => exam.certificationId === certification?.certificationId && exam.status === "PUBLISHED"
+  )
+
   return (
     <div className="space-y-6">
       <Link
@@ -257,6 +501,8 @@ export default function EnterpriseGroupWorkspacePage() {
           <TabsTrigger value="announcements">Announcements</TabsTrigger>
         </TabsList>
 
+        {/*
+        */}
         <TabsContent value="curriculum" className="mt-5 space-y-4">
           <Card>
             <CardHeader>
@@ -283,6 +529,40 @@ export default function EnterpriseGroupWorkspacePage() {
               )}
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ClipboardCheckIcon className="size-4 text-primary" aria-hidden="true" />
+                Certification assessments
+              </CardTitle>
+              <CardDescription>
+                Diagnostics, mock exams, and other assessments the Institution Administrator
+                published for this certification. Read-only.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {certificationExams.length ? (
+                <ul className="divide-y rounded-lg border">
+                  {certificationExams.map((exam) => (
+                    <li
+                      key={exam.examId}
+                      className="flex items-center justify-between gap-2 px-3 py-2.5"
+                    >
+                      <span className="text-sm font-medium">{exam.title}</span>
+                      <Badge variant="outline">
+                        {examTypeById.get(exam.examTypeId) ?? "Assessment"}
+                      </Badge>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No published assessments for this certification yet.
+                </p>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="content" className="mt-5">
@@ -301,29 +581,8 @@ export default function EnterpriseGroupWorkspacePage() {
           />
         </TabsContent>
 
-        <TabsContent value="learners" className="mt-5 space-y-3">
-          {learners.length ? (
-            learners.map((learner) => (
-              <Card key={learner.enterpriseGroupAssigneeId}>
-                <CardContent className="flex items-center gap-3 p-4">
-                  <UsersIcon className="size-5 text-primary" />
-                  <div>
-                    <p className="font-medium">Learner #{learner.learnerId}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {learner.role === "lead" ? "Peer lead" : "Learner"} · Added{" "}
-                      {new Date(learner.assignedAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
-          ) : (
-            <EnterpriseEmptyState
-              icon={UsersIcon}
-              title="No learners assigned"
-              description="Ask your Institution Administrator to add learners to this group."
-            />
-          )}
+        <TabsContent value="learners" className="mt-5">
+          <LearnersTab groupId={id} group={group} learners={learners} />
         </TabsContent>
 
         <TabsContent value="announcements" className="mt-5">

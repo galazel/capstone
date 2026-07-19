@@ -6,6 +6,7 @@ import {
   BookOpenIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  ClipboardCheckIcon,
   FileQuestionIcon,
   Layers3Icon,
   MailIcon,
@@ -32,6 +33,7 @@ import {
   formatDate,
 } from "@/components/enterprise/enterprise-ui.jsx"
 import { useEnterpriseData } from "@/hooks/use-enterprise-data.js"
+import { getExamTypes, getExams } from "@/services/assessmentService.js"
 import { getAllCertifications } from "@/services/certificationService.js"
 import { getEnterpriseGroups } from "@/services/enterpriseService.js"
 
@@ -122,6 +124,23 @@ export default function EnterpriseCertificationDetailPage() {
     (group) => group.orgCertId === numericOrgCertId && group.status === "active"
   )
 
+  const examsQuery = useQuery({
+    queryKey: ["exams"],
+    queryFn: getExams,
+    staleTime: 60_000,
+  })
+  const examTypesQuery = useQuery({
+    queryKey: ["exam-types"],
+    queryFn: getExamTypes,
+    staleTime: 5 * 60_000,
+  })
+  const examTypeById = new Map(
+    asArray(examTypesQuery.data).map((type) => [type.examTypeId, type.examTypeText])
+  )
+  const certificationExams = asArray(examsQuery.data).filter(
+    (exam) => exam.certificationId === orgCert?.certificationId && exam.status === "PUBLISHED"
+  )
+
   const groupInvitations = useMemo(() => {
     const groupIds = new Set(groups.map((g) => g.enterpriseGroupId))
     return asArray(data.invitations).filter((inv) => groupIds.has(inv.enterpriseGroupId))
@@ -150,7 +169,9 @@ export default function EnterpriseCertificationDetailPage() {
     enterpriseLoading ||
     (enterprise && data.isLoading) ||
     certificationsQuery.isLoading ||
-    groupsQuery.isLoading
+    groupsQuery.isLoading ||
+    examsQuery.isLoading ||
+    examTypesQuery.isLoading
 
   if (isLoading) return <EnterpriseLoadingSkeleton />
   if (enterpriseError) return <EnterpriseErrorState onRetry={refetchEnterprise} />
@@ -276,6 +297,39 @@ export default function EnterpriseCertificationDetailPage() {
               ))}
             </div>
           )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ClipboardCheckIcon className="size-4 text-primary" aria-hidden="true" />
+                Certification assessments
+              </CardTitle>
+              <CardDescription>
+                Diagnostics, mock exams, and other published assessments for this certification.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {certificationExams.length ? (
+                <ul className="divide-y rounded-lg border">
+                  {certificationExams.map((exam) => (
+                    <li
+                      key={exam.examId}
+                      className="flex items-center justify-between gap-2 px-3 py-2.5"
+                    >
+                      <span className="text-sm font-medium">{exam.title}</span>
+                      <Badge variant="outline">
+                        {examTypeById.get(exam.examTypeId) ?? "Assessment"}
+                      </Badge>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No published assessments for this certification yet.
+                </p>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="groups" className="space-y-4">
