@@ -16,9 +16,9 @@ const SetNewPasswordPage = lazy(() => import("@/pages/auth/set-new-password-page
 const Certifications = lazy(() => import("./pages/admin/Certifications"))
 const Challenges = lazy(() => import("./pages/admin/Challenges"))
 const QuestionBank = lazy(() => import("./pages/admin/QuestionBank"))
-const Analytics = lazy(() => import("./pages/admin/Analytics"))
 const Learners = lazy(() => import("./pages/admin/Learners"))
 const Organizations = lazy(() => import("./pages/admin/Organizations"))
+const AdminOrganizationDetail = lazy(() => import("./pages/admin/AdminOrganizationDetail"))
 const ViewCertificationAdmin = lazy(() => import("./pages/admin/ViewCertificationAdmin"))
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"))
 const PartnershipRequests = lazy(() => import("./pages/admin/PartnershipRequests"))
@@ -111,12 +111,15 @@ export function App() {
                     <Route path="challenges" element={<Challenges />} />
                     <Route path="question-bank" element={<QuestionBank />} />
                     <Route path="organizations" element={<Organizations />} />
+                    <Route
+                        path="organizations/:id"
+                        element={<AdminOrganizationDetail />}
+                    />
                     <Route path="partnership-requests" element={<PartnershipRequests />} />
                     <Route path="community-moderation" element={<CommunityModeration />} />
                     <Route path="bkt-delivery" element={<BktDeliveryStatus />} />
                     <Route path="gamification-settings" element={<GamificationSettings />} />
                     <Route path="learners" element={<Learners />} />
-                    <Route path="analytics" element={<Analytics />} />
                     <Route
                         path="certification/:id"
                         element={<ViewCertificationAdmin />}

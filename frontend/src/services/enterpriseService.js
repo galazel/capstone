@@ -9,6 +9,17 @@ export function getEnterpriseById(enterpriseId) {
   return base(`enterprises/${enterpriseId}`)
 }
 
+// Admin-only, cross-tenant: every organization's certificate allocations /
+// enrolled learners. The admin institution-detail page filters these
+// client-side to one enterpriseId.
+export function getAllOrganizationCertificates() {
+  return base("organization-certificates")
+}
+
+export function getAllOrganizationCertificationLearners() {
+  return base("organization-certification-learners")
+}
+
 // The caller's OWN organization profile, scoped to the JWT (no admin required).
 // The enterprise portal must use this instead of getEnterpriseById, which is
 // an admin-only endpoint.

@@ -58,7 +58,6 @@ const adminGroups = [
     label: "Overview",
     items: [
       { label: "Platform overview", href: "/admin/dashboard", icon: LayoutDashboard },
-      { label: "Analytics", href: "/admin/analytics", icon: BarChart3 },
     ],
   },
   {

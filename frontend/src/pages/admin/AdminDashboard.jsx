@@ -68,6 +68,15 @@ export default function AdminDashboard() {
   const stats = useMemo(() => {
     const partnerships = asArray(partnershipsQuery.data)
     const results = asArray(resultsQuery.data)
+    const scored = results.filter((row) =>
+      Number.isFinite(Number(row.score ?? row.percentage))
+    )
+    const avgScore = scored.length
+      ? Math.round(
+          scored.reduce((sum, row) => sum + Number(row.score ?? row.percentage), 0) /
+            scored.length
+        )
+      : null
     return {
       learners: asArray(learnersQuery.data).length,
       enterprises: asArray(enterprisesQuery.data).length,
@@ -80,6 +89,7 @@ export default function AdminDashboard() {
         (enrollment) => enrollment.status === "active"
       ).length,
       attempts: results.length,
+      avgScore,
       recentPartnerships: [...partnerships]
         .sort(
           (a, b) => new Date(b.submittedAt ?? 0) - new Date(a.submittedAt ?? 0)
@@ -157,6 +167,15 @@ export default function AdminDashboard() {
           label="Assessment attempts"
           value={resultsQuery.isError ? "—" : stats.attempts}
           hint="Total recorded exam results"
+        />
+        <EnterpriseStatCard
+          label="Average score"
+          value={
+            resultsQuery.isError || stats.avgScore == null
+              ? "—"
+              : `${stats.avgScore}%`
+          }
+          hint="Average score across recorded assessment results"
         />
       </div>
 

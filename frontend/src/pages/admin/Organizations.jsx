@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import {
   Building2,
@@ -9,7 +10,6 @@ import {
   Eye,
   MoreHorizontal,
   Pencil,
-  Plus,
   Search,
   Trash2,
   Users,
@@ -221,12 +221,8 @@ function OrganizationStatusBadge({ status }) {
   )
 }
 
-export default function Organizations({
-                                        onCreate,
-                                        onView,
-                                        onEdit,
-                                        onDelete,
-                                      }) {
+export default function Organizations({ onEdit, onDelete }) {
+  const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState(ALL_FILTER_VALUE)
   const [industryFilter, setIndustryFilter] = useState(ALL_FILTER_VALUE)
@@ -344,13 +340,6 @@ export default function Organizations({
 
   return (
       <section className="flex h-full min-h-0 flex-col overflow-hidden">
-        <div className="flex shrink-0 justify-end pb-4">
-            <Button type="button" onClick={onCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Organization
-            </Button>
-        </div>
-
         <div className="grid shrink-0 gap-3 border-b border-border bg-background py-4 sm:grid-cols-3">
           <div className="rounded-xl border bg-card px-4 py-3">
             <p className="text-xs font-medium text-muted-foreground">
@@ -556,7 +545,11 @@ export default function Organizations({
 
                                 <DropdownMenuContent align="end" className="w-40">
                                   <DropdownMenuItem
-                                      onSelect={() => onView?.(organization)}
+                                      onSelect={() =>
+                                          navigate(
+                                              `/admin/organizations/${getOrganizationId(organization, index)}`
+                                          )
+                                      }
                                   >
                                     <Eye className="mr-2 h-4 w-4" />
                                     View details
