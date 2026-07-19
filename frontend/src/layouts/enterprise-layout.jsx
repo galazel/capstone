@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useMemo, useEffect } from "react"
 import { Outlet, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { LogOutIcon, SettingsIcon, UserIcon } from "lucide-react"
@@ -19,6 +19,7 @@ import { getEnterpriseInvitations } from "@/services/partnershipService.js"
 import { NotificationBell } from "@/components/notification-bell.jsx"
 import { usePortalTheme } from "@/hooks/use-portal-theme.js"
 import { PortalThemeToggle } from "@/components/portal-theme-toggle"
+import { base } from "@/services/base.js"
 
 function getInitials(name = "") {
   return (
@@ -38,6 +39,14 @@ export default function EnterpriseLayout() {
   // A signed-in enterprise account is scoped to its own organization via the
   // enterpriseId from /api/auth/me.
   const authEnterpriseId = user?.enterpriseId ?? null
+
+  // Auto-link orphaned enterprise account on first load
+  useEffect(() => {
+    if (user) {
+      base("admin/fix-my-enterprise-account", { method: "POST" })
+        .catch(err => console.warn("Enterprise account already linked or error:", err.message))
+    }
+  }, [user])
 
   const scopedQuery = useQuery({
     queryKey: ["enterprise", authEnterpriseId],
