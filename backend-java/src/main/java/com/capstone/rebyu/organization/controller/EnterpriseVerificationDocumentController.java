@@ -1,10 +1,14 @@
 package com.capstone.rebyu.organization.controller;
 
+import com.capstone.rebyu.auth.dto.CurrentUserDto;
+import com.capstone.rebyu.auth.service.CognitoAuthService;
 import com.capstone.rebyu.organization.dto.EnterpriseVerificationDocumentDto;
 import com.capstone.rebyu.organization.service.EnterpriseVerificationDocumentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -14,31 +18,44 @@ import java.util.List;
 @RequiredArgsConstructor
 public class EnterpriseVerificationDocumentController {
     private final EnterpriseVerificationDocumentService service;
+    private final CognitoAuthService auth;
 
+    // KYC-style verification documents across every enterprise -- admin-only.
     @GetMapping
-    public List<EnterpriseVerificationDocumentDto> getAll() {
+    public List<EnterpriseVerificationDocumentDto> getAll(@AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return service.getAll();
     }
 
     @GetMapping("/{id}")
-    public EnterpriseVerificationDocumentDto getById(@PathVariable Long id) {
+    public EnterpriseVerificationDocumentDto getById(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return service.getById(id);
+    }
+
+    private void requireAdmin(Jwt jwt) {
+        if (jwt == null) throw new IllegalArgumentException("Authentication is required");
+        CurrentUserDto user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
+        if (!"ADMIN".equalsIgnoreCase(user.role())) throw new IllegalArgumentException("Admin access is required");
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public EnterpriseVerificationDocumentDto create(@Valid @RequestBody EnterpriseVerificationDocumentDto dto) {
+    public EnterpriseVerificationDocumentDto create(@Valid @RequestBody EnterpriseVerificationDocumentDto dto, @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return service.create(dto);
     }
 
     @PutMapping("/{id}")
-    public EnterpriseVerificationDocumentDto update(@PathVariable Long id, @Valid @RequestBody EnterpriseVerificationDocumentDto dto) {
+    public EnterpriseVerificationDocumentDto update(@PathVariable Long id, @Valid @RequestBody EnterpriseVerificationDocumentDto dto, @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return service.update(id, dto);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long id) {
+    public void delete(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         service.delete(id);
     }
 }

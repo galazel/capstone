@@ -1,28 +1,28 @@
 import { AlertCircle, TrendingUp, Zap, BookOpen, CheckCircle, Clock } from 'lucide-react'
 
 export const PRIORITY_CONFIG = {
-  CRITICAL: {
+  CRITICAL_PRIORITY: {
     label: '🔴 Critical',
     bgColor: 'bg-red-100 dark:bg-red-950',
     textColor: 'text-red-800 dark:text-red-300',
     icon: AlertCircle,
     description: 'Focus here first',
   },
-  HIGH: {
+  HIGH_PRIORITY: {
     label: '🟠 High Priority',
     bgColor: 'bg-orange-100 dark:bg-orange-950',
     textColor: 'text-orange-800 dark:text-orange-300',
     icon: Zap,
     description: 'Important to review',
   },
-  MEDIUM: {
+  MEDIUM_PRIORITY: {
     label: '🟡 Medium',
     bgColor: 'bg-yellow-100 dark:bg-yellow-950',
     textColor: 'text-yellow-800 dark:text-yellow-300',
     icon: BookOpen,
     description: 'Good to practice',
   },
-  LOW: {
+  LOW_PRIORITY: {
     label: '🔵 Low',
     bgColor: 'bg-blue-100 dark:bg-blue-950',
     textColor: 'text-blue-800 dark:text-blue-300',

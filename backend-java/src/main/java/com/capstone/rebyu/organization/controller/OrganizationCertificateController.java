@@ -43,18 +43,21 @@ public class OrganizationCertificateController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public OrganizationCertificateDto create(@Valid @RequestBody OrganizationCertificateDto dto) {
+    public OrganizationCertificateDto create(@Valid @RequestBody OrganizationCertificateDto dto, @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return organizationCertificateService.create(dto);
     }
 
     @PutMapping("/{id}")
-    public OrganizationCertificateDto update(@PathVariable Long id, @Valid @RequestBody OrganizationCertificateDto dto) {
+    public OrganizationCertificateDto update(@PathVariable Long id, @Valid @RequestBody OrganizationCertificateDto dto, @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return organizationCertificateService.update(id, dto);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long id) {
+    public void delete(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         organizationCertificateService.delete(id);
     }
 }

@@ -43,19 +43,24 @@ public class OrganizationCertificationLearnerController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public OrganizationCertificationLearnerDto create(@Valid @RequestBody OrganizationCertificationLearnerDto dto) {
+    public OrganizationCertificationLearnerDto create(@Valid @RequestBody OrganizationCertificationLearnerDto dto,
+                                                        @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return organizationCertificationLearnerService.create(dto);
     }
 
     @PutMapping("/{id}")
     public OrganizationCertificationLearnerDto update(@PathVariable Long id,
-                                                        @Valid @RequestBody OrganizationCertificationLearnerDto dto) {
+                                                        @Valid @RequestBody OrganizationCertificationLearnerDto dto,
+                                                        @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return organizationCertificationLearnerService.update(id, dto);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long id) {
+    public void delete(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         organizationCertificationLearnerService.delete(id);
     }
 }

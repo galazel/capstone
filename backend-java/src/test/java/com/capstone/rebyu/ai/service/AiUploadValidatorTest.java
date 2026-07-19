@@ -43,13 +43,14 @@ class AiUploadValidatorTest {
 
     @Test
     void rejectsTooManyFiles() {
-        List<MultipartFile> files = List.of(
-                pdf("a.pdf", 10), pdf("b.pdf", 10), pdf("c.pdf", 10), pdf("d.pdf", 10)
-        );
+        List<MultipartFile> files = new java.util.ArrayList<>();
+        for (int i = 0; i <= AiUploadValidator.MAX_FILES; i++) {
+            files.add(pdf("doc" + i + ".pdf", 10));
+        }
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> validator.validate(files));
-        assertTrue(ex.getMessage().contains("maximum of 3"));
+        assertTrue(ex.getMessage().contains("maximum of " + AiUploadValidator.MAX_FILES));
     }
 
     @Test

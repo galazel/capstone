@@ -45,19 +45,23 @@ public class ExamResultController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public ExamResultDto create(@Valid @RequestBody ExamResultDto dto) {
+    public ExamResultDto create(@Valid @RequestBody ExamResultDto dto, @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return examResultService.create(dto);
     }
 
     @PutMapping("/{learnerId}/{examId}/{attemptNo}")
     public ExamResultDto update(@PathVariable Long learnerId, @PathVariable Long examId, @PathVariable Integer attemptNo,
-                                 @Valid @RequestBody ExamResultDto dto) {
+                                 @Valid @RequestBody ExamResultDto dto, @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return examResultService.update(learnerId, examId, attemptNo, dto);
     }
 
     @DeleteMapping("/{learnerId}/{examId}/{attemptNo}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long learnerId, @PathVariable Long examId, @PathVariable Integer attemptNo) {
+    public void delete(@PathVariable Long learnerId, @PathVariable Long examId, @PathVariable Integer attemptNo,
+                        @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         examResultService.delete(learnerId, examId, attemptNo);
     }
 }

@@ -39,12 +39,13 @@ export default function StudyRecommendations({
     )
   }
 
-  // Flatten hierarchy and sort by priority
-  const allLessons = hierarchy?.majorCategories
+  // Flatten hierarchy and sort by priority. The hierarchy endpoint proxies
+  // FastAPI's raw JSON as-is (snake_case), not converted to camelCase.
+  const allLessons = hierarchy?.major_categories
     ?.flatMap((major) =>
-      major.middleCategories?.flatMap((middle) => middle.lessons || []) || []
+      major.middle_categories?.flatMap((middle) => middle.lessons || []) || []
     )
-    ?.sort((a, b) => (b?.priorityScore || 0) - (a?.priorityScore || 0))
+    ?.sort((a, b) => (b?.priority_score || 0) - (a?.priority_score || 0))
 
   const criticalLessons = allLessons?.slice(0, maxItems)
 
@@ -68,7 +69,7 @@ export default function StudyRecommendations({
       <div className="space-y-2">
         {criticalLessons.map((lesson, index) => (
           <RecommendationCard
-            key={lesson.lessonId || index}
+            key={lesson.lesson_id || index}
             lesson={lesson}
             index={index}
           />
@@ -85,8 +86,8 @@ export default function StudyRecommendations({
 }
 
 function RecommendationCard({ lesson, index }) {
-  const masteryPercent = lesson.masteryProbability
-    ? Math.round(lesson.masteryProbability * 100)
+  const masteryPercent = lesson.mastery_probability
+    ? Math.round(lesson.mastery_probability * 100)
     : 0
 
   const getActivityIcon = (activity) => {
@@ -105,19 +106,19 @@ function RecommendationCard({ lesson, index }) {
               #{index + 1}
             </span>
             <h4 className="text-sm font-medium text-foreground truncate">
-              {lesson.lessonTitle || 'Untitled Topic'}
+              {lesson.lesson_title || 'Untitled Topic'}
             </h4>
           </div>
         </div>
 
-        {lesson.priorityTag && (
-          <PriorityTag tag={lesson.priorityTag} size="sm" />
+        {lesson.priority_tag && (
+          <PriorityTag tag={lesson.priority_tag} size="sm" />
         )}
       </div>
 
-      {lesson.primaryReason && (
+      {lesson.primary_reason && (
         <p className="text-xs leading-relaxed text-muted-foreground mb-2">
-          {lesson.primaryReason}
+          {lesson.primary_reason}
         </p>
       )}
 
@@ -142,12 +143,12 @@ function RecommendationCard({ lesson, index }) {
           className="h-7 text-xs gap-1"
           onClick={() => {
             // TODO: Navigate to lesson or recommended activity
-            console.log(`Start ${lesson.recommendedActivity} for lesson ${lesson.lessonId}`)
+            console.log(`Start ${lesson.recommended_activity} for lesson ${lesson.lesson_id}`)
           }}
         >
-          {getActivityIcon(lesson.recommendedActivity)}
-          {lesson.recommendedActivity
-            ? lesson.recommendedActivity.replace('_', ' ')
+          {getActivityIcon(lesson.recommended_activity)}
+          {lesson.recommended_activity
+            ? lesson.recommended_activity.replace('_', ' ')
             : 'Start'}
         </Button>
       </div>

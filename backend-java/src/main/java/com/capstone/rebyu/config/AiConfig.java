@@ -7,7 +7,6 @@ import com.capstone.rebyu.ai.assistant.LessonGenerationAssistant;
 import com.capstone.rebyu.ai.assistant.QuestionGenerationAssistant;
 import com.capstone.rebyu.ai.assistant.ReviewAssistant;
 import com.capstone.rebyu.ai.tools.LessonComponentDraftTools;
-import com.capstone.rebyu.ai.tools.LessonTool;
 import com.capstone.rebyu.ai.tools.QuestionTool;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.memory.chat.ChatMemoryProvider;
@@ -41,6 +40,9 @@ public class AiConfig {
     @Value("${langchain4j.open-ai.chat-model.temperature}")
     private double temperature;
 
+    @Value("${langchain4j.open-ai.chat-model.max-tokens:8192}")
+    private int maxTokens;
+
     @Value("${spring.datasource.url}")
     private String jdbcUrl;
 
@@ -70,16 +72,17 @@ public class AiConfig {
 
     @Bean
     public ChatModel chatModel() {
-        // Groq's OpenAI-compatible endpoint does not support `response_format=json_schema`.
-        // LangChain4j can still parse typed POJO/collection return values from plain text when
-        // the prompt asks for strict JSON, so we keep the model compatible and validate output
-        // in service code instead of forcing an unsupported provider feature.
+        // Output is validated in service code (see LessonDraftJsonParser) rather than
+        // relying on a provider `response_format`, so the model stays portable across
+        // OpenAI-compatible endpoints. maxTokens is set generously so comprehensive,
+        // multi-section lesson drafts are not truncated mid-JSON (a cut-off response
+        // fails to parse and the whole generation is lost).
         return OpenAiChatModel.builder()
                 .apiKey(apiKey)
                 .baseUrl(baseUrl)
                 .modelName(chatModelName)
                 .temperature(temperature)
-
+                .maxTokens(maxTokens)
                 .timeout(java.time.Duration.ofSeconds(180))
                 .logRequests(false)
                 .logResponses(false)
@@ -128,7 +131,9 @@ public class AiConfig {
         return EmbeddingStoreContentRetriever.builder()
                 .embeddingStore(lessonEmbeddingStore)
                 .embeddingModel(embeddingModel)
-                .maxResults(5)
+                // More grounding chunks -> more source material for comprehensive
+                // lessons (minScore still filters out low-relevance matches).
+                .maxResults(8)
                 .minScore(0.25)
                 .build();
     }
@@ -170,16 +175,17 @@ public class AiConfig {
     @Bean
     public LessonGenerationAssistant lessonGenerationAssistant(
             ChatModel chatModel,
-            LessonTool lessonTool,
             LessonComponentDraftTools lessonComponentDraftTools
     ) {
-        // Lesson drafts are produced as a single JSON document and parsed
-        // deterministically in the service. LangChain4j 1.0.0 + Groq cannot
-        // reliably satisfy the tool-parameter schema for the complex lesson
-        // tools, so no tools are attached here (the draft tool/mapper classes
-        // remain for validation and data-shape reuse).
+        // Lessons are built by tool-calling: the model calls the
+        // LessonComponentDraftTools to create sections and add typed content tools,
+        // which accumulate in the request-scoped LessonDraftCollector (read back in
+        // LessonGenerationService). Only these builder tools are attached — LessonTool's
+        // @Tool methods are @Transactional, so Spring would wrap it in a CGLIB proxy
+        // that hides the @Tool annotations from LangChain4j's scan (see QuestionTool).
         return AiServices.builder(LessonGenerationAssistant.class)
                 .chatModel(chatModel)
+                .tools(lessonComponentDraftTools)
                 .build();
     }
 

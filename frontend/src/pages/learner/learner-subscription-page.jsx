@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query"
+import { useState } from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { CheckIcon, InfoIcon, Loader2Icon } from "lucide-react"
 import { toast } from "sonner"
 
@@ -16,8 +17,10 @@ import ProBadge from "@/components/learner/pro-badge.jsx"
 import { useLearnerEntitlements } from "@/hooks/use-learner-entitlements.js"
 import { getCurrentLearnerIdentity } from "@/services/learnerService.js"
 import {
+  cancelSubscription,
   getIndividualPlans,
   getLearnerSubscription,
+  initiateCheckout,
 } from "@/services/subscriptionService.js"
 
 const FEATURE_LABELS = {
@@ -81,6 +84,8 @@ export default function LearnerSubscriptionPage() {
   const identity = getCurrentLearnerIdentity()
   const learnerId = identity?.learnerId ?? null
   const entitlements = useLearnerEntitlements()
+  const queryClient = useQueryClient()
+  const [redirecting, setRedirecting] = useState(false)
 
   const plansQuery = useQuery({
     queryKey: ["individual-plans"],
@@ -102,11 +107,36 @@ export default function LearnerSubscriptionPage() {
   const subscription = subscriptionQuery.data
   const isProActive = entitlements.personalProActive
 
+  const checkoutMutation = useMutation({
+    mutationFn: () => initiateCheckout(proPlan.subscriptionPlanId),
+    onSuccess: (data) => {
+      if (data?.checkout_url) {
+        setRedirecting(true)
+        window.location.href = data.checkout_url
+      } else {
+        toast.error("Could not start checkout. Please try again.")
+      }
+    },
+    onError: () => {
+      toast.error("Could not start checkout. Please try again.")
+    },
+  })
+
+  const cancelMutation = useMutation({
+    mutationFn: cancelSubscription,
+    onSuccess: () => {
+      toast.success("Your subscription will not renew. Pro access continues until the end of the paid period.")
+      queryClient.invalidateQueries({ queryKey: ["learner-subscription", learnerId] })
+      queryClient.invalidateQueries({ queryKey: ["learner-entitlements"] })
+    },
+    onError: (error) => {
+      toast.error(error?.response?.data?.error ?? "Could not cancel your subscription.")
+    },
+  })
+
   const handleUpgrade = () => {
-    // Real checkout is being finalized (PayMongo test mode + admin acceptance).
-    toast.info(
-      "REBYU Pro activation is currently processed by our team. Contact support to upgrade — automated checkout is coming soon."
-    )
+    if (!proPlan?.subscriptionPlanId) return
+    checkoutMutation.mutate()
   }
 
   return (
@@ -202,14 +232,41 @@ export default function LearnerSubscriptionPage() {
             <CardContent className="flex-1">
               <PlanFeatures plan={proPlan} />
             </CardContent>
-            <CardFooter>
-              {isProActive ? (
+            <CardFooter className="flex flex-col gap-2">
+              {isProActive && subscription?.status === "ACTIVE" && !entitlements.institutionalActive ? (
+                subscription.cancelAtPeriodEnd ? (
+                  <Button variant="outline" className="w-full" disabled>
+                    Cancels {formatDate(subscription.currentPeriodEnd)}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => cancelMutation.mutate()}
+                    disabled={cancelMutation.isPending}
+                  >
+                    {cancelMutation.isPending ? (
+                      <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
+                    ) : (
+                      "Cancel renewal"
+                    )}
+                  </Button>
+                )
+              ) : isProActive ? (
                 <Button variant="outline" className="w-full" disabled>
                   Active
                 </Button>
               ) : (
-                <Button className="w-full" onClick={handleUpgrade}>
-                  Upgrade to Pro
+                <Button
+                  className="w-full"
+                  onClick={handleUpgrade}
+                  disabled={checkoutMutation.isPending || redirecting}
+                >
+                  {checkoutMutation.isPending || redirecting ? (
+                    <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    "Upgrade to Pro"
+                  )}
                 </Button>
               )}
             </CardFooter>
@@ -220,9 +277,8 @@ export default function LearnerSubscriptionPage() {
       <div className="flex items-start gap-2 rounded-xl border p-3 text-xs leading-5 text-muted-foreground">
         <InfoIcon className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
         <span>
-          Automated Pro checkout is being finalized. In the meantime, activation
-          is processed by the REBYU team. Institution-sponsored learners get Pro
-          features through their organization's license.
+          Payments are processed by PayMongo in test mode. Institution-sponsored
+          learners get Pro features through their organization's license instead.
         </span>
       </div>
     </div>

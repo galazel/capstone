@@ -57,7 +57,7 @@ public class OrganizationService {
     }
 
     // Create invite (in production, send email with invite link)
-    Learner invitedUser = learnerRepository.findByEmailIgnoreCase(inviteEmail)
+    Learner invitedUser = learnerRepository.findByUser_EmailIgnoreCase(inviteEmail)
         .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
     TeamMember member = new TeamMember();
@@ -69,11 +69,11 @@ public class OrganizationService {
   }
 
   public List<TeamMemberDto> getTeamMembers(Long orgId) {
-    return teamMemberRepository.findByOrganization_OrgIdOrderByLearnerId(orgId).stream()
+    return teamMemberRepository.findByOrganization_OrgIdOrderByLearner_LearnerId(orgId).stream()
         .map(tm -> new TeamMemberDto(
             tm.getTeamMemberId(),
             tm.getLearner().getFirstName() + " " + tm.getLearner().getLastName(),
-            tm.getLearner().getEmail(),
+            tm.getLearner().getUser() != null ? tm.getLearner().getUser().getEmail() : null,
             tm.getRole(),
             tm.getInviteStatus()
         ))

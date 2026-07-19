@@ -1820,7 +1820,7 @@ function QuestionFileGeneratorDialog({
                                          selectedCertification,
                                          isGenerating = false,
                                      }) {
-    const maxFiles = 3;
+    const maxFiles = 10;
     const maxSizeMB = 10;
     const maxSize = maxSizeMB * 1024 * 1024;
 

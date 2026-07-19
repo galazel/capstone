@@ -6,6 +6,11 @@ paymongo:
   # Public key for frontend (pk_test_*)
   public-key: pk_test_ZCjsmVJe6g7osMYcKfZtTrY6
   base-url: https://api.paymongo.com/v1
+  # From PayMongo Dashboard > Developers > Webhooks > (your endpoint) > Signing secret.
+  # Required to verify that /api/webhooks/paymongo POSTs actually came from
+  # PayMongo -- until this is set, webhook signatures are NOT verified
+  # (a loud warning is logged on every delivery as a reminder).
+  webhook-secret: ""
 
 # Application frontend URL for PayMongo redirects
 app:

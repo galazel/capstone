@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import {
   Award,
   ChevronLeft,
@@ -43,6 +44,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { getAllLearners } from "@/services/adminLearnerService"
 
 const PAGE_SIZE = 8
 const ALL_FILTER_VALUE = "all"
@@ -261,8 +263,6 @@ function LearnerTypeBadge({ type }) {
 }
 
 export default function Learners({
-                                   learners = DEMO_LEARNERS,
-                                   isLoading = false,
                                    onCreate,
                                    onView,
                                    onEdit,
@@ -275,7 +275,13 @@ export default function Learners({
       useState(ALL_FILTER_VALUE)
   const [currentPage, setCurrentPage] = useState(1)
 
-  const list = Array.isArray(learners) ? learners : []
+  const { data: fetchedLearners = [], isLoading } = useQuery({
+    queryKey: ["admin-learners"],
+    queryFn: () => getAllLearners(),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const list = Array.isArray(fetchedLearners) ? fetchedLearners : []
 
   const organizations = useMemo(() => {
     return [

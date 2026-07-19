@@ -42,18 +42,21 @@ public class UserController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public UserDto create(@Valid @RequestBody UserDto dto) {
+    public UserDto create(@Valid @RequestBody UserDto dto, @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return userService.create(dto);
     }
 
     @PutMapping("/{id}")
-    public UserDto update(@PathVariable Long id, @Valid @RequestBody UserDto dto) {
+    public UserDto update(@PathVariable Long id, @Valid @RequestBody UserDto dto, @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return userService.update(id, dto);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long id) {
+    public void delete(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         userService.delete(id);
     }
 }

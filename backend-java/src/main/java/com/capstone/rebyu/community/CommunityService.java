@@ -68,7 +68,7 @@ public class CommunityService {
     public record ReportRequest(String reason, String details) {}
     public record ReportView(Long reportId, Long postId, String postTitle, String authorName, String reporterName,
                              String reason, String details, String status, OffsetDateTime createdAt) {}
-    public record LearnerNotification(Long id, String title, String description, OffsetDateTime createdAt, String href) {}
+    public record LearnerNotification(Long id, String title, String description, OffsetDateTime createdAt, String href, boolean read) {}
 
     public record Post(
             Long postId, String authorName, String initials, String community, OffsetDateTime createdAt,
@@ -192,9 +192,9 @@ public class CommunityService {
             throw new IllegalArgumentException("You can only edit your own post");
         }
         post.setTitle(request.title());
-        post.setDescription(request.description());
-        postRepository.save(post);
-        return toPost(learnerId, post);
+        post.setBody(request.description());
+        CommunityPost saved = postRepository.save(post);
+        return postById(learnerId, saved.getPostId());
     }
 
     public void deletePost(Long learnerId, Long postId) {
@@ -251,8 +251,22 @@ public class CommunityService {
 
     public List<LearnerNotification> notifications(Long learnerId) {
         return notificationRepository.findTop20ByLearner_LearnerIdOrderByCreatedAtDesc(learnerId).stream()
-                .map(n -> new LearnerNotification(n.getNotificationId(), n.getTitle(), n.getBody(), n.getCreatedAt(), n.getHref()))
+                .map(n -> new LearnerNotification(n.getNotificationId(), n.getTitle(), n.getBody(), n.getCreatedAt(),
+                        n.getHref(), n.getReadAt() != null))
                 .toList();
+    }
+
+    @Transactional
+    public void markNotificationRead(Long learnerId, Long notificationId) {
+        LearnerCommunityNotification notification = notificationRepository.findById(notificationId)
+                .orElseThrow(() -> new EntityNotFoundException("Notification not found: " + notificationId));
+        if (!notification.getLearner().getLearnerId().equals(learnerId)) {
+            throw new EntityNotFoundException("Notification not found: " + notificationId);
+        }
+        if (notification.getReadAt() == null) {
+            notification.setReadAt(OffsetDateTime.now());
+            notificationRepository.save(notification);
+        }
     }
 
     /** Uploads a PDF/DOCX attachment and returns its key. Call before {@link #createPost}. */

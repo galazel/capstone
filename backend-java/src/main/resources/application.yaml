@@ -80,22 +80,22 @@ app:
     from: nezer.resora@gmail.com
 
 server:
-  port: ${PORT:8080}
+  port: 8080
   error:
     include-message: always
     include-binding-errors: always
 
-resilience4j:
-  circuitbreaker:
     instances:
       mlSidecar:
         register-health-indicator: true
         sliding-window-size: 10
+resilience4j:
+  circuitbreaker:
         minimum-number-of-calls: 5
         failure-rate-threshold: 50
         wait-duration-in-open-state: 10s
         permitted-number-of-calls-in-half-open-state: 3
-      ragService:
+  ragService:
         register-health-indicator: true
         sliding-window-size: 10
         failure-rate-threshold: 60
@@ -142,7 +142,9 @@ langchain4j:
       base-url: https://models.github.ai/inference
       model-name: ${GITHUB_MODEL:openai/gpt-4.1-mini}
       temperature: 0.7
-      max-tokens: 4096
+      # Generous cap so comprehensive multi-section lesson drafts are not truncated
+      # mid-JSON. Only lesson generation approaches this; short calls never hit it.
+      max-tokens: 8192
       timeout: 60s
       log-requests: false
       log-responses: false
@@ -173,6 +175,16 @@ bkt:
   partial-credit-correct-threshold: ${BKT_PARTIAL_CREDIT_CORRECT_THRESHOLD:0.60}
   fallback-assessment-type: ${BKT_FALLBACK_ASSESSMENT_TYPE:LESSON_QUIZ}
   fallback-difficulty: ${BKT_FALLBACK_DIFFICULTY:AVERAGE}
+
+# PayMongo (test-mode payment provider). Disabled by default so a missing key
+# never accidentally reaches the live API; the paymongo-test profile (or real
+# env vars below) turns it on.
+paymongo:
+  enabled: ${PAYMONGO_ENABLED:false}
+  api-key: ${PAYMONGO_PUBLIC_KEY:}
+  secret-key: ${PAYMONGO_SECRET_KEY:}
+  webhook-secret: ${PAYMONGO_WEBHOOK_SECRET:}
+  base-url: ${PAYMONGO_BASE_URL:https://api.paymongo.com/v1}
 
 # Judge0 code-execution integration for programming assessment items. Defaults
 # to the free, keyless public Judge0 CE instance; set JUDGE0_API_KEY to point

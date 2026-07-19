@@ -22,12 +22,6 @@ public class CurriculumGenerationController {
 
     private final CurriculumGenerationService curriculumGenerationService;
 
-
-
-
-
-
-
     @PostMapping("/generate")
     public ResponseEntity<CertificationDto> generate(
             @RequestParam("certificationId") Long certificationId,

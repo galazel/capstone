@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import {
   Building2,
   ChevronLeft,
@@ -39,6 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { getAllEnterprises } from "@/services/adminEnterpriseService"
 
 const PAGE_SIZE = 8
 const ALL_FILTER_VALUE = "all"
@@ -218,8 +220,6 @@ function OrganizationStatusBadge({ status }) {
 }
 
 export default function Organizations({
-                                        organizations = DEMO_ORGANIZATIONS,
-                                        isLoading = false,
                                         onCreate,
                                         onView,
                                         onEdit,
@@ -230,7 +230,13 @@ export default function Organizations({
   const [industryFilter, setIndustryFilter] = useState(ALL_FILTER_VALUE)
   const [currentPage, setCurrentPage] = useState(1)
 
-  const list = Array.isArray(organizations) ? organizations : []
+  const { data: fetchedOrganizations = [], isLoading } = useQuery({
+    queryKey: ["admin-enterprises"],
+    queryFn: () => getAllEnterprises(),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const list = Array.isArray(fetchedOrganizations) ? fetchedOrganizations : []
 
   const industries = useMemo(() => {
     return [...new Set(

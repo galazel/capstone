@@ -126,13 +126,6 @@ public class CurriculumGenerationService {
         return self.fetchCertificationDto(certificationId);
     }
 
-
-
-
-
-
-
-
     public CertificationDto generateForExistingCertification(
             Long certificationId,
             List<MultipartFile> files,

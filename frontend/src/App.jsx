@@ -34,6 +34,7 @@ const LearnerLearningPage = lazy(() => import("./pages/learner/learner-learning-
 const LearnerDiagnosticGatePage = lazy(() => import("./pages/learner/learner-diagnostic-page.jsx"))
 const LearnerLessonPage = lazy(() => import("./pages/learner/learner-lesson-page.jsx"))
 const LearnerSubscriptionPage = lazy(() => import("./pages/learner/learner-subscription-page.jsx"))
+const SubscriptionCheckoutResultPage = lazy(() => import("./pages/learner/subscription-checkout-result-page.jsx"))
 const LearnerCertificationDetailPage = lazy(() => import("./pages/learner/learner-certification-detail-page.jsx"))
 const LearnerCertificationsPage = lazy(() => import("./pages/learner/learner-certifications-page.jsx"))
 const LearnerChallengesPage = lazy(() => import("./pages/learner/learner-challenges-page.jsx"))
@@ -181,6 +182,15 @@ export function App() {
                 {/* Sprint Challenge destination — the standalone compiler
                     playground the challenges carousel links to. */}
                 <Route path="/challenges" element={<CompilerArea />} />
+
+                {/* PayMongo hosted-checkout redirect targets (success_url/cancel_url
+                    built server-side in PayMongoClient). The success page is what
+                    actually activates the subscription via /subscription/verify. */}
+                <Route path="/subscription/success" element={<SubscriptionCheckoutResultPage />} />
+                <Route
+                    path="/subscription/cancel"
+                    element={<SubscriptionCheckoutResultPage canceled />}
+                />
             </Route>
 
             <Route element={<ProtectedRoute allowedRoles={["ENTERPRISE"]} />}>

@@ -16,6 +16,20 @@ export function getIndividualPlans() {
   return base("subscription-plans/individual")
 }
 
+// Checkout lifecycle: initiate -> PayMongo hosted checkout -> redirect back
+// to /subscription/success or /subscription/cancel -> verify.
+export function initiateCheckout(planId) {
+  return base(`subscription/checkout/${planId}`, { method: "POST" })
+}
+
+export function verifyCheckoutSession(sessionId) {
+  return base(`subscription/verify/${encodeURIComponent(sessionId)}`)
+}
+
+export function cancelSubscription() {
+  return base("subscription/cancel", { method: "POST" })
+}
+
 export function getInstitutionalPlans() {
   return base("subscription-plans/institutional")
 }

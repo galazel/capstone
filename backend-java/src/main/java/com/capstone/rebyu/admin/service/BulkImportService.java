@@ -16,16 +16,22 @@ public class BulkImportService {
 
   public record ImportResult(Long id, String status, int totalRows, int successCount, int errorCount, List<String> errors) {}
 
+  // NOTE: Learner has no email/account fields of its own -- those live on the
+  // linked User (email, password hash, Cognito sub), which this stub does not
+  // create. This method is not wired to any controller yet; provisioning a
+  // real sign-in-capable account per imported row still needs a product
+  // decision (Cognito admin-create vs. invite email) before that part can be
+  // implemented for real.
   @Transactional
   public ImportResult importLearnersFromCSV(String csvContent, Long orgId) {
     long importId = System.currentTimeMillis();
     List<String> errors = new ArrayList<>();
     int successCount = 0;
     int errorCount = 0;
+    int rowNum = 0;
 
     try (BufferedReader reader = new BufferedReader(new StringReader(csvContent))) {
       String line;
-      int rowNum = 0;
       String[] headers = null;
 
       while ((line = reader.readLine()) != null) {
@@ -45,18 +51,18 @@ public class BulkImportService {
           }
 
           // Validate required fields
-          if (row.get("email").isEmpty() || row.get("firstName").isEmpty()) {
+          String email = row.getOrDefault("email", "");
+          String firstName = row.getOrDefault("firstName", "");
+          if (email.isEmpty() || firstName.isEmpty()) {
             errorCount++;
             errors.add("Row " + rowNum + ": Missing email or firstName");
             continue;
           }
 
-          // Create learner
           Learner learner = new Learner();
-          learner.setEmail(row.get("email"));
-          learner.setFirstName(row.get("firstName"));
+          learner.setUsername(email);
+          learner.setFirstName(firstName);
           learner.setLastName(row.getOrDefault("lastName", ""));
-          learner.setIsActive(true);
 
           learnerRepository.save(learner);
           successCount++;

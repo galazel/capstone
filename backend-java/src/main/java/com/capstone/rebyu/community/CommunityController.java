@@ -42,6 +42,11 @@ public class CommunityController {
     @GetMapping("/notifications")
     public List<CommunityService.LearnerNotification> notifications(@AuthenticationPrincipal Jwt jwt) { return service.notifications(me(jwt)); }
 
+    @PutMapping("/notifications/{notificationId}/read")
+    public void markNotificationRead(@AuthenticationPrincipal Jwt jwt, @PathVariable Long notificationId) {
+        service.markNotificationRead(me(jwt), notificationId);
+    }
+
     @PostMapping("/posts/shared-study-item/{libraryItemId}")
     @ResponseStatus(HttpStatus.CREATED)
     public CommunityService.Post shareStudyItem(

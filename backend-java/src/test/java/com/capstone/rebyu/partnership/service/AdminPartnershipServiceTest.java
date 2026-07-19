@@ -105,15 +105,13 @@ class AdminPartnershipServiceTest {
                 .build();
     }
 
-    // ---- 1: email matches, but enterprise name differs -> a NEW Enterprise is created ----
+    // ---- 1: email matches -> the existing Enterprise is reused (even if the name differs) ----
     @Test
-    void approve_emailMatchesButNameDiffers_createsNewEnterpriseInsteadOfReusing() {
+    void approve_emailMatches_reusesExistingEnterpriseEvenIfNameDiffers() {
         PartnershipRequest request = pendingRequest();
         when(requestRepository.findById(REQUEST_ID)).thenReturn(Optional.of(request));
         when(enterpriseRepository.findByPrimaryContactEmailIgnoreCase(ORG_EMAIL))
                 .thenReturn(Optional.of(existingEnterprise("A Totally Different Org")));
-        when(enterpriseRepository.findByEnterpriseNameIgnoreCase(ORG_NAME)).thenReturn(Optional.empty());
-        // Enterprise already has an owner linked so provisioning is a no-op path.
         when(enterpriseMemberRepository.findByEnterprise_EnterpriseId(any())).thenReturn(List.of());
         when(cognitoAdminService.createEnterpriseAccount(anyString(), anyString(), anyString()))
                 .thenReturn(new CognitoAdminService.ProvisionResult(true, "sub-123", "emailed"));
@@ -124,11 +122,10 @@ class AdminPartnershipServiceTest {
 
         PartnershipRequestDetailDto result = service.approve(REQUEST_ID, "ok", "admin");
 
-        assertNotNull(result.enterpriseId());
-        assertEquals(NEW_ENTERPRISE_ID, result.enterpriseId());
-        // The mismatched existing enterprise's own fields were never touched/saved.
-        verify(enterpriseRepository, times(0)).save(existingEnterprise(ORG_NAME));
-        verify(enterpriseRepository, times(1)).save(any(Enterprise.class));
+        // Reused the organization already on file (by contact email); the account
+        // is provisioned on it and no duplicate Enterprise is created.
+        assertEquals(EXISTING_ENTERPRISE_ID, result.enterpriseId());
+        verify(enterpriseRepository, never()).save(any(Enterprise.class));
     }
 
     // ---- 2: email AND name both match -> the existing Enterprise is reused ----

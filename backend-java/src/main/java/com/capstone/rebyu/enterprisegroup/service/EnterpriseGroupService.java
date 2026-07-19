@@ -26,22 +26,27 @@ public class EnterpriseGroupService {
     private final OrganizationCertificateRepository organizationCertificateRepository;
     private final EnterpriseGroupMapper enterpriseGroupMapper;
 
+    // enterpriseId is always the JWT-derived caller (never client-supplied and
+    // never optional here) so this can never fall through to a global fetch.
+    // orgCertId, when given, narrows further -- but only within that same
+    // enterprise, so a caller can't read another tenant's groups by guessing
+    // an orgCertId that belongs to a different enterprise.
     @Transactional(readOnly = true)
     public List<EnterpriseGroupDto> getAll(Long enterpriseId, Long orgCertId) {
-        List<EnterpriseGroup> groups;
+        List<EnterpriseGroup> groups = enterpriseGroupRepository.findByEnterprise_EnterpriseId(enterpriseId);
         if (orgCertId != null) {
-            groups = enterpriseGroupRepository.findByOrgCert_OrgCertId(orgCertId);
-        } else if (enterpriseId != null) {
-            groups = enterpriseGroupRepository.findByEnterprise_EnterpriseId(enterpriseId);
-        } else {
-            groups = enterpriseGroupRepository.findAll();
+            groups = groups.stream()
+                    .filter(g -> g.getOrgCert() != null && orgCertId.equals(g.getOrgCert().getOrgCertId()))
+                    .toList();
         }
         return groups.stream().map(enterpriseGroupMapper::toDto).toList();
     }
 
     @Transactional(readOnly = true)
-    public EnterpriseGroupDto getById(Long id) {
-        return enterpriseGroupMapper.toDto(findEntity(id));
+    public EnterpriseGroupDto getById(Long id, Long callerEnterpriseId) {
+        EnterpriseGroup entity = findEntity(id);
+        requireSameEnterprise(entity, callerEnterpriseId);
+        return enterpriseGroupMapper.toDto(entity);
     }
 
     public EnterpriseGroupDto create(EnterpriseGroupDto dto) {

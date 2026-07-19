@@ -90,7 +90,7 @@ public class LearnerProfileService {
         }
 
         // Verify old password
-        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+        if (!passwordEncoder.matches(oldPassword, user.getPasswordHash())) {
             throw new IllegalArgumentException("Current password is incorrect");
         }
 
@@ -104,7 +104,7 @@ public class LearnerProfileService {
         }
 
         // Update password
-        user.setPassword(passwordEncoder.encode(newPassword));
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
         userRepository.save(user);
 
         log.info("Password changed for learner: {}", learnerId);
@@ -123,15 +123,14 @@ public class LearnerProfileService {
         }
 
         // Verify password
-        if (!passwordEncoder.matches(password, user.getPassword())) {
+        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
             throw new IllegalArgumentException("Password is incorrect");
         }
 
-        // Mark account as inactive instead of deleting
-        user.setActive(false);
-        learner.setActive(false);
+        // Mark account as inactive instead of deleting. Learner has no status
+        // field of its own -- account lifecycle lives entirely on User.
+        user.setAccountStatus(User.AccountStatus.inactive);
         userRepository.save(user);
-        learnerRepository.save(learner);
 
         log.info("Account deleted for learner: {}", learnerId);
     }

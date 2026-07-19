@@ -52,7 +52,9 @@ import java.util.Set;
 @Service
 public class LessonGenerationService {
 
-    private static final int MAX_DOC_CHARS = 10_000;
+    // Higher cap so more of an uploaded source document feeds the model, giving
+    // it enough material to build a comprehensive lesson (not just a thin overview).
+    private static final int MAX_DOC_CHARS = 20_000;
     private static final int MAX_CHUNK_CHARS = 2_500;
     // Caps vision-model token/cost per request; the highest-similarity
     // chunks are searched first, so the first N distinct linked images are
@@ -188,20 +190,34 @@ public class LessonGenerationService {
         log.info("Generating lesson draft for lessonId={} ({}) images={}",
                 lessonId, ctx.lessonTitle(), availableImages.size());
 
+        // Every lesson is built the SAME way — by tool-calling — so quality is
+        // consistent (there is no JSON/description fallback path to diverge onto).
+        // The model calls LessonComponentDraftTools to create sections and add
+        // content tools, which accumulate in the request-scoped collector (the text
+        // return value is ignored). An attempt only counts when it produced real
+        // content, so a stalled run is retried rather than saved as an empty or
+        // description-only lesson.
         List<GeneratedLessonSectionDraftDto> sections = null;
-        for (int attempt = 1; attempt <= 2 && (sections == null || sections.isEmpty()); attempt++) {
-            String raw = availableImages.isEmpty()
-                    ? lessonGenerationAssistant.generateLessonDraft(requestJson, referenceContext)
-                    : generateLessonDraftWithImages(requestJson, referenceContext, availableImages);
-            sections = lessonDraftJsonParser.parseSections(raw, warnings);
-            if (sections.isEmpty()) {
-                log.warn("Attempt {}/2 produced no lesson sections for lessonId={}; raw excerpt: {}",
-                        attempt, lessonId,
-                        raw == null ? "null"
-                                : raw.substring(0, Math.min(raw.length(), 500)));
+        for (int attempt = 1; attempt <= 3 && sections == null; attempt++) {
+            lessonDraftCollector.clear();
+            try {
+                lessonGenerationAssistant.generateLessonDraft(requestJson, referenceContext);
+            } catch (Exception toolFailure) {
+                log.warn("Tool-calling attempt {}/3 failed for lessonId={}: {}",
+                        attempt, lessonId, toolFailure.getMessage());
+            }
+            List<GeneratedLessonSectionDraftDto> collected = lessonDraftCollector.getSections();
+            boolean hasContent = collected.stream()
+                    .anyMatch(section -> section.content() != null && !section.content().isEmpty());
+            if (hasContent) {
+                sections = collected;
+            } else {
+                log.warn("Tool-calling attempt {}/3 produced no lesson content for lessonId={}",
+                        attempt, lessonId);
             }
         }
-        if (sections == null || sections.isEmpty()) {
+
+        if (sections == null) {
             throw new InvalidAiResponseException("The AI did not create any lesson sections.");
         }
 
@@ -373,8 +389,31 @@ public class LessonGenerationService {
                 """.formatted(requestJson, referenceContext)));
 
         List<ChatMessage> messages = List.of(
-                SystemMessage.from(LessonGenerationAssistant.SYSTEM_PROMPT),
+                SystemMessage.from(LessonGenerationAssistant.JSON_SYSTEM_PROMPT),
                 UserMessage.from(userContents));
+        return chatModel.chat(messages).aiMessage().text();
+    }
+
+    /**
+     * Text-only fallback used when tool-calling produced no sections: asks the model
+     * for the whole lesson as a single JSON array (the {@code JSON_SYSTEM_PROMPT}
+     * contract) via a direct {@code ChatModel} call, so no tools are involved. The
+     * result is parsed by {@code LessonDraftJsonParser}, exactly like the image path.
+     */
+    private String generateLessonDraftJson(String requestJson, String referenceContext) {
+        List<ChatMessage> messages = List.of(
+                SystemMessage.from(LessonGenerationAssistant.JSON_SYSTEM_PROMPT),
+                UserMessage.from("""
+                        Generate a complete editable lesson draft as a JSON array of sections.
+
+                        Lesson request:
+                        %s
+
+                        Reference context:
+                        %s
+
+                        Return only the JSON array of sections.
+                        """.formatted(requestJson, referenceContext)));
         return chatModel.chat(messages).aiMessage().text();
     }
 

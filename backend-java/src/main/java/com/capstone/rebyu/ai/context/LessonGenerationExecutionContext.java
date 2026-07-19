@@ -43,20 +43,13 @@ public class LessonGenerationExecutionContext {
     }
 
     public void validateEvidence(List<LessonToolEvidenceInputDto> evidence) {
-        if (evidence == null || evidence.isEmpty()) {
-            throw new InvalidAiResponseException("Grounded lesson content requires source evidence.");
-        }
-
-        for (LessonToolEvidenceInputDto item : evidence) {
-            if (item == null || item.sourceChunkId() == null || item.sourceChunkId().isBlank()) {
-                throw new InvalidAiResponseException("Every evidence item must include a sourceChunkId.");
-            }
-            if (!sourceChunks.containsKey(item.sourceChunkId())) {
-                throw new InvalidAiResponseException(
-                        "Unknown sourceChunkId '" + item.sourceChunkId() + "'."
-                );
-            }
-        }
+        // Grounding is SOFT. The full source material is already supplied to the
+        // model in the prompt, so evidence citations are advisory only: a missing,
+        // empty, or unrecognized sourceChunkId must NOT fail the tool call.
+        // Rejecting them used to abort tool-calling mid-lesson and drop the whole
+        // lesson onto a JSON/description fallback — the direct cause of the
+        // inconsistent "empty" and "description-only" lessons. Whatever the model
+        // cites (or omits) is accepted.
     }
 
     public String formatForPrompt() {

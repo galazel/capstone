@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -17,8 +18,11 @@ from app.db.models import (
 )
 from app.schemas.mastery import MasteryEventCreate, MasteryEventResponse, ParametersUsed
 from app.services import category_service, priority_service
+from app.services import pybkt_runtime
 from app.services.bkt_math import mastery_level, update_mastery
 from app.services.parameter_service import resolve_parameters
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _payload_hash(payload: MasteryEventCreate) -> str:
@@ -93,18 +97,59 @@ def process_mastery_event(session: Session, payload: MasteryEventCreate) -> Mast
         )
         .with_for_update()
     )
-    mastery_before = mastery.mastery_probability if mastery else parameters.prior
     previous_level = mastery.mastery_level if mastery else None
-    update = update_mastery(
-        mastery_before=mastery_before,
-        is_correct=payload.is_correct,
-        learn=parameters.learn,
-        guess=parameters.guess,
-        slip=parameters.slip,
-        forget=parameters.forget,
-    )
+
+    # Prefer the actual fitted pyBKT model for any lesson it was trained on.
+    # pyBKT has no API for a single-step update from an arbitrary starting
+    # probability, so scoring replays the learner's full event history for
+    # this lesson through Model.predict(). Only lessons pyBKT never saw
+    # during training (cold start) or a broken/missing artifact fall back to
+    # the parameter-based estimate below -- mirroring how app.ml.pipeline
+    # itself handles skills that didn't meet its minimum-data threshold.
+    pybkt_model, trained_skills, _ = pybkt_runtime.get_scoring_model(session)
+    pybkt_score: pybkt_runtime.PyBktScore | None = None
+    if pybkt_model is not None and str(payload.lesson_id) in trained_skills:
+        try:
+            pybkt_score = pybkt_runtime.score_with_pybkt(
+                session,
+                pybkt_model,
+                learner_id=payload.learner_id,
+                lesson_id=payload.lesson_id,
+                is_correct=payload.is_correct,
+                difficulty_level=payload.difficulty_level,
+                assessment_type=payload.assessment_type,
+            )
+        except pybkt_runtime.PyBktScoringError:
+            LOGGER.exception(
+                "pyBKT scoring failed for learner %s lesson %s; falling back to parameter estimate",
+                payload.learner_id,
+                payload.lesson_id,
+            )
+
+    if pybkt_score is not None:
+        mastery_before = pybkt_score.mastery_before
+        # pyBKT's predict() only exposes the state before and after a
+        # response, not a separate mid-update (pre-transition) posterior.
+        mastery_posterior = pybkt_score.mastery_after
+        mastery_after = pybkt_score.mastery_after
+        predicted_correct_probability = pybkt_score.predicted_correct_probability
+    else:
+        fallback_prior = mastery.mastery_probability if mastery else parameters.prior
+        manual = update_mastery(
+            mastery_before=fallback_prior,
+            is_correct=payload.is_correct,
+            learn=parameters.learn,
+            guess=parameters.guess,
+            slip=parameters.slip,
+            forget=parameters.forget,
+        )
+        mastery_before = manual.mastery_before
+        mastery_posterior = manual.mastery_posterior
+        mastery_after = manual.mastery_after
+        predicted_correct_probability = manual.predicted_correct_probability
+
     level = mastery_level(
-        update.mastery_after,
+        mastery_after,
         developing_threshold=settings.developing_threshold,
         good_threshold=settings.good_threshold,
         mastered_threshold=settings.mastered_threshold,
@@ -115,7 +160,7 @@ def process_mastery_event(session: Session, payload: MasteryEventCreate) -> Mast
         mastery = LearnerLessonMastery(
             learner_id=payload.learner_id,
             lesson_id=payload.lesson_id,
-            mastery_probability=update.mastery_after,
+            mastery_probability=mastery_after,
             mastery_level=level,
             attempt_count=1,
             last_event_id=payload.source_event_id,
@@ -123,7 +168,7 @@ def process_mastery_event(session: Session, payload: MasteryEventCreate) -> Mast
         )
         session.add(mastery)
     else:
-        mastery.mastery_probability = update.mastery_after
+        mastery.mastery_probability = mastery_after
         mastery.mastery_level = level
         mastery.attempt_count += 1
         mastery.last_event_id = payload.source_event_id
@@ -150,10 +195,10 @@ def process_mastery_event(session: Session, payload: MasteryEventCreate) -> Mast
         is_correct=payload.is_correct,
         difficulty_level=payload.difficulty_level,
         assessment_type=payload.assessment_type,
-        mastery_before=update.mastery_before,
-        mastery_posterior=update.mastery_posterior,
-        mastery_after=update.mastery_after,
-        predicted_correct_probability=update.predicted_correct_probability,
+        mastery_before=mastery_before,
+        mastery_posterior=mastery_posterior,
+        mastery_after=mastery_after,
+        predicted_correct_probability=predicted_correct_probability,
         parameters_used=parameters.as_dict(),
         occurred_at=payload.occurred_at,
         processed_at=now,
@@ -167,9 +212,9 @@ def process_mastery_event(session: Session, payload: MasteryEventCreate) -> Mast
             learner_id=payload.learner_id,
             certification_id=payload.certification_id,
             lesson_id=payload.lesson_id,
-            previous_mastery=update.mastery_before,
-            observation_posterior=update.mastery_posterior,
-            final_mastery=update.mastery_after,
+            previous_mastery=mastery_before,
+            observation_posterior=mastery_posterior,
+            final_mastery=mastery_after,
             previous_mastery_level=previous_level,
             new_mastery_level=level,
             observed_correct=payload.is_correct,

@@ -98,6 +98,28 @@ The API container automatically runs:
 alembic upgrade head
 ```
 
+## Sharing a database with the Java backend
+
+This service can point at the SAME Postgres database the Java backend uses (for
+example, the shared Neon instance) instead of its own separate database. Every
+table this service owns lives in its own Postgres schema (`DB_SCHEMA`, default
+`bkt`), created automatically the first time `alembic upgrade head` runs, so
+nothing here can collide with Java's tables -- notably a legacy
+`learner_lesson_mastery` table that already exists in `public` from an older
+progress-tracking feature.
+
+To share Java's database:
+
+```bash
+# .env
+DATABASE_URL=postgresql+psycopg://<same-user>:<same-password>@<same-host>:5432/<same-db>
+DB_SCHEMA=bkt
+```
+
+Then run migrations as usual (`alembic upgrade head`, or let the `api`
+container do it on startup). Nothing on the Java side needs to change --
+Java's Hibernate/Flyway setup only ever touches `public`.
+
 ## Connect to the existing Rebyu assessment tables
 
 After the main Rebyu database tables exist, run:

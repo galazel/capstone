@@ -5,7 +5,7 @@ import com.capstone.rebyu.gamification.entity.Streak;
 import com.capstone.rebyu.gamification.service.StreakService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.preauthorize.PreAuthorize;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController

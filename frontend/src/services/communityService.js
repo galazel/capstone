@@ -41,6 +41,8 @@ export const startSharedCommunityPractice = (postId) => base(`community/posts/${
 export const reportCommunityPost = (postId, reason, details = null) =>
   base(`community/posts/${postId}/report`, { method: "POST", data: { reason, details } })
 export const getCommunityNotifications = () => base("community/notifications")
+export const markCommunityNotificationRead = (notificationId) =>
+  base(`community/notifications/${notificationId}/read`, { method: "PUT" })
 export const toggleCommunityLike = (id) => base(`community/posts/${id}/like`, { method: "POST" })
 export const toggleCommunitySave = (id) => base(`community/posts/${id}/save`, { method: "POST" })
 export const toggleCircleMembership = (id) => base(`community/circles/${id}/membership`, { method: "POST" })

@@ -23,19 +23,31 @@ public class LearnerController {
     private final LearnerService learnerService;
     private final CognitoAuthService cognitoAuthService;
 
+    // Reading the full learner list / arbitrary learner records exposes every
+    // learner across every enterprise, so reads are admin-only. Learners read
+    // their own record via /api/learners/me/portal.
     @GetMapping
-    public List<LearnerDto> getAll() {
+    public List<LearnerDto> getAll(@AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return learnerService.getAll();
     }
 
     @GetMapping("/{id}")
-    public LearnerDto getById(@PathVariable Long id) {
+    public LearnerDto getById(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return learnerService.getById(id);
+    }
+
+    private void requireAdmin(Jwt jwt) {
+        if (jwt == null) throw new IllegalArgumentException("Authentication is required");
+        CurrentUserDto user = cognitoAuthService.syncCurrentUser(jwt, jwt.getTokenValue());
+        if (!"ADMIN".equalsIgnoreCase(user.role())) throw new IllegalArgumentException("Admin access is required");
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public LearnerDto create(@Valid @RequestBody LearnerDto dto) {
+    public LearnerDto create(@Valid @RequestBody LearnerDto dto, @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return learnerService.create(dto);
     }
     /**
@@ -58,13 +70,15 @@ public class LearnerController {
     }
 
     @PutMapping("/{id}")
-    public LearnerDto update(@PathVariable Long id, @Valid @RequestBody LearnerDto dto) {
+    public LearnerDto update(@PathVariable Long id, @Valid @RequestBody LearnerDto dto, @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         return learnerService.update(id, dto);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long id) {
+    public void delete(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
         learnerService.delete(id);
     }
 }

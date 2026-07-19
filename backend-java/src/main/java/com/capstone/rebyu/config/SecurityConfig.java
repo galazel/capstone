@@ -15,12 +15,22 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtDecoders;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.header.writers.HstsHeaderWriter;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    // Only LearnerProfileService's change-password/delete-account flow needs
+    // this (accounts are otherwise authenticated via Cognito, not a local
+    // password check) -- nothing previously defined this bean at all.
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -60,6 +70,13 @@ public class SecurityConfig {
                         // from the caller's JWT and every list is filtered to that tenant
                         // server-side, replacing the old browser-side filtering of global lists.
                         .requestMatchers("/api/enterprise/me/**").authenticated()
+                        // License/entitlement reads: enterpriseId is JWT-derived at the
+                        // controller now, but this path previously had no auth requirement
+                        // here either -- any unauthenticated caller could read any
+                        // enterprise's billing/entitlement data by guessing an id. Block
+                        // anonymous access here too.
+                        .requestMatchers("/api/enterprise/license", "/api/enterprise/license/**",
+                                "/api/enterprise/entitlements").authenticated()
                         // Tenant/user-scoped portal reads (JWT-derived learnerId/userId).
                         .requestMatchers("/api/learners/me/portal").authenticated()
                         // Flat cross-tenant/cross-user lists that no scoped flow uses anymore --
@@ -75,6 +92,21 @@ public class SecurityConfig {
                         // Learner-certification reads are admin-only at the controller; block anonymous here too.
                         .requestMatchers(org.springframework.http.HttpMethod.GET,
                                 "/api/learner-certifications", "/api/learner-certifications/*").authenticated()
+                        // These controllers had NO auth anywhere -- neither here nor at the
+                        // controller -- until this pass: every learner record, every
+                        // enterprise's profile/billing/verification/invoice data, and every
+                        // learner's per-question exam detail row was readable and writable
+                        // by any unauthenticated caller. Now admin-only at the controller;
+                        // block anonymous access here too.
+                        .requestMatchers("/api/learners", "/api/learners/*").authenticated()
+                        .requestMatchers("/api/enterprises/**").authenticated()
+                        .requestMatchers("/api/enterprise-members/**").authenticated()
+                        .requestMatchers("/api/enterprise-verification-documents/**").authenticated()
+                        .requestMatchers("/api/enterprise-invoices/**").authenticated()
+                        .requestMatchers("/api/learner-exam-details/**").authenticated()
+                        // learnerId is now JWT-derived at the controller instead of a
+                        // client-supplied request param; block anonymous access here too.
+                        .requestMatchers("/api/learner/analytics/**").authenticated()
                         // Generic scaffolding CRUD for partnership requests/items was
                         // previously fully public and unfiltered -- anyone could read
                         // every organization's contact info across every tenant with

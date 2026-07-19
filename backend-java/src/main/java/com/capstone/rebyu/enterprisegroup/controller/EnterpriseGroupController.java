@@ -23,14 +23,14 @@ public class EnterpriseGroupController {
 
     @GetMapping
     public List<EnterpriseGroupDto> getAll(
-            @RequestParam(required = false) Long enterpriseId,
+            @AuthenticationPrincipal Jwt jwt,
             @RequestParam(required = false) Long orgCertId) {
-        return enterpriseGroupService.getAll(enterpriseId, orgCertId);
+        return enterpriseGroupService.getAll(myEnterpriseId(jwt), orgCertId);
     }
 
     @GetMapping("/{id}")
-    public EnterpriseGroupDto getById(@PathVariable Long id) {
-        return enterpriseGroupService.getById(id);
+    public EnterpriseGroupDto getById(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
+        return enterpriseGroupService.getById(id, myEnterpriseId(jwt));
     }
 
     @PostMapping

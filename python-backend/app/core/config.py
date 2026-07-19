@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     sql_echo: bool = False
     db_pool_size: int = 10
     db_max_overflow: int = 20
+    # Dedicated Postgres schema for every BKT table, so this service can share
+    # the same database as the main Rebyu backend without colliding with its
+    # tables (notably a legacy `learner_lesson_mastery` table in `public`).
+    db_schema: str = "bkt"
 
     redis_url: str = "redis://redis:6379/0"
     celery_broker_url: str = "redis://redis:6379/0"
@@ -103,6 +107,13 @@ class Settings(BaseSettings):
     def validate_view_name(cls, value: str) -> str:
         if not _IDENTIFIER.fullmatch(value):
             raise ValueError("training_view_name must be a plain SQL identifier")
+        return value
+
+    @field_validator("db_schema")
+    @classmethod
+    def validate_db_schema(cls, value: str) -> str:
+        if not _IDENTIFIER.fullmatch(value):
+            raise ValueError("db_schema must be a plain SQL identifier")
         return value
 
     @field_validator("artifact_dir", mode="before")

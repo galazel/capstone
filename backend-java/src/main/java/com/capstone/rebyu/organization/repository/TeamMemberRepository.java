@@ -7,6 +7,6 @@ import java.util.List;
 
 @Repository
 public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
-  List<TeamMember> findByOrganization_OrgIdOrderByLearnerId(Long orgId);
+  List<TeamMember> findByOrganization_OrgIdOrderByLearner_LearnerId(Long orgId);
   java.util.Optional<TeamMember> findByOrganization_OrgIdAndLearner_LearnerId(Long orgId, Long learnerId);
 }

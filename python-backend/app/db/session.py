@@ -17,6 +17,13 @@ if not settings.database_url.startswith("sqlite"):
     engine_kwargs.update(
         pool_size=settings.db_pool_size,
         max_overflow=settings.db_max_overflow,
+        # Resolve every unqualified table name to our own schema first, so this
+        # service can share a database with the main Rebyu backend without its
+        # tables (e.g. bkt_model_runs, learner_lesson_mastery) colliding with
+        # anything Java owns in `public`. `public` stays second so reads that
+        # cross into Java-owned tables/views (like the training data view)
+        # still resolve normally.
+        connect_args={"options": f"-csearch_path={settings.db_schema},public"},
     )
 
 engine = create_engine(settings.database_url, **engine_kwargs)

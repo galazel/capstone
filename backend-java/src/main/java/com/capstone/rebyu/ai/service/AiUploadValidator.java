@@ -14,7 +14,7 @@ import java.util.Set;
 @Component
 public class AiUploadValidator {
 
-    public static final int MAX_FILES = 3;
+    public static final int MAX_FILES = 10;
     public static final long MAX_FILE_SIZE_BYTES = 10L * 1024 * 1024;
 
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("pdf", "doc", "docx", "csv");

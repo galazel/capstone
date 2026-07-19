@@ -5,9 +5,10 @@ import com.capstone.rebyu.gamification.service.StudyPlanService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.preauthorize.PreAuthorize;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/study-plans")
@@ -32,10 +33,10 @@ public class StudyPlanController {
 
   @PostMapping("/{planId}/complete")
   @PreAuthorize("hasRole('LEARNER')")
-  public ResponseEntity<?> completePlan(@PathVariable Long planId) {
-    studyPlanService.completeWeek(planId);
+  public ResponseEntity<?> completePlan(
+      @PathVariable Long planId,
+      @RequestAttribute CurrentUserDto currentUser) {
+    studyPlanService.completeWeek(planId, currentUser.getLearnerId());
     return ResponseEntity.ok().build();
   }
 }
-
-class Map {} // Import workaround

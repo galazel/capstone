@@ -247,20 +247,19 @@ public class AdminPartnershipService {
         if (request.getEnterprise() != null) {
             return request.getEnterprise();
         }
+        // Reuse the existing Enterprise that shares this contact email, so an
+        // approved partnership provisions the login account on the SAME
+        // organization the admin already set up — never a duplicate. (Restored
+        // 2026-07-19: a prior change ALSO required an exact organization-name
+        // match here, which created duplicate enterprises on approval and left
+        // the original one with no account — the "I approved but can't get an
+        // account for that enterprise" bug.)
         Enterprise byEmail = enterpriseRepository
                 .findByPrimaryContactEmailIgnoreCase(request.getOrganizationEmail())
                 .orElse(null);
-        if (byEmail != null
-                && byEmail.getEnterpriseName() != null
-                && byEmail.getEnterpriseName().trim().equalsIgnoreCase(
-                        request.getOrganizationName() == null ? "" : request.getOrganizationName().trim())) {
+        if (byEmail != null) {
             return byEmail;
         }
-        // Either no existing Enterprise shares this contact email, or one does
-        // but its name doesn't match this request's organization name -- that
-        // means a different organization simply reuses the same contact
-        // email, so it must not be silently merged into the existing one.
-        // Fall through to create a new Enterprise below.
 
         // Ensure the unique enterprise_name does not collide.
         String name = request.getOrganizationName();

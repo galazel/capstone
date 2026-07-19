@@ -8,7 +8,7 @@ import com.capstone.rebyu.bkt.dto.MasteryHistoryView;
 import com.capstone.rebyu.bkt.service.BKTService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.preauthorize.PreAuthorize;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;

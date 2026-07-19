@@ -14,4 +14,9 @@ public record CurrentUserDto(
         String lastName,
         String displayName
 ) {
+    // Bean-style alias for learnerId() -- controllers across the codebase call
+    // this form; records only auto-generate the canonical accessor.
+    public Long getLearnerId() {
+        return learnerId;
+    }
 }

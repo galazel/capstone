@@ -15,7 +15,9 @@ export function CertificationMasteryPanel({ certificationId, className = '' }) {
     enabled: Boolean(certificationId),
   })
 
-  const { data: priorities } = useQuery({
+  // getMyPriorities() returns a bare JSON array of lesson priorities, not an
+  // object with a `.lessons` property.
+  const { data: priorityLessons } = useQuery({
     queryKey: ['priorities', certificationId],
     queryFn: () => getMyPriorities(certificationId),
     enabled: Boolean(certificationId),
@@ -34,13 +36,9 @@ export function CertificationMasteryPanel({ certificationId, className = '' }) {
     )
   }
 
-  const overallPercent = Math.round(
-    (confidence.overall_confidence || 0) * 100
-  )
-  const masteryLevel = getMasteryLevel(confidence.overall_confidence)
-  const readinessPercent = Math.round(
-    (confidence.ready_for_certification ? 100 : 50)
-  )
+  // confidence_score arrives already scaled 0-100; average_mastery is 0-1.
+  const overallPercent = Math.round(confidence.confidence_score || 0)
+  const masteryLevel = getMasteryLevel(confidence.average_mastery || 0)
 
   return (
     <div className={`space-y-4 ${className}`}>
@@ -80,19 +78,19 @@ export function CertificationMasteryPanel({ certificationId, className = '' }) {
         <StatCard
           icon={Award}
           label="Mastered"
-          value={confidence.lessons_mastered || 0}
+          value={confidence.mastered_count || 0}
           color="text-green-600"
         />
         <StatCard
           icon={TrendingUp}
           label="Developing"
-          value={confidence.lessons_developing || 0}
+          value={confidence.developing_count || 0}
           color="text-blue-600"
         />
         <StatCard
           icon={BookOpen}
           label="Learning"
-          value={confidence.lessons_weak || 0}
+          value={confidence.weak_count || 0}
           color="text-yellow-600"
         />
         <StatCard
@@ -103,59 +101,38 @@ export function CertificationMasteryPanel({ certificationId, className = '' }) {
         />
       </div>
 
-      {/* Readiness Status */}
-      {confidence.ready_for_certification !== undefined && (
-        <div
-          className={`rounded-lg p-4 ${
-            confidence.ready_for_certification
-              ? 'bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800'
-              : 'bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800'
-          }`}
-        >
-          <div className="flex items-start gap-3">
-            <div
-              className={`w-2 h-2 rounded-full mt-1 ${
-                confidence.ready_for_certification
-                  ? 'bg-green-600'
-                  : 'bg-amber-600'
-              }`}
-            />
-            <div>
-              <p
-                className={`font-semibold text-sm ${
-                  confidence.ready_for_certification
-                    ? 'text-green-900 dark:text-green-100'
-                    : 'text-amber-900 dark:text-amber-100'
-                }`}
-              >
-                {confidence.ready_for_certification
-                  ? '✅ Ready for Certification'
-                  : '⏳ Continue Learning'}
-              </p>
-              <p
-                className={`text-xs ${
-                  confidence.ready_for_certification
-                    ? 'text-green-700 dark:text-green-200'
-                    : 'text-amber-700 dark:text-amber-200'
-                }`}
-              >
-                {confidence.ready_for_certification
-                  ? 'You have demonstrated mastery across most topics'
-                  : 'Focus on critical areas to improve your readiness'}
-              </p>
-            </div>
+      {/* Coverage: how much of the curriculum has been assessed at all */}
+      {typeof confidence.coverage_percentage === 'number' && (
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-semibold text-foreground">Curriculum Coverage</p>
+            <p className="text-sm font-semibold text-foreground">
+              {Math.round(confidence.coverage_percentage)}%
+            </p>
           </div>
+          <div className="h-2 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full"
+              style={{ width: `${Math.min(confidence.coverage_percentage, 100)}%` }}
+            />
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {confidence.total_lessons || 0} of the curriculum's lessons assessed so far
+          </p>
         </div>
       )}
 
       {/* Top Priority Areas */}
-      {priorities?.lessons && priorities.lessons.length > 0 && (
+      {Array.isArray(priorityLessons) && priorityLessons.length > 0 && (
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-sm font-semibold text-foreground mb-3">
             Focus Areas
           </p>
           <div className="space-y-2">
-            {priorities.lessons.slice(0, 3).map((lesson) => (
+            {[...priorityLessons]
+              .sort((a, b) => (b?.priority_score || 0) - (a?.priority_score || 0))
+              .slice(0, 3)
+              .map((lesson) => (
               <div
                 key={lesson.lesson_id}
                 className="flex items-start justify-between gap-2 p-2 rounded bg-muted/30 text-sm"

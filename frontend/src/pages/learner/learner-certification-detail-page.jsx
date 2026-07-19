@@ -40,10 +40,12 @@ import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 
 import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
+import { PriorityTag } from "@/components/learner/priority-tag.jsx"
 
 import { getFileViewUrl } from "@/services/fileService.js"
 import { getCertificationFallbackImage, getCuratedCertificationCover } from "@/lib/certification-cover-images.js"
 import { getCertificationModules } from "@/services/learnerService.js"
+import { getCertificationPriorities } from "@/services/learnerAnalyticsService.js"
 
 import {
   confirmPurchase,
@@ -175,6 +177,25 @@ export default function LearnerCertificationDetailPage() {
     queryKey: ["exam-types"],
     queryFn: getExamTypes,
   })
+
+  // BKT priority hierarchy (major -> middle -> lesson), used to tag each
+  // module/category in the curriculum outline below with its urgency.
+  const prioritiesQuery = useQuery({
+    queryKey: ["certification-priorities", certificationId, learnerId],
+    queryFn: () => getCertificationPriorities(learnerId, certificationId),
+    enabled: Boolean(learnerId && certificationId),
+  })
+
+  const majorPriorityById = useMemo(() => {
+    const majors = prioritiesQuery.data?.major_categories ?? []
+    return new Map(majors.map((major) => [String(major.major_category_id), major]))
+  }, [prioritiesQuery.data])
+
+  const middlePriorityById = useMemo(() => {
+    const majors = prioritiesQuery.data?.major_categories ?? []
+    const middles = majors.flatMap((major) => major.middle_categories ?? [])
+    return new Map(middles.map((middle) => [String(middle.middle_category_id), middle]))
+  }, [prioritiesQuery.data])
 
   const publishedDiagnostic = useMemo(() => {
     const typeById = new Map(
@@ -459,18 +480,26 @@ export default function LearnerCertificationDetailPage() {
                     <div className="space-y-8">
                       {modules.map((major, majorIndex) => {
                         const middleCategories = major.middleCategory ?? []
+                        const majorPriority = majorPriorityById.get(
+                            String(major.majorCategoryId)
+                        )
 
                         return (
                             <section
                                 key={major.majorCategoryId ?? majorIndex}
                                 className="space-y-3"
                             >
-                              <h3 className="font-heading text-lg font-bold text-foreground">
-                                <span className="text-primary">
-                                  Major Category {majorIndex + 1}:
-                                </span>{" "}
-                                {major.title ?? "Untitled"}
-                              </h3>
+                              <div className="flex flex-wrap items-center gap-3">
+                                <h3 className="font-heading text-lg font-bold text-foreground">
+                                  <span className="text-primary">
+                                    Major Category {majorIndex + 1}:
+                                  </span>{" "}
+                                  {major.title ?? "Untitled"}
+                                </h3>
+                                {majorPriority?.priority_tag && (
+                                    <PriorityTag tag={majorPriority.priority_tag} size="sm" />
+                                )}
+                              </div>
 
                               {middleCategories.length === 0 ? (
                                   <div className="rounded-2xl border border-dashed border-border bg-card p-6 text-sm text-muted-foreground">
@@ -493,6 +522,9 @@ export default function LearnerCertificationDetailPage() {
                                           middle.middleCategoryId ??
                                           `${majorIndex}-${middleIndex}`
                                       )
+                                      const middlePriority = middlePriorityById.get(
+                                          String(middle.middleCategoryId)
+                                      )
 
                                       return (
                                           <AccordionItem
@@ -502,9 +534,17 @@ export default function LearnerCertificationDetailPage() {
                                           >
                                             <AccordionTrigger className="rounded-lg px-4 py-5 transition-colors hover:bg-muted/50 hover:no-underline">
                                               <div className="flex flex-col items-start text-left">
-                                                <span className="font-semibold text-foreground">
-                                                  {middle.title ?? "Untitled Module"}
-                                                </span>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                  <span className="font-semibold text-foreground">
+                                                    {middle.title ?? "Untitled Module"}
+                                                  </span>
+                                                  {middlePriority?.priority_tag && (
+                                                      <PriorityTag
+                                                          tag={middlePriority.priority_tag}
+                                                          size="sm"
+                                                      />
+                                                  )}
+                                                </div>
                                                 <span className="mt-1 text-sm font-normal text-muted-foreground">
                                                   {middleLessons.length}{" "}
                                                   {middleLessons.length === 1
