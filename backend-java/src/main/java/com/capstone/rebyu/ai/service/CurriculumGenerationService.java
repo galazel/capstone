@@ -101,6 +101,7 @@ public class CurriculumGenerationService {
     }
 
 
+    @Transactional
     public CertificationDto generateForNewCertification(
             CertificationDto dto,
             List<MultipartFile> files,
@@ -115,6 +116,8 @@ public class CurriculumGenerationService {
                 dto.getTitle(), dto.getDescription(), additionalInstructions, documentContent
         );
 
+        // ALL-OR-NOTHING: If any error occurs after this point, the entire
+        // certification creation is rolled back. No partial/broken data.
         Long certificationId = self.createCertificationWithPlan(dto, plan);
         log.info("Created certification {} with AI-generated structure", certificationId);
 
@@ -126,6 +129,7 @@ public class CurriculumGenerationService {
         return self.fetchCertificationDto(certificationId);
     }
 
+    @Transactional
     public CertificationDto generateForExistingCertification(
             Long certificationId,
             List<MultipartFile> files,
