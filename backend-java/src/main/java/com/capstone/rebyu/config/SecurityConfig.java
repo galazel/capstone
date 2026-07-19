@@ -125,6 +125,13 @@ public class SecurityConfig {
                         // question. Now admin- or enterprise-scoped at the controller;
                         // block anonymous access here too.
                         .requestMatchers("/api/questions/**").authenticated()
+                        // Exam WRITES had no auth at all -- anyone could create/edit/
+                        // publish/delete any assessment platform-wide. Now admin-only at
+                        // the controller; block anonymous writes here too. GET stays open
+                        // because learners discover available assessments through it.
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/exams", "/api/exams/**").authenticated()
+                        .requestMatchers(org.springframework.http.HttpMethod.PUT, "/api/exams/**").authenticated()
+                        .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/api/exams/**").authenticated()
                         // File view/download stay public (embedded directly as <img src>/
                         // download links with no Authorization header attached), but
                         // uploading (content-planting) and deleting an arbitrary file by
