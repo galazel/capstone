@@ -5,6 +5,7 @@ import com.capstone.rebyu.certification.entity.Certification;
 import com.capstone.rebyu.certification.entity.Lesson;
 import com.capstone.rebyu.certification.entity.MajorCategory;
 import com.capstone.rebyu.certification.entity.MiddleCategory;
+import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -94,6 +95,13 @@ public class Exam {
     // null is treated as true (current behavior: answers are released).
     @Column(name = "release_answers_after_submit")
     private Boolean releaseAnswersAfterSubmit;
+
+    // NULL = official, platform-wide exam (admin-authored, unchanged
+    // behavior). Set = one Enterprise Member's own assessment, scoped to
+    // their group -- mirrors MajorCategory.ownerGroup.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_group_id")
+    private EnterpriseGroup ownerGroup;
 
     public Status effectiveStatus() {
         return status == null ? Status.DRAFT : status;

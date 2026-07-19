@@ -99,11 +99,12 @@ public class MajorCategoryService {
 
     /**
      * Resolves the managed EnterpriseGroup for a NEW major category and checks
-     * the caller may actually create content under it. Package-visible so
-     * MiddleCategoryService/LessonService can reuse the exact same rule when
-     * they walk up their ancestor chain to an existing MajorCategory.
+     * the caller may actually create content under it. Public so
+     * MiddleCategoryService/LessonService (same package) and ExamService
+     * (assessment package -- an Exam's ownership follows the identical rule)
+     * can reuse the exact same check instead of re-implementing it.
      */
-    EnterpriseGroup resolveAndAuthorizeOwnerGroup(
+    public EnterpriseGroup resolveAndAuthorizeOwnerGroup(
             boolean isAdmin, Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner,
             Long ownerGroupId, Long targetCertificationId) {
         if (ownerGroupId == null) {
@@ -130,7 +131,7 @@ public class MajorCategoryService {
     }
 
     /** Same rule as {@link #resolveAndAuthorizeOwnerGroup}, for editing/deleting existing content. */
-    void requireCanActOn(
+    public void requireCanActOn(
             EnterpriseGroup ownerGroup, boolean isAdmin,
             Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner) {
         if (ownerGroup == null) {

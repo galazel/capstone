@@ -652,9 +652,12 @@ export default function EnterpriseGroupWorkspacePage() {
     enabled: Number.isFinite(id),
     staleTime: 5 * 60_000,
   })
+  // includeGroupId mixes this group's own exams in alongside the official
+  // ones -- omitted everywhere else, so no other reader is affected.
   const examsQuery = useQuery({
-    queryKey: ["exams"],
-    queryFn: getExams,
+    queryKey: ["exams", "group", id],
+    queryFn: () => getExams(id),
+    enabled: Number.isFinite(id),
     staleTime: 60_000,
   })
   const examTypesQuery = useQuery({
@@ -710,6 +713,9 @@ export default function EnterpriseGroupWorkspacePage() {
   const certificationExams = asArray(examsQuery.data).filter(
     (exam) => exam.certificationId === certification?.certificationId && exam.status === "PUBLISHED"
   )
+  // This group's own exams -- kept separate from the official list above,
+  // visible only within this workspace.
+  const ownGroupExams = asArray(examsQuery.data).filter((exam) => exam.ownerGroupId === id)
 
   return (
     <div className="space-y-6">
@@ -805,6 +811,43 @@ export default function EnterpriseGroupWorkspacePage() {
               queryClient.invalidateQueries({ queryKey: ["certifications", "group", id] })
             }
           />
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ClipboardCheckIcon className="size-4 text-primary" aria-hidden="true" />
+                Your group's assessments
+              </CardTitle>
+              <CardDescription>
+                Exams your group has authored, separate from the official ones above.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {ownGroupExams.length ? (
+                <ul className="divide-y rounded-lg border">
+                  {ownGroupExams.map((exam) => (
+                    <li
+                      key={exam.examId}
+                      className="flex items-center justify-between gap-2 px-3 py-2.5"
+                    >
+                      <span className="text-sm font-medium">{exam.title}</span>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">
+                          {examTypeById.get(exam.examTypeId) ?? "Assessment"}
+                        </Badge>
+                        <EnterpriseStatusBadge status={exam.status} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No assessments authored for this group yet.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
           <EnterpriseEmptyState
             icon={FileQuestionIcon}
             title="Need questions for an assessment?"

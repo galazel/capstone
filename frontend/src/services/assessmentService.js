@@ -17,16 +17,24 @@ export async function ensureExamType(examTypeText) {
   return createExamType(examTypeText)
 }
 
-export function getExams() {
-  return base("exams")
+// Omit includeGroupId for official exams only (what every existing caller
+// does). Pass a group id to also mix in that group's own exams -- the
+// caller must be able to act on that group, enforced server-side.
+export function getExams(includeGroupId) {
+  const query = includeGroupId != null ? `?includeGroupId=${includeGroupId}` : ""
+  return base(`exams${query}`)
 }
 
-export function getExamById(examId) {
-  return base(`exams/${examId}`)
+export function getExamById(examId, includeGroupId) {
+  const query = includeGroupId != null ? `?includeGroupId=${includeGroupId}` : ""
+  return base(`exams/${examId}${query}`)
 }
 
-export function createExam(exam) {
-  return base("exams", { method: "POST", data: exam })
+// ownerGroupId is required for an Enterprise Member creating their own
+// exam; omitted, the backend requires ADMIN and creates an official exam.
+export function createExam(exam, ownerGroupId) {
+  const query = ownerGroupId != null ? `?ownerGroupId=${ownerGroupId}` : ""
+  return base(`exams${query}`, { method: "POST", data: exam })
 }
 
 export function updateExam(examId, exam) {

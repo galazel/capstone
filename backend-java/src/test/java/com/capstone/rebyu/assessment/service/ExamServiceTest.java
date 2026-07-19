@@ -18,6 +18,7 @@ import com.capstone.rebyu.certification.repository.CertificationRepository;
 import com.capstone.rebyu.certification.repository.LessonRepository;
 import com.capstone.rebyu.certification.repository.MajorCategoryRepository;
 import com.capstone.rebyu.certification.repository.MiddleCategoryRepository;
+import com.capstone.rebyu.certification.service.MajorCategoryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -50,6 +51,7 @@ class ExamServiceTest {
     @Mock private MiddleCategoryRepository middleCategoryRepository;
     @Mock private LessonRepository lessonRepository;
     @Mock private ExamMapper examMapper;
+    @Mock private MajorCategoryService majorCategoryService;
 
     private ExamService service;
 
@@ -58,7 +60,7 @@ class ExamServiceTest {
         service = new ExamService(
                 examRepository, examQuestionRepository, questionRepository,
                 examTypeRepository, certificationRepository, majorCategoryRepository,
-                middleCategoryRepository, lessonRepository, examMapper);
+                middleCategoryRepository, lessonRepository, examMapper, majorCategoryService);
     }
 
     @Test
@@ -107,7 +109,7 @@ class ExamServiceTest {
             return dto;
         });
 
-        ExamDto result = service.create(request);
+        ExamDto result = service.create(request, true, null, null, false, null);
 
         assertEquals(100L, result.getExamId());
         assertEquals(2, result.getTotalQuestions());
@@ -165,7 +167,7 @@ class ExamServiceTest {
             return dto;
         });
 
-        service.create(request);
+        service.create(request, true, null, null, false, null);
 
         // Never deletes or inserts exam_questions when nothing was selected.
         verify(examQuestionRepository, times(0)).deleteByExam_ExamId(anyLong());

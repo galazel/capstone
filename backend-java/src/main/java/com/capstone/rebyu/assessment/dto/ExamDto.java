@@ -64,6 +64,11 @@ public class ExamDto {
     /** Whether correct answers/explanations are shown to learners after submitting. Null = true. */
     private Boolean releaseAnswersAfterSubmit;
 
+    // NULL = official exam. Read-only here -- ownership is set exclusively
+    // via the create endpoint's ownerGroupId query param, never accepted
+    // directly from this DTO's create/update body. See MajorCategoryDto.
+    private Long ownerGroupId;
+
     /**
      * Ordered list of the questions the admin selected, with the per-question
      * point value and display order. This is the single source of truth for
