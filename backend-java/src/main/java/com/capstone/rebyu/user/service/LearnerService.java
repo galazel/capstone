@@ -3,6 +3,9 @@ package com.capstone.rebyu.user.service;
 import com.capstone.rebyu.common.InvitationAcceptanceException;
 import com.capstone.rebyu.enrollment.entity.OrganizationCertificationLearner;
 import com.capstone.rebyu.enrollment.repository.OrganizationCertificationLearnerRepository;
+import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup;
+import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroupAssignee;
+import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupAssigneeRepository;
 import com.capstone.rebyu.notification.entity.LearnerInvitation;
 import com.capstone.rebyu.notification.repository.LearnerInvitationRepository;
 import com.capstone.rebyu.notification.service.InvitationTokenService;
@@ -37,6 +40,7 @@ public class LearnerService {
             organizationCertificationLearnerRepository;
     private final OrganizationCertificateRepository organizationCertificateRepository;
     private final InvitationTokenService invitationTokenService;
+    private final EnterpriseGroupAssigneeRepository enterpriseGroupAssigneeRepository;
 
     public List<LearnerDto> getAll() {
         return learnerRepository.findAll()
@@ -175,6 +179,24 @@ public class LearnerService {
                         .status(OrganizationCertificationLearner.Status.active)
                         .build();
         enrollment = organizationCertificationLearnerRepository.save(enrollment);
+
+        // The invitation was sent by a group leader for a specific group --
+        // place the newly-enrolled learner directly into it, so no separate
+        // "add to group" step is needed.
+        EnterpriseGroup group = invitation.getEnterpriseGroup();
+        if (group != null && invitation.getInvitedBy() != null) {
+            EnterpriseGroupAssignee assignee = EnterpriseGroupAssignee.builder()
+                    .enterpriseGroup(group)
+                    .orgCertLearner(enrollment)
+                    .assignedBy(invitation.getInvitedBy())
+                    .assignedAt(LocalDateTime.now())
+                    .status(EnterpriseGroupAssignee.Status.active)
+                    .role(EnterpriseGroupAssignee.Role.member)
+                    .build();
+            enterpriseGroupAssigneeRepository.save(assignee);
+            log.info("Learner {} placed into group {} via invitation {}",
+                    learner.getLearnerId(), group.getEnterpriseGroupId(), invitation.getInvitationId());
+        }
 
         // 18-19. Attach the learner and mark the invitation accepted.
         invitation.setLearner(learner);

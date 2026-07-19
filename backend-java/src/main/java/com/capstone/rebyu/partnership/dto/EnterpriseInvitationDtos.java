@@ -24,12 +24,16 @@ public final class EnterpriseInvitationDtos {
     ) {
     }
 
-    // enterpriseId is always overwritten server-side from the caller's JWT
-    // (see EnterpriseInvitationController.send) before this reaches the
-    // service, so it must stay nullable here -- the client never supplies it.
+    // enterpriseId/invitedByUserId are always overwritten server-side from the
+    // caller's JWT (see EnterpriseInvitationController.send) before this reaches
+    // the service, so they must stay nullable here -- the client never supplies
+    // them. Invitations are sent by a group's leader, not the enterprise at
+    // large, so the group (and the certification/slots it belongs to) is
+    // derived from enterpriseGroupId rather than an org-cert-wide picker.
     public record SendInvitationsRequest(
             Long enterpriseId,
-            @NotNull Long orgCertId,
+            Long invitedByUserId,
+            @NotNull Long enterpriseGroupId,
             @NotEmpty List<String> emails
     ) {
     }
@@ -39,6 +43,8 @@ public final class EnterpriseInvitationDtos {
             Long orgCertId,
             Long certificationId,
             String certificationTitle,
+            Long enterpriseGroupId,
+            String groupName,
             String email,
             String status,
             LocalDateTime sentAt,

@@ -34,6 +34,7 @@ class CognitoAuthServiceTest {
     private UserTypeRepository userTypeRepository;
     private LearnerRepository learnerRepository;
     private com.capstone.rebyu.organization.repository.EnterpriseMemberRepository enterpriseMemberRepository;
+    private com.capstone.rebyu.organization.repository.EnterpriseRepository enterpriseRepository;
     private CognitoIdentityProviderClient cognitoClient;
     private CognitoAuthService service;
 
@@ -46,12 +47,17 @@ class CognitoAuthServiceTest {
         learnerRepository = mock(LearnerRepository.class);
         enterpriseMemberRepository =
                 mock(com.capstone.rebyu.organization.repository.EnterpriseMemberRepository.class);
+        enterpriseRepository = mock(com.capstone.rebyu.organization.repository.EnterpriseRepository.class);
         cognitoClient = mock(CognitoIdentityProviderClient.class);
         when(enterpriseMemberRepository.findByUser_UserId(org.mockito.ArgumentMatchers.anyLong()))
                 .thenReturn(java.util.List.of());
+        // None of these test accounts are enterprise contacts -- ensureEnterpriseLinkage
+        // must be a no-op for them.
+        when(enterpriseRepository.findByPrimaryContactEmailIgnoreCase(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(Optional.empty());
         service = new CognitoAuthService(
                 userRepository, userTypeRepository, learnerRepository,
-                enterpriseMemberRepository, cognitoClient);
+                enterpriseMemberRepository, enterpriseRepository, cognitoClient);
     }
 
     private Jwt jwt() {

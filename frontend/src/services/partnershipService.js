@@ -42,10 +42,12 @@ export function getEnterpriseCertificationAccess(enterpriseId) {
   return base(`enterprise/certification-access?enterpriseId=${enterpriseId}`)
 }
 
-export function sendEnterpriseInvitations({ enterpriseId, orgCertId, emails }) {
+// Sent by a group's leader only -- enterpriseGroupId is required; the
+// certification/slots are derived server-side from the group.
+export function sendEnterpriseInvitations({ enterpriseGroupId, emails }) {
   return base("enterprise/invitations", {
     method: "POST",
-    data: { enterpriseId, orgCertId, emails },
+    data: { enterpriseGroupId, emails },
   })
 }
 
@@ -53,9 +55,8 @@ export function getEnterpriseInvitations(enterpriseId) {
   return base(`enterprise/invitations?enterpriseId=${enterpriseId}`)
 }
 
-export function cancelEnterpriseInvitation(invitationId, enterpriseId) {
-  return base(
-    `enterprise/invitations/${invitationId}/cancel?enterpriseId=${enterpriseId}`,
-    { method: "PUT" }
-  )
+// Only the invitation's own group leader may cancel it; enterpriseId is
+// resolved from the caller's JWT server-side, never a client param.
+export function cancelEnterpriseInvitation(invitationId) {
+  return base(`enterprise/invitations/${invitationId}/cancel`, { method: "PUT" })
 }

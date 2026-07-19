@@ -1,6 +1,10 @@
 package com.capstone.rebyu.partnership.service;
 
 import com.capstone.rebyu.common.BusinessRuleException;
+import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup;
+import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroupAuthority;
+import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupAuthorityRepository;
+import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupRepository;
 import com.capstone.rebyu.notification.entity.LearnerInvitation;
 import com.capstone.rebyu.notification.repository.LearnerInvitationRepository;
 import com.capstone.rebyu.notification.service.EmailService;
@@ -10,6 +14,7 @@ import com.capstone.rebyu.partnership.dto.EnterpriseInvitationDtos.Certification
 import com.capstone.rebyu.partnership.dto.EnterpriseInvitationDtos.InvitationDto;
 import com.capstone.rebyu.partnership.dto.EnterpriseInvitationDtos.SendInvitationsRequest;
 import com.capstone.rebyu.partnership.dto.EnterpriseInvitationDtos.SendInvitationsResponse;
+import com.capstone.rebyu.user.entity.User;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,8 +26,13 @@ import java.util.*;
 import java.util.regex.Pattern;
 
 /**
- * Transaction Three: an activated enterprise invites learners against its
- * organization's certification slots.
+ * Transaction Three: a group leader invites learners into their own assigned
+ * group, against the group's certification allocation slots.
+ *
+ * The enterprise account itself does not send invitations -- only the leader
+ * (an active EnterpriseGroupAuthority) of the target group may. The owner
+ * retains read-only visibility via {@link #listInvitations} and
+ * {@link #certificationAccess}.
  *
  * Slot reservation is protected against oversubscription by the optimistic
  * lock (@Version) on OrganizationCertificate: two concurrent invitation
@@ -41,6 +51,8 @@ public class EnterpriseInvitationService {
     private final LearnerInvitationRepository invitationRepository;
     private final EmailService emailService;
     private final com.capstone.rebyu.notification.service.InvitationTokenService invitationTokenService;
+    private final EnterpriseGroupRepository enterpriseGroupRepository;
+    private final EnterpriseGroupAuthorityRepository enterpriseGroupAuthorityRepository;
 
 
     @Transactional(readOnly = true)
@@ -79,15 +91,18 @@ public class EnterpriseInvitationService {
 
     @Transactional
     public SendInvitationsResponse sendInvitations(SendInvitationsRequest request) throws Exception {
-        OrganizationCertificate orgCert = organizationCertificateRepository
-                .findById(request.orgCertId())
+        EnterpriseGroup group = enterpriseGroupRepository.findById(request.enterpriseGroupId())
                 .orElseThrow(() -> new EntityNotFoundException(
-                        "Certification access not found: " + request.orgCertId()));
+                        "Group not found: " + request.enterpriseGroupId()));
 
-        // Ownership: the allocation must belong to the caller's organization.
-        if (!orgCert.getEnterprise().getEnterpriseId().equals(request.enterpriseId())) {
-            throw new EntityNotFoundException("Certification access not found: " + request.orgCertId());
+        // Ownership: the group must belong to the caller's organization.
+        if (group.getEnterprise() == null
+                || !group.getEnterprise().getEnterpriseId().equals(request.enterpriseId())) {
+            throw new EntityNotFoundException("Group not found: " + request.enterpriseGroupId());
         }
+        requireActiveLeader(group, request.invitedByUserId());
+
+        OrganizationCertificate orgCert = group.getOrgCert();
         if (orgCert.getStatus() != OrganizationCertificate.Status.active) {
             throw new BusinessRuleException.InvalidPartnershipRequestException(
                     "This certification access is not active.");
@@ -134,6 +149,8 @@ public class EnterpriseInvitationService {
 
             LearnerInvitation invitation = LearnerInvitation.builder()
                     .orgCert(orgCert)
+                    .enterpriseGroup(group)
+                    .invitedBy(User.builder().userId(request.invitedByUserId()).build())
                     .email(email)
                     .tokenHash(tokenHash)
                     .sentAt(now)
@@ -169,7 +186,7 @@ public class EnterpriseInvitationService {
     }
 
     @Transactional
-    public InvitationDto cancelInvitation(Long invitationId, Long enterpriseId) {
+    public InvitationDto cancelInvitation(Long invitationId, Long enterpriseId, Long callerUserId) {
         LearnerInvitation invitation = invitationRepository.findById(invitationId)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Invitation not found: " + invitationId));
@@ -178,6 +195,13 @@ public class EnterpriseInvitationService {
         if (!orgCert.getEnterprise().getEnterpriseId().equals(enterpriseId)) {
             throw new EntityNotFoundException("Invitation not found: " + invitationId);
         }
+        EnterpriseGroup group = invitation.getEnterpriseGroup();
+        if (group == null) {
+            // Pre-group-scoping invitation; no leader to attribute cancellation to.
+            throw new BusinessRuleException.InvalidPartnershipRequestException(
+                    "This invitation predates group scoping and cannot be cancelled here.");
+        }
+        requireActiveLeader(group, callerUserId);
 
         // Only a still-pending invitation frees a slot; accepted/expired/already
         // revoked invitations must not restore slots or go negative.
@@ -195,6 +219,15 @@ public class EnterpriseInvitationService {
         return toInvitationDto(invitation);
     }
 
+    /** Only an active authority (leader) of this group may send/cancel its invitations. */
+    private void requireActiveLeader(EnterpriseGroup group, Long userId) {
+        if (userId == null || !enterpriseGroupAuthorityRepository.existsByEnterpriseGroupAndUserAndStatus(
+                group, User.builder().userId(userId).build(), EnterpriseGroupAuthority.Status.active)) {
+            throw new BusinessRuleException.EnterpriseGroupRuleException(
+                    "Only this group's leader can manage its invitations.");
+        }
+    }
+
     private CertificationAccessDto toAccessDto(OrganizationCertificate orgCert) {
         int remaining = orgCert.getTotalSlots() - orgCert.getUsedSlots();
         return new CertificationAccessDto(
@@ -210,11 +243,14 @@ public class EnterpriseInvitationService {
 
     private InvitationDto toInvitationDto(LearnerInvitation invitation) {
         OrganizationCertificate orgCert = invitation.getOrgCert();
+        EnterpriseGroup group = invitation.getEnterpriseGroup();
         return new InvitationDto(
                 invitation.getInvitationId(),
                 orgCert.getOrgCertId(),
                 orgCert.getCertification().getCertificationId(),
                 orgCert.getCertification().getTitle(),
+                group != null ? group.getEnterpriseGroupId() : null,
+                group != null ? group.getGroupName() : null,
                 invitation.getEmail(),
                 invitation.getStatus().name(),
                 invitation.getSentAt(),

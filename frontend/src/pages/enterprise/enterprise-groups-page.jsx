@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react"
 import { useOutletContext } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Loader2, Plus, Trash2, UserCog, UserPlus, Users2, UsersRound } from "lucide-react"
+import { Loader2, Mail, Plus, Trash2, UserCog, UserPlus, Users2, UsersRound } from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -49,6 +49,7 @@ import {
   EnterprisePageHeader,
   EnterpriseStatusBadge,
 } from "@/components/enterprise/enterprise-ui.jsx"
+import { useAuth } from "@/context/auth-context.jsx"
 import {
   getLearnerDisplayName,
   useEnterpriseData,
@@ -67,6 +68,10 @@ import {
   removeEnterpriseGroupAssignee,
   removeEnterpriseGroupAuthority,
 } from "@/services/enterpriseService.js"
+import {
+  cancelEnterpriseInvitation,
+  sendEnterpriseInvitations,
+} from "@/services/partnershipService.js"
 
 function backendMessage(error, fallback) {
   return error?.response?.data?.message ?? fallback
@@ -220,8 +225,11 @@ function ManageGroupDialog({
   userById,
   assignments,
   learnerById,
+  invitations,
+  orgCertById,
 }) {
   const queryClient = useQueryClient()
+  const { user } = useAuth()
   const groupId = group?.enterpriseGroupId
   const [authorityUserId, setAuthorityUserId] = useState("")
   const [orgCertLearnerId, setOrgCertLearnerId] = useState("")
@@ -229,6 +237,7 @@ function ManageGroupDialog({
   const [inviteFirstName, setInviteFirstName] = useState("")
   const [inviteLastName, setInviteLastName] = useState("")
   const [inviteEmail, setInviteEmail] = useState("")
+  const [learnerInviteEmail, setLearnerInviteEmail] = useState("")
 
   const authoritiesQuery = useQuery({
     queryKey: ["enterprise-group-authorities", groupId],
@@ -249,6 +258,18 @@ function ManageGroupDialog({
 
   const activeAuthorities = authorities.filter((a) => a.status === "active")
   const activeAssignees = assignees.filter((a) => a.status === "active")
+
+  // Only this group's leader may invite/cancel its learner invitations -- the
+  // enterprise account itself is read-only here.
+  const isLeader = activeAuthorities.some((a) => a.userId === user?.userId)
+
+  const groupInvitations = (Array.isArray(invitations) ? invitations : []).filter(
+    (inv) => inv.enterpriseGroupId === groupId
+  )
+  const pendingGroupInvitations = groupInvitations.filter((inv) => inv.status === "PENDING")
+
+  const orgCert = orgCertById?.get(group?.orgCertId)
+  const remainingSlots = orgCert?.remainingSlots ?? 0
 
   const assignedOrgCertLearnerIds = new Set(
     activeAssignees.map((a) => a.orgCertLearnerId)
@@ -303,6 +324,33 @@ function ManageGroupDialog({
     },
     onError: (err) =>
       toast.error(backendMessage(err, "Unable to create this account.")),
+  })
+
+  const inviteLearnerMutation = useMutation({
+    mutationFn: () =>
+      sendEnterpriseInvitations({
+        enterpriseGroupId: groupId,
+        emails: [learnerInviteEmail.trim()],
+      }),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ["enterprise-overview"] })
+      toast.success(
+        `${response.created} invitation(s) sent.` +
+          (response.skipped?.length ? ` ${response.skipped.length} skipped.` : "")
+      )
+      setLearnerInviteEmail("")
+    },
+    onError: (err) =>
+      toast.error(backendMessage(err, "Unable to send this invitation.")),
+  })
+
+  const cancelInvitationMutation = useMutation({
+    mutationFn: (invitationId) => cancelEnterpriseInvitation(invitationId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["enterprise-overview"] })
+      toast.success("Invitation cancelled. Slot restored.")
+    },
+    onError: (err) => toast.error(backendMessage(err, "Unable to cancel this invitation.")),
   })
 
   const removeAuthorityMutation = useMutation({
@@ -503,6 +551,74 @@ function ManageGroupDialog({
             )}
           </section>
 
+          {/* Invitations */}
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Mail className="size-4 text-muted-foreground" aria-hidden="true" />
+              <h3 className="text-sm font-medium">
+                Learner invitations ({remainingSlots} slot{remainingSlots === 1 ? "" : "s"} left)
+              </h3>
+            </div>
+
+            {isLeader ? (
+              <div className="flex gap-2">
+                <Input
+                  type="email"
+                  value={learnerInviteEmail}
+                  onChange={(e) => setLearnerInviteEmail(e.target.value)}
+                  placeholder="learner@example.com"
+                  disabled={remainingSlots <= 0}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => inviteLearnerMutation.mutate()}
+                  disabled={
+                    !learnerInviteEmail.trim() ||
+                    remainingSlots <= 0 ||
+                    inviteLearnerMutation.isPending
+                  }
+                >
+                  <Plus className="size-4" aria-hidden="true" />
+                  Invite
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Only this group's leader can invite learners.
+              </p>
+            )}
+
+            {groupInvitations.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No invitations sent yet.</p>
+            ) : (
+              <ul className="divide-y rounded-lg border">
+                {groupInvitations.map((inv) => (
+                  <li
+                    key={inv.invitationId}
+                    className="flex items-center justify-between gap-2 px-3 py-2"
+                  >
+                    <span className="flex items-center gap-2 text-sm">
+                      {inv.email}
+                      <EnterpriseStatusBadge status={inv.status} />
+                    </span>
+                    {isLeader && inv.status === "PENDING" ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => cancelInvitationMutation.mutate(inv.invitationId)}
+                        disabled={cancelInvitationMutation.isPending}
+                      >
+                        <Trash2 className="size-4" aria-hidden="true" />
+                        Cancel
+                      </Button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
           {/* Learners */}
           <section className="space-y-3">
             <div className="flex items-center gap-2">
@@ -512,38 +628,44 @@ function ManageGroupDialog({
               </h3>
             </div>
 
-            <div className="flex gap-2">
-              <Select value={orgCertLearnerId} onValueChange={setOrgCertLearnerId}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Add a learner with access to this certification" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableLearners.length === 0 ? (
-                    <SelectItem value="none" disabled>
-                      No eligible learners
-                    </SelectItem>
-                  ) : (
-                    availableLearners.map((assignment) => (
-                      <SelectItem
-                        key={assignment.orgCertLearnerId}
-                        value={String(assignment.orgCertLearnerId)}
-                      >
-                        {getLearnerDisplayName(learnerById.get(assignment.learnerId))}
+            {isLeader ? (
+              <div className="flex gap-2">
+                <Select value={orgCertLearnerId} onValueChange={setOrgCertLearnerId}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Add a learner with access to this certification" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableLearners.length === 0 ? (
+                      <SelectItem value="none" disabled>
+                        No eligible learners
                       </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => addLearnerMutation.mutate()}
-                disabled={!orgCertLearnerId || addLearnerMutation.isPending}
-              >
-                <Plus className="size-4" aria-hidden="true" />
-                Add
-              </Button>
-            </div>
+                    ) : (
+                      availableLearners.map((assignment) => (
+                        <SelectItem
+                          key={assignment.orgCertLearnerId}
+                          value={String(assignment.orgCertLearnerId)}
+                        >
+                          {getLearnerDisplayName(learnerById.get(assignment.learnerId))}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => addLearnerMutation.mutate()}
+                  disabled={!orgCertLearnerId || addLearnerMutation.isPending}
+                >
+                  <Plus className="size-4" aria-hidden="true" />
+                  Add
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Only this group's leader manages its learner roster.
+              </p>
+            )}
 
             {assigneesQuery.isLoading ? (
               <p className="text-sm text-muted-foreground">Loading learners...</p>
@@ -564,32 +686,34 @@ function ManageGroupDialog({
                         {getLearnerDisplayName(learnerById.get(assignee.learnerId))}
                         {isLead ? <Badge variant="secondary">Lead</Badge> : null}
                       </span>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            changeRoleMutation.mutate({
-                              assigneeId: assignee.enterpriseGroupAssigneeId,
-                              role: isLead ? "member" : "lead",
-                            })
-                          }
-                          disabled={changeRoleMutation.isPending}
-                        >
-                          {isLead ? "Make member" : "Make lead"}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            removeLearnerMutation.mutate(assignee.enterpriseGroupAssigneeId)
-                          }
-                          disabled={removeLearnerMutation.isPending}
-                        >
-                          <Trash2 className="size-4" aria-hidden="true" />
-                          Remove
-                        </Button>
-                      </div>
+                      {isLeader ? (
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              changeRoleMutation.mutate({
+                                assigneeId: assignee.enterpriseGroupAssigneeId,
+                                role: isLead ? "member" : "lead",
+                              })
+                            }
+                            disabled={changeRoleMutation.isPending}
+                          >
+                            {isLead ? "Make member" : "Make lead"}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              removeLearnerMutation.mutate(assignee.enterpriseGroupAssigneeId)
+                            }
+                            disabled={removeLearnerMutation.isPending}
+                          >
+                            <Trash2 className="size-4" aria-hidden="true" />
+                            Remove
+                          </Button>
+                        </div>
+                      ) : null}
                     </li>
                   )
                 })}
@@ -746,6 +870,8 @@ export default function EnterpriseGroupsPage() {
         userById={userById}
         assignments={data.assignments}
         learnerById={data.learnerById}
+        invitations={data.invitations}
+        orgCertById={data.orgCertById}
       />
 
       <ArchiveGroupDialog

@@ -1,8 +1,10 @@
 package com.capstone.rebyu.notification.entity;
 
 
+import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup;
 import com.capstone.rebyu.organization.entity.OrganizationCertificate;
 import com.capstone.rebyu.user.entity.Learner;
+import com.capstone.rebyu.user.entity.User;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -34,6 +36,19 @@ public class LearnerInvitation {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "learner_id")
     private Learner learner;
+
+    // The group this invitation places the learner into on acceptance. Nullable
+    // only for invitations sent before groups scoped this flow; every new
+    // invitation is sent by (and requires) a group leader.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "enterprise_group_id")
+    private EnterpriseGroup enterpriseGroup;
+
+    // The group leader who sent this invitation -- used to attribute the
+    // resulting EnterpriseGroupAssignee row on acceptance.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "invited_by")
+    private User invitedBy;
 
     @Column(nullable = false, length = 254)
     private String email;

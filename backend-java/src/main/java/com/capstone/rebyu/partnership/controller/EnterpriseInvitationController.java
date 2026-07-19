@@ -35,16 +35,19 @@ public class EnterpriseInvitationController {
         return invitationService.certificationAccess(myEnterpriseId(jwt));
     }
 
+    // Only the target group's leader may send its invitations -- the
+    // enterprise account itself does not invite learners directly.
     @PostMapping("/invitations")
     public SendInvitationsResponse send(
             @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody SendInvitationsRequest request) throws Exception {
-        Long enterpriseId = myEnterpriseId(jwt);
+        CurrentUserDto caller = currentUser(jwt);
         SendInvitationsRequest trusted = new SendInvitationsRequest(
-                enterpriseId, request.orgCertId(), request.emails());
+                requireEnterpriseId(caller), caller.userId(), request.enterpriseGroupId(), request.emails());
         return invitationService.sendInvitations(trusted);
     }
 
+    /** Read-only across the whole organization -- the owner keeps visibility here. */
     @GetMapping("/invitations")
     public List<InvitationDto> list(@AuthenticationPrincipal Jwt jwt) {
         return invitationService.listInvitations(myEnterpriseId(jwt));
@@ -54,14 +57,22 @@ public class EnterpriseInvitationController {
     public InvitationDto cancel(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable Long invitationId) {
-        return invitationService.cancelInvitation(invitationId, myEnterpriseId(jwt));
+        CurrentUserDto caller = currentUser(jwt);
+        return invitationService.cancelInvitation(invitationId, requireEnterpriseId(caller), caller.userId());
     }
 
     private Long myEnterpriseId(Jwt jwt) {
+        return requireEnterpriseId(currentUser(jwt));
+    }
+
+    private CurrentUserDto currentUser(Jwt jwt) {
         if (jwt == null) {
             throw new IllegalArgumentException("Authentication is required");
         }
-        CurrentUserDto user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
+        return auth.syncCurrentUser(jwt, jwt.getTokenValue());
+    }
+
+    private Long requireEnterpriseId(CurrentUserDto user) {
         if (user.enterpriseId() == null) {
             throw new IllegalArgumentException("An enterprise account is required");
         }
