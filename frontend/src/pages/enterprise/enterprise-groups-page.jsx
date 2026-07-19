@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react"
 import { useOutletContext } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Loader2, Plus, Trash2, UserCog, Users2, UsersRound } from "lucide-react"
+import { Loader2, Plus, Trash2, UserCog, UserPlus, Users2, UsersRound } from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -62,7 +62,8 @@ import {
   getEnterpriseGroupAssignees,
   getEnterpriseGroupAuthorities,
   getEnterpriseGroups,
-  getEnterpriseMembers,
+  getMyEnterpriseMembers,
+  inviteEnterpriseMember,
   removeEnterpriseGroupAssignee,
   removeEnterpriseGroupAuthority,
 } from "@/services/enterpriseService.js"
@@ -224,6 +225,10 @@ function ManageGroupDialog({
   const groupId = group?.enterpriseGroupId
   const [authorityUserId, setAuthorityUserId] = useState("")
   const [orgCertLearnerId, setOrgCertLearnerId] = useState("")
+  const [showInviteForm, setShowInviteForm] = useState(false)
+  const [inviteFirstName, setInviteFirstName] = useState("")
+  const [inviteLastName, setInviteLastName] = useState("")
+  const [inviteEmail, setInviteEmail] = useState("")
 
   const authoritiesQuery = useQuery({
     queryKey: ["enterprise-group-authorities", groupId],
@@ -274,6 +279,30 @@ function ManageGroupDialog({
     },
     onError: (err) =>
       toast.error(backendMessage(err, "Unable to assign this authority.")),
+  })
+
+  const inviteMemberMutation = useMutation({
+    mutationFn: () =>
+      inviteEnterpriseMember({
+        firstName: inviteFirstName.trim(),
+        lastName: inviteLastName.trim(),
+        email: inviteEmail.trim(),
+        memberRole: "manager",
+      }),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["enterprise-members"] })
+      toast.success(
+        result?.emailed
+          ? `Account created — login credentials were emailed to ${inviteEmail.trim()}.`
+          : (result?.note ?? "Account created.")
+      )
+      setInviteFirstName("")
+      setInviteLastName("")
+      setInviteEmail("")
+      setShowInviteForm(false)
+    },
+    onError: (err) =>
+      toast.error(backendMessage(err, "Unable to create this account.")),
   })
 
   const removeAuthorityMutation = useMutation({
@@ -372,6 +401,75 @@ function ManageGroupDialog({
                 Assign
               </Button>
             </div>
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => setShowInviteForm((prev) => !prev)}
+            >
+              <UserPlus className="size-4" aria-hidden="true" />
+              {showInviteForm ? "Cancel" : "This person doesn't have an account yet"}
+            </Button>
+
+            {showInviteForm ? (
+              <div className="space-y-3 rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground">
+                  Create a new login account for a group leader. They'll receive their
+                  username and a temporary password by email.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="invite-first-name">First name</Label>
+                    <Input
+                      id="invite-first-name"
+                      value={inviteFirstName}
+                      onChange={(e) => setInviteFirstName(e.target.value)}
+                      placeholder="Juan"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="invite-last-name">Last name</Label>
+                    <Input
+                      id="invite-last-name"
+                      value={inviteLastName}
+                      onChange={(e) => setInviteLastName(e.target.value)}
+                      placeholder="Dela Cruz"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="invite-email">Email</Label>
+                  <Input
+                    id="invite-email"
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="leader@example.com"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => inviteMemberMutation.mutate()}
+                  disabled={
+                    !inviteFirstName.trim() ||
+                    !inviteLastName.trim() ||
+                    !inviteEmail.trim() ||
+                    inviteMemberMutation.isPending
+                  }
+                >
+                  {inviteMemberMutation.isPending ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                      Creating account...
+                    </>
+                  ) : (
+                    "Create account"
+                  )}
+                </Button>
+              </div>
+            ) : null}
 
             {authoritiesQuery.isLoading ? (
               <p className="text-sm text-muted-foreground">Loading authorities...</p>
@@ -524,7 +622,7 @@ export default function EnterpriseGroupsPage() {
 
   const membersQuery = useQuery({
     queryKey: ["enterprise-members", enterpriseId],
-    queryFn: () => getEnterpriseMembers(enterpriseId),
+    queryFn: () => getMyEnterpriseMembers(),
     enabled: enterpriseId != null,
     retry: 1,
   })

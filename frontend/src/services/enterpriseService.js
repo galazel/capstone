@@ -20,8 +20,25 @@ export function updateEnterprise(enterpriseId, enterprise) {
   return base(`enterprises/${enterpriseId}`, { method: "PUT", data: enterprise })
 }
 
+// Admin-only (kept for the admin org-detail view). The enterprise portal must
+// use getMyEnterpriseMembers below instead -- this one 403s for a real
+// enterprise caller.
 export function getEnterpriseMembers(enterpriseId) {
   return base(`enterprise-members/enterprise/${enterpriseId}`)
+}
+
+// Every member of the caller's OWN organization, scoped to the JWT.
+export function getMyEnterpriseMembers() {
+  return base("enterprise/me/members")
+}
+
+// Creates a brand-new login account for someone to manage on the org's
+// behalf (e.g. a group leader). Cognito emails them their credentials.
+export function inviteEnterpriseMember({ firstName, lastName, email, memberRole }) {
+  return base("enterprise/me/members", {
+    method: "POST",
+    data: { firstName, lastName, email, memberRole },
+  })
 }
 
 // Tenant-scoped portal snapshot: org certs, learner assignments, learner summaries,
