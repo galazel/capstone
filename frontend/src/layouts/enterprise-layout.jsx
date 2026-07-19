@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from "react"
+import { useMemo } from "react"
 import { Outlet, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { LogOutIcon, SettingsIcon, UserIcon } from "lucide-react"
@@ -13,13 +13,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { getEnterpriseById } from "@/services/enterpriseService.js"
+import { getMyEnterpriseProfile } from "@/services/enterpriseService.js"
 import { useAuth } from "@/context/auth-context.jsx"
 import { getEnterpriseInvitations } from "@/services/partnershipService.js"
 import { NotificationBell } from "@/components/notification-bell.jsx"
 import { usePortalTheme } from "@/hooks/use-portal-theme.js"
 import { PortalThemeToggle } from "@/components/portal-theme-toggle"
-import { base } from "@/services/base.js"
 
 function getInitials(name = "") {
   return (
@@ -40,17 +39,9 @@ export default function EnterpriseLayout() {
   // enterpriseId from /api/auth/me.
   const authEnterpriseId = user?.enterpriseId ?? null
 
-  // Auto-link orphaned enterprise account on first load
-  useEffect(() => {
-    if (user) {
-      base("admin/fix-my-enterprise-account", { method: "POST" })
-        .catch(err => console.warn("Enterprise account already linked or error:", err.message))
-    }
-  }, [user])
-
   const scopedQuery = useQuery({
     queryKey: ["enterprise", authEnterpriseId],
-    queryFn: () => getEnterpriseById(authEnterpriseId),
+    queryFn: () => getMyEnterpriseProfile(),
     enabled: authEnterpriseId != null,
     staleTime: 60_000,
     retry: 1,

@@ -1,6 +1,9 @@
 package com.capstone.rebyu.auth.service;
 
 import com.capstone.rebyu.auth.dto.CurrentUserDto;
+import com.capstone.rebyu.organization.entity.Enterprise;
+import com.capstone.rebyu.organization.entity.EnterpriseMember;
+import com.capstone.rebyu.organization.repository.EnterpriseRepository;
 import com.capstone.rebyu.user.entity.Learner;
 import com.capstone.rebyu.user.entity.User;
 import com.capstone.rebyu.user.entity.UserType;
@@ -38,11 +41,13 @@ import java.util.stream.Collectors;
 public class CognitoAuthService {
 
     public static final String LEARNER_USER_TYPE = "LEARNER";
+    public static final String ENTERPRISE_USER_TYPE = "ENTERPRISE";
 
     private final UserRepository userRepository;
     private final UserTypeRepository userTypeRepository;
     private final LearnerRepository learnerRepository;
     private final com.capstone.rebyu.organization.repository.EnterpriseMemberRepository enterpriseMemberRepository;
+    private final EnterpriseRepository enterpriseRepository;
     private final CognitoIdentityProviderClient cognitoClient;
 
     @Transactional
@@ -51,6 +56,7 @@ public class CognitoAuthService {
 
         User existing = userRepository.findByCognitoSub(cognitoSub).orElse(null);
         if (existing != null) {
+            ensureEnterpriseLinkage(existing);
             return toDto(existing);
         }
 
@@ -64,7 +70,9 @@ public class CognitoAuthService {
         }
 
         try {
-            return toDto(linkOrProvision(cognitoSub, email, attributes));
+            User user = linkOrProvision(cognitoSub, email, attributes);
+            ensureEnterpriseLinkage(user);
+            return toDto(user);
         } catch (DataIntegrityViolationException raceLost) {
             // A parallel first-login request linked this subject already.
             return userRepository.findByCognitoSub(cognitoSub)
@@ -138,6 +146,64 @@ public class CognitoAuthService {
             candidate = base + "-" + UUID.randomUUID().toString().substring(0, 6);
         }
         return candidate;
+    }
+
+    /**
+     * Self-heals enterprise account linkage on sign-in. When a validated user's
+     * email matches an Enterprise's primary contact (i.e. an admin-approved
+     * partnership created that organization for this email), make sure the
+     * account is typed ENTERPRISE and linked to that organization as its owner.
+     *
+     * Without this, the first sign-in of an approved enterprise contact falls
+     * through {@link #linkOrProvision} and is provisioned as a plain LEARNER with
+     * no EnterpriseMember row — so enterpriseId never resolves and the enterprise
+     * portal shows "Unable to load your organization". This runs on every sync,
+     * so it also repairs accounts that were already mis-provisioned.
+     */
+    private void ensureEnterpriseLinkage(User user) {
+        if (user == null || user.getEmail() == null || user.getEmail().isBlank()) {
+            return;
+        }
+        Enterprise enterprise = enterpriseRepository
+                .findByPrimaryContactEmailIgnoreCase(user.getEmail())
+                .orElse(null);
+        if (enterprise == null) {
+            return; // Not an enterprise contact — leave as a learner.
+        }
+
+        // 1) Ensure the account is typed ENTERPRISE so role resolution returns
+        //    ENTERPRISE instead of the default LEARNER.
+        boolean isEnterpriseType = user.getUserType() != null
+                && ENTERPRISE_USER_TYPE.equalsIgnoreCase(user.getUserType().getUserTypeText());
+        if (!isEnterpriseType) {
+            UserType enterpriseType = userTypeRepository.findByUserTypeText(ENTERPRISE_USER_TYPE)
+                    .orElseGet(() -> {
+                        UserType type = new UserType();
+                        type.setUserTypeText(ENTERPRISE_USER_TYPE);
+                        return userTypeRepository.save(type);
+                    });
+            user.setUserType(enterpriseType);
+            userRepository.save(user);
+        }
+
+        // 2) Ensure an owner EnterpriseMember link exists so the portal can scope
+        //    to this organization.
+        boolean alreadyLinked = !enterpriseMemberRepository
+                .findByEnterprise_EnterpriseIdAndUser_UserId(
+                        enterprise.getEnterpriseId(), user.getUserId())
+                .isEmpty();
+        if (!alreadyLinked) {
+            EnterpriseMember member = EnterpriseMember.builder()
+                    .enterprise(enterprise)
+                    .user(user)
+                    .memberRole(EnterpriseMember.MemberRole.owner)
+                    .isPrimaryContact(true)
+                    .joinedAt(LocalDateTime.now())
+                    .build();
+            enterpriseMemberRepository.save(member);
+            log.info("Linked enterprise account {} to enterprise {} (id={}) on sign-in",
+                    user.getEmail(), enterprise.getEnterpriseName(), enterprise.getEnterpriseId());
+        }
     }
 
     private CurrentUserDto toDto(User user) {

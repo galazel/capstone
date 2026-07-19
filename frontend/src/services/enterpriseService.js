@@ -9,6 +9,13 @@ export function getEnterpriseById(enterpriseId) {
   return base(`enterprises/${enterpriseId}`)
 }
 
+// The caller's OWN organization profile, scoped to the JWT (no admin required).
+// The enterprise portal must use this instead of getEnterpriseById, which is
+// an admin-only endpoint.
+export function getMyEnterpriseProfile() {
+  return base("enterprise/me/profile")
+}
+
 export function updateEnterprise(enterpriseId, enterprise) {
   return base(`enterprises/${enterpriseId}`, { method: "PUT", data: enterprise })
 }

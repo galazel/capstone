@@ -4,6 +4,8 @@ import com.capstone.rebyu.assessment.dto.ExamResultDto;
 import com.capstone.rebyu.auth.dto.CurrentUserDto;
 import com.capstone.rebyu.auth.service.CognitoAuthService;
 import com.capstone.rebyu.enterprise.dto.EnterprisePortalDtos.OverviewDto;
+import com.capstone.rebyu.organization.dto.EnterpriseDto;
+import com.capstone.rebyu.organization.service.EnterpriseService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -21,7 +23,14 @@ import java.util.List;
 public class EnterprisePortalController {
 
     private final EnterprisePortalService portalService;
+    private final EnterpriseService enterpriseService;
     private final CognitoAuthService auth;
+
+    /** The caller's own organization profile (name, contact, address, etc.). */
+    @GetMapping("/profile")
+    public EnterpriseDto profile(@AuthenticationPrincipal Jwt jwt) {
+        return enterpriseService.getById(myEnterpriseId(jwt));
+    }
 
     @GetMapping("/overview")
     public OverviewDto overview(@AuthenticationPrincipal Jwt jwt) {
