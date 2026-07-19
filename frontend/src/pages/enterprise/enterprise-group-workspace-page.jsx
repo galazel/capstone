@@ -9,6 +9,7 @@ import {
   ClipboardCheckIcon,
   FileQuestionIcon,
   FolderTree,
+  Layers3,
   Loader2,
   MailIcon,
   MegaphoneIcon,
@@ -58,20 +59,114 @@ function asArray(value) {
   return Array.isArray(value) ? value : []
 }
 
-function lessonCount(certification) {
-  return (certification?.majorCategory ?? []).reduce(
-    (total, major) =>
-      total +
-      (major.middleCategory ?? []).reduce(
-        (moduleTotal, module) => moduleTotal + (module.lessons?.length ?? 0),
-        0
-      ),
-    0
+function backendMessage(error, fallback) {
+  return error?.response?.data?.message ?? fallback
+}
+
+function lessonTitle(lesson) {
+  return lesson?.name ?? lesson?.title ?? "Untitled lesson"
+}
+
+/**
+ * Read-only rendering of the official curriculum, mirroring the admin's
+ * ViewCertificationAdmin design (numbered "Major Category N:" headings,
+ * collapsible middle-category cards, numbered lesson rows) so the curriculum
+ * looks the same in both places. No edit/create actions here -- an Enterprise
+ * Member views the official curriculum but cannot change it.
+ */
+function OfficialMiddleCard({ middleCategory }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const lessons = middleCategory.lessons ?? []
+
+  return (
+    <article className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md">
+      <button
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        aria-expanded={isOpen}
+        className="flex w-full items-center justify-between gap-4 px-5 py-5 text-left transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      >
+        <div className="min-w-0">
+          <h3 className="truncate font-heading text-base font-bold text-foreground">
+            {middleCategory.title}
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Middle Category · {lessons.length} {lessons.length === 1 ? "lesson" : "lessons"}
+          </p>
+        </div>
+        <span
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all ${
+            isOpen ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+          }`}
+        >
+          {isOpen ? (
+            <ChevronDown className="h-4 w-4" />
+          ) : (
+            <ChevronRight className="h-4 w-4" />
+          )}
+        </span>
+      </button>
+
+      {isOpen ? (
+        <div className="border-t border-border bg-muted/20 px-5 py-4">
+          {lessons.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
+              No lessons have been added yet.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {lessons.map((lesson, lessonIndex) => (
+                <div
+                  key={lesson.lessonId ?? lessonIndex}
+                  className="flex items-center gap-3 rounded-xl border border-transparent bg-background px-4 py-3"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-xs font-bold text-muted-foreground">
+                    {lessonIndex + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-foreground">
+                      {lessonTitle(lesson)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">Lesson {lessonIndex + 1}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
+    </article>
   )
 }
 
-function backendMessage(error, fallback) {
-  return error?.response?.data?.message ?? fallback
+function OfficialMajorSection({ majorCategory, majorIndex }) {
+  const middleCategories = majorCategory.middleCategory ?? []
+
+  return (
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="font-heading text-lg font-bold text-foreground">
+          <span className="text-primary">Major Category {majorIndex + 1}:</span>{" "}
+          {majorCategory.title}
+        </p>
+      </div>
+
+      {middleCategories.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-card p-6 text-sm text-muted-foreground">
+          No middle categories under this major category.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {middleCategories.map((middleCategory, middleIndex) => (
+            <OfficialMiddleCard
+              key={middleCategory.middleCategoryId ?? middleIndex}
+              middleCategory={middleCategory}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  )
 }
 
 function AnnouncementsTab({ groupId }) {
@@ -876,8 +971,19 @@ export default function EnterpriseGroupWorkspacePage() {
       item.certificationId === group.orgCert?.certificationId
   )
   const learners = (assigneesQuery.data ?? []).filter((item) => item.status === "active")
-  const modules = (certification?.majorCategory ?? []).flatMap(
-    (major) => major.middleCategory ?? []
+  // The official curriculum tree excludes this group's own authored content
+  // (that lives in the Content tab); only platform-wide majors appear here.
+  const officialMajors = (certification?.majorCategory ?? []).filter(
+    (major) => major.ownerGroupId == null
+  )
+  const officialLessonCount = officialMajors.reduce(
+    (total, major) =>
+      total +
+      (major.middleCategory ?? []).reduce(
+        (moduleTotal, module) => moduleTotal + (module.lessons?.length ?? 0),
+        0
+      ),
+    0
   )
 
   const examTypeById = new Map(
@@ -917,32 +1023,41 @@ export default function EnterpriseGroupWorkspacePage() {
 
         {/*
         */}
-        <TabsContent value="curriculum" className="mt-5 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>{certification?.title ?? "Official curriculum"}</CardTitle>
-              <CardDescription>
-                Read-only certification guide with {lessonCount(certification)} lesson(s).
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {modules.length ? (
-                modules.map((module, index) => (
-                  <div key={module.middleCategoryId ?? index} className="rounded-lg border p-3">
-                    <p className="font-medium">{module.title}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {(module.lessons ?? []).map((lesson) => lesson.name).join(" · ") ||
-                        "No lessons yet."}
-                    </p>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No curriculum is available for this certification yet.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+        <TabsContent value="curriculum" className="mt-5 space-y-6">
+          <div>
+            <p className="text-sm font-medium text-primary">Certification curriculum</p>
+            <h2 className="mt-1 font-heading text-2xl font-bold tracking-tight text-foreground">
+              {certification?.title ?? "Course Modules"}
+            </h2>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+              Read-only guide to the major categories, modules, and lessons under this
+              certification — {officialLessonCount} lesson(s) in total.
+            </p>
+          </div>
+
+          {officialMajors.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-border bg-card p-12 text-center shadow-sm">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <Layers3 className="h-7 w-7" />
+              </div>
+              <h3 className="mt-5 font-heading text-lg font-bold text-foreground">
+                No curriculum yet
+              </h3>
+              <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
+                No curriculum is available for this certification yet.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-10">
+              {officialMajors.map((majorCategory, majorIndex) => (
+                <OfficialMajorSection
+                  key={majorCategory.majorCategoryId ?? majorIndex}
+                  majorCategory={majorCategory}
+                  majorIndex={majorIndex}
+                />
+              ))}
+            </div>
+          )}
 
           <Card>
             <CardHeader>
