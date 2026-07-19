@@ -3693,6 +3693,7 @@ OUTPUT RULES:
                                             <TableHead>Lesson</TableHead>
                                             <TableHead>Difficulty</TableHead>
                                             <TableHead>Status</TableHead>
+                                            <TableHead>Added by</TableHead>
                                             <TableHead>Updated</TableHead>
 
                                             <TableHead className="text-right">Actions</TableHead>
@@ -3705,7 +3706,7 @@ OUTPUT RULES:
                                         isQuestionsError ||
                                         paginatedQuestions.length === 0 ? (
                                             <TableRow>
-                                                <TableCell colSpan={7} className="h-[390px]">
+                                                <TableCell colSpan={8} className="h-[390px]">
                                                     <div className="flex h-full flex-col items-center justify-center px-6 text-center">
                                                         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
                                                             <FileQuestion className="h-5 w-5 text-muted-foreground" />
@@ -3771,6 +3772,10 @@ OUTPUT RULES:
 
                                                         <TableCell>
                                                             <Badge variant="outline">Saved</Badge>
+                                                        </TableCell>
+
+                                                        <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground">
+                                                            {question.createdByEmail ?? "Platform"}
                                                         </TableCell>
 
                                                         <TableCell className="text-muted-foreground">
