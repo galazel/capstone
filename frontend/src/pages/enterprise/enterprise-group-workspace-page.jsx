@@ -2,7 +2,6 @@ import { useRef, useState } from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
-  ArrowLeftIcon,
   BookOpen,
   ChevronDown,
   ChevronRight,
@@ -43,6 +42,7 @@ import {
   EnterpriseEmptyState,
   EnterpriseErrorState,
   EnterpriseLoadingSkeleton,
+  EnterpriseMemberSubNav,
   EnterprisePageHeader,
   EnterpriseStatusBadge,
   formatDateTime,
@@ -1164,13 +1164,7 @@ export default function EnterpriseGroupWorkspacePage() {
 
   return (
     <div className="space-y-6">
-      <Link
-        to="/enterprise/member"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeftIcon className="size-4" />
-        My groups
-      </Link>
+      <EnterpriseMemberSubNav />
       <EnterprisePageHeader
         title={group.groupName}
         subtitle={group.groupDescription || "Your assigned group workspace."}

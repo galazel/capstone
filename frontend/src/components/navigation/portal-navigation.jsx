@@ -113,19 +113,6 @@ const enterpriseGroups = [
   },
 ]
 
-// Enterprise Members (group leaders) only ever act within their assigned
-// groups, so their nav is just that -- never the institution-wide Learners /
-// Certifications / Question Bank / Organization pages.
-const enterpriseMemberGroups = [
-  {
-    label: "Workspace",
-    items: [
-      { label: "My Groups", href: "/enterprise/member", icon: UsersRound },
-      { label: "Files", href: "/enterprise/files", icon: Files },
-    ],
-  },
-]
-
 function pathMatches(pathname, item) {
   const candidates = item.match ?? [item.href]
   return candidates.some((path) => pathname === path || (path !== "/admin" && pathname.startsWith(`${path}/`)))
@@ -209,10 +196,15 @@ export function PortalTopNavigation({ role, actions, organizationName, enterpris
   const location = useLocation()
   const [commandOpen, setCommandOpen] = useState(false)
   const isEnterpriseOwner = enterpriseMemberRole === "owner"
+  // An Enterprise Member (group leader, non-owner) only ever acts within
+  // their own assigned groups' workspace pages -- that navigation lives on
+  // the page itself now (see enterprise-member-dashboard-page.jsx /
+  // enterprise-group-workspace-page.jsx), not in this header, and the
+  // command-K search bar is hidden for them too since there's nothing
+  // institution-wide left for it to search.
+  const isEnterpriseMember = role === "ENTERPRISE" && !isEnterpriseOwner
   const allGroups = role === "ADMIN" ? adminGroups : enterpriseGroups
-  const groups = role === "ENTERPRISE" && !isEnterpriseOwner
-    ? enterpriseMemberGroups
-    : allGroups
+  const groups = isEnterpriseMember ? [] : allGroups
   const commandItems = role === "LEARNER" ? learnerNavigation.map((item) => ({ ...item, group: "Learner" })) : groups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.label })))
 
   useEffect(() => {
@@ -233,14 +225,20 @@ export function PortalTopNavigation({ role, actions, organizationName, enterpris
           </nav>
           {organizationName ? <span className="hidden max-w-48 truncate text-xs text-muted-foreground xl:block">{organizationName}</span> : null}
           <div className="ml-auto flex items-center gap-1.5">
-            <Button variant="outline" className="hidden h-9 min-w-44 justify-start gap-2 text-muted-foreground md:flex" onClick={() => setCommandOpen(true)}><Search className="size-4" /><span className="flex-1 text-left">Search REBYU</span><kbd className="text-[10px]">Ctrl K</kbd></Button>
-            <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setCommandOpen(true)} aria-label="Search REBYU"><Search /></Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open navigation"><Menu /></Button></DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-72 p-2">
-                {(role === "LEARNER" ? [{ label: "Navigation", items: learnerNavigation }] : groups).map((group, index) => <div key={group.label}><DropdownMenuLabel>{group.label}</DropdownMenuLabel>{group.items.map((item) => <NavigationMenuItem key={item.href} item={item} />)}{index < (role === "LEARNER" ? 0 : groups.length - 1) ? <DropdownMenuSeparator /> : null}</div>)}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {!isEnterpriseMember ? (
+              <>
+                <Button variant="outline" className="hidden h-9 min-w-44 justify-start gap-2 text-muted-foreground md:flex" onClick={() => setCommandOpen(true)}><Search className="size-4" /><span className="flex-1 text-left">Search REBYU</span><kbd className="text-[10px]">Ctrl K</kbd></Button>
+                <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setCommandOpen(true)} aria-label="Search REBYU"><Search /></Button>
+              </>
+            ) : null}
+            {groups.length > 0 || role === "LEARNER" ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open navigation"><Menu /></Button></DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-72 p-2">
+                  {(role === "LEARNER" ? [{ label: "Navigation", items: learnerNavigation }] : groups).map((group, index) => <div key={group.label}><DropdownMenuLabel>{group.label}</DropdownMenuLabel>{group.items.map((item) => <NavigationMenuItem key={item.href} item={item} />)}{index < (role === "LEARNER" ? 0 : groups.length - 1) ? <DropdownMenuSeparator /> : null}</div>)}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
             {actions}
           </div>
         </div>

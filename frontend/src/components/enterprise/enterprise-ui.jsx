@@ -1,4 +1,5 @@
-import { AlertCircle, Inbox, RefreshCw } from "lucide-react"
+import { AlertCircle, FilesIcon, Inbox, RefreshCw, UsersRoundIcon } from "lucide-react"
+import { NavLink, useLocation } from "react-router-dom"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -10,6 +11,49 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { cn } from "@/lib/utils"
+
+const MEMBER_WORKSPACE_LINKS = [
+  { label: "My Groups", href: "/enterprise/member", icon: UsersRoundIcon },
+  { label: "Files", href: "/enterprise/files", icon: FilesIcon },
+]
+
+/**
+ * An Enterprise Member (group leader) has no header nav for their workspace
+ * -- it lives on the page instead. Drop this at the top of any member page
+ * (the group picker, a group's own workspace, Files) so they can still move
+ * between them.
+ */
+export function EnterpriseMemberSubNav() {
+  const location = useLocation()
+  return (
+    <nav
+      aria-label="Your workspace"
+      className="flex items-center gap-1 border-b border-border pb-3"
+    >
+      {MEMBER_WORKSPACE_LINKS.map((link) => {
+        const Icon = link.icon
+        const active =
+          location.pathname === link.href || location.pathname.startsWith(`${link.href}/`)
+        return (
+          <NavLink
+            key={link.href}
+            to={link.href}
+            className={cn(
+              "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              active
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            <Icon className="size-4" aria-hidden="true" />
+            {link.label}
+          </NavLink>
+        )
+      })}
+    </nav>
+  )
+}
 
 export function EnterprisePageHeader({ title, subtitle, actions }) {
   void title
