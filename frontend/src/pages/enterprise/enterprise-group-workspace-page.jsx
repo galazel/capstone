@@ -47,7 +47,7 @@ import {
   EnterpriseStatusBadge,
   formatDateTime,
 } from "@/components/enterprise/enterprise-ui.jsx"
-import { deleteExam, getExamTypes, getExams } from "@/services/assessmentService.js"
+import { deleteExam, getExamTypes, getExams, publishExam } from "@/services/assessmentService.js"
 import { getAllCertifications } from "@/services/certificationService.js"
 import { createMajorCategory, deleteMajorCategory } from "@/services/majorCategoryService.js"
 import { createMiddleCategory, deleteMiddleCategory } from "@/services/middleCategoryService.js"
@@ -1055,6 +1055,18 @@ export default function EnterpriseGroupWorkspacePage() {
     onError: (err) => toast.error(backendMessage(err, "Unable to delete this assessment.")),
   })
 
+  // Learners can never attempt (or even see) a DRAFT exam -- AssessmentAttemptService
+  // blocks both paths server-side -- so a group's own assessment needs this
+  // explicit publish step before their students can access it.
+  const publishExamMutation = useMutation({
+    mutationFn: (examId) => publishExam(examId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["exams"] })
+      toast.success("Assessment published. Learners can now access it.")
+    },
+    onError: (err) => toast.error(backendMessage(err, "Unable to publish this assessment.")),
+  })
+
   const groupQuery = useQuery({
     queryKey: ["enterprise-group", id],
     queryFn: () => getEnterpriseGroupById(id),
@@ -1276,7 +1288,12 @@ export default function EnterpriseGroupWorkspacePage() {
 
         <TabsContent value="assessments" className="mt-5 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="font-heading text-lg font-bold text-foreground">Assessments</h2>
+            <div>
+              <h2 className="font-heading text-lg font-bold text-foreground">Assessments</h2>
+              <p className="text-xs text-muted-foreground">
+                New assessments start as drafts — publish one before your learners can access it.
+              </p>
+            </div>
             <Button asChild disabled={!certification}>
               <Link to={`/enterprise/groups/${id}/assessments/new`}>
                 <Plus className="size-4" aria-hidden="true" />
@@ -1303,6 +1320,16 @@ export default function EnterpriseGroupWorkspacePage() {
                       {examTypeById.get(exam.examTypeId) ?? "Assessment"}
                     </Badge>
                     <EnterpriseStatusBadge status={exam.status} />
+                    {exam.status === "DRAFT" || !exam.status ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => publishExamMutation.mutate(exam.examId)}
+                        disabled={publishExamMutation.isPending}
+                      >
+                        Publish
+                      </Button>
+                    ) : null}
                     <Button asChild variant="ghost" size="sm">
                       <Link to={`/enterprise/groups/${id}/assessments/${exam.examId}/edit`}>
                         Edit
