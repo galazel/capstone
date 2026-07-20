@@ -112,7 +112,11 @@ function RequestPartnershipDialog({ open, onOpenChange, enterprise, data }) {
     submitMutation.mutate()
   }
 
-  const certifications = [...data.certificationById.values()]
+  // Only published certifications can be requested -- the submit endpoint
+  // rejects drafts, so don't offer them here either.
+  const certifications = [...data.certificationById.values()].filter(
+    (certification) => certification.status === "PUBLISHED"
+  )
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

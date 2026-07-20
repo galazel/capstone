@@ -80,6 +80,12 @@ public class PartnershipRequestTransactionService {
             Certification certification = certificationRepository.findById(item.certificationId())
                     .orElseThrow(() -> new EntityNotFoundException(
                             "Certification not found: " + item.certificationId()));
+            // Only published certifications can be inquired about -- drafts are
+            // still being built (see the CertificationService publish gate).
+            if (certification.getStatus() != Certification.CertificationStatus.PUBLISHED) {
+                throw new BusinessRuleException.InvalidPartnershipRequestException(
+                        "A selected certification is not yet available for partnership.");
+            }
 
             PartnershipRequestItem entity = PartnershipRequestItem.builder()
                     .partnershipRequest(partnershipRequest)

@@ -45,6 +45,7 @@ class PublicPartnershipServiceTest {
 
         Certification certification = new Certification();
         certification.setCertificationId(CERT_ID);
+        certification.setStatus(Certification.CertificationStatus.PUBLISHED);
         when(certificationRepository.findById(CERT_ID)).thenReturn(Optional.of(certification));
 
         when(requestRepository.findByReferenceNumber(anyString())).thenReturn(Optional.empty());
@@ -114,5 +115,20 @@ class PublicPartnershipServiceTest {
         service.submit(request("Beta Inc"));
 
         verify(requestRepository, times(2)).save(any(PartnershipRequest.class));
+    }
+
+    // ---- 4: an organization cannot inquire about a draft (unpublished) certification ----
+    @Test
+    void submit_draftCertification_isRejected() {
+        when(requestRepository.findByIdempotencyKey(anyString())).thenReturn(Optional.empty());
+        Certification draft = new Certification();
+        draft.setCertificationId(CERT_ID);
+        draft.setStatus(Certification.CertificationStatus.DRAFT);
+        when(certificationRepository.findById(CERT_ID)).thenReturn(Optional.of(draft));
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.capstone.rebyu.common.BusinessRuleException.InvalidPartnershipRequestException.class,
+                () -> service.submit(request("Acme Corp")));
+        verify(itemRepository, never()).save(any(PartnershipRequestItem.class));
     }
 }

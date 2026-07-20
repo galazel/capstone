@@ -58,6 +58,7 @@ class PartnershipRequestTransactionServiceTest {
         Certification c = new Certification();
         c.setCertificationId(id);
         c.setTitle("Certification " + id);
+        c.setStatus(Certification.CertificationStatus.PUBLISHED);
         return c;
     }
 
@@ -106,6 +107,24 @@ class PartnershipRequestTransactionServiceTest {
         assertEquals(55L, dto.requestId());
         verify(requestRepository, never()).save(any());
         verify(itemRepository, never()).save(any());
+    }
+
+    @Test
+    void rejectsDraftCertification() {
+        when(requestRepository.findByIdempotencyKey(any())).thenReturn(Optional.empty());
+        when(enterpriseRepository.findById(1L)).thenReturn(Optional.of(enterprise()));
+        when(requestRepository.save(any(PartnershipRequest.class))).thenAnswer(inv -> {
+            PartnershipRequest r = inv.getArgument(0);
+            r.setRequestId(102L);
+            return r;
+        });
+        Certification draft = certification(1L);
+        draft.setStatus(Certification.CertificationStatus.DRAFT);
+        when(certificationRepository.findById(1L)).thenReturn(Optional.of(draft));
+
+        assertThrows(BusinessRuleException.InvalidPartnershipRequestException.class,
+                () -> service.submit(request("k3")));
+        verify(itemRepository, never()).save(any(PartnershipRequestItem.class));
     }
 
     @Test

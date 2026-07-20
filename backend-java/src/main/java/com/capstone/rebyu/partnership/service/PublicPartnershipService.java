@@ -104,6 +104,13 @@ public class PublicPartnershipService {
             Certification certification = certificationRepository.findById(item.certificationId())
                     .orElseThrow(() -> new BusinessRuleException.InvalidPartnershipRequestException(
                             "A selected certification is no longer available."));
+            // Only published certifications (fully built -- lessons, content, and
+            // the required assessments -- see CertificationService publish gate)
+            // can be inquired about; drafts aren't offered to organizations yet.
+            if (certification.getStatus() != Certification.CertificationStatus.PUBLISHED) {
+                throw new BusinessRuleException.InvalidPartnershipRequestException(
+                        "A selected certification is not yet available for partnership.");
+            }
 
             PartnershipRequestItem entity = PartnershipRequestItem.builder()
                     .partnershipRequest(partnershipRequest)

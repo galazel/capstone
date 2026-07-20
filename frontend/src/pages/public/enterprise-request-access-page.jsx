@@ -52,9 +52,12 @@ export default function EnterpriseRequestAccessPage() {
     staleTime: 5 * 60 * 1000,
   })
 
-  const certifications = Array.isArray(certificationsQuery.data)
-    ? certificationsQuery.data
-    : []
+  // Organizations can only inquire about published certifications -- drafts are
+  // still being built by the admin (lessons, content, and required assessments)
+  // and the submit endpoint rejects them anyway.
+  const certifications = (
+    Array.isArray(certificationsQuery.data) ? certificationsQuery.data : []
+  ).filter((certification) => certification.status === "PUBLISHED")
 
   const setField = (key) => (event) =>
     setForm((current) => ({ ...current, [key]: event.target.value }))
