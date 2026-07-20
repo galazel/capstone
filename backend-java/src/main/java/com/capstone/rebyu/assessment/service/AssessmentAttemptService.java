@@ -604,6 +604,10 @@ public class AssessmentAttemptService {
 
     private boolean publishedDiagnosticExists(Long certificationId) {
         return examRepository.findAll().stream()
+                // Only the OFFICIAL diagnostic gates the curriculum. A group's
+                // own assessment is its own content and must never gate
+                // learners outside (or inside) that group.
+                .filter(exam -> exam.getOwnerGroup() == null)
                 .anyMatch(exam -> exam.getCertification().getCertificationId().equals(certificationId)
                         && TYPE_DIAGNOSTIC.equals(exam.getExamType().getExamTypeText())
                         && exam.effectiveStatus() == Exam.Status.PUBLISHED);

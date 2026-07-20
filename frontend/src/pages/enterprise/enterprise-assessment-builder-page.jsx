@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   ArrowLeftIcon,
@@ -21,7 +21,9 @@ import { Checkbox } from "@/components/ui/checkbox"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -76,13 +78,20 @@ function newQuestion(questionType) {
   }
 }
 
-/** Flattens the certification tree to lessons -- questions must anchor to one. */
-function flattenLessons(certification) {
-  const out = []
+/**
+ * Lessons an assessment can anchor to, split into the group's own content and
+ * the official curriculum -- a group may build assessments over either. The
+ * assessment and its questions stay the group's own either way (ownerGroupId);
+ * nothing is written back into the official curriculum.
+ */
+function splitLessons(certification, groupId) {
+  const own = []
+  const official = []
   for (const major of certification?.majorCategory ?? []) {
+    const bucket = major.ownerGroupId === groupId ? own : official
     for (const middle of major.middleCategory ?? []) {
       for (const lesson of middle.lessons ?? []) {
-        out.push({
+        bucket.push({
           lessonId: lesson.lessonId,
           name: lesson.name ?? lesson.title ?? "Untitled lesson",
           middleTitle: middle.title,
@@ -91,7 +100,7 @@ function flattenLessons(certification) {
       }
     }
   }
-  return out
+  return { own, official }
 }
 
 /**
@@ -146,7 +155,14 @@ export default function EnterpriseAssessmentBuilderPage() {
       item.certificationId === group?.certificationId ||
       item.certificationId === group?.orgCert?.certificationId
   )
-  const lessons = useMemo(() => flattenLessons(certification), [certification])
+  const { own: ownLessons, official: officialLessons } = useMemo(
+    () => splitLessons(certification, id),
+    [certification, id]
+  )
+  const lessons = useMemo(
+    () => [...ownLessons, ...officialLessons],
+    [ownLessons, officialLessons]
+  )
 
   // Prefill the details when editing. Questions are authored fresh here, so an
   // edit changes the assessment's settings, not its existing question set.
@@ -383,23 +399,50 @@ export default function EnterpriseAssessmentBuilderPage() {
 
           <div className="space-y-1.5">
             <Label htmlFor="a-lesson">Lesson</Label>
-            <Select value={lessonId} onValueChange={setLessonId}>
+            <Select value={lessonId} onValueChange={setLessonId} disabled={lessons.length === 0}>
               <SelectTrigger id="a-lesson">
                 <SelectValue placeholder="Select a lesson" />
               </SelectTrigger>
               <SelectContent className="max-h-72">
-                {lessons.map((lesson) => (
-                  <SelectItem key={lesson.lessonId} value={String(lesson.lessonId)}>
-                    {lesson.name}
-                  </SelectItem>
-                ))}
+                {ownLessons.length ? (
+                  <SelectGroup>
+                    <SelectLabel>Your lessons</SelectLabel>
+                    {ownLessons.map((lesson) => (
+                      <SelectItem key={lesson.lessonId} value={String(lesson.lessonId)}>
+                        {lesson.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                ) : null}
+                {officialLessons.length ? (
+                  <SelectGroup>
+                    <SelectLabel>Curriculum lessons</SelectLabel>
+                    {officialLessons.map((lesson) => (
+                      <SelectItem key={lesson.lessonId} value={String(lesson.lessonId)}>
+                        {lesson.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                ) : null}
               </SelectContent>
             </Select>
             {lessons.length === 0 ? (
               <p className="text-xs text-muted-foreground">
-                This certification has no lessons yet.
+                No lessons available yet — add your own in the{" "}
+                <Link
+                  to={`/enterprise/groups/${id}?tab=content`}
+                  className="font-medium text-primary hover:underline"
+                >
+                  Content tab
+                </Link>
+                .
               </p>
-            ) : null}
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Pick one of your own lessons or a curriculum lesson. The assessment stays your
+                group&apos;s own either way.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

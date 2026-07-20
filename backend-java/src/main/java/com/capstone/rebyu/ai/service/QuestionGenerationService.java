@@ -430,7 +430,8 @@ public class QuestionGenerationService {
 
         Map<Long, LessonRef> lessons = new LinkedHashMap<>();
         for (Lesson lesson : lessonRepository
-                .findByMiddleCategory_MajorCategory_Certification_CertificationId(certificationId)) {
+                .findByMiddleCategory_MajorCategory_Certification_CertificationIdAndMiddleCategory_MajorCategory_OwnerGroupIsNull(
+                        certificationId)) {
             lessons.put(lesson.getLessonId(), new LessonRef(lesson.getLessonId(), lesson.getName()));
         }
         return new CertContext(cert.getTitle(), lessons);

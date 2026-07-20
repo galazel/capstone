@@ -622,7 +622,11 @@ public class CertificationService {
         Certification certification = certificationRepository.findByIdWithFullTree(id)
                 .orElseThrow(() -> new EntityNotFoundException("Certification not found with ID: " + id));
 
-        List<Exam> exams = examRepository.findByCertification_CertificationId(id);
+        // Official exams only -- a group's own assessments are separate content
+        // and are neither validated nor published by the admin's publish action.
+        List<Exam> exams = examRepository.findByCertification_CertificationId(id).stream()
+                .filter(exam -> exam.getOwnerGroup() == null)
+                .toList();
 
         CertificationPublishRequirementsDto requirements = buildPublishRequirements(certification, exams);
         if (!requirements.publishable()) {
@@ -659,15 +663,26 @@ public class CertificationService {
      * assessment does not exist; `invalid` = an existing assessment is not ready.
      */
     private CertificationPublishRequirementsDto buildPublishRequirements(
-            Certification certification, List<Exam> exams) {
+            Certification certification, List<Exam> allExams) {
 
         List<MissingRequirementDto> missing = new ArrayList<>();
         List<InvalidRequirementDto> invalid = new ArrayList<>();
 
+        // Publishing is about the OFFICIAL curriculum only. Enterprise groups
+        // author their own categories, lessons, and assessments alongside it;
+        // those are separate content and must never add requirements to (or
+        // satisfy requirements of) the admin's publish checklist.
+        List<Exam> exams = allExams.stream()
+                .filter(exam -> exam.getOwnerGroup() == null)
+                .toList();
+
         String certTitle = StringUtils.hasText(certification.getTitle())
                 ? certification.getTitle() : "Certification";
         List<MajorCategory> majors = certification.getMajorCategory() == null
-                ? List.of() : certification.getMajorCategory();
+                ? List.of()
+                : certification.getMajorCategory().stream()
+                        .filter(major -> major.getOwnerGroup() == null)
+                        .toList();
 
         // Certification-wide required assessments.
         long diagnostics = exams.stream().filter(exam -> isExamType(exam, "DIAGNOSTIC")).count();
