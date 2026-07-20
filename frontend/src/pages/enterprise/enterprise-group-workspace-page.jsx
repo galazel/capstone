@@ -39,6 +39,7 @@ import {
   formatDateTime,
 } from "@/components/enterprise/enterprise-ui.jsx"
 import { getExamTypes, getExams } from "@/services/assessmentService.js"
+import AssessmentDialog from "@/components/assessments/admin/assessment-dialog.jsx"
 import { getAllCertifications } from "@/services/certificationService.js"
 import { createMajorCategory, deleteMajorCategory } from "@/services/majorCategoryService.js"
 import { createMiddleCategory, deleteMiddleCategory } from "@/services/middleCategoryService.js"
@@ -1028,6 +1029,7 @@ function LearnersTab({ groupId, group, learners }) {
 export default function EnterpriseGroupWorkspacePage() {
   const { groupId } = useParams()
   const id = Number(groupId)
+  const [createAssessmentOpen, setCreateAssessmentOpen] = useState(false)
   const groupQuery = useQuery({
     queryKey: ["enterprise-group", id],
     queryFn: () => getEnterpriseGroupById(id),
@@ -1241,6 +1243,19 @@ export default function EnterpriseGroupWorkspacePage() {
         </TabsContent>
 
         <TabsContent value="assessments" className="mt-5 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="font-heading text-lg font-bold text-foreground">Assessments</h2>
+              <p className="text-sm text-muted-foreground">
+                Build your group's own exams — title, timer, points, and questions.
+              </p>
+            </div>
+            <Button onClick={() => setCreateAssessmentOpen(true)} disabled={!certification}>
+              <Plus className="size-4" aria-hidden="true" />
+              Create Assessment
+            </Button>
+          </div>
+
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -1291,6 +1306,18 @@ export default function EnterpriseGroupWorkspacePage() {
               </Button>
             }
           />
+
+          {/* Full builder (title, timer, points, question picker), scoped to
+              this group via ownerGroupId so the exam is member-authored. */}
+          {certification ? (
+            <AssessmentDialog
+              open={createAssessmentOpen}
+              onOpenChange={setCreateAssessmentOpen}
+              mode="create"
+              certification={certification}
+              ownerGroupId={id}
+            />
+          ) : null}
         </TabsContent>
 
         <TabsContent value="learners" className="mt-5">
