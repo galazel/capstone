@@ -1,5 +1,5 @@
 import { useRef, useState } from "react"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   ArrowLeftIcon,
@@ -1034,11 +1034,16 @@ function LearnersTab({ groupId, group, learners }) {
   )
 }
 
+const VALID_TABS = ["curriculum", "content", "assessments", "learners", "announcements"]
+
 export default function EnterpriseGroupWorkspacePage() {
   const { groupId } = useParams()
   const id = Number(groupId)
   const queryClient = useQueryClient()
   const [deleteExamTarget, setDeleteExamTarget] = useState(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedTab = searchParams.get("tab")
+  const activeTab = VALID_TABS.includes(requestedTab) ? requestedTab : "curriculum"
 
   const deleteExamMutation = useMutation({
     mutationFn: (id) => deleteExam(id),
@@ -1159,7 +1164,14 @@ export default function EnterpriseGroupWorkspacePage() {
         subtitle={group.groupDescription || "Your assigned group workspace."}
         actions={<Badge>Assigned group</Badge>}
       />
-      <Tabs defaultValue="curriculum">
+      <Tabs
+        value={activeTab}
+        onValueChange={(next) => setSearchParams((prev) => {
+          const params = new URLSearchParams(prev)
+          params.set("tab", next)
+          return params
+        })}
+      >
         <TabsList>
           <TabsTrigger value="curriculum">Curriculum</TabsTrigger>
           <TabsTrigger value="content">Content</TabsTrigger>
