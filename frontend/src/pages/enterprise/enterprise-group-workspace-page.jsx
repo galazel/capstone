@@ -1165,13 +1165,9 @@ export default function EnterpriseGroupWorkspacePage() {
               ))}
             </div>
           )}
-        </TabsContent>
 
-        <TabsContent value="content" className="mt-5 space-y-4">
-          <ContentTab groupId={id} certification={certification} />
-        </TabsContent>
-
-        <TabsContent value="assessments" className="mt-5 space-y-4">
+          {/* Official assessments belong with the official curriculum -- the
+              Assessments tab is only for this group's own (enterprise-owned) exams. */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -1205,7 +1201,13 @@ export default function EnterpriseGroupWorkspacePage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
 
+        <TabsContent value="content" className="mt-5 space-y-4">
+          <ContentTab groupId={id} certification={certification} />
+        </TabsContent>
+
+        <TabsContent value="assessments" className="mt-5 space-y-4">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -1213,7 +1215,8 @@ export default function EnterpriseGroupWorkspacePage() {
                 Your group's assessments
               </CardTitle>
               <CardDescription>
-                Exams your group has authored, separate from the official ones above.
+                Exams your group has authored. Official certification assessments live in the
+                Curriculum tab.
               </CardDescription>
             </CardHeader>
             <CardContent>
