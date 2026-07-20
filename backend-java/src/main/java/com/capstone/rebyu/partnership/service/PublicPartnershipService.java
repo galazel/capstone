@@ -11,6 +11,8 @@ import com.capstone.rebyu.partnership.entity.PartnershipRequest;
 import com.capstone.rebyu.partnership.entity.PartnershipRequestItem;
 import com.capstone.rebyu.partnership.repository.PartnershipRequestItemRepository;
 import com.capstone.rebyu.partnership.repository.PartnershipRequestRepository;
+import com.capstone.rebyu.notification.service.NotificationService;
+import com.capstone.rebyu.user.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,9 +40,13 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PublicPartnershipService {
 
+    private static final String ADMIN_USER_TYPE = "ADMIN";
+
     private final PartnershipRequestRepository requestRepository;
     private final PartnershipRequestItemRepository itemRepository;
     private final CertificationRepository certificationRepository;
+    private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public PublicPartnershipRequestResponse submit(SubmitPublicPartnershipRequest request) {
@@ -125,6 +131,8 @@ public class PublicPartnershipService {
                 partnershipRequest.getReferenceNumber(), partnershipRequest.getOrganizationName(),
                 request.items().size(), totalSlots);
 
+        notifyAdmins(partnershipRequest);
+
         return new PublicPartnershipRequestResponse(
                 partnershipRequest.getReferenceNumber(),
                 partnershipRequest.getOrganizationName(),
@@ -154,6 +162,18 @@ public class PublicPartnershipService {
                 request.getStatus().name(),
                 decided ? request.getAdminRemarks() : null
         );
+    }
+
+    /** Every admin gets an in-app notification -- this is the only new-request signal admins have today. */
+    private void notifyAdmins(PartnershipRequest request) {
+        for (var admin : userRepository.findByUserType_UserTypeText(ADMIN_USER_TYPE)) {
+            notificationService.notify(
+                    admin,
+                    "New partnership request",
+                    request.getOrganizationName() + " submitted a partnership request ("
+                            + request.getReferenceNumber() + ").",
+                    "/admin/partnership-requests");
+        }
     }
 
     private String generateReferenceNumber() {

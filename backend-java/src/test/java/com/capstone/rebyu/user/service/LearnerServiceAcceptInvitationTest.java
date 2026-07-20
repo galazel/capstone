@@ -9,6 +9,7 @@ import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupRepository;
 import com.capstone.rebyu.notification.entity.LearnerInvitation;
 import com.capstone.rebyu.notification.repository.LearnerInvitationRepository;
 import com.capstone.rebyu.notification.service.InvitationTokenService;
+import com.capstone.rebyu.notification.service.NotificationService;
 import com.capstone.rebyu.organization.entity.OrganizationCertificate;
 import com.capstone.rebyu.organization.repository.OrganizationCertificateRepository;
 import com.capstone.rebyu.user.dto.AcceptInvitationResponse;
@@ -51,7 +52,8 @@ class LearnerServiceAcceptInvitationTest {
                 learnerRepository, mock(LearnerMapper.class), invitationRepository,
                 enrollmentRepository, orgCertRepository, new InvitationTokenService(),
                 mock(EnterpriseGroupAssigneeRepository.class),
-                mock(EnterpriseGroupRepository.class));
+                mock(EnterpriseGroupRepository.class),
+                mock(NotificationService.class));
     }
 
     private OrganizationCertificate orgCert() {

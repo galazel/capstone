@@ -8,6 +8,7 @@ import com.capstone.rebyu.organization.entity.OrganizationCertificate;
 import com.capstone.rebyu.organization.repository.EnterpriseMemberRepository;
 import com.capstone.rebyu.organization.repository.EnterpriseRepository;
 import com.capstone.rebyu.organization.repository.OrganizationCertificateRepository;
+import com.capstone.rebyu.notification.service.NotificationService;
 import com.capstone.rebyu.user.entity.User;
 import com.capstone.rebyu.user.entity.UserType;
 import com.capstone.rebyu.user.repository.UserRepository;
@@ -55,6 +56,7 @@ public class AdminPartnershipService {
     private final UserRepository userRepository;
     private final UserTypeRepository userTypeRepository;
     private final CognitoAdminService cognitoAdminService;
+    private final NotificationService notificationService;
 
     @Transactional(readOnly = true)
     public List<PartnershipRequestSummaryDto> list(String statusFilter) {
@@ -120,6 +122,12 @@ public class AdminPartnershipService {
 
         log.info("Partnership request {} APPROVED (enterprise {}); account emailed={}",
                 request.getReferenceNumber(), enterprise.getEnterpriseId(), provision.emailed());
+
+        notifyEnterpriseOwners(enterprise,
+                "Partnership request approved",
+                "Your partnership request (" + request.getReferenceNumber() + ") was approved.",
+                "/enterprise/dashboard");
+
         return toDetail(request, provision.emailed(), provision.note());
     }
 
@@ -224,7 +232,27 @@ public class AdminPartnershipService {
         requestRepository.save(request);
 
         log.info("Partnership request {} REJECTED", request.getReferenceNumber());
+
+        // Only an already-signed-in enterprise (re-requesting more slots) has an
+        // account to notify at this point -- a first-time public request has no
+        // enterprise/account yet when rejected.
+        if (request.getEnterprise() != null) {
+            notifyEnterpriseOwners(request.getEnterprise(),
+                    "Partnership request rejected",
+                    "Your partnership request (" + request.getReferenceNumber() + ") was not approved.",
+                    "/enterprise/partnership");
+        }
+
         return toDetail(request);
+    }
+
+    /** Notifies every owner/primary-contact User linked to this enterprise. */
+    private void notifyEnterpriseOwners(Enterprise enterprise, String title, String body, String href) {
+        enterpriseMemberRepository.findByEnterprise_EnterpriseId(enterprise.getEnterpriseId()).stream()
+                .filter(member -> member.isPrimaryContact() || member.getMemberRole() == EnterpriseMember.MemberRole.owner)
+                .map(EnterpriseMember::getUser)
+                .distinct()
+                .forEach(user -> notificationService.notify(user, title, body, href));
     }
 
     // ------------------------------------------------------------------------

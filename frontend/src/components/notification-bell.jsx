@@ -28,7 +28,7 @@ function formatTime(value) {
   }).format(date)
 }
 
-export function NotificationBell({ items = [], loading = false, emptyMessage }) {
+export function NotificationBell({ items = [], loading = false, emptyMessage, onItemOpen }) {
   const navigate = useNavigate()
   const visibleItems = items.slice(0, 8)
 
@@ -80,9 +80,14 @@ export function NotificationBell({ items = [], loading = false, emptyMessage }) 
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => item.href && navigate(item.href)}
-                  className="flex w-full gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-accent disabled:cursor-default"
-                  disabled={!item.href}
+                  onClick={() => {
+                    onItemOpen?.(item)
+                    if (item.href) navigate(item.href)
+                  }}
+                  className={`flex w-full gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-accent disabled:cursor-default ${
+                    item.read === false ? "bg-primary/5" : ""
+                  }`}
+                  disabled={!item.href && !onItemOpen}
                 >
                   <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                     <Icon className="size-4" aria-hidden="true" />

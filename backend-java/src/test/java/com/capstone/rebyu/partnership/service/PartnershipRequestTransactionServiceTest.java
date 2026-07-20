@@ -12,6 +12,8 @@ import com.capstone.rebyu.partnership.entity.PartnershipRequest;
 import com.capstone.rebyu.partnership.entity.PartnershipRequestItem;
 import com.capstone.rebyu.partnership.repository.PartnershipRequestItemRepository;
 import com.capstone.rebyu.partnership.repository.PartnershipRequestRepository;
+import com.capstone.rebyu.notification.service.NotificationService;
+import com.capstone.rebyu.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,13 +40,16 @@ class PartnershipRequestTransactionServiceTest {
     @Mock private PartnershipRequestItemRepository itemRepository;
     @Mock private EnterpriseRepository enterpriseRepository;
     @Mock private CertificationRepository certificationRepository;
+    @Mock private UserRepository userRepository;
+    @Mock private NotificationService notificationService;
 
     private PartnershipRequestTransactionService service;
 
     @BeforeEach
     void setUp() {
         service = new PartnershipRequestTransactionService(
-                requestRepository, itemRepository, enterpriseRepository, certificationRepository);
+                requestRepository, itemRepository, enterpriseRepository, certificationRepository,
+                userRepository, notificationService);
     }
 
     private Enterprise enterprise() {

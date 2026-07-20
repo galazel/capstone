@@ -1,6 +1,7 @@
 package com.capstone.rebyu.partnership.service;
 
 import com.capstone.rebyu.auth.service.CognitoAdminService;
+import com.capstone.rebyu.notification.service.NotificationService;
 import com.capstone.rebyu.organization.entity.Enterprise;
 import com.capstone.rebyu.organization.entity.EnterpriseMember;
 import com.capstone.rebyu.organization.repository.EnterpriseMemberRepository;
@@ -47,6 +48,7 @@ class AdminPartnershipServiceTest {
     private UserRepository userRepository;
     private UserTypeRepository userTypeRepository;
     private CognitoAdminService cognitoAdminService;
+    private NotificationService notificationService;
 
     private AdminPartnershipService service;
 
@@ -60,11 +62,12 @@ class AdminPartnershipServiceTest {
         userRepository = mock(UserRepository.class);
         userTypeRepository = mock(UserTypeRepository.class);
         cognitoAdminService = mock(CognitoAdminService.class);
+        notificationService = mock(NotificationService.class);
 
         service = new AdminPartnershipService(
                 requestRepository, itemRepository, enterpriseRepository,
                 organizationCertificateRepository, enterpriseMemberRepository,
-                userRepository, userTypeRepository, cognitoAdminService);
+                userRepository, userTypeRepository, cognitoAdminService, notificationService);
 
         // Common approve() plumbing: no certificate items to process, request save is a no-op passthrough.
         when(itemRepository.findByPartnershipRequest_RequestId(REQUEST_ID)).thenReturn(List.of());

@@ -104,6 +104,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/enterprise-verification-documents/**").authenticated()
                         .requestMatchers("/api/enterprise-invoices/**").authenticated()
                         .requestMatchers("/api/learner-exam-details/**").authenticated()
+                        // A user's own in-app notifications -- never public.
+                        .requestMatchers("/api/notifications/**").authenticated()
                         // learnerId is now JWT-derived at the controller instead of a
                         // client-supplied request param; block anonymous access here too.
                         .requestMatchers("/api/learner/analytics/**").authenticated()

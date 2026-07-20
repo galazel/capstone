@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import { Outlet, useNavigate } from "react-router-dom"
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { LogOutIcon, SettingsIcon, UserIcon } from "lucide-react"
 
 import { PortalTopNavigation } from "@/components/navigation/portal-navigation.jsx"
@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { getMyEnterpriseProfile } from "@/services/enterpriseService.js"
 import { useAuth } from "@/context/auth-context.jsx"
-import { getEnterpriseInvitations } from "@/services/partnershipService.js"
+import { getMyNotifications, markNotificationRead } from "@/services/notificationService.js"
 import { NotificationBell } from "@/components/notification-bell.jsx"
 import { usePortalTheme } from "@/hooks/use-portal-theme.js"
 import { PortalThemeToggle } from "@/components/portal-theme-toggle"
@@ -65,33 +65,28 @@ export default function EnterpriseLayout() {
   )
 
   const orgName = enterprise?.enterpriseName ?? "Organization"
-  const invitationsQuery = useQuery({
-    queryKey: ["enterprise-invitations", authEnterpriseId],
-    queryFn: () => getEnterpriseInvitations(authEnterpriseId),
-    enabled: authEnterpriseId != null,
+  const queryClient = useQueryClient()
+  const notificationsQuery = useQuery({
+    queryKey: ["my-notifications"],
+    queryFn: getMyNotifications,
     refetchInterval: 30_000,
     staleTime: 15_000,
     retry: 1,
   })
-  const notifications = (Array.isArray(invitationsQuery.data) ? invitationsQuery.data : [])
-    .map((invitation) => {
-      const status = String(invitation.status ?? "PENDING").toUpperCase()
-      const accepted = status === "ACCEPTED"
-      const cancelled = status === "EXPIRED" || status === "REVOKED"
-      return {
-        id: `invitation-${invitation.invitationId}-${status}`,
-        type: accepted ? "accepted" : cancelled ? "cancelled" : "invitation",
-        title: accepted
-          ? "Learner accepted invitation"
-          : cancelled
-            ? `Invitation ${status.toLowerCase()}`
-            : "Certification invitation sent",
-        description: `${invitation.email} · ${invitation.certificationTitle}`,
-        createdAt: invitation.sentAt,
-        href: "/enterprise/certifications",
-      }
+  const markReadMutation = useMutation({
+    mutationFn: markNotificationRead,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["my-notifications"] }),
+  })
+  const notifications = (Array.isArray(notificationsQuery.data) ? notificationsQuery.data : []).map(
+    (notification) => ({
+      id: notification.id,
+      title: notification.title,
+      description: notification.body,
+      createdAt: notification.createdAt,
+      href: notification.href,
+      read: notification.read,
     })
-    .sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0))
+  )
 
   const logout = async () => {
     await authLogout()
@@ -105,8 +100,9 @@ export default function EnterpriseLayout() {
       <PortalTopNavigation role="ENTERPRISE" organizationName={orgName} enterpriseMemberRole={user?.enterpriseMemberRole} actions={<>
             <NotificationBell
               items={notifications}
-              loading={invitationsQuery.isLoading}
-              emptyMessage="Learner invitation updates will appear here."
+              loading={notificationsQuery.isLoading}
+              emptyMessage="Partnership and invitation updates will appear here."
+              onItemOpen={(item) => markReadMutation.mutate(item.id)}
             />
 
             <PortalThemeToggle />

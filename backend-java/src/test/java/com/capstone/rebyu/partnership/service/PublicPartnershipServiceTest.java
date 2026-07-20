@@ -9,6 +9,8 @@ import com.capstone.rebyu.partnership.entity.PartnershipRequest;
 import com.capstone.rebyu.partnership.entity.PartnershipRequestItem;
 import com.capstone.rebyu.partnership.repository.PartnershipRequestItemRepository;
 import com.capstone.rebyu.partnership.repository.PartnershipRequestRepository;
+import com.capstone.rebyu.notification.service.NotificationService;
+import com.capstone.rebyu.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -32,6 +34,8 @@ class PublicPartnershipServiceTest {
     private PartnershipRequestRepository requestRepository;
     private PartnershipRequestItemRepository itemRepository;
     private CertificationRepository certificationRepository;
+    private UserRepository userRepository;
+    private NotificationService notificationService;
 
     private PublicPartnershipService service;
 
@@ -40,8 +44,11 @@ class PublicPartnershipServiceTest {
         requestRepository = mock(PartnershipRequestRepository.class);
         itemRepository = mock(PartnershipRequestItemRepository.class);
         certificationRepository = mock(CertificationRepository.class);
+        userRepository = mock(UserRepository.class);
+        notificationService = mock(NotificationService.class);
 
-        service = new PublicPartnershipService(requestRepository, itemRepository, certificationRepository);
+        service = new PublicPartnershipService(
+                requestRepository, itemRepository, certificationRepository, userRepository, notificationService);
 
         Certification certification = new Certification();
         certification.setCertificationId(CERT_ID);

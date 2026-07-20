@@ -13,6 +13,8 @@ import com.capstone.rebyu.partnership.entity.PartnershipRequest;
 import com.capstone.rebyu.partnership.entity.PartnershipRequestItem;
 import com.capstone.rebyu.partnership.repository.PartnershipRequestItemRepository;
 import com.capstone.rebyu.partnership.repository.PartnershipRequestRepository;
+import com.capstone.rebyu.notification.service.NotificationService;
+import com.capstone.rebyu.user.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,10 +38,14 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class PartnershipRequestTransactionService {
 
+    private static final String ADMIN_USER_TYPE = "ADMIN";
+
     private final PartnershipRequestRepository requestRepository;
     private final PartnershipRequestItemRepository itemRepository;
     private final EnterpriseRepository enterpriseRepository;
     private final CertificationRepository certificationRepository;
+    private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public PartnershipRequestTransactionDto submit(SubmitPartnershipRequestDto request) {
@@ -100,6 +106,15 @@ public class PartnershipRequestTransactionService {
         log.info("Partnership request {} submitted by enterprise {} with {} item(s)",
                 partnershipRequest.getRequestId(), enterprise.getEnterpriseId(),
                 request.items().size());
+
+        for (var admin : userRepository.findByUserType_UserTypeText(ADMIN_USER_TYPE)) {
+            notificationService.notify(
+                    admin,
+                    "New partnership request",
+                    enterprise.getEnterpriseName() + " submitted a partnership request.",
+                    "/admin/partnership-requests");
+        }
+
         return toDto(partnershipRequest);
     }
 

@@ -10,6 +10,7 @@ import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupRepository;
 import com.capstone.rebyu.notification.entity.LearnerInvitation;
 import com.capstone.rebyu.notification.repository.LearnerInvitationRepository;
 import com.capstone.rebyu.notification.service.InvitationTokenService;
+import com.capstone.rebyu.notification.service.NotificationService;
 import com.capstone.rebyu.organization.entity.OrganizationCertificate;
 import com.capstone.rebyu.organization.repository.OrganizationCertificateRepository;
 import com.capstone.rebyu.user.dto.AcceptInvitationResponse;
@@ -43,6 +44,7 @@ public class LearnerService {
     private final InvitationTokenService invitationTokenService;
     private final EnterpriseGroupAssigneeRepository enterpriseGroupAssigneeRepository;
     private final EnterpriseGroupRepository enterpriseGroupRepository;
+    private final NotificationService notificationService;
 
     public List<LearnerDto> getAll() {
         return learnerRepository.findAll()
@@ -199,6 +201,12 @@ public class LearnerService {
             enterpriseGroupAssigneeRepository.save(assignee);
             log.info("Learner {} placed into group {} via invitation {}",
                     learner.getLearnerId(), group.getEnterpriseGroupId(), invitation.getInvitationId());
+
+            notificationService.notify(
+                    invitation.getInvitedBy(),
+                    "Invitation accepted",
+                    learner.getUser().getEmail() + " accepted your invitation to " + group.getGroupName() + ".",
+                    "/enterprise/groups/" + group.getEnterpriseGroupId());
         }
 
         // Backfill the learner's profile name from the invitation when the

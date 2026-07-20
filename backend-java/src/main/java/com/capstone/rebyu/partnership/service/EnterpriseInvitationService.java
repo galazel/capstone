@@ -8,6 +8,7 @@ import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupRepository;
 import com.capstone.rebyu.notification.entity.LearnerInvitation;
 import com.capstone.rebyu.notification.repository.LearnerInvitationRepository;
 import com.capstone.rebyu.notification.service.EmailService;
+import com.capstone.rebyu.notification.service.NotificationService;
 import com.capstone.rebyu.organization.entity.OrganizationCertificate;
 import com.capstone.rebyu.organization.repository.OrganizationCertificateRepository;
 import com.capstone.rebyu.partnership.dto.EnterpriseInvitationDtos.CertificationAccessDto;
@@ -16,6 +17,7 @@ import com.capstone.rebyu.partnership.dto.EnterpriseInvitationDtos.InvitedLearne
 import com.capstone.rebyu.partnership.dto.EnterpriseInvitationDtos.SendInvitationsRequest;
 import com.capstone.rebyu.partnership.dto.EnterpriseInvitationDtos.SendInvitationsResponse;
 import com.capstone.rebyu.user.entity.User;
+import com.capstone.rebyu.user.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -54,6 +56,8 @@ public class EnterpriseInvitationService {
     private final com.capstone.rebyu.notification.service.InvitationTokenService invitationTokenService;
     private final EnterpriseGroupRepository enterpriseGroupRepository;
     private final EnterpriseGroupAuthorityRepository enterpriseGroupAuthorityRepository;
+    private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
 
     @Transactional(readOnly = true)
@@ -192,6 +196,18 @@ public class EnterpriseInvitationService {
                     orgCert.getCertification().getTitle(),
                     rawToken
             );
+
+            // The invite itself is always email + token (accepting requires the
+            // token, which only the email carries). If the invited address
+            // already belongs to a REBYU account, also drop them an in-app
+            // notification so they see it without having to check email first.
+            userRepository.findByEmailIgnoreCase(email).ifPresent(existingUser ->
+                    notificationService.notify(
+                            existingUser,
+                            "You've been invited",
+                            orgCert.getEnterprise().getEnterpriseName() + " invited you to "
+                                    + orgCert.getCertification().getTitle() + ". Check your email to accept.",
+                            null));
         }
 
         // Reserve slots. The @Version lock makes this safe under concurrency;

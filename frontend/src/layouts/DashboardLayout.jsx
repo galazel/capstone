@@ -1,4 +1,5 @@
 import { Outlet, useNavigate } from "react-router-dom"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { LogOutIcon, SettingsIcon, UserIcon } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -9,15 +10,40 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { NotificationBell } from "@/components/notification-bell.jsx"
 import { PortalTopNavigation } from "@/components/navigation/portal-navigation.jsx"
 import { PortalThemeToggle } from "@/components/portal-theme-toggle"
 import { useAuth } from "@/context/auth-context.jsx"
 import { usePortalTheme } from "@/hooks/use-portal-theme.js"
+import { getMyNotifications, markNotificationRead } from "@/services/notificationService.js"
 
 export default function DashboardLayout() {
   usePortalTheme()
   const navigate = useNavigate()
   const { user, logout } = useAuth()
+  const queryClient = useQueryClient()
+
+  const notificationsQuery = useQuery({
+    queryKey: ["my-notifications"],
+    queryFn: getMyNotifications,
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+    retry: 1,
+  })
+  const markReadMutation = useMutation({
+    mutationFn: markNotificationRead,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["my-notifications"] }),
+  })
+  const notifications = (Array.isArray(notificationsQuery.data) ? notificationsQuery.data : []).map(
+    (notification) => ({
+      id: notification.id,
+      title: notification.title,
+      description: notification.body,
+      createdAt: notification.createdAt,
+      href: notification.href,
+      read: notification.read,
+    })
+  )
 
   const handleLogout = async () => {
     await logout()
@@ -30,6 +56,12 @@ export default function DashboardLayout() {
         role="ADMIN"
         actions={
           <>
+            <NotificationBell
+              items={notifications}
+              loading={notificationsQuery.isLoading}
+              emptyMessage="Partnership request updates will appear here."
+              onItemOpen={(item) => markReadMutation.mutate(item.id)}
+            />
             <PortalThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Open account menu">
