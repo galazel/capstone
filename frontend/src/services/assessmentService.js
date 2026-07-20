@@ -250,7 +250,17 @@ export const ASSESSMENT_TYPES = [
   { value: "QUIZ", label: "Lesson Quiz" },
   { value: "MODULE_EXAM", label: "Module Exam" },
   { value: "MOCK_EXAM", label: "Mock Exam" },
+  { value: "PRACTICE_TEST", label: "Practice Test" },
+  { value: "ASSIGNMENT", label: "Assignment" },
 ]
+
+// Offered to Enterprise groups authoring their own assessments. Excludes
+// DIAGNOSTIC -- that label carries special meaning on the official
+// curriculum (it used to gate lesson access platform-wide), which doesn't
+// apply to a group's own, non-gating assessment and would be misleading.
+export const ENTERPRISE_ASSESSMENT_TYPES = ASSESSMENT_TYPES.filter(
+  (type) => type.value !== "DIAGNOSTIC"
+)
 
 export function getAssessmentTypeLabel(examTypeText) {
   return (

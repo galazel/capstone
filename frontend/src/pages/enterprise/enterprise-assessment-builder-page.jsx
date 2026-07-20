@@ -39,7 +39,7 @@ import {
   saveTextQuestion,
 } from "@/services/questionService.js"
 import {
-  ASSESSMENT_TYPES,
+  ENTERPRISE_ASSESSMENT_TYPES,
   createExam,
   ensureExamType,
   getExamById,
@@ -408,7 +408,7 @@ export default function EnterpriseAssessmentBuilderPage() {
                 <SelectValue placeholder="Select type" />
               </SelectTrigger>
               <SelectContent>
-                {ASSESSMENT_TYPES.map((type) => (
+                {ENTERPRISE_ASSESSMENT_TYPES.map((type) => (
                   <SelectItem key={type.value} value={type.value}>
                     {type.label}
                   </SelectItem>
