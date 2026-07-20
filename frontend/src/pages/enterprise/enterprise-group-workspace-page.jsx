@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
@@ -304,35 +304,42 @@ function AnnouncementsTab({ groupId }) {
   )
 }
 
-/** Small inline "type a name, Add / Cancel" row, reused at all three levels. */
-function InlineAddRow({ placeholder, onSubmit, onCancel, isPending }) {
+function InlineNameInput({ placeholder, onSubmit, onCancel, isPending }) {
   const [value, setValue] = useState("")
-  const submit = () => {
-    if (value.trim()) onSubmit(value.trim())
+  // Enter and blur can both fire on the same commit (e.g. Enter then unmount
+  // blur); guard so the create only happens once.
+  const doneRef = useRef(false)
+
+  const commit = () => {
+    if (doneRef.current) return
+    const trimmed = value.trim()
+    if (!trimmed) {
+      onCancel()
+      return
+    }
+    doneRef.current = true
+    onSubmit(trimmed)
   }
+
   return (
-    <div className="flex gap-2">
-      <Input
-        autoFocus
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault()
-            submit()
-          } else if (e.key === "Escape") {
-            onCancel()
-          }
-        }}
-        placeholder={placeholder}
-      />
-      <Button size="sm" onClick={submit} disabled={!value.trim() || isPending}>
-        Add
-      </Button>
-      <Button size="sm" variant="ghost" onClick={onCancel}>
-        Cancel
-      </Button>
-    </div>
+    <input
+      autoFocus
+      value={value}
+      disabled={isPending}
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault()
+          commit()
+        } else if (e.key === "Escape") {
+          doneRef.current = true
+          onCancel()
+        }
+      }}
+      onBlur={commit}
+      placeholder={placeholder}
+      className="w-full rounded-xl border border-input bg-card px-4 py-3 text-sm text-foreground outline-none transition focus:border-foreground/40 disabled:opacity-60"
+    />
   )
 }
 
@@ -350,8 +357,9 @@ function InlineAddRow({ placeholder, onSubmit, onCancel, isPending }) {
  * same in both places -- the difference is each action here persists
  * immediately (ownership must be resolved server-side per create).
  */
-function ContentTab({ groupId, certification, onContentChanged }) {
+function ContentTab({ groupId, certification }) {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [addingMajor, setAddingMajor] = useState(false)
   const [collapsedMajors, setCollapsedMajors] = useState(() => new Set())
   const [collapsedMiddles, setCollapsedMiddles] = useState(() => new Set())
@@ -369,23 +377,46 @@ function ContentTab({ groupId, certification, onContentChanged }) {
       return next
     })
 
+  // Patch just the affected certification in the cached tree instead of
+  // refetching the whole thing -- refetching getAllCertifications on every
+  // add/delete was what made each action feel slow. The create/delete
+  // endpoints return (or identify) the exact row, so the cache update is
+  // authoritative, not a guess.
+  const contentKey = ["certifications", "group", groupId]
+  const patchCert = (updater) =>
+    queryClient.setQueryData(contentKey, (old) =>
+      (old ?? []).map((cert) =>
+        cert.certificationId === certification.certificationId ? updater(cert) : cert
+      )
+    )
+  const mapMajors = (cert, fn) => ({ ...cert, majorCategory: (cert.majorCategory ?? []).map(fn) })
+
   const createMajorMutation = useMutation({
     mutationFn: (title) =>
       createMajorCategory({ certificationId: certification.certificationId, title }, groupId),
-    onSuccess: () => {
+    onSuccess: (major) => {
+      patchCert((cert) => ({
+        ...cert,
+        majorCategory: [...(cert.majorCategory ?? []), { ...major, middleCategory: major.middleCategory ?? [] }],
+      }))
       toast.success("Category created.")
       setAddingMajor(false)
-      onContentChanged()
     },
     onError: (err) => toast.error(backendMessage(err, "Unable to create this category.")),
   })
 
   const createMiddleMutation = useMutation({
     mutationFn: ({ majorCategoryId, title }) => createMiddleCategory({ majorCategoryId, title }),
-    onSuccess: () => {
+    onSuccess: (middle) => {
+      patchCert((cert) =>
+        mapMajors(cert, (major) =>
+          major.majorCategoryId === middle.majorCategoryId
+            ? { ...major, middleCategory: [...(major.middleCategory ?? []), { ...middle, lessons: middle.lessons ?? [] }] }
+            : major
+        )
+      )
       toast.success("Module created.")
       setAddingMiddleTo(null)
-      onContentChanged()
     },
     onError: (err) => toast.error(backendMessage(err, "Unable to create this module.")),
   })
@@ -393,9 +424,17 @@ function ContentTab({ groupId, certification, onContentChanged }) {
   const createLessonMutation = useMutation({
     mutationFn: ({ middleCategoryId, name }) => createLesson({ middleCategoryId, name }),
     onSuccess: (lesson) => {
-      toast.success("Lesson created.")
+      patchCert((cert) =>
+        mapMajors(cert, (major) => ({
+          ...major,
+          middleCategory: (major.middleCategory ?? []).map((middle) =>
+            middle.middleCategoryId === lesson.middleCategoryId
+              ? { ...middle, lessons: [...(middle.lessons ?? []), lesson] }
+              : middle
+          ),
+        }))
+      )
       setAddingLessonTo(null)
-      onContentChanged()
       navigate(`/enterprise/lessons/${encodeURIComponent(lesson.name)}/create`, {
         state: { lessonId: lesson.lessonId, lessonName: lesson.name },
       })
@@ -405,27 +444,43 @@ function ContentTab({ groupId, certification, onContentChanged }) {
 
   const deleteMajorMutation = useMutation({
     mutationFn: (id) => deleteMajorCategory(id),
-    onSuccess: () => {
+    onSuccess: (_data, majorId) => {
+      patchCert((cert) => ({
+        ...cert,
+        majorCategory: (cert.majorCategory ?? []).filter((major) => major.majorCategoryId !== majorId),
+      }))
       toast.success("Category deleted.")
-      onContentChanged()
     },
     onError: (err) => toast.error(backendMessage(err, "Unable to delete this category.")),
   })
 
   const deleteMiddleMutation = useMutation({
     mutationFn: (id) => deleteMiddleCategory(id),
-    onSuccess: () => {
+    onSuccess: (_data, middleId) => {
+      patchCert((cert) =>
+        mapMajors(cert, (major) => ({
+          ...major,
+          middleCategory: (major.middleCategory ?? []).filter((middle) => middle.middleCategoryId !== middleId),
+        }))
+      )
       toast.success("Module deleted.")
-      onContentChanged()
     },
     onError: (err) => toast.error(backendMessage(err, "Unable to delete this module.")),
   })
 
   const deleteLessonMutation = useMutation({
     mutationFn: (id) => deleteLesson(id),
-    onSuccess: () => {
+    onSuccess: (_data, lessonId) => {
+      patchCert((cert) =>
+        mapMajors(cert, (major) => ({
+          ...major,
+          middleCategory: (major.middleCategory ?? []).map((middle) => ({
+            ...middle,
+            lessons: (middle.lessons ?? []).filter((lesson) => lesson.lessonId !== lessonId),
+          })),
+        }))
+      )
       toast.success("Lesson deleted.")
-      onContentChanged()
     },
     onError: (err) => toast.error(backendMessage(err, "Unable to delete this lesson.")),
   })
@@ -615,7 +670,7 @@ function ContentTab({ groupId, certification, onContentChanged }) {
                               ))}
 
                               {addingLessonTo === middle.middleCategoryId ? (
-                                <InlineAddRow
+                                <InlineNameInput
                                   placeholder="Lesson name"
                                   onSubmit={(name) =>
                                     createLessonMutation.mutate({
@@ -643,7 +698,7 @@ function ContentTab({ groupId, certification, onContentChanged }) {
                     })}
 
                     {addingMiddleTo === major.majorCategoryId ? (
-                      <InlineAddRow
+                      <InlineNameInput
                         placeholder="Module title"
                         onSubmit={(title) =>
                           createMiddleMutation.mutate({
@@ -672,7 +727,7 @@ function ContentTab({ groupId, certification, onContentChanged }) {
 
           {/* In-flow add control, always visible below the list. */}
           {addingMajor ? (
-            <InlineAddRow
+            <InlineNameInput
               placeholder="Major category title"
               onSubmit={(title) => createMajorMutation.mutate(title)}
               onCancel={() => setAddingMajor(false)}
@@ -901,7 +956,6 @@ function LearnersTab({ groupId, group, learners }) {
 export default function EnterpriseGroupWorkspacePage() {
   const { groupId } = useParams()
   const id = Number(groupId)
-  const queryClient = useQueryClient()
   const groupQuery = useQuery({
     queryKey: ["enterprise-group", id],
     queryFn: () => getEnterpriseGroupById(id),
@@ -1075,13 +1129,7 @@ export default function EnterpriseGroupWorkspacePage() {
         </TabsContent>
 
         <TabsContent value="content" className="mt-5 space-y-4">
-          <ContentTab
-            groupId={id}
-            certification={certification}
-            onContentChanged={() =>
-              queryClient.invalidateQueries({ queryKey: ["certifications", "group", id] })
-            }
-          />
+          <ContentTab groupId={id} certification={certification} />
         </TabsContent>
 
         <TabsContent value="assessments" className="mt-5 space-y-4">
