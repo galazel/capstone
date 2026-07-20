@@ -10,7 +10,6 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
       position="bottom-left"
-      closeButton
       richColors={false}
       gap={10}
       visibleToasts={4}
@@ -49,7 +48,6 @@ const Toaster = ({ ...props }: ToasterProps) => {
           icon: "netacad-toast-icon",
           actionButton: "netacad-toast-action",
           cancelButton: "netacad-toast-cancel",
-          closeButton: "netacad-toast-close",
         },
       }}
       {...props}
