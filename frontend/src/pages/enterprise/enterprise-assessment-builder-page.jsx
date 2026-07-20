@@ -1,23 +1,13 @@
 import { useMemo, useState } from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import {
-  ArrowLeftIcon,
-  FileText,
-  ListChecks,
-  Loader2,
-  PenLine,
-  Plus,
-  Trash2,
-} from "lucide-react"
+import { AlertCircle, ArrowLeftIcon, ListChecks, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
-import { Checkbox } from "@/components/ui/checkbox"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import {
   Select,
   SelectContent,
@@ -31,51 +21,41 @@ import {
   EnterpriseErrorState,
   EnterpriseLoadingSkeleton,
 } from "@/components/enterprise/enterprise-ui.jsx"
+import {
+  QUESTION_TYPES,
+  QuestionTypeButton,
+  cloneQuestionData,
+  createLocalId,
+  saveAuthoredQuestion,
+  validateQuestionData,
+} from "@/components/questions/question-editors.jsx"
 import { getAllCertifications } from "@/services/certificationService.js"
 import { getEnterpriseGroupById } from "@/services/enterpriseService.js"
-import { saveQuestion } from "@/services/questionService.js"
+import {
+  saveChoices,
+  saveDiagramQuestion,
+  saveProgrammingQuestion,
+  saveQuestion,
+  saveTextQuestion,
+} from "@/services/questionService.js"
 import {
   ASSESSMENT_TYPES,
   createExam,
   ensureExamType,
   getExamById,
+  getExamTypes,
   updateExam,
 } from "@/services/assessmentService.js"
 
-// Question types an Enterprise group can author here. These map 1:1 to what
-// the questions API accepts (MCQ carries choices; the rest are text-answered).
-const QUESTION_TYPES = [
-  { id: "MCQ", title: "Multiple Choice", description: "Choose from answer options", icon: ListChecks },
-  { id: "SHORT_ANSWER", title: "Short Answer", description: "Brief text response", icon: PenLine },
-  { id: "DESCRIPTIVE", title: "Descriptive", description: "Written explanation", icon: FileText },
-]
-
-const DIFFICULTIES = [
-  { value: "easy", label: "Easy" },
-  { value: "average", label: "Average" },
-  { value: "hard", label: "Hard" },
-]
+const QUESTION_API = { saveQuestion, saveChoices, saveTextQuestion, saveProgrammingQuestion, saveDiagramQuestion }
 
 function backendMessage(error, fallback) {
   return error?.response?.data?.message ?? fallback
 }
 
-function emptyChoice() {
-  return { choiceText: "", correct: false, explanation: "" }
-}
-
-function newQuestion(questionType) {
-  return {
-    key: `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    questionType,
-    difficultyLevel: "average",
-    questionText: "",
-    points: "1",
-    choices:
-      questionType === "MCQ"
-        ? [emptyChoice(), emptyChoice(), emptyChoice(), emptyChoice()]
-        : [],
-  }
+function isValidPoints(value) {
+  const number = Number(value)
+  return Number.isFinite(number) && number > 0
 }
 
 /**
@@ -106,8 +86,13 @@ function splitLessons(certification, groupId) {
 /**
  * Dedicated page (not a modal) for an Enterprise group to build its own
  * assessment: details on the left, the authored questions in the centre, and
- * the question-type palette on the right -- the same three-column shape as the
- * admin question builder. Questions are written here and owned by the group;
+ * the question-type palette on the right -- the same three-column shape as
+ * the admin question builder. The question editors themselves (MCQ, Short
+ * Answer, Descriptive, Programming, Diagram -- with images, correct-answer
+ * marking, test cases, sub-questions, and the diagram editor) are the exact
+ * same components the admin Question Bank uses, reused via
+ * components/questions/question-editors.jsx, with a points configuration
+ * panel layered on top. Questions are written here and owned by the group;
  * the shared question bank is never read from or written to.
  */
 export default function EnterpriseAssessmentBuilderPage() {
@@ -120,14 +105,19 @@ export default function EnterpriseAssessmentBuilderPage() {
   const [searchParams] = useSearchParams()
 
   const [title, setTitle] = useState("")
-  const [examTypeText, setExamTypeText] = useState(
-    searchParams.get("type") ?? "QUIZ"
-  )
+  const [examTypeText, setExamTypeText] = useState(searchParams.get("type") ?? "QUIZ")
   const [durationMinutes, setDurationMinutes] = useState("")
   const [passingScore, setPassingScore] = useState("70")
   const [lessonId, setLessonId] = useState("")
+
+  // Authored questions: { key, typeId, data } -- data shapes match QUESTION_TYPES.
   const [questions, setQuestions] = useState([])
+  const [pointsMode, setPointsMode] = useState("SAME")
+  const [samePoints, setSamePoints] = useState("1")
+  const [pointsById, setPointsById] = useState({})
+
   const [error, setError] = useState("")
+  const [submitted, setSubmitted] = useState(false)
   const [hydrated, setHydrated] = useState(false)
 
   const groupQuery = useQuery({
@@ -140,6 +130,12 @@ export default function EnterpriseAssessmentBuilderPage() {
     queryKey: ["certifications", "group", id],
     queryFn: () => getAllCertifications(id),
     enabled: Number.isFinite(id),
+    staleTime: 5 * 60_000,
+  })
+
+  const examTypesQuery = useQuery({
+    queryKey: ["exam-types"],
+    queryFn: getExamTypes,
     staleTime: 5 * 60_000,
   })
 
@@ -159,16 +155,16 @@ export default function EnterpriseAssessmentBuilderPage() {
     () => splitLessons(certification, id),
     [certification, id]
   )
-  const lessons = useMemo(
-    () => [...ownLessons, ...officialLessons],
-    [ownLessons, officialLessons]
-  )
+  const lessons = useMemo(() => [...ownLessons, ...officialLessons], [ownLessons, officialLessons])
 
-  // Prefill the details when editing. Questions are authored fresh here, so an
-  // edit changes the assessment's settings, not its existing question set.
-  if (isEdit && !hydrated && examQuery.data) {
+  // Prefill the details when editing. Existing questions aren't re-editable
+  // here (see the notice near Save) -- any new questions authored this
+  // session are additions on top of the assessment's current settings.
+  if (isEdit && !hydrated && examQuery.data && Array.isArray(examTypesQuery.data)) {
     const exam = examQuery.data
+    const examType = examTypesQuery.data.find((t) => t.examTypeId === exam.examTypeId)
     setTitle(exam.title ?? "")
+    setExamTypeText(examType?.examTypeText ?? examTypeText)
     setDurationMinutes(exam.durationMinutes != null ? String(exam.durationMinutes) : "")
     setPassingScore(exam.passingScore != null ? String(exam.passingScore) : "70")
     setLessonId(exam.lessonId != null ? String(exam.lessonId) : "")
@@ -176,67 +172,73 @@ export default function EnterpriseAssessmentBuilderPage() {
   }
 
   const totalPoints = questions.reduce(
-    (sum, question) => sum + (Number(question.points) || 0),
+    (sum, question) => sum + (Number(pointsById[question.key]) || 0),
     0
   )
 
-  const addQuestion = (questionType) =>
-    setQuestions((current) => [...current, newQuestion(questionType)])
+  const addQuestion = (questionType) => {
+    const key = createLocalId()
+    setQuestions((current) => [
+      ...current,
+      { key, typeId: questionType.id, data: cloneQuestionData(questionType.data) },
+    ])
+    setPointsById((current) => ({
+      ...current,
+      [key]: pointsMode === "SAME" ? samePoints : "1",
+    }))
+  }
 
-  const patchQuestion = (key, patch) =>
-    setQuestions((current) =>
-      current.map((question) => (question.key === key ? { ...question, ...patch } : question))
-    )
-
-  const removeQuestion = (key) =>
+  const removeQuestion = (key) => {
     setQuestions((current) => current.filter((question) => question.key !== key))
+    setPointsById((current) => {
+      const next = { ...current }
+      delete next[key]
+      return next
+    })
+  }
 
-  const patchChoice = (key, index, patch) =>
+  const updateQuestionData = (key, updater) =>
     setQuestions((current) =>
       current.map((question) =>
         question.key === key
-          ? {
-              ...question,
-              choices: question.choices.map((choice, i) =>
-                i === index ? { ...choice, ...patch } : choice
-              ),
-            }
+          ? { ...question, data: typeof updater === "function" ? updater(question.data) : updater }
           : question
       )
     )
 
-  const setCorrectChoice = (key, index) =>
-    setQuestions((current) =>
-      current.map((question) =>
-        question.key === key
-          ? {
-              ...question,
-              choices: question.choices.map((choice, i) => ({
-                ...choice,
-                correct: i === index,
-              })),
-            }
-          : question
-      )
+  const setOnePoint = (key, value) =>
+    setPointsById((current) => ({ ...current, [key]: value }))
+
+  const applySamePoints = (value) =>
+    setPointsById(() => Object.fromEntries(questions.map((question) => [question.key, value])))
+
+  const handlePointsModeChange = (nextMode) => {
+    if (nextMode === pointsMode) return
+    setPointsMode(nextMode)
+    if (nextMode === "SAME" && isValidPoints(samePoints)) {
+      applySamePoints(Number(samePoints))
+    }
+  }
+
+  const perQuestionErrors = useMemo(() => {
+    if (!submitted) return {}
+    return Object.fromEntries(
+      questions.map((question) => [question.key, validateQuestionData(question.typeId, question.data)])
     )
+  }, [submitted, questions])
 
   const validate = () => {
     if (!title.trim()) return "Give the assessment a name."
     if (!lessonId) return "Choose the lesson this assessment belongs to."
-    if (questions.length === 0) return "Add at least one question."
+    if (!isEdit && questions.length === 0) return "Add at least one question."
+
     for (const [index, question] of questions.entries()) {
-      if (!question.questionText.trim()) {
-        return `Question ${index + 1} needs its text.`
+      const errors = validateQuestionData(question.typeId, question.data)
+      if (Object.keys(errors).length > 0) {
+        return `Question ${index + 1} has missing or invalid fields.`
       }
-      if (!(Number(question.points) > 0)) {
+      if (!isValidPoints(pointsById[question.key])) {
         return `Question ${index + 1} needs points greater than zero.`
-      }
-      if (question.questionType === "MCQ") {
-        const filled = question.choices.filter((choice) => choice.choiceText.trim())
-        if (filled.length < 2) return `Question ${index + 1} needs at least two choices.`
-        if (!filled.some((choice) => choice.correct)) {
-          return `Question ${index + 1} needs a correct answer marked.`
-        }
       }
     }
     return ""
@@ -246,48 +248,50 @@ export default function EnterpriseAssessmentBuilderPage() {
     mutationFn: async () => {
       const examType = await ensureExamType(examTypeText)
 
-      // 1. Author each question as this group's own (ownerGroupId).
+      // Author each new question as this group's own (ownerGroupId), reusing
+      // the exact same per-type save calls the admin builder uses.
       const created = []
       for (const question of questions) {
-        const saved = await saveQuestion(
+        const saved = await saveAuthoredQuestion(
+          question,
           {
-            questionType: question.questionType,
-            difficultyLevel: question.difficultyLevel,
-            questionText: question.questionText.trim(),
             lessonId: Number(lessonId),
-            totalPoints: Number(question.points) || 1,
-            choices:
-              question.questionType === "MCQ"
-                ? question.choices
-                    .filter((choice) => choice.choiceText.trim())
-                    .map((choice) => ({
-                      choiceText: choice.choiceText.trim(),
-                      correct: Boolean(choice.correct),
-                      explanation: choice.explanation?.trim() || null,
-                    }))
-                : [],
+            certificationId: certification.certificationId,
+            totalPoints: Number(pointsById[question.key]) || 1,
+            ownerGroupId: id,
           },
-          id
+          QUESTION_API
         )
-        created.push({ saved, points: Number(question.points) || 1 })
+        created.push({ questionId: saved.questionId, points: Number(pointsById[question.key]) || 1 })
       }
 
-      // 2. Attach them to the assessment, in order, with their points.
       const payload = {
         certificationId: certification.certificationId,
         examTypeId: examType.examTypeId,
         title: title.trim(),
         durationMinutes: durationMinutes ? Number(durationMinutes) : null,
-        totalQuestions: created.length,
         passingScore: passingScore ? Number(passingScore) : null,
         releaseAnswersAfterSubmit: true,
         targetScope: "LESSON",
         lessonId: Number(lessonId),
-        questions: created.map((entry, index) => ({
-          questionId: entry.saved.questionId,
+      }
+
+      if (created.length > 0) {
+        // New questions this session become (or add to) the exam's question
+        // set. On create this is the whole set; on edit with no prior
+        // questions preserved server-side view, this replaces it (see the
+        // notice near Save).
+        payload.totalQuestions = created.length
+        payload.questions = created.map((entry, index) => ({
+          questionId: entry.questionId,
           points: entry.points,
           displayOrder: index + 1,
-        })),
+        }))
+      } else if (isEdit) {
+        // Settings-only edit -- omit questions/questionIds entirely so the
+        // backend leaves the existing question set untouched, and echo back
+        // the exam's real count so it isn't reset.
+        payload.totalQuestions = examQuery.data?.totalQuestions ?? 0
       }
 
       return isEdit
@@ -307,6 +311,7 @@ export default function EnterpriseAssessmentBuilderPage() {
   })
 
   const handleSave = () => {
+    setSubmitted(true)
     const problem = validate()
     if (problem) {
       setError(problem)
@@ -316,7 +321,11 @@ export default function EnterpriseAssessmentBuilderPage() {
     saveMutation.mutate()
   }
 
-  if (groupQuery.isLoading || certificationsQuery.isLoading || (isEdit && examQuery.isLoading)) {
+  if (
+    groupQuery.isLoading ||
+    certificationsQuery.isLoading ||
+    (isEdit && (examQuery.isLoading || examTypesQuery.isLoading))
+  ) {
     return <EnterpriseLoadingSkeleton />
   }
   if (groupQuery.isError) {
@@ -361,8 +370,19 @@ export default function EnterpriseAssessmentBuilderPage() {
       </div>
 
       {error ? (
-        <p className="border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive" role="alert">
+        <p
+          className="border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive"
+          role="alert"
+        >
           {error}
+        </p>
+      ) : null}
+
+      {isEdit && questions.length > 0 ? (
+        <p className="flex items-start gap-1.5 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs leading-5 text-amber-700 dark:text-amber-400">
+          <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+          Saving will replace this assessment&apos;s entire question set with the ones you&apos;ve
+          added here.
         </p>
       ) : null}
 
@@ -469,9 +489,56 @@ export default function EnterpriseAssessmentBuilderPage() {
               />
             </div>
           </div>
+
+          {/* Points configuration -- same SAME/INDIVIDUAL pattern as the
+              admin assessment builder's question-points panel. */}
+          <div className="rounded-xl border p-3">
+            <h4 className="text-sm font-semibold">Question points</h4>
+            <RadioGroup value={pointsMode} onValueChange={handlePointsModeChange} className="mt-3 gap-2">
+              <label className="flex items-center gap-2 text-sm">
+                <RadioGroupItem value="SAME" />
+                Same points for all questions
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <RadioGroupItem value="INDIVIDUAL" />
+                Configure points for each question
+              </label>
+            </RadioGroup>
+
+            {pointsMode === "SAME" ? (
+              <div className="mt-3 flex items-end gap-2">
+                <div className="space-y-1">
+                  <Label htmlFor="a-same-points" className="text-xs">
+                    Points per question
+                  </Label>
+                  <Input
+                    id="a-same-points"
+                    type="number"
+                    min="0.01"
+                    step="0.5"
+                    value={samePoints}
+                    onChange={(e) => {
+                      const next = e.target.value
+                      setSamePoints(next)
+                      if (isValidPoints(next)) applySamePoints(Number(next))
+                    }}
+                    className="h-9 w-24"
+                    aria-invalid={!isValidPoints(samePoints)}
+                  />
+                </div>
+                {!isValidPoints(samePoints) ? (
+                  <p className="pb-1 text-xs text-destructive">Points must be greater than zero.</p>
+                ) : null}
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-muted-foreground">
+                Set each question&apos;s points in its card in the centre column.
+              </p>
+            )}
+          </div>
         </aside>
 
-        {/* CENTER: authored questions */}
+        {/* CENTER: authored questions, using the exact admin question editors */}
         <main className="min-h-0 overflow-y-auto bg-muted/20 p-4">
           {questions.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-center">
@@ -483,115 +550,49 @@ export default function EnterpriseAssessmentBuilderPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {questions.map((question, index) => (
-                <div
-                  key={question.key}
-                  className="rounded-2xl border border-border bg-card p-4 shadow-sm"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
-                      {index + 1}
-                    </span>
-                    <Badge variant="secondary">
-                      {QUESTION_TYPES.find((t) => t.id === question.questionType)?.title ??
-                        question.questionType}
-                    </Badge>
-                    <div className="ml-auto flex items-center gap-2">
-                      <Label htmlFor={`pts-${question.key}`} className="text-xs">
-                        Points
-                      </Label>
-                      <Input
-                        id={`pts-${question.key}`}
-                        type="number"
-                        min="0.5"
-                        step="0.5"
-                        value={question.points}
-                        onChange={(e) => patchQuestion(question.key, { points: e.target.value })}
-                        className="h-8 w-20"
-                      />
-                      <Select
-                        value={question.difficultyLevel}
-                        onValueChange={(value) =>
-                          patchQuestion(question.key, { difficultyLevel: value })
-                        }
-                      >
-                        <SelectTrigger className="h-8 w-28">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {DIFFICULTIES.map((d) => (
-                            <SelectItem key={d.value} value={d.value}>
-                              {d.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Delete question ${index + 1}`}
-                        onClick={() => removeQuestion(question.key)}
-                        className="text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    </div>
+              {questions.map((question, index) => {
+                const questionType = QUESTION_TYPES.find((t) => t.id === question.typeId)
+                const Editor = questionType?.component
+                if (!Editor) return null
+
+                const pointsInput = (
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <Label htmlFor={`pts-${question.key}`} className="text-xs text-muted-foreground">
+                      Points
+                    </Label>
+                    <Input
+                      id={`pts-${question.key}`}
+                      type="number"
+                      min="0.01"
+                      step="0.5"
+                      readOnly={pointsMode === "SAME"}
+                      disabled={pointsMode === "SAME"}
+                      value={pointsById[question.key] ?? ""}
+                      onChange={(e) => setOnePoint(question.key, e.target.value)}
+                      className="h-8 w-20"
+                      aria-label={`Points for question ${index + 1}`}
+                    />
                   </div>
+                )
 
-                  <Textarea
-                    value={question.questionText}
-                    onChange={(e) =>
-                      patchQuestion(question.key, { questionText: e.target.value })
-                    }
-                    placeholder="Write the question..."
-                    rows={2}
-                    className="mt-3"
+                return (
+                  <Editor
+                    key={question.key}
+                    questionKey={question.key}
+                    questionNumber={index + 1}
+                    onRemove={() => removeQuestion(question.key)}
+                    data={question.data}
+                    onDataChange={(updater) => updateQuestionData(question.key, updater)}
+                    errors={perQuestionErrors[question.key] ?? {}}
+                    headerExtra={pointsInput}
                   />
-
-                  {question.questionType === "MCQ" ? (
-                    <div className="mt-3 space-y-2">
-                      <p className="text-xs font-medium text-muted-foreground">
-                        Choices — tick the correct one
-                      </p>
-                      {question.choices.map((choice, choiceIndex) => (
-                        <div key={choiceIndex} className="flex items-center gap-2">
-                          <Checkbox
-                            checked={Boolean(choice.correct)}
-                            onCheckedChange={() => setCorrectChoice(question.key, choiceIndex)}
-                            aria-label={`Mark choice ${choiceIndex + 1} correct`}
-                          />
-                          <Input
-                            value={choice.choiceText}
-                            onChange={(e) =>
-                              patchChoice(question.key, choiceIndex, {
-                                choiceText: e.target.value,
-                              })
-                            }
-                            placeholder={`Choice ${choiceIndex + 1}`}
-                          />
-                        </div>
-                      ))}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          patchQuestion(question.key, {
-                            choices: [...question.choices, emptyChoice()],
-                          })
-                        }
-                      >
-                        <Plus className="size-3.5" />
-                        Add choice
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </main>
 
-        {/* RIGHT: question type palette */}
+        {/* RIGHT: question type palette -- the same five types as admin */}
         <aside className="min-h-0 space-y-4 overflow-y-auto border-t border-border p-4 md:border-l md:border-t-0">
           <div>
             <p className="text-sm font-medium text-foreground">Add Question</p>
@@ -600,29 +601,9 @@ export default function EnterpriseAssessmentBuilderPage() {
             </p>
           </div>
           <div className="space-y-2">
-            {QUESTION_TYPES.map((type) => {
-              const Icon = type.icon
-              return (
-                <button
-                  key={type.id}
-                  type="button"
-                  onClick={() => addQuestion(type.id)}
-                  className="flex w-full items-start gap-3 rounded-xl border border-border bg-card p-3 text-left transition hover:border-primary/50 hover:bg-muted/50"
-                >
-                  <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <Icon className="size-4" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium text-foreground">
-                      {type.title}
-                    </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {type.description}
-                    </span>
-                  </span>
-                </button>
-              )
-            })}
+            {QUESTION_TYPES.map((questionType) => (
+              <QuestionTypeButton key={questionType.id} questionType={questionType} onAdd={addQuestion} />
+            ))}
           </div>
         </aside>
       </div>

@@ -125,6 +125,14 @@ public class SecurityConfig {
                         // question. Now admin- or enterprise-scoped at the controller;
                         // block anonymous access here too.
                         .requestMatchers("/api/questions/**").authenticated()
+                        // Same defect on the per-type answer-key endpoints (choices,
+                        // short-answer/descriptive keys, programming test cases, diagram
+                        // reference answers) -- had zero auth, now admin- or
+                        // enterprise-scoped at the controller; block anonymous access here too.
+                        .requestMatchers("/api/choices/**").authenticated()
+                        .requestMatchers("/api/text-question-configs/**").authenticated()
+                        .requestMatchers("/api/programming-question-configs/**").authenticated()
+                        .requestMatchers("/api/diagram-question-configs/**").authenticated()
                         // Exam WRITES had no auth at all -- anyone could create/edit/
                         // publish/delete any assessment platform-wide. Now admin-only at
                         // the controller; block anonymous writes here too. GET stays open
