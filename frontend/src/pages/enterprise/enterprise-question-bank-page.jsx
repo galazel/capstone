@@ -73,7 +73,7 @@ function emptyChoice() {
   return { choiceText: "", correct: false, explanation: "" }
 }
 
-function QuestionFormDialog({ open, onOpenChange, lessonId, editingQuestion }) {
+function QuestionFormDialog({ open, onOpenChange, lessonId, editingQuestion, groupId }) {
   const queryClient = useQueryClient()
   const isEditing = editingQuestion != null
 
@@ -125,10 +125,12 @@ function QuestionFormDialog({ open, onOpenChange, lessonId, editingQuestion }) {
       }
       return isEditing
         ? updateQuestion(editingQuestion.questionId, payload)
-        : saveQuestion(payload)
+        // Authored for this group when opened in a group context, so it stays
+        // private to them rather than joining the official question bank.
+        : saveQuestion(payload, groupId)
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["enterprise-questions", lessonId] })
+      queryClient.invalidateQueries({ queryKey: ["enterprise-questions", lessonId, groupId ?? null] })
       toast.success(isEditing ? "Question updated." : "Question added.")
       reset()
       onOpenChange(false)
@@ -338,6 +340,9 @@ export default function EnterpriseQuestionBankPage() {
   const preselectedCertId = searchParams.get("certificationId")
   const preselectedLessonId = searchParams.get("lessonId")
   const shouldAutoOpenForm = searchParams.get("add") === "1"
+  // Opened from a group workspace: questions authored here belong to that
+  // group, and the list shows the group's own questions alongside official ones.
+  const groupId = searchParams.get("groupId") ? Number(searchParams.get("groupId")) : undefined
 
   const [selectedCertId, setSelectedCertId] = useState(preselectedCertId ?? "")
   const [selectedLessonId, setSelectedLessonId] = useState(preselectedLessonId ?? "")
@@ -400,8 +405,8 @@ export default function EnterpriseQuestionBankPage() {
   }, [accessibleCertifications, selectedCertId])
 
   const questionsQuery = useQuery({
-    queryKey: ["enterprise-questions", selectedLessonId],
-    queryFn: () => getQuestionsByLesson(selectedLessonId),
+    queryKey: ["enterprise-questions", selectedLessonId, groupId ?? null],
+    queryFn: () => getQuestionsByLesson(selectedLessonId, groupId),
     enabled: !!selectedLessonId,
   })
 
@@ -410,7 +415,9 @@ export default function EnterpriseQuestionBankPage() {
   const deleteMutation = useMutation({
     mutationFn: (questionId) => deleteQuestion(questionId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["enterprise-questions", selectedLessonId] })
+      queryClient.invalidateQueries({
+        queryKey: ["enterprise-questions", selectedLessonId, groupId ?? null],
+      })
       toast.success("Question deleted.")
       setDeleteTarget(null)
     },
@@ -605,6 +612,7 @@ export default function EnterpriseQuestionBankPage() {
         onOpenChange={setFormOpen}
         lessonId={Number(selectedLessonId) || null}
         editingQuestion={editingQuestion}
+        groupId={groupId}
       />
 
       <AlertDialog

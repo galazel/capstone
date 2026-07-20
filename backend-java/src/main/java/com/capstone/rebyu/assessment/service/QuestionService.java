@@ -16,6 +16,7 @@ import com.capstone.rebyu.certification.entity.MajorCategory;
 import com.capstone.rebyu.certification.entity.MiddleCategory;
 import com.capstone.rebyu.certification.repository.LessonRepository;
 import com.capstone.rebyu.common.BusinessRuleException;
+import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup;
 import com.capstone.rebyu.organization.repository.OrganizationCertificateRepository;
 import com.capstone.rebyu.user.entity.User;
 import jakarta.persistence.EntityNotFoundException;
@@ -44,19 +45,40 @@ public class QuestionService {
     private final QuestionMapper questionMapper;
     private final OrganizationCertificateRepository organizationCertificateRepository;
 
-    public List<QuestionDto> getAll() {
-        log.debug("Fetching all questions");
-        return questionRepository.findAll().stream().map(questionMapper::toDto).toList();
+    /**
+     * includeGroupId is the same opt-in scoping used for the curriculum tree
+     * and exams: omitted, only official (admin-authored) questions are
+     * returned -- identical to before group ownership existed, since no
+     * question has ever had a non-null owner group. Passed, that group's own
+     * questions are mixed in; another group's questions are never visible.
+     */
+    public List<QuestionDto> getAll(Long includeGroupId) {
+        log.debug("Fetching all questions (includeGroupId={})", includeGroupId);
+        return questionRepository.findAll().stream()
+                .filter(question -> isVisible(question, includeGroupId))
+                .map(questionMapper::toDto).toList();
     }
 
-    public List<QuestionDto> getByLessonId(Long lessonId) {
+    public List<QuestionDto> getByLessonId(Long lessonId, Long includeGroupId) {
         log.debug("Fetching questions for lesson id: {}", lessonId);
-        return questionRepository.findByLesson_LessonId(lessonId).stream().map(questionMapper::toDto).toList();
+        return questionRepository.findByLesson_LessonId(lessonId).stream()
+                .filter(question -> isVisible(question, includeGroupId))
+                .map(questionMapper::toDto).toList();
     }
 
-    public QuestionDto getById(Long id) {
+    public QuestionDto getById(Long id, Long includeGroupId) {
         log.debug("Fetching question id: {}", id);
-        return questionMapper.toDto(findEntity(id));
+        Question entity = findEntity(id);
+        if (!isVisible(entity, includeGroupId)) {
+            throw new EntityNotFoundException("Question not found: " + id);
+        }
+        return questionMapper.toDto(entity);
+    }
+
+    /** Official questions are visible to everyone; group-owned only to that group. */
+    private boolean isVisible(Question question, Long includeGroupId) {
+        return question.getOwnerGroup() == null
+                || question.getOwnerGroup().getEnterpriseGroupId().equals(includeGroupId);
     }
 
     /**
@@ -66,8 +88,10 @@ public class QuestionService {
      *                             certification this organization has purchased
      *                             access to. Null for an ADMIN caller (no restriction).
      */
-    public QuestionDto create(QuestionDto dto, Long creatorUserId, Long restrictToEnterpriseId) {
-        log.info("Creating new question");
+    public QuestionDto create(
+            QuestionDto dto, Long creatorUserId, Long restrictToEnterpriseId, EnterpriseGroup ownerGroup) {
+        log.info("Creating new question (ownerGroup={})",
+                ownerGroup == null ? null : ownerGroup.getEnterpriseGroupId());
         validateLesson(dto, restrictToEnterpriseId);
         if (dto.getParentQuestionId() == null && dto.getQuestionText() != null) {
             if (questionRepository.findDuplicate(dto.getLessonId(), dto.getQuestionText(), dto.getQuestionType()).isPresent()) {
@@ -78,6 +102,7 @@ public class QuestionService {
         entity.setQuestionId(null);
         entity.setCreatedBy(User.builder().userId(creatorUserId).build());
         entity.setCreatedAt(LocalDateTime.now());
+        entity.setOwnerGroup(ownerGroup);
         resolveParent(entity, dto.getParentQuestionId());
         QuestionDto result = questionMapper.toDto(questionRepository.save(entity));
         log.info("Question created with id: {} by userId={}", result.getQuestionId(), creatorUserId);

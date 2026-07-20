@@ -28,9 +28,17 @@ public class EligibleQuestionService {
     private final QuestionRepository questionRepository;
     private final ExamQuestionRepository examQuestionRepository;
 
+    /**
+     * @param includeGroupId omitted -> official questions only (unchanged
+     *                       behavior); passed -> that group's own questions are
+     *                       offered too. Another group's questions are never
+     *                       eligible. The caller's access to the group is
+     *                       checked in the controller.
+     */
     @Transactional(readOnly = true)
     public List<EligibleQuestionDto> getEligible(
-            Long certificationId, Long majorId, Long middleId, Long lessonId, Long examId) {
+            Long certificationId, Long majorId, Long middleId, Long lessonId, Long examId,
+            Long includeGroupId) {
 
         List<Question> scoped = resolveScope(certificationId, majorId, middleId, lessonId);
 
@@ -42,6 +50,8 @@ public class EligibleQuestionService {
 
         return scoped.stream()
                 .filter(question -> !assigned.contains(question.getQuestionId()))
+                .filter(question -> question.getOwnerGroup() == null
+                        || question.getOwnerGroup().getEnterpriseGroupId().equals(includeGroupId))
                 .map(this::toDto)
                 .toList();
     }

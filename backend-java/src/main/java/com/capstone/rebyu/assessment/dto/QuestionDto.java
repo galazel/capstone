@@ -24,6 +24,10 @@ public class QuestionDto {
     private String createdByEmail;
     private LocalDateTime createdAt;
 
+    // NULL = official question. Read-only here -- ownership is set exclusively
+    // via the create endpoint's ownerGroupId query param, never from this body.
+    private Long ownerGroupId;
+
     private Long parentQuestionId;
 
     @NotBlank

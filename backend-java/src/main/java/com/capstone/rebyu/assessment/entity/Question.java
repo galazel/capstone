@@ -2,6 +2,7 @@ package com.capstone.rebyu.assessment.entity;
 
 
 import com.capstone.rebyu.certification.entity.Lesson;
+import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup;
 import com.capstone.rebyu.user.entity.User;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -88,4 +89,13 @@ public class Question {
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
+
+    // NULL = official, platform-wide question (admin-authored, unchanged).
+    // Set = authored by one Enterprise group; only that group sees and can
+    // use it. Mirrors MajorCategory.ownerGroup / Exam.ownerGroup.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_group_id")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private EnterpriseGroup ownerGroup;
 }

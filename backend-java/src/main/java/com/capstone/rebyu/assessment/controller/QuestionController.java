@@ -6,6 +6,10 @@ import com.capstone.rebyu.assessment.service.EligibleQuestionService;
 import com.capstone.rebyu.assessment.service.QuestionService;
 import com.capstone.rebyu.auth.dto.CurrentUserDto;
 import com.capstone.rebyu.auth.service.CognitoAuthService;
+import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup;
+import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupRepository;
+import com.capstone.rebyu.enterprisegroup.service.EnterpriseGroupService;
+import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -28,17 +32,22 @@ import java.util.List;
 public class QuestionController {
     private final QuestionService questionService;
     private final EligibleQuestionService eligibleQuestionService;
+    private final EnterpriseGroupService enterpriseGroupService;
+    private final EnterpriseGroupRepository enterpriseGroupRepository;
     private final CognitoAuthService auth;
 
     @GetMapping
     public List<QuestionDto> getAll(
-            @RequestParam(required = false) Long lessonId, @AuthenticationPrincipal Jwt jwt) {
-        requireAdminOrEnterprise(jwt);
+            @RequestParam(required = false) Long lessonId,
+            @RequestParam(required = false) Long includeGroupId,
+            @AuthenticationPrincipal Jwt jwt) {
+        CurrentUserDto caller = requireAdminOrEnterprise(jwt);
+        requireGroupAccessIfRequested(caller, includeGroupId);
         if (lessonId != null) {
-            return questionService.getByLessonId(lessonId);
+            return questionService.getByLessonId(lessonId, includeGroupId);
         }
 
-        return questionService.getAll();
+        return questionService.getAll(includeGroupId);
     }
 
     /**
@@ -53,23 +62,42 @@ public class QuestionController {
             @RequestParam(required = false) Long middleId,
             @RequestParam(required = false) Long lessonId,
             @RequestParam(required = false) Long examId,
+            @RequestParam(required = false) Long includeGroupId,
             @AuthenticationPrincipal Jwt jwt) {
-        requireAdminOrEnterprise(jwt);
-        return eligibleQuestionService.getEligible(certificationId, majorId, middleId, lessonId, examId);
+        CurrentUserDto caller = requireAdminOrEnterprise(jwt);
+        requireGroupAccessIfRequested(caller, includeGroupId);
+        return eligibleQuestionService.getEligible(
+                certificationId, majorId, middleId, lessonId, examId, includeGroupId);
     }
 
     @GetMapping("/{id}")
-    public QuestionDto getById(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
-        requireAdminOrEnterprise(jwt);
-        return questionService.getById(id);
+    public QuestionDto getById(
+            @PathVariable Long id,
+            @RequestParam(required = false) Long includeGroupId,
+            @AuthenticationPrincipal Jwt jwt) {
+        CurrentUserDto caller = requireAdminOrEnterprise(jwt);
+        requireGroupAccessIfRequested(caller, includeGroupId);
+        return questionService.getById(id, includeGroupId);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public QuestionDto create(@Valid @RequestBody QuestionDto dto, @AuthenticationPrincipal Jwt jwt) {
+    public QuestionDto create(
+            @Valid @RequestBody QuestionDto dto,
+            @RequestParam(required = false) Long ownerGroupId,
+            @AuthenticationPrincipal Jwt jwt) {
         CurrentUserDto caller = requireAdminOrEnterprise(jwt);
         boolean isAdmin = "ADMIN".equalsIgnoreCase(caller.role());
-        return questionService.create(dto, caller.userId(), isAdmin ? null : caller.enterpriseId());
+        // ownerGroupId marks this as the group's own question. The caller must
+        // actually be able to act on that group (owner or its active leader).
+        EnterpriseGroup ownerGroup = null;
+        if (ownerGroupId != null) {
+            requireGroupAccessIfRequested(caller, ownerGroupId);
+            ownerGroup = enterpriseGroupRepository.findById(ownerGroupId)
+                    .orElseThrow(() -> new EntityNotFoundException("Group not found: " + ownerGroupId));
+        }
+        return questionService.create(
+                dto, caller.userId(), isAdmin ? null : caller.enterpriseId(), ownerGroup);
     }
 
     @PutMapping("/{id}")
@@ -97,5 +125,22 @@ public class QuestionController {
             throw new IllegalArgumentException("Admin or enterprise access is required");
         }
         return user;
+    }
+
+    /**
+     * No-op when no group is referenced. Otherwise the caller must belong to
+     * that group's organization and be its active leader (or the institution
+     * owner) -- so a group's private questions can't be read, or written to,
+     * by guessing a group id. Reuses the same check as the rest of the app.
+     */
+    private void requireGroupAccessIfRequested(CurrentUserDto caller, Long groupId) {
+        if (groupId == null) {
+            return;
+        }
+        if (caller.enterpriseId() == null) {
+            throw new IllegalArgumentException("An enterprise account is required");
+        }
+        boolean owner = "owner".equalsIgnoreCase(caller.enterpriseMemberRole());
+        enterpriseGroupService.getAccessibleById(groupId, caller.enterpriseId(), caller.userId(), owner);
     }
 }

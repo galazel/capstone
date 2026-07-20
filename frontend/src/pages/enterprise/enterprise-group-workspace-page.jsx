@@ -1249,10 +1249,15 @@ export default function EnterpriseGroupWorkspacePage() {
                 Build your group's own exams — title, timer, points, and questions.
               </p>
             </div>
-            <Button onClick={() => setCreateAssessmentOpen(true)} disabled={!certification}>
-              <Plus className="size-4" aria-hidden="true" />
-              Create Assessment
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button asChild variant="outline">
+                <Link to={`/enterprise/question-bank?groupId=${id}`}>My questions</Link>
+              </Button>
+              <Button onClick={() => setCreateAssessmentOpen(true)} disabled={!certification}>
+                <Plus className="size-4" aria-hidden="true" />
+                Create Assessment
+              </Button>
+            </div>
           </div>
 
           <Card>

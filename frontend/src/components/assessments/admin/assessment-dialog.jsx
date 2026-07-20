@@ -1199,6 +1199,7 @@ export default function AssessmentDialog({
                 createTypeConfig.scope === "MAJOR_CATEGORY" ? targetId : null
               }
               onAddQuestions={handleAddQuestions}
+              ownerGroupId={ownerGroupId}
           />
         </DialogContent>
       </Dialog>

@@ -2,8 +2,11 @@ import { base } from "./base"
 
 export const DEFAULT_GENERATION_TARGET = 100
 
-export async function saveQuestion(question) {
-    return await base("questions", {
+// Pass ownerGroupId to author a question that belongs to one Enterprise group
+// (only that group sees/uses it). Omit it for official, platform-wide questions.
+export async function saveQuestion(question, ownerGroupId) {
+    const query = ownerGroupId != null ? `?ownerGroupId=${ownerGroupId}` : ""
+    return await base(`questions${query}`, {
         method: "POST",
         data: question,
     })
@@ -22,14 +25,19 @@ export async function deleteQuestion(questionId) {
     })
 }
 
-export async function getQuestionsByLesson(lessonId) {
-    return await base(`questions?lessonId=${lessonId}`, {
+export async function getQuestionsByLesson(lessonId, includeGroupId) {
+    const group = includeGroupId != null ? `&includeGroupId=${includeGroupId}` : ""
+    return await base(`questions?lessonId=${lessonId}${group}`, {
         method: "GET",
     })
 }
 
-export async function getQuestions() {
-    return await base("questions", {
+// Omit includeGroupId for official questions only (what every existing caller
+// does). Pass a group id to also include that group's own questions -- the
+// caller must be able to act on that group, enforced server-side.
+export async function getQuestions(includeGroupId) {
+    const query = includeGroupId != null ? `?includeGroupId=${includeGroupId}` : ""
+    return await base(`questions${query}`, {
         method: "GET",
     })
 }
@@ -45,6 +53,7 @@ export async function getEligibleQuestions({
     middleId,
     lessonId,
     examId,
+    includeGroupId,
 } = {}) {
     const params = new URLSearchParams()
     if (certificationId != null) params.set("certificationId", certificationId)
@@ -52,6 +61,7 @@ export async function getEligibleQuestions({
     if (middleId != null) params.set("middleId", middleId)
     if (lessonId != null) params.set("lessonId", lessonId)
     if (examId != null) params.set("examId", examId)
+    if (includeGroupId != null) params.set("includeGroupId", includeGroupId)
     return await base(`questions/eligible?${params.toString()}`, { method: "GET" })
 }
 
