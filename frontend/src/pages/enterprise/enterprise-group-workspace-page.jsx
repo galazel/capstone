@@ -21,6 +21,16 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -37,8 +47,7 @@ import {
   EnterpriseStatusBadge,
   formatDateTime,
 } from "@/components/enterprise/enterprise-ui.jsx"
-import { getExamTypes, getExams } from "@/services/assessmentService.js"
-import AssessmentDialog from "@/components/assessments/admin/assessment-dialog.jsx"
+import { deleteExam, getExamTypes, getExams } from "@/services/assessmentService.js"
 import { getAllCertifications } from "@/services/certificationService.js"
 import { createMajorCategory, deleteMajorCategory } from "@/services/majorCategoryService.js"
 import { createMiddleCategory, deleteMiddleCategory } from "@/services/middleCategoryService.js"
@@ -1028,7 +1037,19 @@ function LearnersTab({ groupId, group, learners }) {
 export default function EnterpriseGroupWorkspacePage() {
   const { groupId } = useParams()
   const id = Number(groupId)
-  const [createAssessmentOpen, setCreateAssessmentOpen] = useState(false)
+  const queryClient = useQueryClient()
+  const [deleteExamTarget, setDeleteExamTarget] = useState(null)
+
+  const deleteExamMutation = useMutation({
+    mutationFn: (id) => deleteExam(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["exams"] })
+      toast.success("Assessment deleted.")
+      setDeleteExamTarget(null)
+    },
+    onError: (err) => toast.error(backendMessage(err, "Unable to delete this assessment.")),
+  })
+
   const groupQuery = useQuery({
     queryKey: ["enterprise-group", id],
     queryFn: () => getEnterpriseGroupById(id),
@@ -1243,96 +1264,69 @@ export default function EnterpriseGroupWorkspacePage() {
 
         <TabsContent value="assessments" className="mt-5 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="font-heading text-lg font-bold text-foreground">Assessments</h2>
-              <p className="text-sm text-muted-foreground">
-                Build your group's own exams — title, timer, points, and questions.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button asChild variant="outline">
-                <Link to={`/enterprise/question-bank?groupId=${id}`}>My questions</Link>
-              </Button>
-              <Button onClick={() => setCreateAssessmentOpen(true)} disabled={!certification}>
+            <h2 className="font-heading text-lg font-bold text-foreground">Assessments</h2>
+            <Button asChild disabled={!certification}>
+              <Link to={`/enterprise/groups/${id}/assessments/new`}>
                 <Plus className="size-4" aria-hidden="true" />
                 Create Assessment
-              </Button>
-            </div>
+              </Link>
+            </Button>
           </div>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <ClipboardCheckIcon className="size-4 text-primary" aria-hidden="true" />
-                Your group's assessments
-              </CardTitle>
-              <CardDescription>
-                Exams your group has authored. Official certification assessments live in the
-                Curriculum tab.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {ownGroupExams.length ? (
-                <ul className="divide-y rounded-lg border">
-                  {ownGroupExams.map((exam) => (
-                    <li
-                      key={exam.examId}
-                      className="flex items-center justify-between gap-3 px-3 py-3"
+          {ownGroupExams.length ? (
+            <ul className="divide-y rounded-xl border bg-card">
+              {ownGroupExams.map((exam) => (
+                <li key={exam.examId} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">{exam.title}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {exam.totalQuestions ?? 0}{" "}
+                      {(exam.totalQuestions ?? 0) === 1 ? "question" : "questions"}
+                      {exam.durationMinutes ? ` · ${exam.durationMinutes} min` : ""}
+                      {exam.passingScore != null ? ` · ${exam.passingScore}% to pass` : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Badge variant="outline">
+                      {examTypeById.get(exam.examTypeId) ?? "Assessment"}
+                    </Badge>
+                    <EnterpriseStatusBadge status={exam.status} />
+                    <Button asChild variant="ghost" size="sm">
+                      <Link to={`/enterprise/groups/${id}/assessments/${exam.examId}/edit`}>
+                        Edit
+                      </Link>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Delete ${exam.title}`}
+                      onClick={() => setDeleteExamTarget(exam)}
+                      className="text-muted-foreground hover:text-destructive"
                     >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-foreground">
-                          {exam.title}
-                        </p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {exam.totalQuestions ?? 0}{" "}
-                          {(exam.totalQuestions ?? 0) === 1 ? "question" : "questions"}
-                          {exam.durationMinutes ? ` · ${exam.durationMinutes} min` : ""}
-                          {exam.passingScore != null ? ` · ${exam.passingScore}% to pass` : ""}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <Badge variant="outline">
-                          {examTypeById.get(exam.examTypeId) ?? "Assessment"}
-                        </Badge>
-                        <EnterpriseStatusBadge status={exam.status} />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="rounded-lg border border-dashed p-8 text-center">
-                  <ClipboardCheckIcon
-                    className="mx-auto size-8 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <p className="mt-3 text-sm font-medium text-foreground">No assessments yet</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Create your group's first assessment to see it listed here.
-                  </p>
-                  <Button
-                    className="mt-4"
-                    onClick={() => setCreateAssessmentOpen(true)}
-                    disabled={!certification}
-                  >
-                    <Plus className="size-4" aria-hidden="true" />
-                    Create Assessment
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Full builder (title, timer, points, question picker), scoped to
-              this group via ownerGroupId so the exam is member-authored. */}
-          {certification ? (
-            <AssessmentDialog
-              open={createAssessmentOpen}
-              onOpenChange={setCreateAssessmentOpen}
-              mode="create"
-              certification={certification}
-              ownerGroupId={id}
-            />
-          ) : null}
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="rounded-xl border border-dashed p-10 text-center">
+              <ClipboardCheckIcon
+                className="mx-auto size-8 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <p className="mt-3 text-sm font-medium text-foreground">No assessments yet</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Create your group's first assessment to see it listed here.
+              </p>
+              <Button asChild className="mt-4" disabled={!certification}>
+                <Link to={`/enterprise/groups/${id}/assessments/new`}>
+                  <Plus className="size-4" aria-hidden="true" />
+                  Create Assessment
+                </Link>
+              </Button>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="learners" className="mt-5">
@@ -1343,6 +1337,32 @@ export default function EnterpriseGroupWorkspacePage() {
           <AnnouncementsTab groupId={id} />
         </TabsContent>
       </Tabs>
+
+      <AlertDialog
+        open={deleteExamTarget != null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteExamTarget(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this assessment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              &quot;{deleteExamTarget?.title}&quot; will be permanently removed. This cannot be
+              undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteExamMutation.mutate(deleteExamTarget.examId)}
+              disabled={deleteExamMutation.isPending}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

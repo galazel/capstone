@@ -85,7 +85,7 @@ public class ExamService {
             ExamDto dto, boolean isAdmin,
             Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner, Long ownerGroupId) {
         log.info("Creating new exam (ownerGroupId={})", ownerGroupId);
-        enforceUniqueness(dto);
+        enforceUniqueness(dto, ownerGroupId);
         Exam entity = examMapper.toEntity(dto);
         entity.setExamId(null);
         entity.setOwnerGroup(majorCategoryService.resolveAndAuthorizeOwnerGroup(
@@ -270,7 +270,14 @@ public class ExamService {
      * quiz, a middle one middle exam, a major one major exam, and a certification
      * one diagnostic + one mock. Enforced only on create; edits keep their scope.
      */
-    private void enforceUniqueness(ExamDto dto) {
+    private void enforceUniqueness(ExamDto dto, Long ownerGroupId) {
+        // These are rules for the OFFICIAL curriculum (one quiz per lesson,
+        // one diagnostic per certification, ...). A group's own assessments are
+        // separate content and aren't bound by them -- a group may author as
+        // many as it likes without colliding with the official set.
+        if (ownerGroupId != null) {
+            return;
+        }
         String scope = dto.getTargetScope();
         if ("LESSON".equals(scope) && dto.getLessonId() != null
                 && examRepository.existsByLesson_LessonId(dto.getLessonId())) {

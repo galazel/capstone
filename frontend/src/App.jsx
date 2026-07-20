@@ -57,6 +57,7 @@ const EnterpriseLearnerDetailPage = lazy(() => import("./pages/enterprise/enterp
 const EnterpriseCertificationsPage = lazy(() => import("./pages/enterprise/enterprise-certifications-page.jsx"))
 const EnterpriseCertificationDetailPage = lazy(() => import("./pages/enterprise/enterprise-certification-detail-page.jsx"))
 const EnterpriseCertificationViewerPage = lazy(() => import("./pages/enterprise/enterprise-certification-viewer-page.jsx"))
+const EnterpriseAssessmentBuilderPage = lazy(() => import("./pages/enterprise/enterprise-assessment-builder-page.jsx"))
 const EnterpriseGroupsPage = lazy(() => import("./pages/enterprise/enterprise-groups-page.jsx"))
 const EnterpriseLicensePage = lazy(() => import("./pages/enterprise/enterprise-license-page.jsx"))
 const EnterpriseAnalyticsPage = lazy(() => import("./pages/enterprise/enterprise-analytics-page.jsx"))
@@ -244,6 +245,16 @@ export function App() {
                         certification allocation. */}
                     <Route path="groups" element={<EnterpriseGroupsPage />} />
                     <Route path="groups/:groupId" element={<EnterpriseGroupWorkspacePage />} />
+                    {/* Full-page assessment builder (details + question builder),
+                        replacing the old modal. Edit reuses the same page. */}
+                    <Route
+                        path="groups/:groupId/assessments/new"
+                        element={<EnterpriseAssessmentBuilderPage />}
+                    />
+                    <Route
+                        path="groups/:groupId/assessments/:examId/edit"
+                        element={<EnterpriseAssessmentBuilderPage />}
+                    />
                     {/* Reuses the admin lesson editor -- it reads lesson id/context
                         from navigation state, not from the route prefix, and the
                         underlying save/load endpoints already authorize group-owned
