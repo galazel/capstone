@@ -1,4 +1,4 @@
-import { AlertCircle, FilesIcon, Inbox, RefreshCw, UsersRoundIcon } from "lucide-react"
+import { AlertCircle, Inbox, RefreshCw, UsersRoundIcon } from "lucide-react"
 import { NavLink, useLocation } from "react-router-dom"
 
 import { Badge } from "@/components/ui/badge"
@@ -13,15 +13,16 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 
+// Files moved into the account dropdown (with Profile/Settings/Log out) --
+// see enterprise-layout.jsx -- so it isn't listed here anymore.
 const MEMBER_WORKSPACE_LINKS = [
   { label: "My Groups", href: "/enterprise/member", icon: UsersRoundIcon },
-  { label: "Files", href: "/enterprise/files", icon: FilesIcon },
 ]
 
 /**
  * An Enterprise Member (group leader) has no header nav for their workspace
  * -- it lives on the page instead. Drop this at the top of any member page
- * (the group picker, a group's own workspace, Files) so they can still move
+ * (the group picker, a group's own workspace) so they can still move
  * between them.
  */
 export function EnterpriseMemberSubNav() {

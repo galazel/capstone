@@ -1,7 +1,7 @@
 import { useMemo } from "react"
 import { Outlet, useNavigate } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { LogOutIcon, SettingsIcon, UserIcon } from "lucide-react"
+import { FilesIcon, LogOutIcon, SettingsIcon, UserIcon } from "lucide-react"
 
 import { PortalTopNavigation } from "@/components/navigation/portal-navigation.jsx"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -65,6 +65,11 @@ export default function EnterpriseLayout() {
   )
 
   const orgName = enterprise?.enterpriseName ?? "Organization"
+  // An Enterprise Member (group leader, non-owner) has no header nav for
+  // Files (see enterprise-ui.jsx's EnterpriseMemberSubNav) -- it lives in
+  // this account menu instead. The owner already has Files in the header
+  // nav, so it isn't duplicated here for them.
+  const isEnterpriseMember = user?.enterpriseMemberRole && user.enterpriseMemberRole !== "owner"
   const queryClient = useQueryClient()
   const notificationsQuery = useQuery({
     queryKey: ["my-notifications"],
@@ -139,6 +144,12 @@ export default function EnterpriseLayout() {
                  <SettingsIcon />
                  Settings
                </DropdownMenuItem>
+               {isEnterpriseMember ? (
+                 <DropdownMenuItem onClick={() => navigate("/enterprise/files")}>
+                   <FilesIcon />
+                   Files
+                 </DropdownMenuItem>
+               ) : null}
                <DropdownMenuSeparator />
                <DropdownMenuItem variant="destructive" onClick={logout}>
                  <LogOutIcon />
