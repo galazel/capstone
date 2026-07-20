@@ -1015,6 +1015,7 @@ export default function EnterpriseGroupWorkspacePage() {
         <TabsList>
           <TabsTrigger value="curriculum">Curriculum</TabsTrigger>
           <TabsTrigger value="content">Content</TabsTrigger>
+          <TabsTrigger value="assessments">Assessments</TabsTrigger>
           <TabsTrigger value="learners">Learners ({learners.length})</TabsTrigger>
           <TabsTrigger value="announcements">Announcements</TabsTrigger>
         </TabsList>
@@ -1071,7 +1072,19 @@ export default function EnterpriseGroupWorkspacePage() {
               ))}
             </div>
           )}
+        </TabsContent>
 
+        <TabsContent value="content" className="mt-5 space-y-4">
+          <ContentTab
+            groupId={id}
+            certification={certification}
+            onContentChanged={() =>
+              queryClient.invalidateQueries({ queryKey: ["certifications", "group", id] })
+            }
+          />
+        </TabsContent>
+
+        <TabsContent value="assessments" className="mt-5 space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -1105,16 +1118,6 @@ export default function EnterpriseGroupWorkspacePage() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="content" className="mt-5 space-y-4">
-          <ContentTab
-            groupId={id}
-            certification={certification}
-            onContentChanged={() =>
-              queryClient.invalidateQueries({ queryKey: ["certifications", "group", id] })
-            }
-          />
 
           <Card>
             <CardHeader className="pb-2">
