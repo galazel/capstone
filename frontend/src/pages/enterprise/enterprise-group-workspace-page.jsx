@@ -458,17 +458,6 @@ function ContentTab({ groupId, certification, onContentChanged }) {
         </p>
       </div>
 
-      {addingMajor ? (
-        <div className="mb-3">
-          <InlineAddRow
-            placeholder="Major category title"
-            onSubmit={(title) => createMajorMutation.mutate(title)}
-            onCancel={() => setAddingMajor(false)}
-            isPending={createMajorMutation.isPending}
-          />
-        </div>
-      ) : null}
-
       {ownMajorCategories.length === 0 && !addingMajor ? (
         <div className="flex min-h-[240px] flex-col items-center justify-center px-6 text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-card text-foreground shadow-sm">
@@ -680,21 +669,27 @@ function ContentTab({ groupId, certification, onContentChanged }) {
               </div>
             )
           })}
+
+          {/* In-flow add control, always visible below the list. */}
+          {addingMajor ? (
+            <InlineAddRow
+              placeholder="Major category title"
+              onSubmit={(title) => createMajorMutation.mutate(title)}
+              onCancel={() => setAddingMajor(false)}
+              isPending={createMajorMutation.isPending}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAddingMajor(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card px-4 py-4 text-sm font-medium text-muted-foreground transition hover:border-foreground/40 hover:text-foreground"
+            >
+              <Plus size={16} />
+              Add {ownMajorCategories.length ? "another " : ""}major category
+            </button>
+          )}
         </div>
       )}
-
-      {/* Floating add-category button, matching the admin CertificationModules FAB. */}
-      {ownMajorCategories.length > 0 ? (
-        <button
-          type="button"
-          onClick={() => setAddingMajor(true)}
-          title="Add category"
-          aria-label="Add category"
-          className="fixed bottom-8 right-8 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-foreground text-background shadow-lg transition duration-200 hover:scale-105 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-4"
-        >
-          <Plus size={24} strokeWidth={2.5} />
-        </button>
-      ) : null}
     </section>
   )
 }
