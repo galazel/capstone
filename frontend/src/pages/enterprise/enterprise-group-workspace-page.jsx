@@ -439,9 +439,9 @@ function ContentTab({ groupId, certification }) {
         }))
       )
       setAddingLessonTo(null)
-      navigate(`/enterprise/lessons/${encodeURIComponent(lesson.name)}/create`, {
-        state: { lessonId: lesson.lessonId, lessonName: lesson.name },
-      })
+      // Stay on the list -- use the lesson's "Create content" button to open
+      // the editor when you're ready, instead of jumping there on every add.
+      toast.success("Lesson created.")
     },
     onError: (err) => toast.error(backendMessage(err, "Unable to create this lesson.")),
   })
