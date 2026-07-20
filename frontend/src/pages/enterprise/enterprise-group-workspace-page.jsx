@@ -15,6 +15,7 @@ import {
   MegaphoneIcon,
   PinIcon,
   Plus,
+  SquarePen,
   Trash2,
   UserPlusIcon,
   UsersIcon,
@@ -661,6 +662,16 @@ function ContentTab({ groupId, certification }) {
                                   >
                                     {lesson.name}
                                   </button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 gap-1 px-2 text-primary hover:text-primary"
+                                    onClick={() => openLesson(lesson)}
+                                  >
+                                    <SquarePen size={14} aria-hidden="true" />
+                                    Create content
+                                  </Button>
                                   <button
                                     type="button"
                                     aria-label="Delete lesson"
