@@ -355,6 +355,7 @@ export default function EnterpriseAssessmentBuilderPage() {
         certificationId: certification.certificationId,
         examTypeId: examType.examTypeId,
         title: title.trim(),
+        isGenerated: false,
         durationMinutes: durationMinutes ? Number(durationMinutes) : null,
         passingScore: passingScore ? Number(passingScore) : null,
         releaseAnswersAfterSubmit: true,
