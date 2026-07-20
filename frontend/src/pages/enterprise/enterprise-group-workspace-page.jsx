@@ -738,20 +738,27 @@ function ContentTab({ groupId, certification }) {
             )
           })}
 
-          {/* In-flow add control, always visible below the list. */}
+          {/* In-flow add control -- renders the same major-category card shape
+              as a real one, with the title as an input you type into. */}
           {addingMajor ? (
             <div className="overflow-hidden rounded-2xl border border-dashed border-primary/50 bg-card shadow-sm">
               <div className="flex items-center gap-3 px-4 py-4">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground">
+                  <ChevronDown size={18} />
+                </span>
                 <span className="w-8 text-xl font-semibold tracking-tight text-muted-foreground/60">
                   {String(ownMajorCategories.length + 1).padStart(2, "0")}
                 </span>
-                <InlineNameInput
-                  placeholder="Major category title"
-                  className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
-                  onSubmit={(title) => createMajorMutation.mutate(title)}
-                  onCancel={() => setAddingMajor(false)}
-                  isPending={createMajorMutation.isPending}
-                />
+                <div className="min-w-0 flex-1">
+                  <InlineNameInput
+                    placeholder="Major category title"
+                    className="w-full min-w-0 bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
+                    onSubmit={(title) => createMajorMutation.mutate(title)}
+                    onCancel={() => setAddingMajor(false)}
+                    isPending={createMajorMutation.isPending}
+                  />
+                  <p className="mt-0.5 text-xs text-muted-foreground">New category</p>
+                </div>
               </div>
             </div>
           ) : (
