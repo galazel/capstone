@@ -304,7 +304,7 @@ function AnnouncementsTab({ groupId }) {
   )
 }
 
-function InlineNameInput({ placeholder, onSubmit, onCancel, isPending }) {
+function InlineNameInput({ placeholder, onSubmit, onCancel, isPending, className }) {
   const [value, setValue] = useState("")
   // Enter and blur can both fire on the same commit (e.g. Enter then unmount
   // blur); guard so the create only happens once.
@@ -338,7 +338,10 @@ function InlineNameInput({ placeholder, onSubmit, onCancel, isPending }) {
       }}
       onBlur={commit}
       placeholder={placeholder}
-      className="w-full rounded-xl border border-input bg-card px-4 py-3 text-sm text-foreground outline-none transition focus:border-foreground/40 disabled:opacity-60"
+      className={
+        className ??
+        "w-full rounded-xl border border-input bg-card px-4 py-3 text-sm text-foreground outline-none transition focus:border-foreground/40 disabled:opacity-60"
+      }
     />
   )
 }
@@ -670,17 +673,21 @@ function ContentTab({ groupId, certification }) {
                               ))}
 
                               {addingLessonTo === middle.middleCategoryId ? (
-                                <InlineNameInput
-                                  placeholder="Lesson name"
-                                  onSubmit={(name) =>
-                                    createLessonMutation.mutate({
-                                      middleCategoryId: middle.middleCategoryId,
-                                      name,
-                                    })
-                                  }
-                                  onCancel={() => setAddingLessonTo(null)}
-                                  isPending={createLessonMutation.isPending}
-                                />
+                                <div className="flex items-center gap-3 rounded-xl border border-dashed border-primary/50 bg-card px-3 py-2.5">
+                                  <BookOpen size={15} className="shrink-0 text-muted-foreground" />
+                                  <InlineNameInput
+                                    placeholder="Lesson name"
+                                    className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
+                                    onSubmit={(name) =>
+                                      createLessonMutation.mutate({
+                                        middleCategoryId: middle.middleCategoryId,
+                                        name,
+                                      })
+                                    }
+                                    onCancel={() => setAddingLessonTo(null)}
+                                    isPending={createLessonMutation.isPending}
+                                  />
+                                </div>
                               ) : (
                                 <button
                                   type="button"
@@ -698,17 +705,23 @@ function ContentTab({ groupId, certification }) {
                     })}
 
                     {addingMiddleTo === major.majorCategoryId ? (
-                      <InlineNameInput
-                        placeholder="Module title"
-                        onSubmit={(title) =>
-                          createMiddleMutation.mutate({
-                            majorCategoryId: major.majorCategoryId,
-                            title,
-                          })
-                        }
-                        onCancel={() => setAddingMiddleTo(null)}
-                        isPending={createMiddleMutation.isPending}
-                      />
+                      <div className="overflow-hidden rounded-xl border border-dashed border-primary/50 bg-card">
+                        <div className="flex items-center gap-3 px-3 py-3">
+                          <FolderTree size={16} className="shrink-0 text-muted-foreground" />
+                          <InlineNameInput
+                            placeholder="Module title"
+                            className="min-w-0 flex-1 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
+                            onSubmit={(title) =>
+                              createMiddleMutation.mutate({
+                                majorCategoryId: major.majorCategoryId,
+                                title,
+                              })
+                            }
+                            onCancel={() => setAddingMiddleTo(null)}
+                            isPending={createMiddleMutation.isPending}
+                          />
+                        </div>
+                      </div>
                     ) : (
                       <button
                         type="button"
@@ -727,12 +740,20 @@ function ContentTab({ groupId, certification }) {
 
           {/* In-flow add control, always visible below the list. */}
           {addingMajor ? (
-            <InlineNameInput
-              placeholder="Major category title"
-              onSubmit={(title) => createMajorMutation.mutate(title)}
-              onCancel={() => setAddingMajor(false)}
-              isPending={createMajorMutation.isPending}
-            />
+            <div className="overflow-hidden rounded-2xl border border-dashed border-primary/50 bg-card shadow-sm">
+              <div className="flex items-center gap-3 px-4 py-4">
+                <span className="w-8 text-xl font-semibold tracking-tight text-muted-foreground/60">
+                  {String(ownMajorCategories.length + 1).padStart(2, "0")}
+                </span>
+                <InlineNameInput
+                  placeholder="Major category title"
+                  className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
+                  onSubmit={(title) => createMajorMutation.mutate(title)}
+                  onCancel={() => setAddingMajor(false)}
+                  isPending={createMajorMutation.isPending}
+                />
+              </div>
+            </div>
           ) : (
             <button
               type="button"
