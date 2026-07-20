@@ -791,8 +791,9 @@ function ContentTab({ groupId, certification }) {
 function LearnersTab({ groupId, group, learners }) {
   const queryClient = useQueryClient()
   const [inviteOpen, setInviteOpen] = useState(false)
-  const [draftEmail, setDraftEmail] = useState("")
-  const [emails, setEmails] = useState([])
+  const [draft, setDraft] = useState({ firstName: "", lastName: "", email: "" })
+  // Each staged learner: { firstName, lastName, email }.
+  const [invitees, setInvitees] = useState([])
   const [error, setError] = useState("")
 
   const invitationsQuery = useQuery({
@@ -808,33 +809,38 @@ function LearnersTab({ groupId, group, learners }) {
   const remainingSlots = Math.max(0, (group.totalSlots ?? 0) - (group.usedSlots ?? 0))
 
   const resetForm = () => {
-    setDraftEmail("")
-    setEmails([])
+    setDraft({ firstName: "", lastName: "", email: "" })
+    setInvitees([])
     setError("")
   }
 
-  const addEmail = (value) => {
-    const email = value.trim().toLowerCase()
-    if (!email) return
+  const addInvitee = () => {
+    const email = draft.email.trim().toLowerCase()
+    const firstName = draft.firstName.trim()
+    const lastName = draft.lastName.trim()
+    if (!email) {
+      setError("Enter the learner's email.")
+      return
+    }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setError(`"${email}" is not a valid email.`)
       return
     }
-    if (emails.includes(email)) {
+    if (invitees.some((inv) => inv.email === email)) {
       setError("That email is already in the list.")
       return
     }
-    if (emails.length >= remainingSlots) {
+    if (invitees.length >= remainingSlots) {
       setError(`Only ${remainingSlots} slot(s) remaining in this group.`)
       return
     }
-    setEmails((current) => [...current, email])
-    setDraftEmail("")
+    setInvitees((current) => [...current, { firstName, lastName, email }])
+    setDraft({ firstName: "", lastName: "", email: "" })
     setError("")
   }
 
   const inviteMutation = useMutation({
-    mutationFn: () => sendEnterpriseInvitations({ enterpriseGroupId: groupId, emails }),
+    mutationFn: () => sendEnterpriseInvitations({ enterpriseGroupId: groupId, learners: invitees }),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["group-invitations", groupId] })
       queryClient.invalidateQueries({ queryKey: ["enterprise-group", groupId] })
@@ -879,37 +885,57 @@ function LearnersTab({ groupId, group, learners }) {
         </CardHeader>
         {inviteOpen ? (
           <CardContent className="space-y-3">
-            <div className="flex gap-2">
+            <div className="grid gap-2 sm:grid-cols-[1fr_1fr_1.4fr_auto]">
+              <Input
+                value={draft.firstName}
+                onChange={(e) => setDraft((d) => ({ ...d, firstName: e.target.value }))}
+                placeholder="First name"
+              />
+              <Input
+                value={draft.lastName}
+                onChange={(e) => setDraft((d) => ({ ...d, lastName: e.target.value }))}
+                placeholder="Last name"
+              />
               <Input
                 type="email"
-                value={draftEmail}
-                onChange={(e) => setDraftEmail(e.target.value)}
+                value={draft.email}
+                onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === ",") {
+                  if (e.key === "Enter") {
                     e.preventDefault()
-                    addEmail(draftEmail)
+                    addInvitee()
                   }
                 }}
                 placeholder="learner@example.com"
               />
-              <Button type="button" variant="outline" onClick={() => addEmail(draftEmail)}>
+              <Button type="button" variant="outline" onClick={addInvitee}>
                 Add
               </Button>
             </div>
-            {emails.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5">
-                {emails.map((email) => (
-                  <Badge key={email} variant="secondary" className="gap-1 py-1">
-                    {email}
+            {invitees.length > 0 ? (
+              <div className="divide-y rounded-lg border">
+                {invitees.map((inv) => (
+                  <div
+                    key={inv.email}
+                    className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-medium">
+                        {[inv.firstName, inv.lastName].filter(Boolean).join(" ") || "—"}
+                      </span>
+                      <span className="ml-2 text-muted-foreground">{inv.email}</span>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => setEmails((current) => current.filter((e) => e !== email))}
-                      aria-label={`Remove ${email}`}
-                      className="rounded-full outline-none hover:text-destructive"
+                      onClick={() =>
+                        setInvitees((current) => current.filter((c) => c.email !== inv.email))
+                      }
+                      aria-label={`Remove ${inv.email}`}
+                      className="rounded-full px-1 text-muted-foreground outline-none hover:text-destructive"
                     >
                       ×
                     </button>
-                  </Badge>
+                  </div>
                 ))}
               </div>
             ) : null}
@@ -920,7 +946,7 @@ function LearnersTab({ groupId, group, learners }) {
             ) : null}
             <Button
               onClick={() => inviteMutation.mutate()}
-              disabled={emails.length === 0 || inviteMutation.isPending}
+              disabled={invitees.length === 0 || inviteMutation.isPending}
             >
               {inviteMutation.isPending ? (
                 <>
@@ -928,7 +954,7 @@ function LearnersTab({ groupId, group, learners }) {
                   Sending...
                 </>
               ) : (
-                `Send ${emails.length || ""} invitation${emails.length === 1 ? "" : "s"}`
+                `Send ${invitees.length || ""} invitation${invitees.length === 1 ? "" : "s"}`
               )}
             </Button>
           </CardContent>
@@ -948,7 +974,14 @@ function LearnersTab({ groupId, group, learners }) {
               >
                 <div className="flex items-center gap-2 text-sm">
                   <MailIcon className="size-4 text-muted-foreground" aria-hidden="true" />
-                  {inv.email}
+                  <span>
+                    {[inv.firstName, inv.lastName].filter(Boolean).join(" ") ? (
+                      <span className="font-medium">
+                        {[inv.firstName, inv.lastName].filter(Boolean).join(" ")}{" "}
+                      </span>
+                    ) : null}
+                    <span className="text-muted-foreground">{inv.email}</span>
+                  </span>
                   <EnterpriseStatusBadge status={inv.status} />
                 </div>
                 <Button

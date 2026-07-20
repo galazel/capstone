@@ -1,7 +1,11 @@
 package com.capstone.rebyu.partnership.dto;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -30,11 +34,19 @@ public final class EnterpriseInvitationDtos {
     // them. Invitations are sent by a group's leader, not the enterprise at
     // large, so the group (and the certification/slots it belongs to) is
     // derived from enterpriseGroupId rather than an org-cert-wide picker.
+    /** One invited learner: email required, first/last name optional (NetAcad-style). */
+    public record InvitedLearner(
+            @Size(max = 100) String firstName,
+            @Size(max = 100) String lastName,
+            @NotBlank @Email @Size(max = 254) String email
+    ) {
+    }
+
     public record SendInvitationsRequest(
             Long enterpriseId,
             Long invitedByUserId,
             @NotNull Long enterpriseGroupId,
-            @NotEmpty List<String> emails
+            @NotEmpty List<@Valid InvitedLearner> learners
     ) {
     }
 
@@ -46,6 +58,8 @@ public final class EnterpriseInvitationDtos {
             Long enterpriseGroupId,
             String groupName,
             String email,
+            String firstName,
+            String lastName,
             String status,
             LocalDateTime sentAt,
             LocalDateTime expiresAt

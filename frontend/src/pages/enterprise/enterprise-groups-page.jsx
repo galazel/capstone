@@ -288,6 +288,8 @@ function ManageGroupDialog({
   const [inviteLastName, setInviteLastName] = useState("")
   const [inviteEmail, setInviteEmail] = useState("")
   const [learnerInviteEmail, setLearnerInviteEmail] = useState("")
+  const [learnerInviteFirst, setLearnerInviteFirst] = useState("")
+  const [learnerInviteLast, setLearnerInviteLast] = useState("")
   const [editingSlots, setEditingSlots] = useState(false)
   const [slotsInput, setSlotsInput] = useState("")
 
@@ -413,7 +415,13 @@ function ManageGroupDialog({
     mutationFn: () =>
       sendEnterpriseInvitations({
         enterpriseGroupId: groupId,
-        emails: [learnerInviteEmail.trim()],
+        learners: [
+          {
+            firstName: learnerInviteFirst.trim(),
+            lastName: learnerInviteLast.trim(),
+            email: learnerInviteEmail.trim(),
+          },
+        ],
       }),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["enterprise-overview"] })
@@ -422,6 +430,8 @@ function ManageGroupDialog({
           (response.skipped?.length ? ` ${response.skipped.length} skipped.` : "")
       )
       setLearnerInviteEmail("")
+      setLearnerInviteFirst("")
+      setLearnerInviteLast("")
     },
     onError: (err) =>
       toast.error(backendMessage(err, "Unable to send this invitation.")),
@@ -698,7 +708,19 @@ function ManageGroupDialog({
             </div>
 
             {isLeader ? (
-              <div className="flex gap-2">
+              <div className="grid gap-2 sm:grid-cols-[1fr_1fr_1.4fr_auto]">
+                <Input
+                  value={learnerInviteFirst}
+                  onChange={(e) => setLearnerInviteFirst(e.target.value)}
+                  placeholder="First name"
+                  disabled={remainingSlots <= 0}
+                />
+                <Input
+                  value={learnerInviteLast}
+                  onChange={(e) => setLearnerInviteLast(e.target.value)}
+                  placeholder="Last name"
+                  disabled={remainingSlots <= 0}
+                />
                 <Input
                   type="email"
                   value={learnerInviteEmail}

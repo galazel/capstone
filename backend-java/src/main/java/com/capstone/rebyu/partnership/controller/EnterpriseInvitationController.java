@@ -43,7 +43,7 @@ public class EnterpriseInvitationController {
             @Valid @RequestBody SendInvitationsRequest request) throws Exception {
         CurrentUserDto caller = currentUser(jwt);
         SendInvitationsRequest trusted = new SendInvitationsRequest(
-                requireEnterpriseId(caller), caller.userId(), request.enterpriseGroupId(), request.emails());
+                requireEnterpriseId(caller), caller.userId(), request.enterpriseGroupId(), request.learners());
         return invitationService.sendInvitations(trusted);
     }
 

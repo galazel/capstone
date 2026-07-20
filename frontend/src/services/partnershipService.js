@@ -43,11 +43,12 @@ export function getEnterpriseCertificationAccess(enterpriseId) {
 }
 
 // Sent by a group's leader only -- enterpriseGroupId is required; the
-// certification/slots are derived server-side from the group.
-export function sendEnterpriseInvitations({ enterpriseGroupId, emails }) {
+// certification/slots are derived server-side from the group. `learners` is a
+// list of { firstName, lastName, email } (name optional, email required).
+export function sendEnterpriseInvitations({ enterpriseGroupId, learners }) {
   return base("enterprise/invitations", {
     method: "POST",
-    data: { enterpriseGroupId, emails },
+    data: { enterpriseGroupId, learners },
   })
 }
 

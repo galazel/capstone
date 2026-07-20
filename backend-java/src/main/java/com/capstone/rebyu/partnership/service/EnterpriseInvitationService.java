@@ -12,6 +12,7 @@ import com.capstone.rebyu.organization.entity.OrganizationCertificate;
 import com.capstone.rebyu.organization.repository.OrganizationCertificateRepository;
 import com.capstone.rebyu.partnership.dto.EnterpriseInvitationDtos.CertificationAccessDto;
 import com.capstone.rebyu.partnership.dto.EnterpriseInvitationDtos.InvitationDto;
+import com.capstone.rebyu.partnership.dto.EnterpriseInvitationDtos.InvitedLearner;
 import com.capstone.rebyu.partnership.dto.EnterpriseInvitationDtos.SendInvitationsRequest;
 import com.capstone.rebyu.partnership.dto.EnterpriseInvitationDtos.SendInvitationsResponse;
 import com.capstone.rebyu.user.entity.User;
@@ -109,15 +110,19 @@ public class EnterpriseInvitationService {
                     "This certification access is not active.");
         }
 
-        // De-duplicate and validate emails; skip ones already invited.
+        // De-duplicate and validate emails; skip ones already invited. The
+        // first entry seen for an email wins (keeps its name), later dups skip.
         List<String> skipped = new ArrayList<>();
-        LinkedHashSet<String> toInvite = new LinkedHashSet<>();
-        for (String raw : request.emails()) {
-            if (raw == null) continue;
-            String email = raw.trim().toLowerCase(Locale.ROOT);
+        LinkedHashMap<String, InvitedLearner> toInvite = new LinkedHashMap<>();
+        for (InvitedLearner entry : request.learners()) {
+            if (entry == null || entry.email() == null) continue;
+            String email = entry.email().trim().toLowerCase(Locale.ROOT);
             if (email.isEmpty()) continue;
             if (!EMAIL.matcher(email).matches()) {
-                skipped.add(raw + " (invalid email)");
+                skipped.add(entry.email() + " (invalid email)");
+                continue;
+            }
+            if (toInvite.containsKey(email)) {
                 continue;
             }
             if (invitationRepository.existsByOrgCert_OrgCertIdAndEmailIgnoreCaseAndStatus(
@@ -125,7 +130,8 @@ public class EnterpriseInvitationService {
                 skipped.add(email + " (already invited)");
                 continue;
             }
-            toInvite.add(email);
+            toInvite.put(email, new InvitedLearner(
+                    trimToNull(entry.firstName()), trimToNull(entry.lastName()), email));
         }
 
         if (toInvite.isEmpty()) {
@@ -151,7 +157,8 @@ public class EnterpriseInvitationService {
 
         LocalDateTime now = LocalDateTime.now();
         List<InvitationDto> created = new ArrayList<>();
-        for (String email : toInvite) {
+        for (InvitedLearner entry : toInvite.values()) {
+            String email = entry.email();
 
             // Raw token is emailed only; the DB stores SHA-256(rawToken).
             String rawToken = invitationTokenService.generateRawToken();
@@ -162,6 +169,8 @@ public class EnterpriseInvitationService {
                     .enterpriseGroup(group)
                     .invitedBy(User.builder().userId(request.invitedByUserId()).build())
                     .email(email)
+                    .firstName(entry.firstName())
+                    .lastName(entry.lastName())
                     .tokenHash(tokenHash)
                     .sentAt(now)
                     .expiresAt(now.plusDays(INVITATION_VALID_DAYS))
@@ -232,6 +241,15 @@ public class EnterpriseInvitationService {
         return toInvitationDto(invitation);
     }
 
+    /** Trims a string to null when blank, so empty name fields aren't stored as "". */
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     /** Restores exactly one reserved slot on the group; used_slots never goes negative. */
     private void restoreGroupSlot(EnterpriseGroup group) {
         if (group == null) {
@@ -274,6 +292,8 @@ public class EnterpriseInvitationService {
                 group != null ? group.getEnterpriseGroupId() : null,
                 group != null ? group.getGroupName() : null,
                 invitation.getEmail(),
+                invitation.getFirstName(),
+                invitation.getLastName(),
                 invitation.getStatus().name(),
                 invitation.getSentAt(),
                 invitation.getExpiresAt()

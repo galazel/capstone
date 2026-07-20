@@ -201,6 +201,21 @@ public class LearnerService {
                     learner.getLearnerId(), group.getEnterpriseGroupId(), invitation.getInvitationId());
         }
 
+        // Backfill the learner's profile name from the invitation when the
+        // inviter provided one and the learner hasn't set their own yet.
+        boolean learnerChanged = false;
+        if (isBlank(learner.getFirstName()) && !isBlank(invitation.getFirstName())) {
+            learner.setFirstName(invitation.getFirstName().trim());
+            learnerChanged = true;
+        }
+        if (isBlank(learner.getLastName()) && !isBlank(invitation.getLastName())) {
+            learner.setLastName(invitation.getLastName().trim());
+            learnerChanged = true;
+        }
+        if (learnerChanged) {
+            learnerRepository.save(learner);
+        }
+
         // 18-19. Attach the learner and mark the invitation accepted.
         invitation.setLearner(learner);
         invitation.setAcceptedAt(LocalDateTime.now());
@@ -229,6 +244,10 @@ public class LearnerService {
         }
         group.setUsedSlots(Math.max(0, group.getUsedSlots() - 1));
         enterpriseGroupRepository.save(group);
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     /** Restores exactly one reserved slot; used_slots never goes negative. */

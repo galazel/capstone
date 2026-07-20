@@ -53,6 +53,15 @@ public class LearnerInvitation {
     @Column(nullable = false, length = 254)
     private String email;
 
+    // Optional: captured when the inviter provides the learner's name (like
+    // NetAcad's first/last/email invite). Used to greet the invite and to
+    // backfill the learner's profile name on acceptance if it's still blank.
+    @Column(name = "first_name", length = 100)
+    private String firstName;
+
+    @Column(name = "last_name", length = 100)
+    private String lastName;
+
     @Column(name = "token_hash", nullable = false, unique = true, length = 255)
     private String tokenHash;
 
