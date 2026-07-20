@@ -101,6 +101,8 @@ public class EnterpriseMemberProvisioningService {
         EnterpriseMember member = EnterpriseMember.builder()
                 .enterprise(enterprise)
                 .user(user)
+                .firstName(request.getFirstName().trim())
+                .lastName(request.getLastName().trim())
                 .memberRole(request.getMemberRole())
                 .isPrimaryContact(false)
                 .joinedAt(LocalDateTime.now())

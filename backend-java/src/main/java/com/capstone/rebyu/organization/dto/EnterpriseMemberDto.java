@@ -24,6 +24,11 @@ public class EnterpriseMemberDto {
     // label members/authorities without fetching the global users list.
     private String email;
 
+    // Captured at invite time so members/authorities can be shown by name
+    // rather than just an email address. Null for pre-existing members.
+    private String firstName;
+    private String lastName;
+
     @NotNull
     private EnterpriseMember.MemberRole memberRole;
 

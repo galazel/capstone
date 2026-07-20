@@ -487,8 +487,15 @@ function ManageGroupDialog({
     onError: (err) => toast.error(backendMessage(err, "Unable to update this learner's role.")),
   })
 
-  const memberLabel = (memberUserId) =>
-    userById.get(memberUserId)?.email ?? `User #${memberUserId}`
+  // Prefer the member's name (captured when their account was provisioned),
+  // falling back to email for members created before names were stored.
+  const memberLabel = (memberUserId) => {
+    const member = userById.get(memberUserId)
+    if (!member) return `User #${memberUserId}`
+    const name = [member.firstName, member.lastName].filter(Boolean).join(" ")
+    if (name && member.email) return `${name} (${member.email})`
+    return name || member.email || `User #${memberUserId}`
+  }
 
   if (!group) return null
 
@@ -918,8 +925,8 @@ export default function EnterpriseGroupsPage() {
 
   const members = Array.isArray(membersQuery.data) ? membersQuery.data : []
 
-  // Member/authority labels come from the tenant-scoped members list (which now carries
-  // each member's email) -- no global users fetch needed.
+  // Member/authority labels come from the tenant-scoped members list (which carries
+  // each member's name and email) -- no global users fetch needed.
   const userById = useMemo(
     () => new Map(members.map((m) => [m.userId, m])),
     [members]

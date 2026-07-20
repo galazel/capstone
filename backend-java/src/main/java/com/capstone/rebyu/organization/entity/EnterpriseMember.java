@@ -38,6 +38,15 @@ public class EnterpriseMember {
     @Column(name = "member_role", nullable = false, length = 20)
     private MemberRole memberRole = MemberRole.manager;
 
+    // Captured when the enterprise provisions this person's account. The users
+    // table has no name columns, so without these a member can only ever be
+    // labelled by email.
+    @Column(name = "first_name", length = 100)
+    private String firstName;
+
+    @Column(name = "last_name", length = 100)
+    private String lastName;
+
     @Column(name = "is_primary_contact", nullable = false)
     private boolean isPrimaryContact = false;
 
