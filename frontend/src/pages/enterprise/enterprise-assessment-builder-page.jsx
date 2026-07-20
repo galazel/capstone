@@ -49,6 +49,18 @@ import {
 
 const QUESTION_API = { saveQuestion, saveChoices, saveTextQuestion, saveProgrammingQuestion, saveDiagramQuestion }
 
+// What each exam type actually targets in the curriculum tree. Regardless of
+// scope, authored questions still need a specific lesson (Question.lesson is
+// mandatory) -- only what gets stored on the EXAM itself (lessonId vs
+// middleCategoryId vs nothing) changes.
+const EXAM_TYPE_SCOPES = {
+  QUIZ: "LESSON",
+  MODULE_EXAM: "MIDDLE_CATEGORY",
+  MOCK_EXAM: "CERTIFICATION",
+  PRACTICE_TEST: "LESSON",
+  ASSIGNMENT: "LESSON",
+}
+
 function backendMessage(error, fallback) {
   return error?.response?.data?.message ?? fallback
 }
@@ -59,26 +71,30 @@ function isValidPoints(value) {
 }
 
 /**
- * Lessons an assessment can anchor to, split into the group's own content and
- * the official curriculum -- a group may build assessments over either. The
- * assessment and its questions stay the group's own either way (ownerGroupId);
- * nothing is written back into the official curriculum.
+ * The curriculum as a Major Category -> Middle Category (module) -> Lesson
+ * tree, split into the group's own content and the official curriculum -- a
+ * group may build assessments over either. Ownership is decided at the major
+ * category level and inherited by everything under it. The assessment and
+ * its questions stay the group's own either way (ownerGroupId); nothing is
+ * written back into the official curriculum.
  */
-function splitLessons(certification, groupId) {
+function buildCurriculumTree(certification, groupId) {
   const own = []
   const official = []
   for (const major of certification?.majorCategory ?? []) {
     const bucket = major.ownerGroupId === groupId ? own : official
-    for (const middle of major.middleCategory ?? []) {
-      for (const lesson of middle.lessons ?? []) {
-        bucket.push({
+    bucket.push({
+      majorCategoryId: major.majorCategoryId,
+      title: major.title,
+      middleCategories: (major.middleCategory ?? []).map((middle) => ({
+        middleCategoryId: middle.middleCategoryId,
+        title: middle.title,
+        lessons: (middle.lessons ?? []).map((lesson) => ({
           lessonId: lesson.lessonId,
           name: lesson.name ?? lesson.title ?? "Untitled lesson",
-          middleTitle: middle.title,
-          majorTitle: major.title,
-        })
-      }
-    }
+        })),
+      })),
+    })
   }
   return { own, official }
 }
@@ -94,6 +110,11 @@ function splitLessons(certification, groupId) {
  * components/questions/question-editors.jsx, with a points configuration
  * panel layered on top. Questions are written here and owned by the group;
  * the shared question bank is never read from or written to.
+ *
+ * Picking where the assessment lives is a Category -> Module -> Lesson
+ * cascade: each level's options are scoped to whatever was picked above it
+ * (e.g. choosing a module only offers the lessons inside that module),
+ * regardless of exam type.
  */
 export default function EnterpriseAssessmentBuilderPage() {
   const { groupId, examId } = useParams()
@@ -108,7 +129,11 @@ export default function EnterpriseAssessmentBuilderPage() {
   const [examTypeText, setExamTypeText] = useState(searchParams.get("type") ?? "QUIZ")
   const [durationMinutes, setDurationMinutes] = useState("")
   const [passingScore, setPassingScore] = useState("70")
-  const [lessonId, setLessonId] = useState("")
+
+  // Category (major) -> Module (middle) -> Lesson cascade.
+  const [scopeMajorId, setScopeMajorId] = useState("")
+  const [scopeMiddleId, setScopeMiddleId] = useState("")
+  const [scopeLessonId, setScopeLessonId] = useState("")
 
   // Authored questions: { key, typeId, data } -- data shapes match QUESTION_TYPES.
   const [questions, setQuestions] = useState([])
@@ -151,23 +176,80 @@ export default function EnterpriseAssessmentBuilderPage() {
       item.certificationId === group?.certificationId ||
       item.certificationId === group?.orgCert?.certificationId
   )
-  const { own: ownLessons, official: officialLessons } = useMemo(
-    () => splitLessons(certification, id),
+
+  const { own: ownMajors, official: officialMajors } = useMemo(
+    () => buildCurriculumTree(certification, id),
     [certification, id]
   )
-  const lessons = useMemo(() => [...ownLessons, ...officialLessons], [ownLessons, officialLessons])
+  const allMajors = useMemo(() => [...ownMajors, ...officialMajors], [ownMajors, officialMajors])
+
+  const majorById = useMemo(
+    () => new Map(allMajors.map((major) => [String(major.majorCategoryId), major])),
+    [allMajors]
+  )
+  const middleIndex = useMemo(() => {
+    const map = new Map()
+    for (const major of allMajors) {
+      for (const middle of major.middleCategories) {
+        map.set(String(middle.middleCategoryId), { middle, majorId: String(major.majorCategoryId) })
+      }
+    }
+    return map
+  }, [allMajors])
+  const lessonIndex = useMemo(() => {
+    const map = new Map()
+    for (const major of allMajors) {
+      for (const middle of major.middleCategories) {
+        for (const lesson of middle.lessons) {
+          map.set(String(lesson.lessonId), {
+            lesson,
+            middleId: String(middle.middleCategoryId),
+            majorId: String(major.majorCategoryId),
+          })
+        }
+      }
+    }
+    return map
+  }, [allMajors])
+
+  const middleOptions = scopeMajorId ? majorById.get(scopeMajorId)?.middleCategories ?? [] : []
+  const lessonOptions = scopeMiddleId ? middleIndex.get(scopeMiddleId)?.middle.lessons ?? [] : []
+
+  const handleMajorChange = (value) => {
+    setScopeMajorId(value)
+    setScopeMiddleId("")
+    setScopeLessonId("")
+  }
+  const handleMiddleChange = (value) => {
+    setScopeMiddleId(value)
+    setScopeLessonId("")
+  }
+
+  const scope = EXAM_TYPE_SCOPES[examTypeText] ?? "LESSON"
 
   // Prefill the details when editing. Existing questions aren't re-editable
   // here (see the notice near Save) -- any new questions authored this
   // session are additions on top of the assessment's current settings.
-  if (isEdit && !hydrated && examQuery.data && Array.isArray(examTypesQuery.data)) {
+  if (isEdit && !hydrated && examQuery.data && Array.isArray(examTypesQuery.data) && certification) {
     const exam = examQuery.data
     const examType = examTypesQuery.data.find((t) => t.examTypeId === exam.examTypeId)
     setTitle(exam.title ?? "")
     setExamTypeText(examType?.examTypeText ?? examTypeText)
     setDurationMinutes(exam.durationMinutes != null ? String(exam.durationMinutes) : "")
     setPassingScore(exam.passingScore != null ? String(exam.passingScore) : "70")
-    setLessonId(exam.lessonId != null ? String(exam.lessonId) : "")
+
+    if (exam.lessonId != null) {
+      const chain = lessonIndex.get(String(exam.lessonId))
+      setScopeLessonId(String(exam.lessonId))
+      setScopeMiddleId(chain?.middleId ?? "")
+      setScopeMajorId(chain?.majorId ?? "")
+    } else if (exam.middleCategoryId != null) {
+      const chain = middleIndex.get(String(exam.middleCategoryId))
+      setScopeMiddleId(String(exam.middleCategoryId))
+      setScopeMajorId(chain?.majorId ?? "")
+    } else if (exam.majorCategoryId != null) {
+      setScopeMajorId(String(exam.majorCategoryId))
+    }
     setHydrated(true)
   }
 
@@ -229,7 +311,9 @@ export default function EnterpriseAssessmentBuilderPage() {
 
   const validate = () => {
     if (!title.trim()) return "Give the assessment a name."
-    if (!lessonId) return "Choose the lesson this assessment belongs to."
+    if (!scopeMajorId) return "Choose a category."
+    if (!scopeMiddleId) return "Choose a module."
+    if (!scopeLessonId) return "Choose a lesson to attach your questions to."
     if (!isEdit && questions.length === 0) return "Add at least one question."
 
     for (const [index, question] of questions.entries()) {
@@ -249,13 +333,15 @@ export default function EnterpriseAssessmentBuilderPage() {
       const examType = await ensureExamType(examTypeText)
 
       // Author each new question as this group's own (ownerGroupId), reusing
-      // the exact same per-type save calls the admin builder uses.
+      // the exact same per-type save calls the admin builder uses. Every
+      // question attaches to the chosen lesson regardless of the exam's own
+      // scope, since a question always needs one.
       const created = []
       for (const question of questions) {
         const saved = await saveAuthoredQuestion(
           question,
           {
-            lessonId: Number(lessonId),
+            lessonId: Number(scopeLessonId),
             certificationId: certification.certificationId,
             totalPoints: Number(pointsById[question.key]) || 1,
             ownerGroupId: id,
@@ -272,8 +358,10 @@ export default function EnterpriseAssessmentBuilderPage() {
         durationMinutes: durationMinutes ? Number(durationMinutes) : null,
         passingScore: passingScore ? Number(passingScore) : null,
         releaseAnswersAfterSubmit: true,
-        targetScope: "LESSON",
-        lessonId: Number(lessonId),
+        targetScope: scope,
+        lessonId: scope === "LESSON" ? Number(scopeLessonId) : null,
+        middleCategoryId: scope === "MIDDLE_CATEGORY" ? Number(scopeMiddleId) : null,
+        majorCategoryId: scope === "MAJOR_CATEGORY" ? Number(scopeMajorId) : null,
       }
 
       if (created.length > 0) {
@@ -331,6 +419,13 @@ export default function EnterpriseAssessmentBuilderPage() {
   if (groupQuery.isError) {
     return <EnterpriseErrorState title="Unable to load this group" onRetry={groupQuery.refetch} />
   }
+
+  const scopeHint =
+    scope === "MIDDLE_CATEGORY"
+      ? "This assessment targets the whole module. The lesson below is only used to attach your questions."
+      : scope === "CERTIFICATION"
+        ? "This assessment covers the whole certification. The lesson below is only used to attach your questions."
+        : "This assessment and its questions attach to the lesson you pick."
 
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col">
@@ -417,53 +512,99 @@ export default function EnterpriseAssessmentBuilderPage() {
             </Select>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="a-lesson">Lesson</Label>
-            <Select value={lessonId} onValueChange={setLessonId} disabled={lessons.length === 0}>
-              <SelectTrigger id="a-lesson">
-                <SelectValue placeholder="Select a lesson" />
-              </SelectTrigger>
-              <SelectContent className="max-h-72">
-                {ownLessons.length ? (
-                  <SelectGroup>
-                    <SelectLabel>Your lessons</SelectLabel>
-                    {ownLessons.map((lesson) => (
-                      <SelectItem key={lesson.lessonId} value={String(lesson.lessonId)}>
-                        {lesson.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                ) : null}
-                {officialLessons.length ? (
-                  <SelectGroup>
-                    <SelectLabel>Curriculum lessons</SelectLabel>
-                    {officialLessons.map((lesson) => (
-                      <SelectItem key={lesson.lessonId} value={String(lesson.lessonId)}>
-                        {lesson.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                ) : null}
-              </SelectContent>
-            </Select>
-            {lessons.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                No lessons available yet — add your own in the{" "}
-                <Link
-                  to={`/enterprise/groups/${id}?tab=content`}
-                  className="font-medium text-primary hover:underline"
+          {allMajors.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              No categories available yet — add your own in the{" "}
+              <Link
+                to={`/enterprise/groups/${id}?tab=content`}
+                className="font-medium text-primary hover:underline"
+              >
+                Content tab
+              </Link>
+              .
+            </p>
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="a-major">Category</Label>
+                <Select value={scopeMajorId} onValueChange={handleMajorChange}>
+                  <SelectTrigger id="a-major">
+                    <SelectValue placeholder="Select a category" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {ownMajors.length ? (
+                      <SelectGroup>
+                        <SelectLabel>Your categories</SelectLabel>
+                        {ownMajors.map((major) => (
+                          <SelectItem key={major.majorCategoryId} value={String(major.majorCategoryId)}>
+                            {major.title}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    ) : null}
+                    {officialMajors.length ? (
+                      <SelectGroup>
+                        <SelectLabel>Curriculum categories</SelectLabel>
+                        {officialMajors.map((major) => (
+                          <SelectItem key={major.majorCategoryId} value={String(major.majorCategoryId)}>
+                            {major.title}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    ) : null}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="a-middle">Module</Label>
+                <Select
+                  value={scopeMiddleId}
+                  onValueChange={handleMiddleChange}
+                  disabled={!scopeMajorId || middleOptions.length === 0}
                 >
-                  Content tab
-                </Link>
-                .
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Pick one of your own lessons or a curriculum lesson. The assessment stays your
-                group&apos;s own either way.
-              </p>
-            )}
-          </div>
+                  <SelectTrigger id="a-middle">
+                    <SelectValue placeholder="Select a module" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {middleOptions.map((middle) => (
+                      <SelectItem key={middle.middleCategoryId} value={String(middle.middleCategoryId)}>
+                        {middle.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {scopeMajorId && middleOptions.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">This category has no modules yet.</p>
+                ) : null}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="a-lesson">Lesson</Label>
+                <Select
+                  value={scopeLessonId}
+                  onValueChange={setScopeLessonId}
+                  disabled={!scopeMiddleId || lessonOptions.length === 0}
+                >
+                  <SelectTrigger id="a-lesson">
+                    <SelectValue placeholder="Select a lesson" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {lessonOptions.map((lesson) => (
+                      <SelectItem key={lesson.lessonId} value={String(lesson.lessonId)}>
+                        {lesson.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {scopeMiddleId && lessonOptions.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">This module has no lessons yet.</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">{scopeHint}</p>
+                )}
+              </div>
+            </>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
