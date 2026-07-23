@@ -32,7 +32,7 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:5173"]
     )
 
-    database_url: str = "postgresql+psycopg://rebyu:rebyu@postgres:5432/rebyu"
+    database_url: str = "postgresql+psycopg2://rebyu:rebyu@postgres:5432/rebyu"
     sql_echo: bool = False
     db_pool_size: int = 10
     db_max_overflow: int = 20
