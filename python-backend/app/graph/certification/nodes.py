@@ -7,11 +7,11 @@ from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage
 from pypdf import PdfReader
 from dotenv import load_dotenv
-from app.schemas.curriculum_schema import CertificationCurriculum
-from app.schemas.lesson_audit import LessonAuditResult
+from schemas.certification.curriculum_schema import CertificationCurriculum
+from schemas.certification.lesson_audit import LessonAuditResult
 from .state import CertificationState
 from app.services.ai.vector_db import save_chunks, get_vector_store
-from app.agents.auditor_lesson import curriculum_agent, auditor_agent, lesson_generation_agent, auditor_lesson_agent
+from agents.certification.auditor_lesson import curriculum_agent, auditor_agent, lesson_generation_agent, auditor_lesson_agent
 from langgraph.types import Send
 
 

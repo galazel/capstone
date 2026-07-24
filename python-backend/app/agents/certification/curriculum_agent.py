@@ -1,8 +1,8 @@
-from app.tools.curriculum_tools import curriculum_tools
+from tools.certification.curriculum_tools import curriculum_tools
 from langchain.agents import create_agent
 from app.utils.helpers import llm
 from langchain.agents.structured_output import ToolStrategy
-from app.schemas.curriculum_schema import CertificationCurriculum
+from schemas.certification.curriculum_schema import CertificationCurriculum
 
 curriculum_agent = create_agent(
     model=llm,

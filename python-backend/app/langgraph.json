@@ -1,0 +1,6 @@
+{
+  "graphs": {
+    "tutor": "app.graphs.tutor.workflow:build_graph",
+    "certification": "app.graphs.certification.workflow:build_graph"
+  }
+}

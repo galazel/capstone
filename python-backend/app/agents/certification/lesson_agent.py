@@ -1,4 +1,4 @@
-from app.tools.lesson_tools import (
+from tools.certification.lesson_tools import (
     lesson_search_tools,
     lesson_builder_tools
 )

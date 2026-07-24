@@ -1,5 +1,5 @@
 from langchain.agents import create_agent
-from app.schemas.lesson_audit import LessonAuditResult
+from schemas.certification.lesson_audit import LessonAuditResult
 from langchain.agents.structured_output import ToolStrategy
 
 
