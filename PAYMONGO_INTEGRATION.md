@@ -5,8 +5,8 @@
 REBYU is integrated with **PayMongo Hosted Checkout** for secure payment processing in test mode.
 
 **Test Keys:**
-- **Secret Key:** `${PAYMONGO_SECRET_KEY:}`
-- **Public Key:** `pk_test_ZCjsmVJe6g7osMYcKfZtTrY6`
+- **Secret Key:** set `PAYMONGO_SECRET_KEY` in your environment; never commit it.
+- **Public Key:** set `PAYMONGO_PUBLIC_KEY` in your environment.
 - **Payment Methods Available:** Card, GCash, PayMaya
 
 ## Architecture
@@ -52,9 +52,9 @@ const result = await paymongoService.verifyPayment(sessionId)
 
 ```yaml
 paymongo:
-  enabled: true
+  enabled: ${PAYMONGO_ENABLED:true}
   secret-key: ${PAYMONGO_SECRET_KEY:}
-  public-key: pk_test_ZCjsmVJe6g7osMYcKfZtTrY6
+  public-key: ${PAYMONGO_PUBLIC_KEY:}
   base-url: https://api.paymongo.com/v1
 
 app:
@@ -140,7 +140,7 @@ Integer seatLimit = entitlementService.getLimitValue(learnerId, "SEAT_LIMIT");
 
 ## Deployment Checklist
 
-- [ ] Add PayMongo test keys to environment variables (or application.yml)
+- [ ] Add PayMongo test keys to environment variables (never `application.yml`)
 - [ ] Enable PayMongo in `application.yml`: `paymongo.enabled: true`
 - [ ] Update redirect URLs in `app.frontend-url`
 - [ ] Configure webhook endpoint in PayMongo dashboard

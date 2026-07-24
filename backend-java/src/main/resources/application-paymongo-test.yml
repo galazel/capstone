@@ -1,10 +1,10 @@
 # PayMongo Test Mode Configuration
 paymongo:
-  enabled: true
+  enabled: ${PAYMONGO_ENABLED:true}
   # Secret key for API calls (sk_test_*)
   secret-key: ${PAYMONGO_SECRET_KEY:}
   # Public key for frontend (pk_test_*)
-  public-key: pk_test_ZCjsmVJe6g7osMYcKfZtTrY6
+  public-key: ${PAYMONGO_PUBLIC_KEY:}
   base-url: https://api.paymongo.com/v1
   # From PayMongo Dashboard > Developers > Webhooks > (your endpoint) > Signing secret.
   # Required to verify that /api/webhooks/paymongo POSTs actually came from
