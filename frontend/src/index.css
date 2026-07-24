@@ -1,4 +1,3 @@
-
 @import url("https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,400..700&family=JetBrains+Mono:wght@400;500&display=swap");
 @import "tailwindcss";
 @import "flowbite-react/plugin/tailwindcss";
@@ -21,7 +20,7 @@
     --popover-foreground: oklch(0.18 0.03 265);
 
 
-    --primary: #2f7dd3;
+    --primary: #2670be;
     --primary-foreground: #ffffff;
 
 
@@ -92,7 +91,7 @@
         @apply mx-auto flex min-h-[calc(100dvh-4rem)] min-w-0 w-full max-w-[1440px] flex-1 flex-col items-stretch gap-8 px-4 py-6 sm:px-6 sm:py-8 lg:px-8;
     }
 
-    .rebyu-page > * {
+    .rebyu-page>* {
         width: 100%;
         min-width: 0;
     }
@@ -179,7 +178,7 @@ body.netacad-overlay-theme {
     box-shadow: none;
 }
 
-.netacad-portal > header {
+.netacad-portal>header {
     box-shadow: none;
 }
 
@@ -216,6 +215,7 @@ body.netacad-overlay-theme {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
     *,
     *::before,
     *::after {
@@ -293,7 +293,7 @@ body.netacad-overlay-theme {
     color-scheme: dark;
 }
 
-.dark .netacad-portal > [data-slot="sidebar-inset"] > header {
+.dark .netacad-portal>[data-slot="sidebar-inset"]>header {
     background: rgb(19 29 43 / 0.96);
 }
 
@@ -316,20 +316,18 @@ body.netacad-overlay-theme {
     color: var(--muted-foreground);
 }
 
-.dark body.netacad-overlay-theme :is(
-    [data-slot="dialog-content"],
+.dark body.netacad-overlay-theme :is([data-slot="dialog-content"],
     [data-slot="alert-dialog-content"],
     [data-slot="sheet-content"],
     [data-slot="drawer-content"],
     [data-slot="dropdown-menu-content"],
-    [data-slot="select-content"]
-) {
+    [data-slot="select-content"]) {
     background: var(--popover);
     color: var(--popover-foreground);
     border-color: var(--border);
 }
 
-.netacad-portal [data-slot="sidebar-container"] > div,
+.netacad-portal [data-slot="sidebar-container"]>div,
 .netacad-portal [data-mobile="true"] {
     border-color: var(--sidebar-border);
     box-shadow: 4px 0 18px rgb(15 42 67 / 0.12);
@@ -339,7 +337,7 @@ body.netacad-overlay-theme {
     background: var(--background);
 }
 
-.netacad-portal > [data-slot="sidebar-inset"] > header {
+.netacad-portal>[data-slot="sidebar-inset"]>header {
     position: sticky;
     top: 0;
     z-index: 20;
@@ -414,61 +412,49 @@ body.netacad-overlay-theme {
     color: var(--accent-foreground);
 }
 
-:is(.netacad-portal, .netacad-overlay-theme) :is(
-    [data-slot="input"],
+:is(.netacad-portal, .netacad-overlay-theme) :is([data-slot="input"],
     [data-slot="textarea"],
-    [data-slot="select-trigger"]
-) {
+    [data-slot="select-trigger"]) {
     border-radius: 0.625rem;
     border-color: var(--input);
     background: var(--background);
     box-shadow: inset 0 1px 1px rgb(23 43 77 / 0.04);
 }
 
-:is(.netacad-portal, .netacad-overlay-theme) :is(
-    [data-slot="input"],
+:is(.netacad-portal, .netacad-overlay-theme) :is([data-slot="input"],
     [data-slot="textarea"],
-    [data-slot="select-trigger"]
-):focus-visible {
+    [data-slot="select-trigger"]):focus-visible {
     border-color: var(--ring);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 18%, transparent);
 }
 
-:is(.netacad-portal, .netacad-overlay-theme) :is(
-    [data-slot="dialog-content"],
-    [data-slot="alert-dialog-content"]
-) {
+:is(.netacad-portal, .netacad-overlay-theme) :is([data-slot="dialog-content"],
+    [data-slot="alert-dialog-content"]) {
     border: 1px solid var(--border);
     border-radius: 0.75rem;
     box-shadow: 0 24px 64px rgb(15 23 42 / 0.16);
 }
 
-:is(.netacad-portal, .netacad-overlay-theme) :is(
-    [data-slot="dialog-title"],
+:is(.netacad-portal, .netacad-overlay-theme) :is([data-slot="dialog-title"],
     [data-slot="alert-dialog-title"],
     [data-slot="sheet-title"],
-    [data-slot="drawer-title"]
-) {
+    [data-slot="drawer-title"]) {
     color: var(--foreground);
     font-size: 1.25rem;
     font-weight: 600;
 }
 
-:is(.netacad-portal, .netacad-overlay-theme) :is(
-    [data-slot="sheet-content"],
-    [data-slot="drawer-content"]
-) {
+:is(.netacad-portal, .netacad-overlay-theme) :is([data-slot="sheet-content"],
+    [data-slot="drawer-content"]) {
     border-color: var(--border);
     background: #ffffff;
     box-shadow: 0 24px 64px rgb(15 23 42 / 0.16);
 }
 
-:is(.netacad-portal, .netacad-overlay-theme) :is(
-    [data-slot="dropdown-menu-content"],
+:is(.netacad-portal, .netacad-overlay-theme) :is([data-slot="dropdown-menu-content"],
     [data-slot="dropdown-menu-sub-content"],
     [data-slot="select-content"],
-    [data-slot="popover-content"]
-) {
+    [data-slot="popover-content"]) {
     border: 1px solid var(--border);
     border-radius: 0.625rem;
     box-shadow: 0 12px 32px rgb(15 23 42 / 0.12);
@@ -526,10 +512,8 @@ body.netacad-overlay-theme {
     letter-spacing: 0.035em;
 }
 
-:is(.netacad-portal, .netacad-overlay-theme) :is(
-    [data-slot="accordion-item"],
-    [data-slot="collapsible-content"]
-) {
+:is(.netacad-portal, .netacad-overlay-theme) :is([data-slot="accordion-item"],
+    [data-slot="collapsible-content"]) {
     border-color: var(--border);
 }
 
@@ -831,34 +815,27 @@ body.netacad-overlay-theme {
 
 /* Shared component scale: readable, study-friendly, and consistent across
    learner, institution, and administrator surfaces. */
-:is(.netacad-portal, .netacad-overlay-theme) :is(
-    [data-slot="dropdown-menu-content"],
+:is(.netacad-portal, .netacad-overlay-theme) :is([data-slot="dropdown-menu-content"],
     [data-slot="select-content"],
-    [data-slot="popover-content"]
-) {
+    [data-slot="popover-content"]) {
     border-color: var(--border);
     border-radius: 0.75rem;
     box-shadow: 0 12px 32px rgb(39 52 82 / 0.12);
     font-size: 0.9375rem;
 }
 
-:is(.netacad-portal, .netacad-overlay-theme) :is(
-    [data-slot="dropdown-menu-item"],
-    [data-slot="select-item"]
-) {
+:is(.netacad-portal, .netacad-overlay-theme) :is([data-slot="dropdown-menu-item"],
+    [data-slot="select-item"]) {
     min-height: 2.5rem;
     border-radius: 0.5rem;
     font-size: 0.9375rem;
 }
 
-:is(.netacad-portal, .netacad-overlay-theme) :is(
-    [data-slot="table-cell"],
-    [data-slot="table-head"]
-) {
+:is(.netacad-portal, .netacad-overlay-theme) :is([data-slot="table-cell"],
+    [data-slot="table-head"]) {
     font-size: 0.9375rem;
 }
 
 :is(.netacad-portal, .netacad-overlay-theme) [data-slot="tooltip-content"] {
     font-size: 0.8125rem;
 }
-
