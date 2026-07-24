@@ -1,4 +1,5 @@
 from langgraph.graph import StateGraph, START, END
+from app.utils.helpers import checkpointer
 
 from .nodes import (
     document_ingestion_node,
@@ -66,7 +67,9 @@ def build_certification_graph():
         },
     )
 
-    return workflow.compile()
+    return workflow.compile(
+        checkpointer=checkpointer,
+    )
 
 
 certification_graph = build_certification_graph()

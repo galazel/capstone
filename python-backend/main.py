@@ -10,8 +10,8 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from graph.workflow import certification_graph
-from graph.tutor import chat
+from graphs.workflow import certification_graph
+from graphs.tutor import chat
 import traceback
 
 

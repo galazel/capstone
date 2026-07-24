@@ -10,7 +10,7 @@ from fastapi import (
 )
 from pydantic import BaseModel
 import traceback
-from app.graph.workflow import certification_graph
+from app.graphs.workflow import certification_graph
 from app.database.session import get_db
 from sqlalchemy.orm import Session
 
