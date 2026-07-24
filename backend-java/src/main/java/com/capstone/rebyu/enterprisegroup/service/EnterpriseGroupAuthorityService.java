@@ -1,5 +1,6 @@
 package com.capstone.rebyu.enterprisegroup.service;
 
+import com.capstone.rebyu.auth.service.CognitoAuthService;
 import com.capstone.rebyu.common.BusinessRuleException;
 import com.capstone.rebyu.enterprisegroup.dto.EnterpriseGroupAuthorityDto;
 import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup;
@@ -7,7 +8,12 @@ import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroupAuthority;
 import com.capstone.rebyu.enterprisegroup.mapper.EnterpriseGroupAuthorityMapper;
 import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupAuthorityRepository;
 import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupRepository;
+import com.capstone.rebyu.organization.entity.EnterpriseMember;
+import com.capstone.rebyu.organization.repository.EnterpriseMemberRepository;
 import com.capstone.rebyu.user.entity.User;
+import com.capstone.rebyu.user.entity.UserType;
+import com.capstone.rebyu.user.repository.UserRepository;
+import com.capstone.rebyu.user.repository.UserTypeRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +32,9 @@ public class EnterpriseGroupAuthorityService {
     private final EnterpriseGroupAuthorityRepository enterpriseGroupAuthorityRepository;
     private final EnterpriseGroupRepository enterpriseGroupRepository;
     private final EnterpriseGroupAuthorityMapper enterpriseGroupAuthorityMapper;
+    private final UserRepository userRepository;
+    private final UserTypeRepository userTypeRepository;
+    private final EnterpriseMemberRepository enterpriseMemberRepository;
 
     @Transactional(readOnly = true)
     public List<EnterpriseGroupAuthorityDto> getAll(Long groupId, Long userId) {
@@ -67,8 +76,56 @@ public class EnterpriseGroupAuthorityService {
 
         EnterpriseGroupAuthorityDto result =
                 enterpriseGroupAuthorityMapper.toDto(enterpriseGroupAuthorityRepository.save(entity));
+        promoteToEnterpriseMember(dto.getUserId());
         log.info("Enterprise group authority created with id: {}", result.getEnterpriseGroupAuthorityId());
         return result;
+    }
+
+    /**
+     * Leading a group makes someone an enterprise member, so their account type
+     * is corrected here as well as at provisioning time. Accounts predating the
+     * ENTERPRISE_MEMBER role were all created as plain ENTERPRISE, and a leader
+     * can also be added from an account that already existed for another
+     * reason, so neither path can be relied on to have set it already.
+     *
+     * The organization's own ENTERPRISE account is deliberately left alone: an
+     * owner who also leads a group stays the owner.
+     */
+    private void promoteToEnterpriseMember(Long userId) {
+        if (userId == null) {
+            return;
+        }
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            return;
+        }
+        String currentType = user.getUserType() != null ? user.getUserType().getUserTypeText() : null;
+        if (CognitoAuthService.ENTERPRISE_USER_TYPE.equalsIgnoreCase(currentType)
+                && isOrganizationOwnAccount(user)) {
+            return;
+        }
+        if (CognitoAuthService.ENTERPRISE_MEMBER_USER_TYPE.equalsIgnoreCase(currentType)) {
+            return;
+        }
+
+        UserType memberType = userTypeRepository
+                .findByUserTypeText(CognitoAuthService.ENTERPRISE_MEMBER_USER_TYPE)
+                .orElseGet(() -> {
+                    UserType type = new UserType();
+                    type.setUserTypeText(CognitoAuthService.ENTERPRISE_MEMBER_USER_TYPE);
+                    return userTypeRepository.save(type);
+                });
+        user.setUserType(memberType);
+        userRepository.save(user);
+        log.info("Promoted userId={} to {} on group-authority assignment",
+                userId, CognitoAuthService.ENTERPRISE_MEMBER_USER_TYPE);
+    }
+
+    /** An owner/primary contact holds the organization's own account. */
+    private boolean isOrganizationOwnAccount(User user) {
+        return enterpriseMemberRepository.findByUser_UserId(user.getUserId()).stream()
+                .anyMatch(member -> member.isPrimaryContact()
+                        || member.getMemberRole() == EnterpriseMember.MemberRole.owner);
     }
 
     /**

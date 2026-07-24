@@ -21,7 +21,9 @@ import com.capstone.rebyu.certification.repository.LessonRepository;
 import com.capstone.rebyu.challenge.entity.ChallengeSession;
 import com.capstone.rebyu.challenge.repository.ChallengeSessionRepository;
 import com.capstone.rebyu.enrollment.entity.LearnerCertification;
+import com.capstone.rebyu.enrollment.entity.OrganizationCertificationLearner;
 import com.capstone.rebyu.enrollment.repository.LearnerCertificationRepository;
+import com.capstone.rebyu.enrollment.repository.OrganizationCertificationLearnerRepository;
 import com.capstone.rebyu.progress.entity.LearnerCompletedLesson;
 import com.capstone.rebyu.progress.repository.LearnerCompletedLessonRepository;
 import com.capstone.rebyu.progressanalytics.dto.ProgressAnalyticsDtos.CategoryMasteryRow;
@@ -78,6 +80,7 @@ public class ProgressAnalyticsService {
     private final QuestionRepository questionRepository;
     private final ChallengeSessionRepository challengeSessionRepository;
     private final LessonRepository lessonRepository;
+    private final OrganizationCertificationLearnerRepository organizationCertificationLearnerRepository;
     private final LearnerCompletedLessonRepository learnerCompletedLessonRepository;
     private final LearnerMasteryService learnerMasteryService;
     private final BktEventFactory bktEventFactory;
@@ -87,8 +90,19 @@ public class ProgressAnalyticsService {
         Certification certification = certificationRepository.findById(certificationId)
                 .orElseThrow(() -> new EntityNotFoundException("Certification not found: " + certificationId));
 
-        if (!learnerCertificationRepository.existsByLearner_LearnerIdAndCertification_CertificationIdAndStatus(
-                learnerId, certificationId, LearnerCertification.Status.active)) {
+        // Two ways to be enrolled, and both must count here. A learner who bought
+        // the certification themselves gets a learner_certifications row; one an
+        // organization sponsors gets only an organization_certification_learners
+        // row (see LearnerService.acceptInvitation, which never writes the
+        // former). Checking just the first made every enterprise learner look
+        // unenrolled -- including on their own analytics page.
+        boolean selfEnrolled = learnerCertificationRepository
+                .existsByLearner_LearnerIdAndCertification_CertificationIdAndStatus(
+                        learnerId, certificationId, LearnerCertification.Status.active);
+        boolean organizationSponsored = organizationCertificationLearnerRepository
+                .existsByLearner_LearnerIdAndOrgCert_Certification_CertificationIdAndStatus(
+                        learnerId, certificationId, OrganizationCertificationLearner.Status.active);
+        if (!selfEnrolled && !organizationSponsored) {
             throw new EntityNotFoundException("No active enrollment in this certification");
         }
 
@@ -190,7 +204,14 @@ public class ProgressAnalyticsService {
                 .toList());
         boolean hasChallengeActivity = !sessions.isEmpty();
 
-        List<Lesson> certLessons = lessonRepository.findAllWithCategoriesByCertificationId(certificationId);
+        // Official lessons only. The unfiltered query counts every lesson on the
+        // certification including ones private to an Enterprise group, so a
+        // learner's total -- and therefore their completion percentage -- used to
+        // move whenever an unrelated group authored content the learner cannot
+        // see, let alone complete.
+        List<Lesson> certLessons = lessonRepository
+                .findByMiddleCategory_MajorCategory_Certification_CertificationIdAndMiddleCategory_MajorCategory_OwnerGroupIsNull(
+                        certificationId);
         int totalLessonCount = certLessons.size();
         Map<Long, Lesson> lessonById = certLessons.stream()
                 .collect(Collectors.toMap(Lesson::getLessonId, l -> l));

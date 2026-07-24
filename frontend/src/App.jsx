@@ -52,6 +52,7 @@ const Community = lazy(() => import("./pages/learner/learner-community-qa.jsx"))
 const EnterpriseDashboardPage = lazy(() => import("./pages/enterprise/enterprise-dashboard-page.jsx"))
 const EnterpriseMemberDashboardPage = lazy(() => import("./pages/enterprise/enterprise-member-dashboard-page.jsx"))
 const EnterpriseGroupWorkspacePage = lazy(() => import("./pages/enterprise/enterprise-group-workspace-page.jsx"))
+const EnterpriseGroupLearnerPage = lazy(() => import("./pages/enterprise/enterprise-group-learner-page.jsx"))
 const EnterpriseLearnersPage = lazy(() => import("./pages/enterprise/enterprise-learners-page.jsx"))
 const EnterpriseLearnerDetailPage = lazy(() => import("./pages/enterprise/enterprise-learner-detail-page.jsx"))
 const EnterpriseCertificationsPage = lazy(() => import("./pages/enterprise/enterprise-certifications-page.jsx"))
@@ -68,6 +69,7 @@ const EnterpriseOrganizationPage = lazy(() => import("./pages/enterprise/enterpr
 const EnterpriseQuestionBankPage = lazy(() => import("./pages/enterprise/enterprise-question-bank-page.jsx"))
 const EnterpriseRequestAccessPage = lazy(() => import("./pages/public/enterprise-request-access-page.jsx"))
 const CompilerArea = lazy(() => import("./components/challenges/compiler-area.jsx"))
+const NotificationsPage = lazy(() => import("./pages/notifications-page.jsx"))
 const NotFoundPage = lazy(() => import("./pages/public/not-found-page.jsx"))
 const ForbiddenPage = lazy(() => import("./pages/public/forbidden-page.jsx"))
 
@@ -216,7 +218,7 @@ export function App() {
                 />
             </Route>
 
-            <Route element={<ProtectedRoute allowedRoles={["ENTERPRISE"]} />}>
+            <Route element={<ProtectedRoute allowedRoles={["ENTERPRISE", "ENTERPRISE_MEMBER"]} />}>
                 <Route path="/enterprise" element={<EnterpriseLayout />}>
                     <Route index element={<EnterpriseHome />} />
                     <Route path="dashboard" element={<EnterpriseDashboardEntry />} />
@@ -245,6 +247,10 @@ export function App() {
                         certification allocation. */}
                     <Route path="groups" element={<EnterpriseGroupsPage />} />
                     <Route path="groups/:groupId" element={<EnterpriseGroupWorkspacePage />} />
+                    <Route
+                        path="groups/:groupId/learners/:learnerId"
+                        element={<EnterpriseGroupLearnerPage />}
+                    />
                     {/* Full-page assessment builder (details + question builder),
                         replacing the old modal. Edit reuses the same page. */}
                     <Route
@@ -255,11 +261,6 @@ export function App() {
                         path="groups/:groupId/assessments/:examId/edit"
                         element={<EnterpriseAssessmentBuilderPage />}
                     />
-                    {/* Reuses the admin lesson editor -- it reads lesson id/context
-                        from navigation state, not from the route prefix, and the
-                        underlying save/load endpoints already authorize group-owned
-                        content for Enterprise Members. */}
-                    <Route path="lessons/:name/create" element={<CreateLessons />} />
                     {/* Read-only Cisco-style two-pane content reader (outline +
                         lesson body). ?groupId= mixes in the group's own content. */}
                     <Route
@@ -274,6 +275,18 @@ export function App() {
                     <Route path="files" element={<EnterpriseFilesPage />} />
                     <Route path="organization" element={<EnterpriseOrganizationPage />} />
                 </Route>
+            </Route>
+
+            {/* The notification feed is per-user, not per-portal, so admin,
+                enterprise, and learner all share this one page. */}
+            <Route
+                element={
+                    <ProtectedRoute
+                        allowedRoles={["ADMIN", "ENTERPRISE", "ENTERPRISE_MEMBER", "LEARNER"]}
+                    />
+                }
+            >
+                <Route path="/notifications" element={<NotificationsPage />} />
             </Route>
 
             <Route path="/403" element={<ForbiddenPage />} />

@@ -1,5 +1,4 @@
 import { Outlet, useNavigate } from "react-router-dom"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { LogOutIcon, SettingsIcon, UserIcon } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -15,35 +14,13 @@ import { PortalTopNavigation } from "@/components/navigation/portal-navigation.j
 import { PortalThemeToggle } from "@/components/portal-theme-toggle"
 import { useAuth } from "@/context/auth-context.jsx"
 import { usePortalTheme } from "@/hooks/use-portal-theme.js"
-import { getMyNotifications, markNotificationRead } from "@/services/notificationService.js"
+import { useNotifications } from "@/hooks/use-notifications.js"
 
 export default function DashboardLayout() {
   usePortalTheme()
   const navigate = useNavigate()
   const { user, logout } = useAuth()
-  const queryClient = useQueryClient()
-
-  const notificationsQuery = useQuery({
-    queryKey: ["my-notifications"],
-    queryFn: getMyNotifications,
-    refetchInterval: 30_000,
-    staleTime: 15_000,
-    retry: 1,
-  })
-  const markReadMutation = useMutation({
-    mutationFn: markNotificationRead,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["my-notifications"] }),
-  })
-  const notifications = (Array.isArray(notificationsQuery.data) ? notificationsQuery.data : []).map(
-    (notification) => ({
-      id: notification.id,
-      title: notification.title,
-      description: notification.body,
-      createdAt: notification.createdAt,
-      href: notification.href,
-      read: notification.read,
-    })
-  )
+  const notifications = useNotifications()
 
   const handleLogout = async () => {
     await logout()
@@ -57,10 +34,13 @@ export default function DashboardLayout() {
         actions={
           <>
             <NotificationBell
-              items={notifications}
-              loading={notificationsQuery.isLoading}
+              items={notifications.items}
+              unreadCount={notifications.unreadCount}
+              loading={notifications.isLoading}
               emptyMessage="Partnership request updates will appear here."
-              onItemOpen={(item) => markReadMutation.mutate(item.id)}
+              onItemOpen={notifications.open}
+              onMarkAllRead={notifications.markAllRead}
+              onDelete={notifications.remove}
             />
             <PortalThemeToggle />
             <DropdownMenu>

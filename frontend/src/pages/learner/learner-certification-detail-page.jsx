@@ -40,6 +40,7 @@ import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 
 import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
+import { LearnerAnnouncements } from "@/components/learner/learner-announcements.jsx"
 import { PriorityTag } from "@/components/learner/priority-tag.jsx"
 
 import { getFileViewUrl } from "@/services/fileService.js"
@@ -458,6 +459,10 @@ export default function LearnerCertificationDetailPage() {
                   </ProductFeature>
                 </div>
               </div>
+
+              {/* Announcements from the learner's organization group, if any.
+                  Renders nothing when they aren't in one. */}
+              <LearnerAnnouncements certificationId={certificationId} />
 
               {/* Course Curriculum grouped by major category */}
               <div className="space-y-6">

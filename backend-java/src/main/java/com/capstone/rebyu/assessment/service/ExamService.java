@@ -179,6 +179,10 @@ public class ExamService {
         Exam exam = findEntity(id);
         majorCategoryService.requireCanActOn(
                 exam.getOwnerGroup(), isAdmin, callerEnterpriseId, callerUserId, callerIsOwner);
+        // The exam_questions join rows aren't cascade-deleted by the FK, so they
+        // must be cleared first or the exam delete fails with a constraint violation.
+        examQuestionRepository.deleteByExam_ExamId(id);
+        examQuestionRepository.flush();
         examRepository.delete(exam);
         log.info("Exam id: {} deleted", id);
     }

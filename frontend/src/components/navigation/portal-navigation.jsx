@@ -113,19 +113,47 @@ const enterpriseGroups = [
   },
 ]
 
+/**
+ * Both enterprise-side roles: ENTERPRISE is the organization's own (owner)
+ * account, ENTERPRISE_MEMBER is someone it created an account for. They share
+ * the same portal and permissions -- see CognitoAuthService.isEnterpriseRole.
+ */
+export function isEnterpriseRole(role) {
+  return role === "ENTERPRISE" || role === "ENTERPRISE_MEMBER"
+}
+
 function pathMatches(pathname, item) {
   const candidates = item.match ?? [item.href]
   return candidates.some((path) => pathname === path || (path !== "/admin" && pathname.startsWith(`${path}/`)))
 }
 
-function Brand({ role }) {
+function Brand({ role, organizationName }) {
+  const isEnterprise = isEnterpriseRole(role)
+  const home = role === "LEARNER"
+    ? "/learner/analytics"
+    : isEnterprise
+      ? "/enterprise/dashboard"
+      : "/admin/dashboard"
+  // On the enterprise side this shows the organization's own name rather than
+  // the generic word "Institution" -- a member works inside one specific
+  // organization, and naming it is what makes the header useful to them. Falls
+  // back to the generic label only while the profile is still loading.
+  const label = role === "LEARNER"
+    ? "Learn"
+    : isEnterprise
+      ? organizationName || "Institution"
+      : "Admin"
+
   return (
-    <NavLink to={role === "LEARNER" ? "/learner/analytics" : role === "ENTERPRISE" ? "/enterprise/dashboard" : "/admin/dashboard"} className="flex shrink-0 items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={role === "LEARNER" ? "REBYU home and analytics" : "REBYU home"}>
+    <NavLink to={home} className="flex shrink-0 items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={role === "LEARNER" ? "REBYU home and analytics" : "REBYU home"}>
       <BrandLogo className="size-8" />
       <span className="hidden leading-none sm:block">
         <span className="block font-heading text-[15px] font-bold tracking-tight">REBYU</span>
-        <span className="mt-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          {role === "LEARNER" ? "Learn" : role === "ENTERPRISE" ? "Institution" : "Admin"}
+        <span
+          className="mt-1 block max-w-40 truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground"
+          title={isEnterprise && organizationName ? organizationName : undefined}
+        >
+          {label}
         </span>
       </span>
     </NavLink>
@@ -202,7 +230,10 @@ export function PortalTopNavigation({ role, actions, organizationName, enterpris
   // enterprise-group-workspace-page.jsx), not in this header, and the
   // command-K search bar is hidden for them too since there's nothing
   // institution-wide left for it to search.
-  const isEnterpriseMember = role === "ENTERPRISE" && !isEnterpriseOwner
+  // The explicit role is authoritative; the owner check still covers accounts
+  // that predate ENTERPRISE_MEMBER and have not been migrated yet.
+  const isEnterpriseMember =
+    role === "ENTERPRISE_MEMBER" || (role === "ENTERPRISE" && !isEnterpriseOwner)
   const allGroups = role === "ADMIN" ? adminGroups : enterpriseGroups
   const groups = isEnterpriseMember ? [] : allGroups
   const commandItems = role === "LEARNER" ? learnerNavigation.map((item) => ({ ...item, group: "Learner" })) : groups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.label })))
@@ -219,11 +250,10 @@ export function PortalTopNavigation({ role, actions, organizationName, enterpris
     <>
       <header className="sticky top-0 z-40 border-b border-border/80 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/90">
         <div className="mx-auto flex h-16 w-full max-w-[1480px] items-center gap-4 px-4 sm:px-6 lg:px-8">
-          <Brand role={role} />
+          <Brand role={role} organizationName={organizationName} />
           <nav className="hidden min-w-0 flex-1 items-center gap-1 lg:flex" aria-label={`${role.toLowerCase()} navigation`}>
             {role === "LEARNER" ? learnerNavigation.slice(0, 6).map((item) => <NavLink key={`${item.label}-${item.href}`} to={item.href} className={cn("relative px-2.5 py-2 text-sm font-medium transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", pathMatches(location.pathname, item) ? "text-primary after:absolute after:inset-x-2.5 after:-bottom-[13px] after:h-0.5 after:bg-primary" : "text-muted-foreground")}>{item.label}</NavLink>) : groups.map((group) => <GroupDropdown key={group.label} group={group} pathname={location.pathname} />)}
           </nav>
-          {organizationName ? <span className="hidden max-w-48 truncate text-xs text-muted-foreground xl:block">{organizationName}</span> : null}
           <div className="ml-auto flex items-center gap-1.5">
             {!isEnterpriseMember ? (
               <>

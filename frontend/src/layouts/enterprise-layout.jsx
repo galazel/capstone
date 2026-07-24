@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import { Outlet, useNavigate } from "react-router-dom"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { FilesIcon, LogOutIcon, SettingsIcon, UserIcon } from "lucide-react"
 
 import { PortalTopNavigation } from "@/components/navigation/portal-navigation.jsx"
@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { getMyEnterpriseProfile } from "@/services/enterpriseService.js"
 import { useAuth } from "@/context/auth-context.jsx"
-import { getMyNotifications, markNotificationRead } from "@/services/notificationService.js"
+import { useNotifications } from "@/hooks/use-notifications.js"
 import { NotificationBell } from "@/components/notification-bell.jsx"
 import { usePortalTheme } from "@/hooks/use-portal-theme.js"
 import { PortalThemeToggle } from "@/components/portal-theme-toggle"
@@ -70,28 +70,12 @@ export default function EnterpriseLayout() {
   // this account menu instead. The owner already has Files in the header
   // nav, so it isn't duplicated here for them.
   const isEnterpriseMember = user?.enterpriseMemberRole && user.enterpriseMemberRole !== "owner"
-  const queryClient = useQueryClient()
-  const notificationsQuery = useQuery({
-    queryKey: ["my-notifications"],
-    queryFn: getMyNotifications,
-    refetchInterval: 30_000,
-    staleTime: 15_000,
-    retry: 1,
-  })
-  const markReadMutation = useMutation({
-    mutationFn: markNotificationRead,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["my-notifications"] }),
-  })
-  const notifications = (Array.isArray(notificationsQuery.data) ? notificationsQuery.data : []).map(
-    (notification) => ({
-      id: notification.id,
-      title: notification.title,
-      description: notification.body,
-      createdAt: notification.createdAt,
-      href: notification.href,
-      read: notification.read,
-    })
-  )
+  // Pass the account's real role through so the header can tell the
+  // organization's own account apart from one it created for a member.
+  const portalRole = (user?.role ?? "").toUpperCase() === "ENTERPRISE_MEMBER"
+    ? "ENTERPRISE_MEMBER"
+    : "ENTERPRISE"
+  const notifications = useNotifications()
 
   const logout = async () => {
     await authLogout()
@@ -102,12 +86,15 @@ export default function EnterpriseLayout() {
 
   return (
     <div className="netacad-portal enterprise-portal flex min-h-screen flex-col bg-background">
-      <PortalTopNavigation role="ENTERPRISE" organizationName={orgName} enterpriseMemberRole={user?.enterpriseMemberRole} actions={<>
+      <PortalTopNavigation role={portalRole} organizationName={orgName} enterpriseMemberRole={user?.enterpriseMemberRole} actions={<>
             <NotificationBell
-              items={notifications}
-              loading={notificationsQuery.isLoading}
+              items={notifications.items}
+              unreadCount={notifications.unreadCount}
+              loading={notifications.isLoading}
               emptyMessage="Partnership and invitation updates will appear here."
-              onItemOpen={(item) => markReadMutation.mutate(item.id)}
+              onItemOpen={notifications.open}
+              onMarkAllRead={notifications.markAllRead}
+              onDelete={notifications.remove}
             />
 
             <PortalThemeToggle />

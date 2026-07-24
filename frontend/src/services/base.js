@@ -9,8 +9,10 @@ export const API = import.meta.env.DEV
   ? "/api"
   : `${deployedApiOrigin || "http://localhost:8080"}/api`
 
-// Attaches the Cognito access token when a session exists.
-async function currentAccessToken() {
+// Attaches the Cognito access token when a session exists. Exported because
+// the SSE notification stream needs the same bearer token but is opened with
+// fetch (not axios), so it can't go through base() below.
+export async function currentAccessToken() {
   try {
     const session = await fetchAuthSession()
     return session?.tokens?.accessToken?.toString() ?? null

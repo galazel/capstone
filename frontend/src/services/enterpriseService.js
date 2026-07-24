@@ -194,3 +194,33 @@ export function getEnterpriseFiles() { return base("enterprise/files") }
 export function getEnterpriseFileDownloadUrl(id) { return base(`enterprise/files/${id}/download-url`) }
 export function uploadEnterpriseFile(file) { const formData = new FormData(); formData.append("file", file); return base("enterprise/files", { method: "POST", data: formData }) }
 export function deleteEnterpriseFile(id) { return base(`enterprise/files/${id}`, { method: "DELETE" }) }
+
+// ---------------------------------------------------------------------------
+// A group leader monitoring their own learners. All three are scoped to a group
+// the caller actually leads (or owns) -- enforced server-side, never here.
+// ---------------------------------------------------------------------------
+
+/** The group's active learners with summary progress figures, for the table. */
+export function getGroupLearnerRoster(groupId) {
+  return base(`enterprise/me/groups/${groupId}/learners`)
+}
+
+/** Full statistics for one learner: weak topics, curriculum progress, readiness. */
+export function getGroupLearnerAnalytics(groupId, learnerId) {
+  return base(`enterprise/me/groups/${groupId}/learners/${learnerId}/analytics`)
+}
+
+/** Unassigns the learner from the group. Account, enrollment and progress remain. */
+export function removeLearnerFromGroup(groupId, learnerId) {
+  return base(`enterprise/me/groups/${groupId}/learners/${learnerId}`, { method: "DELETE" })
+}
+
+/**
+ * Announcements from the groups the signed-in learner belongs to. The learner
+ * is resolved from the token server-side; pass a certificationId to show only
+ * the announcements belonging to that course.
+ */
+export function getMyAnnouncements(certificationId) {
+  const query = certificationId != null ? `?certificationId=${certificationId}` : ""
+  return base(`learners/me/announcements${query}`)
+}

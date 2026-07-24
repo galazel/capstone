@@ -121,7 +121,7 @@ public class QuestionController {
             throw new IllegalArgumentException("Authentication is required");
         }
         CurrentUserDto user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
-        if (!"ADMIN".equalsIgnoreCase(user.role()) && !"ENTERPRISE".equalsIgnoreCase(user.role())) {
+        if (!"ADMIN".equalsIgnoreCase(user.role()) && !CognitoAuthService.isEnterpriseRole(user.role())) {
             throw new IllegalArgumentException("Admin or enterprise access is required");
         }
         return user;

@@ -64,7 +64,7 @@ function FloatingDeleteButton({ onClick }) {
             type="button"
             title="Delete tool"
             aria-label="Delete tool"
-            className="absolute right-4 top-4 z-10 grid h-9 w-9 place-items-center rounded-full border border-zinc-200 bg-white/95 text-zinc-400 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+            className="absolute right-3 top-3 z-10 grid h-8 w-8 place-items-center rounded-full bg-muted/80 text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover/tool:opacity-100"
             onClick={(event) => {
                 event.stopPropagation()
                 onClick()
@@ -80,7 +80,7 @@ function AddButton({ children, onClick, className = "" }) {
         <button
             type="button"
             onClick={onClick}
-            className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-zinc-950 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-zinc-800 ${className}`}
+            className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 ${className}`}
         >
             <Plus className="h-4 w-4" />
             {children}
@@ -101,37 +101,43 @@ function RemoveButton({ children = "Remove", onClick, disabled = false }) {
     )
 }
 
+/**
+ * Wrapper around one placed tool in the lesson canvas.
+ *
+ * The tool's name and blurb are not drawn on the block: you can see what an
+ * image card or a tab set is by looking at it, and a grey "Intro image card /
+ * A smaller heading, description, and image in one combined block." bar on top
+ * of every block buried the actual lesson content. The title is kept as the
+ * section's accessible name so the block is still identifiable non-visually.
+ *
+ * A single hairline ring is the only edge drawn here. Everything nested inside
+ * uses tint and spacing instead of more outlines -- borders inside borders
+ * inside borders were what made this editor feel like a stack of boxes rather
+ * than a page.
+ */
 function ToolShell({ title, description, onDelete, children, className = "" }) {
     return (
         <section
-            className={`relative overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm transition hover:shadow-md ${className}`}
+            aria-label={title || undefined}
+            className={`group/tool relative rounded-xl bg-card px-5 py-4 ring-1 ring-border/60 transition hover:ring-border ${className}`}
         >
             <FloatingDeleteButton onClick={onDelete} />
 
-            {(title || description) && (
-                <div className="border-b border-zinc-100 bg-zinc-50/70 px-5 py-4 pr-16">
-                    {title && <h3 className="font-semibold text-zinc-950">{title}</h3>}
-                    {description && (
-                        <p className="mt-1 text-sm leading-6 text-zinc-500">{description}</p>
-                    )}
-                </div>
-            )}
-
-            <div className="space-y-5 p-5">{children}</div>
+            <div className="space-y-4 pr-10">{children}</div>
         </section>
     )
 }
 
-function SectionHeading({ title, description, action }) {
+/**
+ * Label for a repeatable group (list items, tabs, cards), paired with its Add
+ * button. The label stays because it names what the button adds; the blurb
+ * underneath ("New items start blank so you can type directly.") is dropped --
+ * it restated what is obvious the moment you click Add.
+ */
+function SectionHeading({ title, action }) {
     return (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-                <h3 className="font-semibold text-zinc-950">{title}</h3>
-                {description && (
-                    <p className="mt-1 text-sm leading-6 text-zinc-500">{description}</p>
-                )}
-            </div>
-
+        <div className="flex items-center justify-between gap-3">
+            <h3 className="min-w-0 truncate text-sm font-semibold text-foreground">{title}</h3>
             {action}
         </div>
     )
@@ -144,7 +150,7 @@ function InlineField({ value, onChange, placeholder, className = "" }) {
             value={value ?? ""}
             onChange={(event) => onChange(event.target.value)}
             placeholder={placeholder}
-            className={`w-full border-0 bg-transparent outline-none placeholder:text-zinc-300 ${className}`}
+            className={`w-full border-0 bg-transparent outline-none placeholder:text-muted-foreground/50 ${className}`}
         />
     )
 }
@@ -156,7 +162,7 @@ function TextAreaField({ value, onChange, placeholder, rows = 4, className = "" 
             onChange={(event) => onChange(event.target.value)}
             placeholder={placeholder}
             rows={rows}
-            className={`w-full resize-none rounded-2xl border border-zinc-200 bg-white p-4 text-sm leading-6 text-zinc-700 outline-none transition placeholder:text-zinc-300 focus:border-zinc-950 focus:ring-4 focus:ring-zinc-100 ${className}`}
+            className={`w-full resize-none rounded-lg bg-muted/40 p-4 text-sm leading-6 text-foreground outline-none transition placeholder:text-muted-foreground/50 focus:bg-muted/60 focus:ring-2 focus:ring-ring/25 ${className}`}
         />
     )
 }
@@ -190,24 +196,24 @@ function ImageUploadArea({ data, onDataChange, title = "Upload an image" }) {
         <div className="space-y-4">
             <div
                 {...getRootProps()}
-                className={`cursor-pointer rounded-3xl border-2 border-dashed p-7 text-center transition ${
+                className={`cursor-pointer rounded-xl border-2 border-dashed p-7 text-center transition ${
                     isDragActive
-                        ? "border-zinc-950 bg-zinc-100"
-                        : "border-zinc-200 bg-zinc-50/70 hover:border-zinc-500 hover:bg-white"
+                        ? "border-primary bg-primary/10"
+                        : "border-border bg-muted/40 hover:border-primary/40 hover:bg-muted/60"
                 }`}
             >
                 <input {...getInputProps()} />
-                <div className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-2xl border border-zinc-200 bg-white text-zinc-500 shadow-sm">
+                <div className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-lg bg-muted text-muted-foreground">
                     <ImagePlus className="h-5 w-5" />
                 </div>
-                <p className="font-medium text-zinc-800">
+                <p className="font-medium text-foreground">
                     {isDragActive ? "Drop the image here" : title}
                 </p>
-                <p className="mt-1 text-sm text-zinc-500">JPG, PNG, WebP, GIF, or JFIF.</p>
+                <p className="mt-1 text-sm text-muted-foreground">JPG, PNG, WebP, GIF, or JFIF.</p>
             </div>
 
             {previewUrl && (
-                <div className="overflow-hidden rounded-3xl border border-zinc-200 bg-zinc-50">
+                <div className="overflow-hidden rounded-xl bg-muted/40">
                     <img
                         src={previewUrl}
                         alt={data?.smallHeader || data?.title || "Lesson upload preview"}
@@ -247,27 +253,27 @@ function VideoUploadArea({ data, onDataChange, title = "Upload a video" }) {
         <div className="space-y-4">
             <div
                 {...getRootProps()}
-                className={`cursor-pointer rounded-3xl border-2 border-dashed p-7 text-center transition ${
+                className={`cursor-pointer rounded-xl border-2 border-dashed p-7 text-center transition ${
                     isDragActive
-                        ? "border-zinc-950 bg-zinc-100"
-                        : "border-zinc-200 bg-zinc-50/70 hover:border-zinc-500 hover:bg-white"
+                        ? "border-primary bg-primary/10"
+                        : "border-border bg-muted/40 hover:border-primary/40 hover:bg-muted/60"
                 }`}
             >
                 <input {...getInputProps()} />
-                <div className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-2xl border border-zinc-200 bg-white text-zinc-500 shadow-sm">
+                <div className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-lg bg-muted text-muted-foreground">
                     <VideoIcon className="h-5 w-5" />
                 </div>
-                <p className="font-medium text-zinc-800">
+                <p className="font-medium text-foreground">
                     {isDragActive ? "Drop the video here" : title}
                 </p>
-                <p className="mt-1 text-sm text-zinc-500">MP4, WebM, or OGG.</p>
+                <p className="mt-1 text-sm text-muted-foreground">MP4, WebM, or OGG.</p>
             </div>
 
             {previewUrl && (
                 <video
                     src={previewUrl}
                     controls
-                    className="w-full rounded-3xl border border-zinc-200 bg-black"
+                    className="w-full rounded-xl bg-foreground"
                 />
             )}
         </div>
@@ -276,14 +282,14 @@ function VideoUploadArea({ data, onDataChange, title = "Upload a video" }) {
 
 export function HeadingTool({ data, onDataChange, onDelete }) {
     return (
-        <div className="relative rounded-2xl px-1 py-2 transition hover:bg-zinc-50">
+        <div className="relative rounded-lg px-1 py-2 transition hover:bg-muted/40">
             <FloatingDeleteButton onClick={onDelete} />
 
             <InlineField
                 value={data?.text}
                 onChange={(value) => onDataChange({ ...data, text: value })}
                 placeholder="Write a heading..."
-                className="pr-12 text-3xl font-bold text-zinc-950"
+                className="pr-12 text-3xl font-bold text-foreground"
             />
         </div>
     )
@@ -291,14 +297,14 @@ export function HeadingTool({ data, onDataChange, onDelete }) {
 
 export function SubheadingTool({ data, onDataChange, onDelete }) {
     return (
-        <div className="relative rounded-2xl px-1 py-2 transition hover:bg-zinc-50">
+        <div className="relative rounded-lg px-1 py-2 transition hover:bg-muted/40">
             <FloatingDeleteButton onClick={onDelete} />
 
             <InlineField
                 value={data?.text}
                 onChange={(value) => onDataChange({ ...data, text: value })}
                 placeholder="Write a smaller heading..."
-                className="pr-12 text-xl font-semibold text-zinc-900"
+                className="pr-12 text-xl font-semibold text-foreground"
             />
         </div>
     )
@@ -360,14 +366,14 @@ function ListEditorTool({ data, onDataChange, onDelete, ordered = false }) {
 
             <ListTag className={ordered ? "list-decimal space-y-3 pl-6" : "list-disc space-y-3 pl-6"}>
                 {items.map((item, index) => (
-                    <li key={item.id} className="pl-1 marker:text-zinc-400">
-                        <div className="flex items-center gap-2 rounded-2xl border border-zinc-200 bg-zinc-50/50 p-2 transition focus-within:border-zinc-950 focus-within:bg-white focus-within:ring-4 focus-within:ring-zinc-100">
+                    <li key={item.id} className="pl-1 marker:text-muted-foreground">
+                        <div className="flex items-center gap-2 rounded-lg bg-muted/40 p-2 transition focus-within:bg-muted/60 focus-within:ring-2 focus-within:ring-ring/25">
                             <input
                                 type="text"
                                 value={item.text ?? ""}
                                 onChange={(event) => updateItem(item.id, event.target.value)}
                                 placeholder={`List item ${index + 1}`}
-                                className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-sm text-zinc-700 outline-none placeholder:text-zinc-400"
+                                className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
                             />
                             <RemoveButton onClick={() => removeItem(item.id)} disabled={items.length <= 1} />
                         </div>
@@ -406,7 +412,7 @@ function ImageTextTool({ data, onDataChange, onDelete, imagePosition = "left" })
                         value={toolData.title}
                         onChange={(value) => onDataChange({ ...toolData, title: value })}
                         placeholder="Write a title..."
-                        className="text-2xl font-bold text-zinc-950"
+                        className="text-2xl font-bold text-foreground"
                     />
 
                     <TextAreaField
@@ -468,7 +474,7 @@ function TabsEditor({ items, onItemsChange, intro }) {
             />
 
             <ShadcnTabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="flex h-auto w-full flex-nowrap justify-start overflow-x-auto rounded-2xl bg-zinc-100 p-1">
+                <TabsList className="flex h-auto w-full flex-nowrap justify-start overflow-x-auto rounded-lg bg-muted p-1">
                     {tabItems.map((tab, index) => (
                         <TabsTrigger key={tab.id} value={tab.id} className="shrink-0 rounded-xl">
                             {tab.label || `Tab ${index + 1}`}
@@ -478,7 +484,7 @@ function TabsEditor({ items, onItemsChange, intro }) {
 
                 {tabItems.map((tab, index) => (
                     <TabsContent key={tab.id} value={tab.id}>
-                        <Card className="rounded-3xl border-zinc-200 shadow-none">
+                        <Card className="rounded-xl border-border shadow-none">
                             <CardHeader>
                                 <div className="flex items-start justify-between gap-4">
                                     <div className="w-full space-y-3">
@@ -487,7 +493,7 @@ function TabsEditor({ items, onItemsChange, intro }) {
                                             value={tab.label ?? ""}
                                             onChange={(event) => updateTab(tab.id, "label", event.target.value)}
                                             placeholder={`Tab ${index + 1} label`}
-                                            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium outline-none placeholder:text-zinc-400 focus:border-zinc-950 focus:ring-4 focus:ring-zinc-100"
+                                            className="w-full rounded-lg bg-muted/40 px-3 py-2 text-sm font-medium outline-none placeholder:text-muted-foreground focus:bg-muted/60 focus:ring-2 focus:ring-ring/25"
                                         />
 
                                         <input
@@ -495,7 +501,7 @@ function TabsEditor({ items, onItemsChange, intro }) {
                                             value={tab.title ?? ""}
                                             onChange={(event) => updateTab(tab.id, "title", event.target.value)}
                                             placeholder={`Tab ${index + 1} title`}
-                                            className="w-full bg-transparent text-xl font-semibold text-zinc-950 outline-none placeholder:text-zinc-300"
+                                            className="w-full bg-transparent text-xl font-semibold text-foreground outline-none placeholder:text-muted-foreground/50"
                                         />
                                     </div>
 
@@ -571,7 +577,7 @@ function AccordionEditor({ items, onItemsChange, intro }) {
                     <AccordionItem
                         key={item.id}
                         value={item.id}
-                        className="rounded-2xl border border-zinc-200 px-4"
+                        className="rounded-lg bg-muted/40 px-4"
                     >
                         <div className="flex items-center gap-2">
                             <input
@@ -579,7 +585,7 @@ function AccordionEditor({ items, onItemsChange, intro }) {
                                 value={item.title ?? ""}
                                 onChange={(event) => updateItem(item.id, "title", event.target.value)}
                                 placeholder={`Accordion item ${index + 1} title`}
-                                className="w-full bg-transparent py-4 font-medium outline-none placeholder:text-zinc-400"
+                                className="w-full bg-transparent py-4 font-medium outline-none placeholder:text-muted-foreground"
                             />
 
                             <AccordionTrigger className="w-auto shrink-0 px-2">
@@ -668,13 +674,13 @@ function FlipCardsEditor({ cards, onCardsChange, intro }) {
                     return (
                         <div key={card.id} className="h-64 w-full [perspective:1000px]">
                             <div
-                                className={`relative h-full w-full rounded-3xl transition-transform duration-700 [transform-style:preserve-3d] ${
+                                className={`relative h-full w-full rounded-xl transition-transform duration-700 [transform-style:preserve-3d] ${
                                     isFlipped ? "[transform:rotateY(180deg)]" : ""
                                 }`}
                             >
-                                <div className="absolute inset-0 flex flex-col justify-between rounded-3xl bg-zinc-950 p-5 text-white shadow-sm [backface-visibility:hidden]">
+                                <div className="absolute inset-0 flex flex-col justify-between rounded-xl bg-foreground p-5 text-background shadow-sm [backface-visibility:hidden]">
                                     <div>
-                                        <p className="mb-3 text-xs font-medium uppercase tracking-[0.18em] text-zinc-400">
+                                        <p className="mb-3 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                                             Front {index + 1}
                                         </p>
 
@@ -683,22 +689,22 @@ function FlipCardsEditor({ cards, onCardsChange, intro }) {
                                             value={card.frontTitle ?? ""}
                                             onChange={(event) => updateCard(card.id, "frontTitle", event.target.value)}
                                             placeholder="Question or term"
-                                            className="w-full bg-transparent text-2xl font-semibold text-white outline-none placeholder:text-zinc-500"
+                                            className="w-full bg-transparent text-2xl font-semibold text-background outline-none placeholder:text-background/50"
                                         />
                                     </div>
 
                                     <button
                                         type="button"
                                         onClick={() => toggleCard(card.id)}
-                                        className="self-start rounded-full border border-white/20 px-3 py-2 text-sm font-medium transition hover:bg-white hover:text-black"
+                                        className="self-start rounded-full border border-white/20 px-3 py-2 text-sm font-medium transition hover:bg-card hover:text-black"
                                     >
                                         Flip card
                                     </button>
                                 </div>
 
-                                <div className="absolute inset-0 flex [transform:rotateY(180deg)] flex-col justify-between rounded-3xl bg-zinc-100 p-5 text-zinc-950 shadow-sm [backface-visibility:hidden]">
+                                <div className="absolute inset-0 flex [transform:rotateY(180deg)] flex-col justify-between rounded-xl bg-muted p-5 text-foreground shadow-sm [backface-visibility:hidden]">
                                     <div>
-                                        <p className="mb-3 text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">
+                                        <p className="mb-3 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                                             Back {index + 1}
                                         </p>
 
@@ -707,7 +713,7 @@ function FlipCardsEditor({ cards, onCardsChange, intro }) {
                                             value={card.backTitle ?? ""}
                                             onChange={(event) => updateCard(card.id, "backTitle", event.target.value)}
                                             placeholder="Answer"
-                                            className="w-full bg-transparent text-xl font-semibold text-zinc-950 outline-none placeholder:text-zinc-400"
+                                            className="w-full bg-transparent text-xl font-semibold text-foreground outline-none placeholder:text-muted-foreground"
                                         />
 
                                         <textarea
@@ -715,7 +721,7 @@ function FlipCardsEditor({ cards, onCardsChange, intro }) {
                                             onChange={(event) => updateCard(card.id, "description", event.target.value)}
                                             rows={3}
                                             placeholder="Explanation..."
-                                            className="mt-3 w-full resize-none bg-transparent text-sm text-zinc-600 outline-none placeholder:text-zinc-400"
+                                            className="mt-3 w-full resize-none bg-transparent text-sm text-muted-foreground outline-none placeholder:text-muted-foreground"
                                         />
                                     </div>
 
@@ -723,7 +729,7 @@ function FlipCardsEditor({ cards, onCardsChange, intro }) {
                                         <button
                                             type="button"
                                             onClick={() => toggleCard(card.id)}
-                                            className="rounded-full bg-black px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+                                            className="rounded-full bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
                                         >
                                             Flip back
                                         </button>
@@ -779,20 +785,20 @@ export function VideoTool({ data, onDataChange, onDelete }) {
     )
 }
 
-function CombinedHeaderFields({ data, onDataChange, title, description }) {
+/**
+ * The heading + description pair the compound tools share. Its own label and
+ * blurb are dropped for the same reason as ToolShell's: the field placeholders
+ * already say what goes where, so the explanation was pure repetition.
+ */
+function CombinedHeaderFields({ data, onDataChange, title }) {
     return (
-        <div className="rounded-3xl border border-zinc-200 bg-zinc-50/60 p-5">
-            <div className="mb-4">
-                <h3 className="font-semibold text-zinc-950">{title}</h3>
-                <p className="mt-1 text-sm leading-6 text-zinc-500">{description}</p>
-            </div>
-
+        <div className="space-y-1" aria-label={title || undefined}>
             <div className="space-y-3">
                 <InlineField
                     value={data?.smallHeader}
                     onChange={(value) => onDataChange({ ...data, smallHeader: value })}
                     placeholder="Write a smaller heading..."
-                    className="text-xl font-semibold text-zinc-900"
+                    className="text-xl font-semibold text-foreground"
                 />
 
                 <TextAreaField
@@ -842,14 +848,14 @@ function GridItemsEditor({ data, onDataChange }) {
                 {items.map((item, index) => (
                     <div
                         key={item.id}
-                        className="space-y-3 rounded-3xl border border-zinc-200 bg-zinc-50/60 p-4 transition hover:bg-white hover:shadow-sm"
+                        className="space-y-3 rounded-xl bg-muted/40 p-4 transition hover:bg-muted/60"
                     >
                         <input
                             type="text"
                             value={item.title ?? ""}
                             onChange={(event) => updateItem(item.id, "title", event.target.value)}
                             placeholder={`Card ${index + 1} title`}
-                            className="w-full bg-transparent text-lg font-semibold text-zinc-950 outline-none placeholder:text-zinc-300"
+                            className="w-full bg-transparent text-lg font-semibold text-foreground outline-none placeholder:text-muted-foreground/50"
                         />
 
                         <TextAreaField
@@ -1042,8 +1048,8 @@ export function MediaTextBlockTool({ data, onDataChange, onDelete }) {
                 description="Add context before the image or video layout."
             />
 
-            <div className="grid gap-3 rounded-3xl border border-zinc-200 bg-zinc-50/60 p-4 sm:grid-cols-2">
-                <div className="space-y-1.5 text-sm font-medium text-zinc-700">
+            <div className="grid gap-3 rounded-xl bg-muted/40 p-4 sm:grid-cols-2">
+                <div className="space-y-1.5 text-sm font-medium text-foreground">
                     <span>Media type</span>
                     <Select value={mediaType} onValueChange={(value) => updateField("mediaType", value)}>
                         <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -1054,7 +1060,7 @@ export function MediaTextBlockTool({ data, onDataChange, onDelete }) {
                     </Select>
                 </div>
 
-                <div className="space-y-1.5 text-sm font-medium text-zinc-700">
+                <div className="space-y-1.5 text-sm font-medium text-foreground">
                     <span>Layout</span>
                     <Select value={toolData.layout === "image-right" ? "image-right" : "image-left"} onValueChange={(value) => updateField("layout", value)}>
                         <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -1080,7 +1086,7 @@ export function MediaTextBlockTool({ data, onDataChange, onDelete }) {
                         value={toolData.supportingTitle}
                         onChange={(value) => updateField("supportingTitle", value)}
                         placeholder="Write a title..."
-                        className="text-2xl font-bold text-zinc-950"
+                        className="text-2xl font-bold text-foreground"
                     />
 
                     <TextAreaField

@@ -41,7 +41,24 @@ import java.util.stream.Collectors;
 public class CognitoAuthService {
 
     public static final String LEARNER_USER_TYPE = "LEARNER";
+    /** The organization's own account -- the owner / primary contact. */
     public static final String ENTERPRISE_USER_TYPE = "ENTERPRISE";
+    /**
+     * Someone the organization created an account for (a group leader, a
+     * co-admin) rather than the organization account itself. Carries the same
+     * permissions as ENTERPRISE; it exists so the two can be told apart.
+     */
+    public static final String ENTERPRISE_MEMBER_USER_TYPE = "ENTERPRISE_MEMBER";
+
+    /**
+     * True for either enterprise-side role. Every permission check that used to
+     * compare against "ENTERPRISE" must go through this, or group leaders lose
+     * the authoring rights they had before the member role existed.
+     */
+    public static boolean isEnterpriseRole(String role) {
+        return ENTERPRISE_USER_TYPE.equalsIgnoreCase(role)
+                || ENTERPRISE_MEMBER_USER_TYPE.equalsIgnoreCase(role);
+    }
 
     private final UserRepository userRepository;
     private final UserTypeRepository userTypeRepository;
@@ -172,9 +189,12 @@ public class CognitoAuthService {
         }
 
         // 1) Ensure the account is typed ENTERPRISE so role resolution returns
-        //    ENTERPRISE instead of the default LEARNER.
+        //    ENTERPRISE instead of the default LEARNER. ENTERPRISE_MEMBER counts
+        //    as already-typed: this repair runs on every sync, and rewriting it
+        //    to ENTERPRISE would undo a group leader's role on their next
+        //    sign-in for anyone who is both a primary contact and a member.
         boolean isEnterpriseType = user.getUserType() != null
-                && ENTERPRISE_USER_TYPE.equalsIgnoreCase(user.getUserType().getUserTypeText());
+                && isEnterpriseRole(user.getUserType().getUserTypeText());
         if (!isEnterpriseType) {
             UserType enterpriseType = userTypeRepository.findByUserTypeText(ENTERPRISE_USER_TYPE)
                     .orElseGet(() -> {

@@ -72,11 +72,6 @@ public class AiConfig {
 
     @Bean
     public ChatModel chatModel() {
-        // Output is validated in service code (see LessonDraftJsonParser) rather than
-        // relying on a provider `response_format`, so the model stays portable across
-        // OpenAI-compatible endpoints. maxTokens is set generously so comprehensive,
-        // multi-section lesson drafts are not truncated mid-JSON (a cut-off response
-        // fails to parse and the whole generation is lost).
         return OpenAiChatModel.builder()
                 .apiKey(apiKey)
                 .baseUrl(baseUrl)
@@ -131,8 +126,6 @@ public class AiConfig {
         return EmbeddingStoreContentRetriever.builder()
                 .embeddingStore(lessonEmbeddingStore)
                 .embeddingModel(embeddingModel)
-                // More grounding chunks -> more source material for comprehensive
-                // lessons (minScore still filters out low-relevance matches).
                 .maxResults(8)
                 .minScore(0.25)
                 .build();
@@ -175,32 +168,39 @@ public class AiConfig {
     @Bean
     public LessonGenerationAssistant lessonGenerationAssistant(
             ChatModel chatModel,
-            LessonComponentDraftTools lessonComponentDraftTools
+            LessonComponentDraftTools lessonComponentDraftTools,
+            @Qualifier("lessonContentRetriever")
+            ContentRetriever lessonContentRetriever
     ) {
-        // Lessons are built by tool-calling: the model calls the
-        // LessonComponentDraftTools to create sections and add typed content tools,
-        // which accumulate in the request-scoped LessonDraftCollector (read back in
-        // LessonGenerationService). Only these builder tools are attached — LessonTool's
-        // @Tool methods are @Transactional, so Spring would wrap it in a CGLIB proxy
-        // that hides the @Tool annotations from LangChain4j's scan (see QuestionTool).
         return AiServices.builder(LessonGenerationAssistant.class)
                 .chatModel(chatModel)
+                .contentRetriever(lessonContentRetriever)
                 .tools(lessonComponentDraftTools)
                 .build();
     }
 
     @Bean
-    public QuestionGenerationAssistant questionGenerationAssistant(ChatModel chatModel, QuestionTool questionTool) {
+    public QuestionGenerationAssistant questionGenerationAssistant(
+            ChatModel chatModel,
+            QuestionTool questionTool,
+            @Qualifier("questionContentRetriever")
+            ContentRetriever questionContentRetriever
+    ) {
         return AiServices.builder(QuestionGenerationAssistant.class)
                 .chatModel(chatModel)
+                .contentRetriever(questionContentRetriever)
                 .tools(questionTool)
                 .build();
     }
 
     @Bean
-    public CurriculumPlanningAssistant curriculumPlanningAssistant(ChatModel chatModel) {
+    public CurriculumPlanningAssistant curriculumPlanningAssistant(
+            ChatModel chatModel,
+            @Qualifier("lessonContentRetriever") ContentRetriever lessonContentRetriever
+    ) {
         return AiServices.builder(CurriculumPlanningAssistant.class)
                 .chatModel(chatModel)
+                .contentRetriever(lessonContentRetriever)
                 .build();
     }
 

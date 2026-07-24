@@ -420,20 +420,19 @@ function LessonToolCard({ action, onClick, disabled }) {
           type="button"
           disabled={disabled}
           onClick={onClick}
-          className="group flex w-full items-start gap-3 rounded-xl border bg-background p-3 text-left transition hover:border-primary/40 hover:bg-muted/50 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50"
+          // The tool's description is a hover tooltip rather than a second line
+          // of visible text: with nineteen tools stacked in a narrow panel, a
+          // grey subtitle under every one of them was more noise than help.
+          title={action.description}
+          className="group flex w-full items-center gap-3 rounded-lg border bg-background px-3 py-2 text-left transition hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50"
       >
-      <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg border bg-muted text-muted-foreground transition group-hover:border-primary/30 group-hover:bg-primary/10 group-hover:text-primary">
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border bg-muted text-muted-foreground transition group-hover:border-primary/30 group-hover:bg-primary/10 group-hover:text-primary">
         <Icon className="h-4 w-4" />
       </span>
 
-        <span className="min-w-0">
-        <span className="block text-sm font-medium leading-5 text-foreground">
+        <span className="min-w-0 truncate text-sm font-medium leading-5 text-foreground">
           {action.name}
         </span>
-        <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-          {action.description}
-        </span>
-      </span>
       </button>
   )
 }
@@ -459,19 +458,12 @@ function LessonToolsPanel({ isLoadingLesson, onAddTool }) {
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
           <div className="space-y-6 pb-6">
             {actionGroups.map((group) => (
-                <section key={group.label} className="space-y-3">
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                      {group.label}
-                    </h3>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      {group.label === "Individual tools"
-                          ? "Use these for custom, block-by-block lesson building."
-                          : "Use these when you want one ready-made layout with multiple fields."}
-                    </p>
-                  </div>
+                <section key={group.label} className="space-y-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    {group.label}
+                  </h3>
 
-                  <div className="grid gap-2">
+                  <div className="grid gap-1.5">
                     {group.items.map((action) => (
                         <LessonToolCard
                             key={action.type}

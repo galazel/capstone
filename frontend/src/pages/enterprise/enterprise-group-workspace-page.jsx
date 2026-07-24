@@ -6,14 +6,12 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardCheckIcon,
-  FolderTree,
   Layers3,
   Loader2,
   MailIcon,
   MegaphoneIcon,
   PinIcon,
   Plus,
-  SquarePen,
   Trash2,
   UserPlusIcon,
   UsersIcon,
@@ -36,6 +34,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Progress } from "@/components/ui/progress"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -47,17 +54,24 @@ import {
   EnterpriseStatusBadge,
   formatDateTime,
 } from "@/components/enterprise/enterprise-ui.jsx"
-import { deleteExam, getExamTypes, getExams, publishExam } from "@/services/assessmentService.js"
+import {
+  deleteExam,
+  getExamQuestions,
+  getExamTypes,
+  getExams,
+  publishExam,
+} from "@/services/assessmentService.js"
+import { getQuestions } from "@/services/questionService.js"
+import AssessmentPreviewDialog from "@/components/assessments/admin/assessment-preview-dialog.jsx"
 import { getAllCertifications } from "@/services/certificationService.js"
-import { createMajorCategory, deleteMajorCategory } from "@/services/majorCategoryService.js"
-import { createMiddleCategory, deleteMiddleCategory } from "@/services/middleCategoryService.js"
-import { createLesson, deleteLesson } from "@/services/lessonService.js"
 import {
   archiveGroupAnnouncement,
   createGroupAnnouncement,
   getEnterpriseGroupAssignees,
   getEnterpriseGroupById,
   getGroupAnnouncements,
+  getGroupLearnerRoster,
+  removeLearnerFromGroup,
 } from "@/services/enterpriseService.js"
 import {
   cancelEnterpriseInvitation,
@@ -356,448 +370,7 @@ function InlineNameInput({ placeholder, onSubmit, onCancel, isPending, className
   )
 }
 
-/**
- * A group's own authored content -- Major Categories owned by this group
- * (ownerGroupId === groupId), created and edited alongside the read-only
- * official curriculum, never mixed into it for anyone else. Middle
- * categories/lessons inherit ownership from their major category, so no
- * ownerGroupId is passed for those creates -- see MiddleCategoryService/
- * LessonService.
- *
- * The building UI deliberately mirrors the admin's CertificationModules
- * component (collapsible numbered major cards, folder-tree modules, lesson
- * rows, dashed add buttons, floating "+") so authoring content feels the
- * same in both places -- the difference is each action here persists
- * immediately (ownership must be resolved server-side per create).
- */
-function ContentTab({ groupId, certification }) {
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const [addingMajor, setAddingMajor] = useState(false)
-  const [collapsedMajors, setCollapsedMajors] = useState(() => new Set())
-  const [collapsedMiddles, setCollapsedMiddles] = useState(() => new Set())
-  const [addingMiddleTo, setAddingMiddleTo] = useState(null)
-  const [addingLessonTo, setAddingLessonTo] = useState(null)
-
-  const ownMajorCategories = (certification?.majorCategory ?? []).filter(
-    (major) => major.ownerGroupId === groupId
-  )
-
-  const toggle = (setter, id) =>
-    setter((current) => {
-      const next = new Set(current)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-
-  // Patch just the affected certification in the cached tree instead of
-  // refetching the whole thing -- refetching getAllCertifications on every
-  // add/delete was what made each action feel slow. The create/delete
-  // endpoints return (or identify) the exact row, so the cache update is
-  // authoritative, not a guess.
-  const contentKey = ["certifications", "group", groupId]
-  const patchCert = (updater) =>
-    queryClient.setQueryData(contentKey, (old) =>
-      (old ?? []).map((cert) =>
-        cert.certificationId === certification.certificationId ? updater(cert) : cert
-      )
-    )
-  const mapMajors = (cert, fn) => ({ ...cert, majorCategory: (cert.majorCategory ?? []).map(fn) })
-
-  const createMajorMutation = useMutation({
-    mutationFn: (title) =>
-      createMajorCategory({ certificationId: certification.certificationId, title }, groupId),
-    onSuccess: (major) => {
-      patchCert((cert) => ({
-        ...cert,
-        majorCategory: [...(cert.majorCategory ?? []), { ...major, middleCategory: major.middleCategory ?? [] }],
-      }))
-      toast.success("Category created.")
-      setAddingMajor(false)
-    },
-    onError: (err) => toast.error(backendMessage(err, "Unable to create this category.")),
-  })
-
-  const createMiddleMutation = useMutation({
-    mutationFn: ({ majorCategoryId, title }) => createMiddleCategory({ majorCategoryId, title }),
-    onSuccess: (middle) => {
-      patchCert((cert) =>
-        mapMajors(cert, (major) =>
-          major.majorCategoryId === middle.majorCategoryId
-            ? { ...major, middleCategory: [...(major.middleCategory ?? []), { ...middle, lessons: middle.lessons ?? [] }] }
-            : major
-        )
-      )
-      toast.success("Module created.")
-      setAddingMiddleTo(null)
-    },
-    onError: (err) => toast.error(backendMessage(err, "Unable to create this module.")),
-  })
-
-  const createLessonMutation = useMutation({
-    mutationFn: ({ middleCategoryId, name }) => createLesson({ middleCategoryId, name }),
-    onSuccess: (lesson) => {
-      patchCert((cert) =>
-        mapMajors(cert, (major) => ({
-          ...major,
-          middleCategory: (major.middleCategory ?? []).map((middle) =>
-            middle.middleCategoryId === lesson.middleCategoryId
-              ? { ...middle, lessons: [...(middle.lessons ?? []), lesson] }
-              : middle
-          ),
-        }))
-      )
-      setAddingLessonTo(null)
-      // Stay on the list -- use the lesson's "Create content" button to open
-      // the editor when you're ready, instead of jumping there on every add.
-      toast.success("Lesson created.")
-    },
-    onError: (err) => toast.error(backendMessage(err, "Unable to create this lesson.")),
-  })
-
-  const deleteMajorMutation = useMutation({
-    mutationFn: (id) => deleteMajorCategory(id),
-    onSuccess: (_data, majorId) => {
-      patchCert((cert) => ({
-        ...cert,
-        majorCategory: (cert.majorCategory ?? []).filter((major) => major.majorCategoryId !== majorId),
-      }))
-      toast.success("Category deleted.")
-    },
-    onError: (err) => toast.error(backendMessage(err, "Unable to delete this category.")),
-  })
-
-  const deleteMiddleMutation = useMutation({
-    mutationFn: (id) => deleteMiddleCategory(id),
-    onSuccess: (_data, middleId) => {
-      patchCert((cert) =>
-        mapMajors(cert, (major) => ({
-          ...major,
-          middleCategory: (major.middleCategory ?? []).filter((middle) => middle.middleCategoryId !== middleId),
-        }))
-      )
-      toast.success("Module deleted.")
-    },
-    onError: (err) => toast.error(backendMessage(err, "Unable to delete this module.")),
-  })
-
-  const deleteLessonMutation = useMutation({
-    mutationFn: (id) => deleteLesson(id),
-    onSuccess: (_data, lessonId) => {
-      patchCert((cert) =>
-        mapMajors(cert, (major) => ({
-          ...major,
-          middleCategory: (major.middleCategory ?? []).map((middle) => ({
-            ...middle,
-            lessons: (middle.lessons ?? []).filter((lesson) => lesson.lessonId !== lessonId),
-          })),
-        }))
-      )
-      toast.success("Lesson deleted.")
-    },
-    onError: (err) => toast.error(backendMessage(err, "Unable to delete this lesson.")),
-  })
-
-  if (!certification) {
-    return (
-      <EnterpriseEmptyState
-        icon={FolderTree}
-        title="No certification linked to this group yet"
-        description="Content can be authored once this group's certification allocation is set."
-      />
-    )
-  }
-
-  const openLesson = (lesson) =>
-    navigate(`/enterprise/lessons/${encodeURIComponent(lesson.name)}/create`, {
-      state: { lessonId: lesson.lessonId, lessonName: lesson.name },
-    })
-
-  return (
-    <section className="w-full">
-      <div className="mb-4 rounded-2xl border border-zinc-200 bg-zinc-50/70 p-5 dark:border-zinc-800 dark:bg-zinc-900/40">
-        <h2 className="text-base font-semibold text-foreground">Your group's content</h2>
-        <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-          Build your own categories, modules, and lessons for this group. They sit alongside
-          the official curriculum but stay visible only to your group.
-        </p>
-        <p className="mt-3 text-xs font-medium text-muted-foreground/70">
-          {ownMajorCategories.length} categor{ownMajorCategories.length === 1 ? "y" : "ies"}
-        </p>
-      </div>
-
-      {ownMajorCategories.length === 0 && !addingMajor ? (
-        <div className="flex min-h-[240px] flex-col items-center justify-center px-6 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-card text-foreground shadow-sm">
-            <FolderTree size={24} />
-          </div>
-          <h3 className="mt-4 text-base font-semibold text-foreground">
-            Start building your group's content
-          </h3>
-          <p className="mt-1 max-w-sm text-sm leading-6 text-muted-foreground">
-            Use the button below to create your first major category, then add modules and
-            lessons under it.
-          </p>
-          <Button className="mt-4" onClick={() => setAddingMajor(true)}>
-            <Plus className="size-4" aria-hidden="true" />
-            Add category
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {ownMajorCategories.map((major, majorIndex) => {
-            const middles = major.middleCategory ?? []
-            const majorOpen = !collapsedMajors.has(major.majorCategoryId)
-            return (
-              <div
-                key={major.majorCategoryId}
-                className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
-              >
-                <div className="flex items-center gap-3 px-4 py-4">
-                  <button
-                    type="button"
-                    onClick={() => toggle(setCollapsedMajors, major.majorCategoryId)}
-                    aria-label="Show or hide modules"
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted"
-                  >
-                    {majorOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                  </button>
-                  <span className="w-8 text-xl font-semibold tracking-tight text-muted-foreground/60">
-                    {String(majorIndex + 1).padStart(2, "0")}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-foreground">{major.title}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {middles.length} {middles.length === 1 ? "module" : "modules"}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      aria-label="Add module"
-                      onClick={() => {
-                        setAddingMiddleTo(major.majorCategoryId)
-                        setCollapsedMajors((c) => {
-                          const n = new Set(c)
-                          n.delete(major.majorCategoryId)
-                          return n
-                        })
-                      }}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                    >
-                      <Plus size={17} />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Delete category"
-                      onClick={() => deleteMajorMutation.mutate(major.majorCategoryId)}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-red-50 hover:text-red-600"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-
-                {majorOpen ? (
-                  <div className="space-y-3 border-t border-border bg-muted/30 px-4 py-4">
-                    {middles.map((middle) => {
-                      const lessons = middle.lessons ?? []
-                      const middleOpen = !collapsedMiddles.has(middle.middleCategoryId)
-                      return (
-                        <div
-                          key={middle.middleCategoryId}
-                          className="overflow-hidden rounded-xl border border-border bg-card"
-                        >
-                          <div className="flex items-center gap-3 px-3 py-3">
-                            <button
-                              type="button"
-                              onClick={() => toggle(setCollapsedMiddles, middle.middleCategoryId)}
-                              aria-label="Show or hide lessons"
-                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted"
-                            >
-                              {middleOpen ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
-                            </button>
-                            <FolderTree size={16} className="shrink-0 text-muted-foreground" />
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium text-foreground">
-                                {middle.title}
-                              </p>
-                              <p className="mt-0.5 text-xs text-muted-foreground">
-                                {lessons.length} {lessons.length === 1 ? "lesson" : "lessons"}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                aria-label="Add lesson"
-                                onClick={() => {
-                                  setAddingLessonTo(middle.middleCategoryId)
-                                  setCollapsedMiddles((c) => {
-                                    const n = new Set(c)
-                                    n.delete(middle.middleCategoryId)
-                                    return n
-                                  })
-                                }}
-                                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                              >
-                                <Plus size={16} />
-                              </button>
-                              <button
-                                type="button"
-                                aria-label="Delete module"
-                                onClick={() => deleteMiddleMutation.mutate(middle.middleCategoryId)}
-                                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-red-50 hover:text-red-600"
-                              >
-                                <Trash2 size={15} />
-                              </button>
-                            </div>
-                          </div>
-
-                          {middleOpen ? (
-                            <div className="space-y-2 border-t border-border bg-muted/20 px-3 py-3">
-                              {lessons.map((lesson, lessonIndex) => (
-                                <div
-                                  key={lesson.lessonId}
-                                  className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5"
-                                >
-                                  <span className="w-5 text-xs font-semibold text-muted-foreground/60">
-                                    {String(lessonIndex + 1).padStart(2, "0")}
-                                  </span>
-                                  <BookOpen size={15} className="shrink-0 text-muted-foreground" />
-                                  <button
-                                    type="button"
-                                    onClick={() => openLesson(lesson)}
-                                    className="min-w-0 flex-1 truncate text-left text-sm text-foreground hover:underline"
-                                  >
-                                    {lesson.name}
-                                  </button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-8 gap-1 px-2 text-primary hover:text-primary"
-                                    onClick={() => openLesson(lesson)}
-                                  >
-                                    <SquarePen size={14} aria-hidden="true" />
-                                    Create content
-                                  </Button>
-                                  <button
-                                    type="button"
-                                    aria-label="Delete lesson"
-                                    onClick={() => deleteLessonMutation.mutate(lesson.lessonId)}
-                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-red-50 hover:text-red-600"
-                                  >
-                                    <Trash2 size={15} />
-                                  </button>
-                                </div>
-                              ))}
-
-                              {addingLessonTo === middle.middleCategoryId ? (
-                                <div className="flex items-center gap-3 rounded-xl border border-dashed border-primary/50 bg-card px-3 py-2.5">
-                                  <BookOpen size={15} className="shrink-0 text-muted-foreground" />
-                                  <InlineNameInput
-                                    placeholder="Lesson name"
-                                    className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
-                                    onSubmit={(name) =>
-                                      createLessonMutation.mutate({
-                                        middleCategoryId: middle.middleCategoryId,
-                                        name,
-                                      })
-                                    }
-                                    onCancel={() => setAddingLessonTo(null)}
-                                    isPending={createLessonMutation.isPending}
-                                  />
-                                </div>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => setAddingLessonTo(middle.middleCategoryId)}
-                                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-card px-4 py-2.5 text-sm font-medium text-muted-foreground transition hover:border-foreground/40 hover:text-foreground"
-                                >
-                                  <Plus size={15} />
-                                  {lessons.length ? "Add another lesson" : "Add first lesson"}
-                                </button>
-                              )}
-                            </div>
-                          ) : null}
-                        </div>
-                      )
-                    })}
-
-                    {addingMiddleTo === major.majorCategoryId ? (
-                      <div className="overflow-hidden rounded-xl border border-dashed border-primary/50 bg-card">
-                        <div className="flex items-center gap-3 px-3 py-3">
-                          <FolderTree size={16} className="shrink-0 text-muted-foreground" />
-                          <InlineNameInput
-                            placeholder="Module title"
-                            className="min-w-0 flex-1 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
-                            onSubmit={(title) =>
-                              createMiddleMutation.mutate({
-                                majorCategoryId: major.majorCategoryId,
-                                title,
-                              })
-                            }
-                            onCancel={() => setAddingMiddleTo(null)}
-                            isPending={createMiddleMutation.isPending}
-                          />
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setAddingMiddleTo(major.majorCategoryId)}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-card px-4 py-3 text-sm font-medium text-muted-foreground transition hover:border-foreground/40 hover:text-foreground"
-                      >
-                        <Plus size={16} />
-                        {middles.length ? "Add another module" : "Add first module"}
-                      </button>
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            )
-          })}
-
-          {/* In-flow add control -- renders the same major-category card shape
-              as a real one, with the title as an input you type into. */}
-          {addingMajor ? (
-            <div className="overflow-hidden rounded-2xl border border-dashed border-primary/50 bg-card shadow-sm">
-              <div className="flex items-center gap-3 px-4 py-4">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground">
-                  <ChevronDown size={18} />
-                </span>
-                <span className="w-8 text-xl font-semibold tracking-tight text-muted-foreground/60">
-                  {String(ownMajorCategories.length + 1).padStart(2, "0")}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <InlineNameInput
-                    placeholder="Major category title"
-                    className="w-full min-w-0 bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
-                    onSubmit={(title) => createMajorMutation.mutate(title)}
-                    onCancel={() => setAddingMajor(false)}
-                    isPending={createMajorMutation.isPending}
-                  />
-                  <p className="mt-0.5 text-xs text-muted-foreground">New category</p>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setAddingMajor(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card px-4 py-4 text-sm font-medium text-muted-foreground transition hover:border-foreground/40 hover:text-foreground"
-            >
-              <Plus size={16} />
-              Add {ownMajorCategories.length ? "another " : ""}major category
-            </button>
-          )}
-        </div>
-      )}
-    </section>
-  )
-}
-
-function LearnersTab({ groupId, group, learners }) {
+function LearnersTab({ groupId, group }) {
   const queryClient = useQueryClient()
   const [inviteOpen, setInviteOpen] = useState(false)
   const [draft, setDraft] = useState({ firstName: "", lastName: "", email: "" })
@@ -1008,39 +581,169 @@ function LearnersTab({ groupId, group, learners }) {
         </Card>
       ) : null}
 
-      {learners.length ? (
-        learners.map((learner) => (
-          <Card key={learner.enterpriseGroupAssigneeId}>
-            <CardContent className="flex items-center gap-3 p-4">
-              <UsersIcon className="size-5 text-primary" />
-              <div>
-                <p className="font-medium">Learner #{learner.learnerId}</p>
-                <p className="text-sm text-muted-foreground">
-                  {learner.role === "lead" ? "Peer lead" : "Learner"} · Added{" "}
-                  {new Date(learner.assignedAt).toLocaleDateString()}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        ))
-      ) : pendingInvitations.length === 0 ? (
-        <EnterpriseEmptyState
-          icon={UsersIcon}
-          title="No learners yet"
-          description="Invite your first learner into this group above."
-        />
-      ) : null}
+      <GroupLearnerTable groupId={groupId} hasPendingInvitations={pendingInvitations.length > 0} />
     </div>
   )
 }
 
-const VALID_TABS = ["curriculum", "content", "assessments", "learners", "announcements"]
+function LessonProgressCell({ completed, total, percentage }) {
+  if (!total) {
+    return <span className="text-sm text-muted-foreground">No lessons yet</span>
+  }
+  const shown = Number.isFinite(Number(percentage)) ? Number(percentage) : 0
+  return (
+    <div className="flex items-center gap-2">
+      <Progress value={Math.min(100, Math.max(0, shown))} className="h-1.5 w-16" />
+      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+        {completed}/{total}
+      </span>
+    </div>
+  )
+}
+
+/**
+ * The group's learners with the figures a leader monitors, each row opening
+ * that learner's full statistics. Reads the leader-scoped roster endpoint --
+ * the group assignee list alone carries no names or progress.
+ */
+function GroupLearnerTable({ groupId, hasPendingInvitations }) {
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [removeTarget, setRemoveTarget] = useState(null)
+
+  const rosterQuery = useQuery({
+    queryKey: ["group-learner-roster", groupId],
+    queryFn: () => getGroupLearnerRoster(groupId),
+    enabled: Number.isFinite(groupId),
+  })
+
+  const removeMutation = useMutation({
+    mutationFn: (learnerId) => removeLearnerFromGroup(groupId, learnerId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["group-learner-roster", groupId] })
+      queryClient.invalidateQueries({ queryKey: ["enterprise-group-assignees", groupId] })
+      queryClient.invalidateQueries({ queryKey: ["enterprise-group", groupId] })
+      toast.success("Learner removed from this group. Their account and progress are unchanged.")
+      setRemoveTarget(null)
+    },
+    onError: (err) => toast.error(backendMessage(err, "Unable to remove this learner.")),
+  })
+
+  const rows = asArray(rosterQuery.data)
+
+  if (rosterQuery.isLoading) {
+    return <EnterpriseLoadingSkeleton rows={3} />
+  }
+  if (rosterQuery.isError) {
+    return (
+      <EnterpriseErrorState
+        title="Unable to load this group's learners"
+        onRetry={rosterQuery.refetch}
+      />
+    )
+  }
+  if (rows.length === 0) {
+    return hasPendingInvitations ? null : (
+      <EnterpriseEmptyState
+        icon={UsersIcon}
+        title="No learners yet"
+        description="Invite your first learner into this group above."
+      />
+    )
+  }
+
+  return (
+    <>
+      <Card className="overflow-hidden py-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Learner</TableHead>
+              <TableHead className="w-48">Lessons completed</TableHead>
+              <TableHead className="w-28">Joined</TableHead>
+              <TableHead className="w-12" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => (
+              <TableRow
+                key={row.enterpriseGroupAssigneeId}
+                onClick={() => navigate(`/enterprise/groups/${groupId}/learners/${row.learnerId}`)}
+                className="cursor-pointer"
+              >
+                <TableCell>
+                  <p className="font-medium text-foreground">{row.name}</p>
+                  {row.username ? (
+                    <p className="text-xs text-muted-foreground">@{row.username}</p>
+                  ) : null}
+                </TableCell>
+                <TableCell>
+                  <LessonProgressCell
+                    completed={row.completedLessonCount}
+                    total={row.totalLessonCount}
+                    percentage={row.completionPercentage}
+                  />
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {row.assignedAt ? new Date(row.assignedAt).toLocaleDateString() : "—"}
+                </TableCell>
+                <TableCell>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Remove ${row.name} from this group`}
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setRemoveTarget(row)
+                    }}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+
+      <AlertDialog
+        open={removeTarget != null}
+        onOpenChange={(open) => {
+          if (!open) setRemoveTarget(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this learner from the group?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {removeTarget?.name} will be unassigned from this group and the slot returned.
+              Their account, enrolment, and progress are kept, so they can be added back later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => removeMutation.mutate(removeTarget.learnerId)}
+              disabled={removeMutation.isPending}
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+
+const VALID_TABS = ["curriculum", "assessments", "learners", "announcements"]
 
 export default function EnterpriseGroupWorkspacePage() {
   const { groupId } = useParams()
   const id = Number(groupId)
   const queryClient = useQueryClient()
   const [deleteExamTarget, setDeleteExamTarget] = useState(null)
+  const [previewExam, setPreviewExam] = useState(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedTab = searchParams.get("tab")
   const activeTab = VALID_TABS.includes(requestedTab) ? requestedTab : "curriculum"
@@ -1099,6 +802,20 @@ export default function EnterpriseGroupWorkspacePage() {
     queryFn: getExamTypes,
     staleTime: 5 * 60_000,
   })
+  // Only fetched to power the "view assessment content" preview dialog --
+  // getExamQuestions() returns the join rows for every exam, so it's
+  // filtered down to the previewed exam's rows inside the dialog itself.
+  const examQuestionsQuery = useQuery({
+    queryKey: ["exam-questions"],
+    queryFn: getExamQuestions,
+    staleTime: 60_000,
+  })
+  const questionsQuery = useQuery({
+    queryKey: ["questions", "group", id],
+    queryFn: () => getQuestions(id),
+    enabled: Number.isFinite(id),
+    staleTime: 60_000,
+  })
 
   if (
     groupQuery.isLoading ||
@@ -1152,6 +869,10 @@ export default function EnterpriseGroupWorkspacePage() {
   const examTypeById = new Map(
     asArray(examTypesQuery.data).map((type) => [type.examTypeId, type.examTypeText])
   )
+  const questionById = new Map(
+    asArray(questionsQuery.data).map((question) => [question.questionId, question])
+  )
+  const examQuestions = asArray(examQuestionsQuery.data)
   // Official assessments for this certification -- diagnostics, mock exams,
   // and other exam types the admin published. Read-only here, same as the
   // rest of the official curriculum.
@@ -1180,7 +901,6 @@ export default function EnterpriseGroupWorkspacePage() {
       >
         <TabsList>
           <TabsTrigger value="curriculum">Curriculum</TabsTrigger>
-          <TabsTrigger value="content">Content</TabsTrigger>
           <TabsTrigger value="assessments">Assessments</TabsTrigger>
           <TabsTrigger value="learners">Learners ({learners.length})</TabsTrigger>
           <TabsTrigger value="announcements">Announcements</TabsTrigger>
@@ -1276,10 +996,6 @@ export default function EnterpriseGroupWorkspacePage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="content" className="mt-5 space-y-4">
-          <ContentTab groupId={id} certification={certification} />
-        </TabsContent>
-
         <TabsContent value="assessments" className="mt-5 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -1300,15 +1016,21 @@ export default function EnterpriseGroupWorkspacePage() {
             <ul className="divide-y rounded-xl border bg-card">
               {ownGroupExams.map((exam) => (
                 <li key={exam.examId} className="flex items-center justify-between gap-3 px-4 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-foreground">{exam.title}</p>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewExam(exam)}
+                    className="min-w-0 text-left"
+                  >
+                    <p className="truncate text-sm font-medium text-foreground hover:underline">
+                      {exam.title}
+                    </p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {exam.totalQuestions ?? 0}{" "}
                       {(exam.totalQuestions ?? 0) === 1 ? "question" : "questions"}
                       {exam.durationMinutes ? ` · ${exam.durationMinutes} min` : ""}
                       {exam.passingScore != null ? ` · ${exam.passingScore}% to pass` : ""}
                     </p>
-                  </div>
+                  </button>
                   <div className="flex shrink-0 items-center gap-2">
                     <Badge variant="outline">
                       {examTypeById.get(exam.examTypeId) ?? "Assessment"}
@@ -1352,18 +1074,12 @@ export default function EnterpriseGroupWorkspacePage() {
               <p className="mt-1 text-sm text-muted-foreground">
                 Create your group's first assessment to see it listed here.
               </p>
-              <Button asChild className="mt-4" disabled={!certification}>
-                <Link to={`/enterprise/groups/${id}/assessments/new`}>
-                  <Plus className="size-4" aria-hidden="true" />
-                  Create Assessment
-                </Link>
-              </Button>
             </div>
           )}
         </TabsContent>
 
         <TabsContent value="learners" className="mt-5">
-          <LearnersTab groupId={id} group={group} learners={learners} />
+          <LearnersTab groupId={id} group={group} />
         </TabsContent>
 
         <TabsContent value="announcements" className="mt-5">
@@ -1396,6 +1112,17 @@ export default function EnterpriseGroupWorkspacePage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AssessmentPreviewDialog
+        open={previewExam != null}
+        onOpenChange={(open) => {
+          if (!open) setPreviewExam(null)
+        }}
+        exam={previewExam}
+        examTypeByIdText={examTypeById}
+        examQuestions={examQuestions}
+        questionById={questionById}
+      />
     </div>
   )
 }

@@ -1,6 +1,7 @@
 package com.capstone.rebyu.enterprise;
 
 import com.capstone.rebyu.auth.service.CognitoAdminService;
+import com.capstone.rebyu.auth.service.CognitoAuthService;
 import com.capstone.rebyu.common.BusinessRuleException;
 import com.capstone.rebyu.enterprise.dto.EnterpriseMemberInviteRequestDto;
 import com.capstone.rebyu.organization.dto.EnterpriseMemberDto;
@@ -42,7 +43,14 @@ public class EnterpriseMemberProvisioningService {
     private final EnterpriseMemberRepository enterpriseMemberRepository;
     private final EnterpriseMemberMapper enterpriseMemberMapper;
 
-    private static final String ENTERPRISE_USER_TYPE = "ENTERPRISE";
+    /**
+     * Everyone this service creates is a non-owner (an owner is rejected above),
+     * so they are typed ENTERPRISE_MEMBER rather than ENTERPRISE -- the latter
+     * identifies the organization's own account. Both roles carry the same
+     * permissions; see CognitoAuthService.isEnterpriseRole.
+     */
+    private static final String ENTERPRISE_MEMBER_USER_TYPE =
+            CognitoAuthService.ENTERPRISE_MEMBER_USER_TYPE;
 
     @Transactional
     public InviteResult inviteMember(Enterprise enterprise, EnterpriseMemberInviteRequestDto request) {
@@ -68,10 +76,10 @@ public class EnterpriseMemberProvisioningService {
 
         User user = existingUser;
         if (provision.cognitoSub() != null || provision.emailed()) {
-            UserType enterpriseType = userTypeRepository.findByUserTypeText(ENTERPRISE_USER_TYPE)
+            UserType enterpriseType = userTypeRepository.findByUserTypeText(ENTERPRISE_MEMBER_USER_TYPE)
                     .orElseGet(() -> {
                         UserType type = new UserType();
-                        type.setUserTypeText(ENTERPRISE_USER_TYPE);
+                        type.setUserTypeText(ENTERPRISE_MEMBER_USER_TYPE);
                         return userTypeRepository.save(type);
                     });
 

@@ -29,6 +29,7 @@ import { useAuth } from "@/context/auth-context.jsx"
 import { NotificationBell } from "@/components/notification-bell.jsx"
 import { getLearnerInvitations } from "@/services/enterpriseService.js"
 import { usePortalTheme } from "@/hooks/use-portal-theme.js"
+import { useNotifications } from "@/hooks/use-notifications.js"
 import { PortalThemeToggle } from "@/components/portal-theme-toggle"
 import { CalendarDays } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -116,8 +117,25 @@ export default function LearnerLayout() {
       }
     })
   const moderationNotifications = (Array.isArray(communityNotificationsQuery.data) ? communityNotificationsQuery.data : []).map((notification) => ({ ...notification, type: "certification" }))
-  const notifications = [...moderationNotifications, ...pendingInvitationNotifications, ...assignmentNotifications]
-    .sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0))
+  // The persisted feed (the same one admins and enterprises see) was never read
+  // here before, so backend-issued notifications never reached learners at all.
+  // These are the only ones with a numeric id, and the only ones that can be
+  // marked read or deleted; the derived items above stay read-only.
+  const inbox = useNotifications()
+  const notifications = [
+    ...inbox.items,
+    ...moderationNotifications,
+    ...pendingInvitationNotifications,
+    ...assignmentNotifications,
+  ].sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0))
+
+  const openNotification = (item) => {
+    if (typeof item.id === "number") {
+      inbox.open(item)
+      return
+    }
+    if (item.href) navigate(item.href)
+  }
 
   const outletContext = useMemo(
     () => ({
@@ -148,8 +166,12 @@ export default function LearnerLayout() {
             </Tooltip>
             <NotificationBell
               items={notifications}
+              unreadCount={inbox.unreadCount}
               loading={query.isLoading || invitationsQuery.isLoading}
               emptyMessage="Certification invitations and assignments will appear here."
+              onItemOpen={openNotification}
+              onMarkAllRead={inbox.markAllRead}
+              onDelete={inbox.remove}
             />
 
             <PortalThemeToggle />

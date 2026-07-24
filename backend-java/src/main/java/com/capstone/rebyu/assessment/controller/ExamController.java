@@ -107,7 +107,7 @@ public class ExamController {
             throw new IllegalArgumentException("Authentication is required");
         }
         CurrentUserDto user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
-        if (!isAdmin(user) && !"ENTERPRISE".equalsIgnoreCase(user.role())) {
+        if (!isAdmin(user) && !CognitoAuthService.isEnterpriseRole(user.role())) {
             throw new IllegalArgumentException("Admin or enterprise access is required");
         }
         return user;

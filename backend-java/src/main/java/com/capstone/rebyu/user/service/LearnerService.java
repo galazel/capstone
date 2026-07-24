@@ -205,8 +205,11 @@ public class LearnerService {
             notificationService.notify(
                     invitation.getInvitedBy(),
                     "Invitation accepted",
-                    learner.getUser().getEmail() + " accepted your invitation to " + group.getGroupName() + ".",
-                    "/enterprise/groups/" + group.getEnterpriseGroupId());
+                    displayNameFor(learner, invitation)
+                            + " accepted your invitation to " + group.getGroupName() + ".",
+                    // Straight to the group's learners tab -- the leader opens
+                    // this to look at who just joined.
+                    "/enterprise/groups/" + group.getEnterpriseGroupId() + "?tab=learners");
         }
 
         // Backfill the learner's profile name from the invitation when the
@@ -256,6 +259,31 @@ public class LearnerService {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    /**
+     * How to refer to a learner in a notification: their name, never their
+     * e-mail address. The learner's own profile name wins, but this runs before
+     * the name backfill further down, so a first-time acceptance falls back to
+     * the name the inviter typed. Username is the last resort -- the e-mail is
+     * deliberately not used at all.
+     */
+    private String displayNameFor(Learner learner, LearnerInvitation invitation) {
+        String profileName = joinName(learner.getFirstName(), learner.getLastName());
+        if (!isBlank(profileName)) {
+            return profileName;
+        }
+        String invitedName = joinName(invitation.getFirstName(), invitation.getLastName());
+        if (!isBlank(invitedName)) {
+            return invitedName;
+        }
+        return isBlank(learner.getUsername()) ? "A learner" : learner.getUsername().trim();
+    }
+
+    private String joinName(String firstName, String lastName) {
+        return ((isBlank(firstName) ? "" : firstName.trim())
+                + " "
+                + (isBlank(lastName) ? "" : lastName.trim())).trim();
     }
 
     /** Restores exactly one reserved slot; used_slots never goes negative. */

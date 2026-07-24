@@ -25,6 +25,13 @@ router = APIRouter(
 )
 
 
+
+
+
+
+
+
+
 @router.post("/events", response_model=MasteryEventResponse)
 def ingest_mastery_event(
     payload: MasteryEventCreate,

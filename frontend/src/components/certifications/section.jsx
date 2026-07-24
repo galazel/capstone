@@ -69,7 +69,7 @@ function Section({
                         onChange(section.id, "sectionName", event.target.value)
                     }
                     placeholder="Untitled Section"
-                    className="w-full max-w-sm min-w-0 bg-transparent text-xs font-semibold tracking-[0.16em] text-zinc-500 uppercase outline-none placeholder:text-zinc-400 focus:text-zinc-950"
+                    className="w-full max-w-sm min-w-0 bg-transparent text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground outline-none placeholder:text-muted-foreground/60 focus:text-foreground"
                 />
 
                 <button
@@ -78,7 +78,7 @@ function Section({
                         event.stopPropagation()
                         onDelete(section.id)
                     }}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-400 opacity-100 transition hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground opacity-100 transition hover:bg-destructive/10 hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100"
                     title="Delete section"
                     aria-label="Delete section"
                 >
@@ -86,8 +86,8 @@ function Section({
                 </button>
             </div>
 
-            <article className="min-h-[720px] w-full overflow-hidden rounded-sm border border-zinc-200 bg-white shadow-[0_12px_35px_rgba(0,0,0,0.08)] transition duration-200 hover:shadow-[0_16px_45px_rgba(0,0,0,0.12)]">
-                <div className="flex min-h-[720px] w-full flex-col gap-3 p-10">
+            <article className="min-h-[720px] w-full overflow-hidden rounded-xl bg-card ring-1 ring-border/60">
+                <div className="flex min-h-[720px] w-full flex-col gap-3 p-8">
                     {tools.map((item, toolIndex) => {
                         const ToolComponent = TOOL_COMPONENTS[item.type]
 
@@ -95,10 +95,10 @@ function Section({
                             return (
                                 <div
                                     key={item.id ?? toolIndex}
-                                    className="rounded-lg bg-red-50 p-3 text-sm text-red-600"
+                                    className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive"
                                 >
                                     <p className="font-medium">Unknown tool type: {item.type}</p>
-                                    <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-white/70 p-2 text-xs text-red-700">
+                                    <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-background/70 p-2 text-xs text-destructive">
                     {JSON.stringify(item, null, 2)}
                   </pre>
                                 </div>

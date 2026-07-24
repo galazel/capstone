@@ -147,6 +147,10 @@ export function roleHomePath(role) {
     case "ADMIN":
       return "/admin/dashboard"
     case "ENTERPRISE":
+    // An account the organization created for one of its people (a group
+    // leader). Same portal as the organization's own account -- the dashboard
+    // itself branches on whether they are the owner.
+    case "ENTERPRISE_MEMBER":
       return "/enterprise/dashboard"
     default:
       return "/learner/analytics"
