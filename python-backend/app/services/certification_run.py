@@ -342,17 +342,33 @@ async def run_retry(context: RunContext) -> dict[str, Any]:
 
 
 async def run_restart(context: RunContext, seed: dict) -> dict[str, Any]:
-    """Discards the thread's checkpoints, then runs from the first step.
+    """Discards the thread's checkpoints and its vector index, then runs from
+    the first step.
 
-    Deleting is what makes this a true restart: LangGraph resolves a thread's
-    starting point from its checkpoints, so invoking a seed on a thread that
-    still has them would resume mid-run instead of beginning again.
+    Deleting the checkpoints is what makes this a true restart: LangGraph
+    resolves a thread's starting point from its checkpoints, so invoking a
+    seed on a thread that still has them would resume mid-run instead of
+    beginning again.
+
+    Deleting the index matters just as much. `rag.store.add_documents` is
+    additive by design -- so that a second document set extends a
+    certification's knowledge base rather than erasing it -- which means a
+    restart that skipped this step would re-ingest the same documents and
+    leave every chunk in the index twice, once more per restart.
     """
+    from app.rag.store import delete_index, namespace_for
     from app.utils.helpers import get_checkpointer
 
     checkpointer = await get_checkpointer()
     await checkpointer.adelete_thread(context.thread_id)
     logger.info("Discarded checkpoints for thread %s ahead of restart", context.thread_id)
+
+    namespace = namespace_for(
+        certification_id=seed.get("certification_id"),
+        certification_name=seed.get("certification_name", ""),
+    )
+    if delete_index(namespace):
+        logger.info("Discarded FAISS index '%s' ahead of restart", namespace)
 
     _reopen_generation_request(context)
     return await execute(context, seed)
