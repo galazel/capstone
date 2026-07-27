@@ -12,6 +12,12 @@ export default defineConfig({
     // remaining under 200 kB gzip, so retain a meaningful higher ceiling.
     chunkSizeWarningLimit: 650,
   },
+  optimizeDeps: {
+    include: [
+      "recharts > @reduxjs/toolkit",
+      "motion > framer-motion",
+    ],
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

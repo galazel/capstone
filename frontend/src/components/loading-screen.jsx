@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence, motion } from "motion/react"
 import { BookOpenIcon, BrainIcon, FlameIcon, TrophyIcon } from "lucide-react"
 
 import { BrandLogo } from "@/components/brand-logo.tsx"
