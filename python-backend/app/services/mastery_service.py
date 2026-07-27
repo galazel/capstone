@@ -16,9 +16,8 @@ from app.db.models import (
     LearnerLessonMastery,
     LearnerLessonMasteryHistory,
 )
-from app.schemas.mastery import MasteryEventCreate, MasteryEventResponse, ParametersUsed
+from app.schemas.certification.mastery import MasteryEventCreate, MasteryEventResponse, ParametersUsed
 from app.services import category_service, priority_service
-from app.services import pybkt_runtime
 from app.services.bkt_math import mastery_level, update_mastery
 from app.services.parameter_service import resolve_parameters
 
@@ -66,21 +65,60 @@ def _response_from_event(
     )
 
 
-def process_mastery_event(session: Session, payload: MasteryEventCreate) -> MasteryEventResponse:
+def _find_duplicate_response(session: Session, source_event_id: str) -> MasteryEventResponse | None:
     existing_event = session.scalar(
-        select(BktMasteryEvent).where(
-            BktMasteryEvent.source_event_id == payload.source_event_id
-        )
+        select(BktMasteryEvent).where(BktMasteryEvent.source_event_id == source_event_id)
     )
-    if existing_event:
-        mastery = session.get(
-            LearnerLessonMastery,
-            (existing_event.learner_id, existing_event.lesson_id),
-        )
-        if mastery is None:
-            raise RuntimeError("Mastery event exists but its mastery row is missing")
-        return _response_from_event(existing_event, mastery, duplicate=True)
+    if existing_event is None:
+        return None
+    mastery = session.get(
+        LearnerLessonMastery,
+        (existing_event.learner_id, existing_event.lesson_id),
+    )
+    if mastery is None:
+        raise RuntimeError("Mastery event exists but its mastery row is missing")
+    return _response_from_event(existing_event, mastery, duplicate=True)
 
+
+def process_mastery_event(session: Session, payload: MasteryEventCreate) -> MasteryEventResponse:
+    duplicate = _find_duplicate_response(session, payload.source_event_id)
+    if duplicate is not None:
+        return duplicate
+
+    # A concurrent first-ever event for the same learner+lesson can race here:
+    # both requests see no existing LearnerLessonMastery row (nothing to lock
+    # with SELECT ... FOR UPDATE), both attempt an insert, and the loser hits
+    # the table's (learner_id, lesson_id) primary-key conflict on commit. That
+    # is a different event (different source_event_id) than the one already
+    # committed, so the plain "is this a duplicate delivery" check above can't
+    # catch it. Retry once: by the time we retry, the winner's row exists, so
+    # this attempt's SELECT ... FOR UPDATE finds and locks it instead of
+    # trying a second blind insert.
+    last_error: IntegrityError | None = None
+    for attempt in range(2):
+        try:
+            return _process_mastery_event_once(session, payload)
+        except IntegrityError as exc:
+            session.rollback()
+            duplicate = _find_duplicate_response(session, payload.source_event_id)
+            if duplicate is not None:
+                return duplicate
+            last_error = exc
+            if attempt == 0:
+                LOGGER.warning(
+                    "Mastery row conflict for learner %s lesson %s (likely a concurrent "
+                    "first event); retrying once",
+                    payload.learner_id,
+                    payload.lesson_id,
+                )
+                continue
+            raise
+
+    # Unreachable, but keeps type-checkers happy about a guaranteed return/raise above.
+    raise last_error  # pragma: no cover
+
+
+def _process_mastery_event_once(session: Session, payload: MasteryEventCreate) -> MasteryEventResponse:
     settings = get_settings()
     parameters = resolve_parameters(
         session,
@@ -99,54 +137,31 @@ def process_mastery_event(session: Session, payload: MasteryEventCreate) -> Mast
     )
     previous_level = mastery.mastery_level if mastery else None
 
-    # Prefer the actual fitted pyBKT model for any lesson it was trained on.
-    # pyBKT has no API for a single-step update from an arbitrary starting
-    # probability, so scoring replays the learner's full event history for
-    # this lesson through Model.predict(). Only lessons pyBKT never saw
-    # during training (cold start) or a broken/missing artifact fall back to
-    # the parameter-based estimate below -- mirroring how app.ml.pipeline
-    # itself handles skills that didn't meet its minimum-data threshold.
-    pybkt_model, trained_skills, _ = pybkt_runtime.get_scoring_model(session)
-    pybkt_score: pybkt_runtime.PyBktScore | None = None
-    if pybkt_model is not None and str(payload.lesson_id) in trained_skills:
-        try:
-            pybkt_score = pybkt_runtime.score_with_pybkt(
-                session,
-                pybkt_model,
-                learner_id=payload.learner_id,
-                lesson_id=payload.lesson_id,
-                is_correct=payload.is_correct,
-                difficulty_level=payload.difficulty_level,
-                assessment_type=payload.assessment_type,
-            )
-        except pybkt_runtime.PyBktScoringError:
-            LOGGER.exception(
-                "pyBKT scoring failed for learner %s lesson %s; falling back to parameter estimate",
-                payload.learner_id,
-                payload.lesson_id,
-            )
-
-    if pybkt_score is not None:
-        mastery_before = pybkt_score.mastery_before
-        # pyBKT's predict() only exposes the state before and after a
-        # response, not a separate mid-update (pre-transition) posterior.
-        mastery_posterior = pybkt_score.mastery_after
-        mastery_after = pybkt_score.mastery_after
-        predicted_correct_probability = pybkt_score.predicted_correct_probability
-    else:
-        fallback_prior = mastery.mastery_probability if mastery else parameters.prior
-        manual = update_mastery(
-            mastery_before=fallback_prior,
-            is_correct=payload.is_correct,
-            learn=parameters.learn,
-            guess=parameters.guess,
-            slip=parameters.slip,
-            forget=parameters.forget,
-        )
-        mastery_before = manual.mastery_before
-        mastery_posterior = manual.mastery_posterior
-        mastery_after = manual.mastery_after
-        predicted_correct_probability = manual.predicted_correct_probability
+    # Online, per-event scoring always uses the incremental Bayes+forget
+    # update below rather than pyBKT's Model.predict(): pyBKT has no API for
+    # a single-step update from an arbitrary starting probability, so it can
+    # only score a new observation by replaying the learner's ENTIRE event
+    # history for that lesson on every single request -- growing cost per
+    # event, executed while holding this row's lock. The math below is the
+    # same Bayes-rule-plus-forgetting update pyBKT itself applies at each
+    # step; what actually needs pyBKT's EM fitting is estimating good
+    # prior/learn/guess/slip/forget parameters per lesson/class in the first
+    # place, which happens offline in the weekly training job
+    # (app.ml.pipeline / training_service) and is already what
+    # resolve_parameters() reads back here.
+    fallback_prior = mastery.mastery_probability if mastery else parameters.prior
+    result = update_mastery(
+        mastery_before=fallback_prior,
+        is_correct=payload.is_correct,
+        learn=parameters.learn,
+        guess=parameters.guess,
+        slip=parameters.slip,
+        forget=parameters.forget,
+    )
+    mastery_before = result.mastery_before
+    mastery_posterior = result.mastery_posterior
+    mastery_after = result.mastery_after
+    predicted_correct_probability = result.predicted_correct_probability
 
     level = mastery_level(
         mastery_after,
@@ -265,27 +280,11 @@ def process_mastery_event(session: Session, payload: MasteryEventCreate) -> Mast
             settings=settings,
             source_event_id=payload.source_event_id,
             model_version=parameters.model_variant,
+            major_category_id=payload.major_category_id,
+            middle_category_id=payload.middle_category_id,
         )
 
-    try:
-        session.commit()
-    except IntegrityError:
-        session.rollback()
-        existing_event = session.scalar(
-            select(BktMasteryEvent).where(
-                BktMasteryEvent.source_event_id == payload.source_event_id
-            )
-        )
-        if existing_event is None:
-            raise
-        mastery = session.get(
-            LearnerLessonMastery,
-            (existing_event.learner_id, existing_event.lesson_id),
-        )
-        if mastery is None:
-            raise RuntimeError("Duplicate event exists without mastery row")
-        return _response_from_event(existing_event, mastery, duplicate=True)
-
+    session.commit()
     session.refresh(event)
     session.refresh(mastery)
     return _response_from_event(event, mastery, duplicate=False)

@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Compiled TypeScript build artifacts (keep only .ts sources)
+src/**/*.js.map
+src/**/*.d.ts.map
+src/hooks/use-mobile.js
+src/hooks/use-mobile.d.ts
+src/lib/utils.js
+src/lib/utils.d.ts

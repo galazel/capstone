@@ -90,6 +90,15 @@ public class AssessmentAttempt {
     @Column(name = "idempotency_key", length = 100)
     private String idempotencyKey;
 
+    /**
+     * JSON audit trail of why an adaptive retake's question set was assembled
+     * the way it was (past-attempt weakness matrix + resulting target
+     * distribution). NULL for attempt #1 or any attempt built from the exam's
+     * fixed question list.
+     */
+    @Column(name = "retake_basis", columnDefinition = "TEXT")
+    private String retakeBasis;
+
     @Version
     @Column(name = "version")
     private Long version;

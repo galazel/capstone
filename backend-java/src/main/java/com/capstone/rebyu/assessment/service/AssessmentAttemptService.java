@@ -1,10 +1,10 @@
 package com.capstone.rebyu.assessment.service;
 
-import com.capstone.rebyu.ai.dto.AnswerGradingRequestDto;
-import com.capstone.rebyu.ai.dto.AnswerGradingRequestDto.SubQuestionGradingRequestDto;
-import com.capstone.rebyu.ai.dto.AnswerGradingResultDto;
-import com.capstone.rebyu.ai.dto.AnswerGradingResultDto.SubAnswerGradeDto;
-import com.capstone.rebyu.ai.service.AiAnswerGradingService;
+import com.capstone.rebyu.aigateway.dto.AnswerGradingRequestDto;
+import com.capstone.rebyu.aigateway.dto.AnswerGradingRequestDto.SubQuestionGradingRequestDto;
+import com.capstone.rebyu.aigateway.dto.AnswerGradingResultDto;
+import com.capstone.rebyu.aigateway.dto.AnswerGradingResultDto.SubAnswerGradeDto;
+import com.capstone.rebyu.aigateway.service.AiAnswerGradingService;
 import com.capstone.rebyu.assessment.dto.attempt.DiagramAttemptDtos.*;
 import com.capstone.rebyu.assessment.dto.attempt.LearnerAttemptDtos.*;
 import com.capstone.rebyu.assessment.dto.attempt.ProgrammingAttemptDtos.*;
@@ -83,6 +83,8 @@ public class AssessmentAttemptService {
     private final AiAnswerGradingService aiAnswerGradingService;
     private final CodeExecutionService codeExecutionService;
     private final DiagramGradingService diagramGradingService;
+    private final AdaptiveRetakeQuestionSelectionService adaptiveRetakeQuestionSelectionService;
+    private final AssessmentEventProducer assessmentEventProducer;
 
     private static final int MAX_EXECUTION_HISTORY = 20;
 
@@ -178,6 +180,26 @@ public class AssessmentAttemptService {
                 .map(previous -> previous.getAttemptNumber() + 1)
                 .orElse(1);
 
+        // Retakes (attempt #2+) get a fresh, weakness-targeted question set
+        // instead of replaying the fixed exam template; attempt #1 always
+        // uses the exam's authored question list, unshuffled.
+        List<Question> questionsToUse;
+        Map<Long, BigDecimal> pointOverrideByQuestionId = new HashMap<>();
+        for (ExamQuestion examQuestion : examQuestions) {
+            if (examQuestion.getPoints() != null) {
+                pointOverrideByQuestionId.put(examQuestion.getQuestion().getQuestionId(), examQuestion.getPoints());
+            }
+        }
+        String retakeBasisJson = null;
+        if (nextAttemptNumber > 1) {
+            AdaptiveRetakeQuestionSelectionService.Selection selection =
+                    adaptiveRetakeQuestionSelectionService.select(exam, learnerId, examQuestions);
+            questionsToUse = selection.questions();
+            retakeBasisJson = selection.retakeBasisJson();
+        } else {
+            questionsToUse = examQuestions.stream().map(ExamQuestion::getQuestion).toList();
+        }
+
         LocalDateTime now = LocalDateTime.now();
         AssessmentAttempt attempt = AssessmentAttempt.builder()
                 .exam(exam)
@@ -192,18 +214,19 @@ public class AssessmentAttemptService {
                 .idempotencyKey(idempotencyKey != null && !idempotencyKey.isBlank()
                         ? idempotencyKey
                         : UUID.randomUUID().toString())
+                .retakeBasis(retakeBasisJson)
                 .build();
         attempt = attemptRepository.save(attempt);
 
         int order = 1;
-        for (ExamQuestion examQuestion : examQuestions) {
-            Question question = examQuestion.getQuestion();
+        for (Question question : questionsToUse) {
             // Snapshot the per-assessment point value so this attempt scores by
             // what the question is worth in THIS exam; fall back to the
-            // question's own total when no override was set.
-            BigDecimal points = examQuestion.getPoints() != null
-                    ? examQuestion.getPoints()
-                    : question.getTotalPoints();
+            // question's own total when no override was set (always the case
+            // for a question the adaptive retake pulled in from outside the
+            // exam's original authored list).
+            BigDecimal points = pointOverrideByQuestionId.getOrDefault(
+                    question.getQuestionId(), question.getTotalPoints());
             attemptQuestionRepository.save(AssessmentAttemptQuestion.builder()
                     .attempt(attempt)
                     .sourceQuestionId(question.getQuestionId())
@@ -214,6 +237,13 @@ public class AssessmentAttemptService {
                     .points(points)
                     .lessonId(question.getLesson().getLessonId())
                     .build());
+        }
+
+        if (nextAttemptNumber > 1) {
+            // Lightweight RabbitMQ trigger (ids only) alongside the
+            // synchronous adaptive-retake selection above -- Phase 6 wires
+            // the consumer.
+            assessmentEventProducer.publishAssessmentRetakeRequested(attempt.getAssessmentAttemptId());
         }
 
         log.info("Started attempt {} (#{}) of exam {} for learner {}",
@@ -371,6 +401,10 @@ public class AssessmentAttemptService {
         // SAME commit as the result. Dispatched to FastAPI asynchronously; an
         // unavailable BKT service can never fail or roll back this submission.
         bktOutboxService.enqueueForAttempt(attempt, questions, answersByQuestion);
+
+        // Lightweight RabbitMQ trigger (ids only) alongside the synchronous
+        // flow above -- Phase 6 wires the consumer.
+        assessmentEventProducer.publishAssessmentSubmitted(attemptId);
 
         log.info("Attempt {} submitted: {}% ({} / {} points)",
                 attemptId, percentage, earnedPoints, totalPoints);

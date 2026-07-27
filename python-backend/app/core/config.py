@@ -52,6 +52,16 @@ class Settings(BaseSettings):
     scheduled_retraining_hour: int = 2
     scheduled_retraining_minute: int = 0
 
+    # --- AI generation models (certification/lesson/tutor agents) -----------
+    # Per-agent-type model selection so cheap classification tasks (document
+    # validation, lesson audits) can move to a lighter/faster model later
+    # without touching agent code.
+    ai_default_model: str = "llama-3.3-70b-versatile"
+    ai_generation_model: str = "llama-3.3-70b-versatile"
+    ai_classification_model: str = "llama-3.3-70b-versatile"
+    ai_temperature: float = 0.0
+    ai_max_tokens: int = 6000
+
     artifact_dir: Path = Path("artifacts")
     training_view_name: str = "rebyu_bkt_training_data_v"
     max_upload_mb: int = 100
@@ -102,6 +112,48 @@ class Settings(BaseSettings):
     priority_worsen_margin: float = 5.0
     priority_improve_margin: float = 8.0
 
+    # --- RAG / retrieval (Phase 2a) -------------------------------------------
+    # Replaces the previous 256-dim SHA-256 token-hashing "embeddings", which
+    # had no semantic capability at all. Kept behind settings so the model can
+    # be swapped (e.g. to BAAI/bge-base-en-v1.5) without touching rag/ code.
+    rag_embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    rag_embedding_device: str = "cpu"
+    rag_index_dir: Path = Path("faiss_db")
+    # ~1000 chars/150 overlap on sentence boundaries, vs the old 300-char
+    # fixed-width slices that cut mid-word and carried ~75 tokens of context.
+    rag_chunk_size: int = 1000
+    rag_chunk_overlap: int = 150
+    # Fetch wide, then narrow: fetch_k candidates are reranked down to top_k.
+    rag_fetch_k: int = 20
+    rag_top_k: int = 8
+    rag_rerank_enabled: bool = True
+    rag_rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    # Hard ceiling on assembled context handed to a generation agent.
+    rag_max_context_chars: int = 24000
+
+    # --- RabbitMQ (Phase 6 consumers) ----------------------------------------
+    # Same broker/topology the Java backend's producers publish to
+    # (see backend-java RabbitMqConfig): topic exchange + per-queue DLX/DLQ.
+    rabbitmq_host: str = "localhost"
+    rabbitmq_port: int = 5672
+    rabbitmq_username: str = "guest"
+    rabbitmq_password: str = "guest"
+    rabbitmq_exchange: str = "rebyu.exchange"
+    rabbitmq_dead_letter_exchange: str = "rebyu.dlx"
+
+    # --- AWS S3 (Phase 6: read knowledge_documents uploaded by Java) ---------
+    aws_s3_bucket_name: str = "rebyu"
+    aws_s3_region: str = "us-east-1"
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+
+    @property
+    def rabbitmq_url(self) -> str:
+        return (
+            f"amqp://{self.rabbitmq_username}:{self.rabbitmq_password}"
+            f"@{self.rabbitmq_host}:{self.rabbitmq_port}/"
+        )
+
     @field_validator("training_view_name")
     @classmethod
     def validate_view_name(cls, value: str) -> str:
@@ -116,7 +168,7 @@ class Settings(BaseSettings):
             raise ValueError("db_schema must be a plain SQL identifier")
         return value
 
-    @field_validator("artifact_dir", mode="before")
+    @field_validator("artifact_dir", "rag_index_dir", mode="before")
     @classmethod
     def normalize_artifact_dir(cls, value: object) -> Path:
         return Path(str(value)).expanduser()
@@ -151,16 +203,7 @@ class Settings(BaseSettings):
 
     def ensure_directories(self) -> None:
         self.artifact_dir.mkdir(parents=True, exist_ok=True)
-
-    @property
-    def readiness_weight_total(self) -> float:
-        return (
-            self.readiness_mastery_weight
-            + self.readiness_diagnostic_weight
-            + self.readiness_quiz_weight
-            + self.readiness_middle_exam_weight
-            + self.readiness_mock_exam_weight
-        )
+        self.rag_index_dir.mkdir(parents=True, exist_ok=True)
 
 
 @lru_cache

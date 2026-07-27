@@ -43,4 +43,7 @@ public class CertificationDto {
     @JsonIgnore
     private MultipartFile file;
 
+    /** Certification-scoped exams (diagnostic, mock exam) -- not tied to any one major/middle/lesson. */
+    private List<ExamSummaryDto> exams;
+
 }

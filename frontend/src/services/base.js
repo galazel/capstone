@@ -38,6 +38,10 @@ export async function base(endpoint, options = {}) {
       data: options.data,
       responseType: options.responseType,
       headers,
+      // Real byte-level upload progress, for callers that send files. Without
+      // this a large multipart POST is indistinguishable from a hung request,
+      // which is what forced the old generation UI to fake progress on a timer.
+      onUploadProgress: options.onUploadProgress,
     })
 
     return response.data

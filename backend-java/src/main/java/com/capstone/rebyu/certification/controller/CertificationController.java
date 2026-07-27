@@ -1,6 +1,6 @@
 package com.capstone.rebyu.certification.controller;
 
-import com.capstone.rebyu.ai.service.CurriculumGenerationService;
+import com.capstone.rebyu.aigateway.service.CurriculumGenerationService;
 import com.capstone.rebyu.auth.dto.CurrentUserDto;
 import com.capstone.rebyu.auth.service.CognitoAuthService;
 import com.capstone.rebyu.certification.dto.CertificationDto;
@@ -77,10 +77,10 @@ public class CertificationController {
             @RequestPart(value = "files", required = false) List<MultipartFile> files,
             @RequestParam(value = "additionalInstructions", required = false) String additionalInstructions
     ) throws IOException {
-        requireAdmin(jwt);
+        CurrentUserDto user = requireAdmin(jwt);
         log.info("AI certification creation requested for '{}'", dto.getTitle());
         return curriculumGenerationService.generateForNewCertification(
-                dto, files, additionalInstructions
+                dto, files, additionalInstructions, user.userId()
         );
     }
 
@@ -113,7 +113,7 @@ public class CertificationController {
         log.info("Publish certification with ID: {}", id);
     }
 
-    private void requireAdmin(Jwt jwt) {
+    private CurrentUserDto requireAdmin(Jwt jwt) {
         if (jwt == null) {
             throw new IllegalArgumentException("Authentication is required");
         }
@@ -121,6 +121,7 @@ public class CertificationController {
         if (!"ADMIN".equalsIgnoreCase(user.role())) {
             throw new IllegalArgumentException("Admin access is required");
         }
+        return user;
     }
 
     /**

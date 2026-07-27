@@ -9,6 +9,7 @@ import {
   ChevronDown,
   CircleHelp,
   Command,
+  Cpu,
   FileQuestion,
   Files,
   Handshake,
@@ -64,6 +65,7 @@ const adminGroups = [
     items: [
       { label: "Certifications", href: "/admin", icon: Award },
       { label: "Question Bank", href: "/admin/question-bank", icon: FileQuestion },
+      { label: "AI generation", href: "/admin/generation", icon: Cpu },
       { label: "Challenges", href: "/admin/challenges", icon: Swords },
     ],
   },

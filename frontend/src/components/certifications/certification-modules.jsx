@@ -18,10 +18,9 @@ import { toast } from "sonner"
 
 import { formatBytes, useFileUpload } from "@/hooks/use-file-upload"
 import { Button } from "@/components/ui/button"
-import AiGenerationProgress from "@/components/commons/ai-generation-progress.jsx"
+import { GenerationHandoffProgress } from "@/components/certifications/generation-handoff-progress.jsx"
 import { generateCertificationStructure } from "@/services/certificationService"
 import { mapCertificationToModuleStructure } from "@/utils/certification-structure"
-import { generateContentForAllLessons } from "@/utils/generate-all-lesson-content"
 
 const createId = () =>
     globalThis.crypto?.randomUUID?.() ??
@@ -54,6 +53,30 @@ function IconButton({
         >
             {children}
         </button>
+    )
+}
+
+function ExamBadges({ exams }) {
+    if (!Array.isArray(exams) || exams.length === 0) {
+        return null
+    }
+
+    return (
+        <div className="mt-1 flex flex-wrap items-center gap-1">
+            {exams.map((exam) => (
+                <span
+                    key={exam.examId}
+                    title={`${exam.examType ?? "Exam"} · ${exam.status ?? "DRAFT"}`}
+                    className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2 py-0.5 text-[11px] font-medium text-zinc-600"
+                >
+                    <FileText size={11} className="text-zinc-400" />
+                    {exam.title}
+                    {exam.totalQuestions != null && (
+                        <span className="text-zinc-400">· {exam.totalQuestions}Q</span>
+                    )}
+                </span>
+            ))}
+        </div>
     )
 }
 
@@ -367,11 +390,15 @@ function CertificationModules({
                                   onCreateMiddleExam,
                                   onGenerateForNewCertification,
                                   onGenerationComplete,
+                                  onGenerationStarted,
                               }) {
     const [localCategories, setLocalCategories] = useState([])
     const [currentPage, setCurrentPage] = useState("default")
     const [isGeneratingStructure, setIsGeneratingStructure] = useState(false)
-    const [lessonGenerationProgress, setLessonGenerationProgress] = useState(null)
+    // Real byte progress from axios, so the panel reports what is actually
+    // happening instead of advancing on a timer.
+    const [uploadPercent, setUploadPercent] = useState(0)
+    const [pendingFileCount, setPendingFileCount] = useState(0)
 
     const categories = Array.isArray(value) ? value : localCategories
 
@@ -627,14 +654,21 @@ function CertificationModules({
     const handleGenerateDocuments = async (selectedDocuments) => {
         try {
             setIsGeneratingStructure(true)
-            setLessonGenerationProgress(null)
+            setPendingFileCount(selectedDocuments.length)
+            setUploadPercent(0)
 
             let savedCertification = null
 
             if (certificationId != null) {
                 savedCertification = await generateCertificationStructure(
                     certificationId,
-                    selectedDocuments
+                    selectedDocuments,
+                    (event) =>
+                        setUploadPercent(
+                            event.total
+                                ? Math.round((event.loaded / event.total) * 100)
+                                : 0
+                        )
                 )
             } else if (onGenerateForNewCertification) {
                 savedCertification =
@@ -645,51 +679,38 @@ function CertificationModules({
                 )
             }
 
-            // Structure is created; now write and save real content for every
-            // lesson (one at a time, so no single request can time out).
-            const summary = await generateContentForAllLessons(
-                savedCertification,
-                {
-                    onProgress: ({ index, total, lessonName }) =>
-                        setLessonGenerationProgress({ index, total, lessonName }),
-                }
-            )
-
+            // Curriculum generation now runs asynchronously in the background
+            // (see the RabbitMQ-driven Python consumer) -- the response here
+            // only confirms the request was queued, not that any categories
+            // or lessons exist yet. Reflect whatever came back (an empty
+            // structure) and let the notification bell announce completion.
             updateCategories(
                 mapCertificationToModuleStructure(savedCertification)
             )
             setCurrentPage("default")
 
-            if (certificationId != null) {
-                if (summary.total === 0) {
-                    toast.success("Certification structure generated", {
-                        description:
-                            "Add lessons, then generate their content individually.",
-                    })
-                } else if (summary.failed === 0) {
-                    toast.success("Certification and lesson content generated", {
-                        description: `${summary.succeeded} lesson${
-                            summary.succeeded === 1 ? "" : "s"
-                        } were written and saved.${
-                            summary.skippedToolCount > 0
-                                ? ` ${summary.skippedToolCount} generated block(s) couldn't be saved and were left out — review lessons for gaps.`
-                                : ""
-                        }`,
-                    })
-                } else {
-                    toast.warning(
-                        "Certification generated with some lessons incomplete",
-                        {
-                            description: `${summary.succeeded} of ${summary.total} lessons were generated. Open these individually to generate: ${summary.failedLessons.join(", ")}`,
-                        }
-                    )
-                }
-            } else {
-                onGenerationComplete?.(summary)
+            // Hand the run to the monitor rendered in this same modal rather
+            // than navigating away. Generation is a long conversation the admin
+            // steers -- it pauses for their review repeatedly -- and sending
+            // them to a different page mid-flow loses the thread of what they
+            // were doing.
+            const targetId = certificationId ?? savedCertification?.certificationId
+            if (targetId != null) {
+                onGenerationStarted?.(targetId)
+                return
             }
+
+            // No id to follow (a brand-new certification whose save did not
+            // return one): announce it rather than opening a monitor that has
+            // nothing to attach to.
+            onGenerationComplete?.({
+                title: "AI generation started",
+                description:
+                    "Building the curriculum in the background — you'll get a notification here when it's ready to review.",
+            })
         } finally {
             setIsGeneratingStructure(false)
-            setLessonGenerationProgress(null)
+            setUploadPercent(0)
         }
     }
 
@@ -718,51 +739,16 @@ function CertificationModules({
                     isGenerating={isGeneratingStructure}
                 />
 
-                <AiGenerationProgress
-                    open={isGeneratingStructure}
-                    title={
-                        lessonGenerationProgress
-                            ? "Generating lesson content"
-                            : "Generating certification structure"
+                <GenerationHandoffProgress
+                    phase={
+                        !isGeneratingStructure
+                            ? "idle"
+                            : uploadPercent < 100
+                                ? "uploading"
+                                : "processing"
                     }
-                    description={
-                        lessonGenerationProgress
-                            ? `Lesson ${lessonGenerationProgress.index + 1} of ${lessonGenerationProgress.total}: ${lessonGenerationProgress.lessonName}`
-                            : "Building categories and lessons"
-                    }
-                    stepDurationMs={18000}
-                    steps={
-                        lessonGenerationProgress
-                            ? [
-                                "Reading source material for this lesson",
-                                "Writing in-depth, exam-level content",
-                                "Adding tools and layouts",
-                                "Saving the lesson",
-                            ]
-                            : [
-                                "Reading your documents",
-                                "Planning major categories",
-                                "Creating middle categories and lessons",
-                                "Organizing the curriculum",
-                                "Saving the structure",
-                            ]
-                    }
-                    sentences={
-                        lessonGenerationProgress
-                            ? [
-                                "Writing clear, exam-focused explanations...",
-                                "Adding a mix of tools for each lesson...",
-                                "Certifications with many lessons take a while — thanks for your patience.",
-                                "Each lesson is saved as soon as it's ready.",
-                            ]
-                            : [
-                                "Planning a curriculum that covers your documents...",
-                                "Creating categories with multiple lessons each...",
-                                "Structuring categories so learners progress logically...",
-                                "Lesson content generation starts right after this.",
-                                "Almost done building the structure.",
-                            ]
-                    }
+                    uploadPercent={uploadPercent}
+                    fileCount={pendingFileCount}
                 />
             </>
         )
@@ -859,6 +845,7 @@ function CertificationModules({
                                                 ? "middle category"
                                                 : "middle categories"}
                                         </p>
+                                        <ExamBadges exams={majorCategory.exams} />
                                     </div>
 
                                     <div className="flex items-center gap-1">
@@ -943,6 +930,7 @@ function CertificationModules({
                                                                             ? "lesson"
                                                                             : "lessons"}
                                                                     </p>
+                                                                    <ExamBadges exams={middleCategory.exams} />
                                                                 </div>
 
                                                                 <div className="flex items-center gap-1">
@@ -1023,19 +1011,22 @@ function CertificationModules({
                                                                                                 className="shrink-0 text-zinc-500"
                                                                                             />
 
-                                                                                            <input
-                                                                                                value={lesson.name}
-                                                                                                onChange={(event) =>
-                                                                                                    updateLessonName(
-                                                                                                        majorCategory.id,
-                                                                                                        middleCategory.id,
-                                                                                                        lesson.id,
-                                                                                                        event.target.value
-                                                                                                    )
-                                                                                                }
-                                                                                                placeholder="Lesson name"
-                                                                                                className="min-w-0 flex-1 bg-transparent text-sm text-zinc-800 outline-none placeholder:text-zinc-400"
-                                                                                            />
+                                                                                            <div className="min-w-0 flex-1">
+                                                                                                <input
+                                                                                                    value={lesson.name}
+                                                                                                    onChange={(event) =>
+                                                                                                        updateLessonName(
+                                                                                                            majorCategory.id,
+                                                                                                            middleCategory.id,
+                                                                                                            lesson.id,
+                                                                                                            event.target.value
+                                                                                                        )
+                                                                                                    }
+                                                                                                    placeholder="Lesson name"
+                                                                                                    className="w-full bg-transparent text-sm text-zinc-800 outline-none placeholder:text-zinc-400"
+                                                                                                />
+                                                                                                <ExamBadges exams={lesson.exams} />
+                                                                                            </div>
 
                                                                                             <IconButton
                                                                                                 label="Delete lesson"

@@ -1,8 +1,9 @@
 package com.capstone.rebyu.common;
 
 import jakarta.persistence.EntityNotFoundException;
-import com.capstone.rebyu.ai.common.AiProviderRateLimitException;
-import com.capstone.rebyu.ai.common.InvalidAiGeneratedQuestionException;
+import com.capstone.rebyu.aigateway.common.AiProviderRateLimitException;
+import com.capstone.rebyu.aigateway.common.InvalidAiGeneratedQuestionException;
+import com.capstone.rebyu.aigateway.common.InvalidAiResponseException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;

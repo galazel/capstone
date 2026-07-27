@@ -55,8 +55,36 @@ def recompute_categories(
     source_event_id: str | None = None,
     exam_id: int | None = None,
     model_version: str | None = None,
+    major_category_id: int | None = None,
+    middle_category_id: int | None = None,
 ) -> None:
-    """Rebuild every middle- and major-category priority for one certification."""
+    """Rebuild middle- and major-category priorities.
+
+    When major_category_id/middle_category_id are given (the online
+    per-event path in mastery_service), only the touched middle category is
+    re-aggregated from its own lesson rows, and only the touched major
+    category is re-aggregated -- reusing every OTHER middle category's
+    already-stored priority row instead of recomputing it, since major
+    aggregation only needs each middle's summary (score/tag/mastery/
+    evidence), not its individual lessons. This bounds the work to the
+    touched branch instead of redoing the whole certification's hierarchy on
+    every single answer. Falls back to a full rebuild when no scope is given
+    (used by full_recalculate, the admin-triggered recompute).
+    """
+    if middle_category_id is not None and major_category_id is not None:
+        _recompute_one_branch(
+            session,
+            learner_id=learner_id,
+            certification_id=certification_id,
+            settings=settings,
+            source_event_id=source_event_id,
+            exam_id=exam_id,
+            model_version=model_version,
+            major_category_id=major_category_id,
+            middle_category_id=middle_category_id,
+        )
+        return
+
     mastery_rows = list(
         session.scalars(
             select(LearnerLessonMastery).where(
@@ -132,6 +160,112 @@ def recompute_categories(
             exam_id=exam_id,
             major_category_id=major_id,
         )
+
+
+def _recompute_one_branch(
+    session: Session,
+    *,
+    learner_id: int,
+    certification_id: int,
+    settings: Settings,
+    source_event_id: str | None,
+    exam_id: int | None,
+    model_version: str | None,
+    major_category_id: int,
+    middle_category_id: int,
+) -> None:
+    middle_lesson_rows = list(
+        session.scalars(
+            select(LearnerCategoryPriority).where(
+                LearnerCategoryPriority.learner_id == learner_id,
+                LearnerCategoryPriority.certification_id == certification_id,
+                LearnerCategoryPriority.category_type == "LESSON",
+                LearnerCategoryPriority.middle_category_id == middle_category_id,
+            )
+        )
+    )
+    if not middle_lesson_rows:
+        return
+
+    sample_mastery = session.scalar(
+        select(LearnerLessonMastery)
+        .where(
+            LearnerLessonMastery.learner_id == learner_id,
+            LearnerLessonMastery.middle_category_id == middle_category_id,
+        )
+        .limit(1)
+    )
+    middle_title = sample_mastery.middle_category_title if sample_mastery else None
+    major_title = sample_mastery.major_category_title if sample_mastery else None
+
+    middle_computed = _aggregate_middle(middle_lesson_rows, settings)
+    ps.upsert_priority(
+        session,
+        learner_id=learner_id,
+        certification_id=certification_id,
+        category_type="MIDDLE",
+        category_id=middle_category_id,
+        title=middle_title,
+        computed=middle_computed,
+        settings=settings,
+        model_version=model_version,
+        source_event_id=source_event_id,
+        exam_id=exam_id,
+        major_category_id=major_category_id,
+        middle_category_id=middle_category_id,
+    )
+    session.flush()
+
+    # Major aggregation only needs every middle's stored summary (not its
+    # individual lessons) plus every lesson under the major for critical/
+    # high-lesson ratios -- both scoped to this major category, not the
+    # whole certification.
+    middle_rows = list(
+        session.scalars(
+            select(LearnerCategoryPriority).where(
+                LearnerCategoryPriority.learner_id == learner_id,
+                LearnerCategoryPriority.certification_id == certification_id,
+                LearnerCategoryPriority.category_type == "MIDDLE",
+                LearnerCategoryPriority.major_category_id == major_category_id,
+            )
+        )
+    )
+    middle_dicts = [
+        {
+            "priority_score": row.priority_score,
+            "priority_tag": row.priority_tag,
+            "mastery_probability": row.mastery_probability,
+            "evidence_count": row.evidence_count,
+        }
+        for row in middle_rows
+    ]
+
+    major_lesson_rows = list(
+        session.scalars(
+            select(LearnerCategoryPriority).where(
+                LearnerCategoryPriority.learner_id == learner_id,
+                LearnerCategoryPriority.certification_id == certification_id,
+                LearnerCategoryPriority.category_type == "LESSON",
+                LearnerCategoryPriority.major_category_id == major_category_id,
+            )
+        )
+    )
+
+    major_computed = _aggregate_major(middle_dicts, major_lesson_rows, settings)
+    ps.upsert_priority(
+        session,
+        learner_id=learner_id,
+        certification_id=certification_id,
+        category_type="MAJOR",
+        category_id=major_category_id,
+        title=major_title,
+        computed=major_computed,
+        settings=settings,
+        model_version=model_version,
+        source_event_id=source_event_id,
+        exam_id=exam_id,
+        major_category_id=major_category_id,
+    )
 
 
 def full_recalculate(

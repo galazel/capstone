@@ -58,7 +58,7 @@ export default function CertificationAssessmentsSection({
   const navigate = useNavigate()
   const [startTarget, setStartTarget] = useState(null)
 
-  const examsQuery = useQuery({ queryKey: ["exams"], queryFn: getExams })
+  const examsQuery = useQuery({ queryKey: ["exams"], queryFn: () => getExams() })
   const examTypesQuery = useQuery({
     queryKey: ["exam-types"],
     queryFn: getExamTypes,

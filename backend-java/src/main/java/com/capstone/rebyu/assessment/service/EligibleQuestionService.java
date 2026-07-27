@@ -56,7 +56,13 @@ public class EligibleQuestionService {
                 .toList();
     }
 
-    private List<Question> resolveScope(Long certificationId, Long majorId, Long middleId, Long lessonId) {
+    /**
+     * Resolves the exam's curriculum scope into its full candidate question
+     * pool (top-level questions only), most-specific id wins. Public so other
+     * scope-derived question selection (e.g. adaptive retake selection) can
+     * reuse the exact same scope resolution instead of reimplementing it.
+     */
+    public List<Question> resolveScope(Long certificationId, Long majorId, Long middleId, Long lessonId) {
         if (lessonId != null) {
             return questionRepository
                     .findByParentQuestionIsNullAndLesson_LessonIdOrderByQuestionIdAsc(lessonId);

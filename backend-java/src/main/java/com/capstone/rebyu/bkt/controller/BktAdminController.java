@@ -47,7 +47,12 @@ public class BktAdminController {
     @GetMapping("/outbox")
     @PreAuthorize("hasRole('ADMIN')")
     public List<BktOutboxAdminView> byStatus(
-            @RequestParam(defaultValue = "FAILED") BktOutboxStatus status,
+            // FAILED is a reserved, not-yet-used status (see BktOutboxStatus)
+            // -- the dispatcher only ever produces PENDING/PROCESSING/
+            // PROCESSED/DEAD_LETTER, so defaulting here to FAILED silently
+            // returned nothing. DEAD_LETTER is the status admins actually
+            // need to see by default.
+            @RequestParam(defaultValue = "DEAD_LETTER") BktOutboxStatus status,
             @RequestParam(defaultValue = "100") int limit,
             @AuthenticationPrincipal Jwt jwt) {
         requireAdmin(jwt);

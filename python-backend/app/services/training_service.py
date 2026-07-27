@@ -23,7 +23,6 @@ from app.db.models import (
 from app.ml.pipeline import run_pipeline
 from app.repositories.bkt import deactivate_artifacts
 from app.repositories.training import TrainingDataRepository
-from app.services import pybkt_runtime
 from app.services.bkt_math import mastery_level
 
 LOGGER = logging.getLogger(__name__)
@@ -257,10 +256,6 @@ def _persist_result(
     run.completed_at = now
     run.error_message = None
     session.commit()
-
-    # The next real-time event must score against this run's model, not a
-    # stale in-memory copy of whichever artifact was active before it.
-    pybkt_runtime.invalidate_model_cache()
 
 
 def execute_training_run(

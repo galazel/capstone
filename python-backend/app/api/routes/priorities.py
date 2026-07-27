@@ -8,7 +8,7 @@ from app.core.config import get_settings
 from app.core.security import require_service_key
 from app.db.models import LearnerCategoryPriority
 from app.db.session import get_db
-from app.schemas.priority import (
+from app.schemas.certification.priority import (
     CategoryPriorityHierarchy,
     ConfidenceResponse,
     LessonPriority,
@@ -96,7 +96,8 @@ def _build_hierarchy(
         ]
         weak = sum(
             1 for l in middle_lessons
-            if l.mastery_probability is not None and l.mastery_probability < 0.40
+            if l.mastery_probability is not None
+            and l.mastery_probability < get_settings().developing_threshold
         )
         high = sum(1 for l in middle_lessons if l.priority_tag in (ps.HIGH, ps.CRITICAL))
         critical = sum(1 for l in middle_lessons if l.priority_tag == ps.CRITICAL)

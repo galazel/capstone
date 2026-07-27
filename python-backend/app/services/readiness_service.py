@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.repositories.bkt import list_learner_mastery
-from app.schemas.analytics import (
+from app.schemas.certification.analytics import (
     ReadinessComponent,
     ReadinessRequest,
     ReadinessResponse,

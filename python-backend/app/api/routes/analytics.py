@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import require_service_key
 from app.db.session import get_db
-from app.schemas.analytics import ReadinessRequest, ReadinessResponse
+from app.schemas.certification.analytics import ReadinessRequest, ReadinessResponse
 from app.services.readiness_service import calculate_readiness
 
 router = APIRouter(

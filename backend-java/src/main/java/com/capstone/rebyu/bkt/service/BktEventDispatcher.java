@@ -76,9 +76,11 @@ public class BktEventDispatcher {
             }
         }
 
-        // A corrupt payload can never succeed; dead-letter it directly.
+        // A corrupt payload can never succeed; dead-letter it directly instead
+        // of burning through the normal retry/backoff cycle for a failure
+        // that retrying can never fix.
         if (!undeserializable.isEmpty()) {
-            outboxService.markRetry(undeserializable, "Unparseable outbox payload");
+            outboxService.markDeadLetter(undeserializable, "Unparseable outbox payload");
             ids.removeAll(undeserializable);
             events = deserializeRemaining(claimed, undeserializable);
         }

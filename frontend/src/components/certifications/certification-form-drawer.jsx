@@ -4,7 +4,6 @@ import {
     ArrowRight,
     CheckCircle2,
     CircleAlert,
-    CircleChevronLeft,
     X,
 } from "lucide-react"
 import { useMutation } from "@tanstack/react-query"
@@ -23,17 +22,17 @@ import {
 
 import CertificationDetails from "@/components/certifications/certification-details"
 import CertificationModules from "@/components/certifications/certification-modules"
+import { InlineGenerationMonitor } from "@/components/certifications/inline-generation-monitor.jsx"
 
 import { Button } from "@/components/ui/button"
 import {
-    Drawer,
-    DrawerClose,
-    DrawerContent,
-    DrawerFooter,
-    DrawerHeader,
-    DrawerTitle,
-    DrawerTrigger,
-} from "@/components/ui/drawer"
+    Dialog,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
 import {
     Alert,
     AlertDescription,
@@ -364,6 +363,9 @@ export default function CertificationFormDrawer({
     const [moduleCategories, setModuleCategories] = useState([])
     const [detailsErrors, setDetailsErrors] = useState({})
     const [submissionError, setSubmissionError] = useState("")
+    // Set once generation is queued. The modal then shows the run's live
+    // timeline in place of the form, so the admin never leaves the flow.
+    const [generatingCertificationId, setGeneratingCertificationId] = useState(null)
     const [submissionDialog, setSubmissionDialog] = useState(
         emptySubmissionDialog
     )
@@ -414,7 +416,7 @@ export default function CertificationFormDrawer({
         }
     }, [open, certificationId])
 
-    function handleDrawerChange(nextOpen) {
+    function handleModalChange(nextOpen) {
         if (!nextOpen && isBusy) {
             return
         }
@@ -614,27 +616,18 @@ export default function CertificationFormDrawer({
         await onSaved?.(savedCertification)
 
         // Module categories and the "created" dialog are handled by the
-        // caller (CertificationModules) once lesson content generation for
-        // every lesson has also finished — see handleGenerateDocuments.
+        // caller (CertificationModules) -- curriculum generation itself now
+        // runs asynchronously in the background, see handleGenerateDocuments.
         return savedCertification
     }
 
-    function handleNewCertificationGenerationComplete(summary) {
-        const lessonSummary =
-            summary == null
-                ? ""
-                : summary.total === 0
-                    ? " No lessons were created to generate content for."
-                    : summary.failed === 0
-                        ? ` Content was generated and saved for all ${summary.total} lesson${summary.total === 1 ? "" : "s"}.`
-                        : ` Content was generated for ${summary.succeeded} of ${summary.total} lessons; ${summary.failedLessons.join(", ")} still need it — open them individually to generate.`
-
+    function handleNewCertificationGenerationComplete() {
         setSubmissionDialog({
             open: true,
             title: "Certification created successfully",
             description:
-                "The certification and its AI-generated categories and lessons were saved." +
-                lessonSummary,
+                "The certification was saved and its curriculum is now being generated in the " +
+                "background. You'll get a notification here when it's ready to review.",
         })
     }
 
@@ -649,46 +642,55 @@ export default function CertificationFormDrawer({
 
     function handleCloseAfterSuccess() {
         setSubmissionDialog(emptySubmissionDialog)
-        handleDrawerChange(false)
+        handleModalChange(false)
     }
 
     return (
-        <Drawer
-            direction="right"
+        <Dialog
             open={open}
-            onOpenChange={handleDrawerChange}
+            onOpenChange={handleModalChange}
         >
-            {trigger && <DrawerTrigger asChild>{trigger}</DrawerTrigger>}
+            {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
 
-            <DrawerContent className="fixed top-0 right-0 bottom-auto left-auto flex h-dvh !w-full !max-w-none flex-col rounded-l-3xl rounded-r-none border-l bg-background p-0 sm:!w-[680px] xl:!w-[50vw]">
-                <DrawerHeader className="flex flex-row items-center gap-3 border-b px-4 py-5 text-left sm:px-6">
-                    <DrawerClose asChild>
-                        <button
-                            type="button"
-                            aria-label="Close certification form"
-                            disabled={isBusy}
-                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                            <CircleChevronLeft className="h-7 w-7" />
-                        </button>
-                    </DrawerClose>
-
+            {/* `sm:max-w-none` is load-bearing: DialogContent ships with
+                `sm:max-w-lg` (512px), and an unprefixed `max-w-none` does not
+                override it -- tailwind-merge treats the two breakpoints as
+                separate utilities, so the modal stayed clamped to 512px no
+                matter what width was set. */}
+            <DialogContent className="flex h-[88vh] w-[96vw] max-w-none flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-none sm:w-[92vw] lg:w-[86vw] xl:w-[76vw] 2xl:w-[68vw]">
+                {/* DialogContent renders its own close button, so the drawer's
+                    back-chevron is gone -- two close affordances in one header
+                    is worse than one, and a left-chevron reads as "back" in a
+                    centered modal that has nothing to go back to. */}
+                <DialogHeader className="flex flex-row items-center gap-3 border-b px-4 py-5 pr-12 text-left sm:px-6 sm:pr-12">
                     <div className="min-w-0 flex-1">
-                        <DrawerTitle className="text-lg font-semibold text-foreground">
-                            {isEditing
-                                ? "Edit Certification"
-                                : "Create Certification"}
-                        </DrawerTitle>
+                        <DialogTitle className="text-lg font-semibold text-foreground">
+                            {generatingCertificationId
+                                ? "Generating certification"
+                                : isEditing
+                                    ? "Edit Certification"
+                                    : "Create Certification"}
+                        </DialogTitle>
 
                         <p className="mt-0.5 text-xs text-muted-foreground">
-                            Step {page} of {TOTAL_STEPS}
+                            {generatingCertificationId
+                                ? "Watch it build, and review each item as it is produced"
+                                : `Step ${page} of ${TOTAL_STEPS}`}
                         </p>
                     </div>
-                </DrawerHeader>
+                </DialogHeader>
 
-                <div className="flex-1 overflow-y-auto">
-                    <div className="w-full px-4 py-5 sm:px-6">
-                        {page === 1 ? (
+                <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+                    <div className="flex min-h-0 w-full flex-1 flex-col px-4 py-5 sm:px-6">
+                        {generatingCertificationId ? (
+                            <InlineGenerationMonitor
+                                certificationId={generatingCertificationId}
+                                onClose={() => {
+                                    setGeneratingCertificationId(null)
+                                    handleModalChange(false)
+                                }}
+                            />
+                        ) : page === 1 ? (
                             <CertificationDetails
                                 value={certificationDetails}
                                 onChange={handleDetailsChange}
@@ -709,12 +711,14 @@ export default function CertificationFormDrawer({
                                 onGenerationComplete={
                                     isEditing ? undefined : handleNewCertificationGenerationComplete
                                 }
+                                onGenerationStarted={setGeneratingCertificationId}
                             />
                         )}
                     </div>
                 </div>
 
-                <DrawerFooter className="border-t bg-background px-4 py-4 sm:px-6">
+                {generatingCertificationId ? null : (
+                <DialogFooter className="border-t bg-background px-4 py-4 sm:px-6">
                     <div className="w-full">
                         {submissionError && (
                             <Alert
@@ -779,8 +783,9 @@ export default function CertificationFormDrawer({
                             </Button>
                         </div>
                     </div>
-                </DrawerFooter>
-            </DrawerContent>
+                </DialogFooter>
+                )}
+            </DialogContent>
 
             <AlertDialog
                 open={submissionDialog.open}
@@ -816,6 +821,6 @@ export default function CertificationFormDrawer({
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-        </Drawer>
+        </Dialog>
     )
 }
