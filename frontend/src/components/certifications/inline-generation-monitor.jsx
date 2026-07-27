@@ -64,7 +64,7 @@ export function InlineGenerationMonitor({ certificationId, onClose }) {
   }, [runId])
 
   const stream = useWorkflowStream(runId)
-  const { run, events, tasks, currentTask, connected, isTerminal, isWaitingForReview } = stream
+  const { run, events, tasks, attempts, currentTask, connected, isTerminal, isWaitingForReview } = stream
 
   const review = useQuery({
     queryKey: ["workflow-review", runId, isWaitingForReview, run?.last_seq],
@@ -144,16 +144,34 @@ export function InlineGenerationMonitor({ certificationId, onClose }) {
         </div>
         <div className="flex gap-2">
           {!isTerminal ? (
-            <Button size="sm" variant="outline" disabled={cancel.isPending} onClick={() => cancel.mutate()}>
-              <Ban className="mr-2 size-4" />
-              Cancel
-            </Button>
-          ) : null}
-          {isTerminal ? (
+            <>
+              {/* Leaving and stopping were the same button before: the only
+                  control on a live run was labelled "Cancel", so closing the
+                  workspace meant clicking the thing that kills the run. They
+                  are now two buttons that say what they do. */}
+              <Button size="sm" onClick={onClose}>Close</Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={cancel.isPending}
+                onClick={() => cancel.mutate()}
+              >
+                <Ban className="mr-2 size-4" />
+                Stop generating
+              </Button>
+            </>
+          ) : (
             <Button size="sm" onClick={onClose}>Done</Button>
-          ) : null}
+          )}
         </div>
       </div>
+
+      {!isTerminal ? (
+        <p className="text-xs text-muted-foreground">
+          Generation runs on the server — closing this leaves it running. The
+          certification stays marked as generating until it finishes.
+        </p>
+      ) : null}
 
       <Tabs defaultValue="timeline" className="flex min-h-0 flex-1 flex-col">
         <TabsList>
@@ -169,6 +187,11 @@ export function InlineGenerationMonitor({ certificationId, onClose }) {
         </TabsList>
 
         <TabsContent value="timeline" className="min-h-0 flex-1">
+          {attempts > 1 ? (
+            <p className="pb-2 text-xs text-muted-foreground">
+              Attempt {attempts}. Earlier attempts are in Activity.
+            </p>
+          ) : null}
           <WorkflowTimeline tasks={tasks} currentTaskId={currentTask?.id} />
         </TabsContent>
 

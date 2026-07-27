@@ -33,16 +33,41 @@ def test_start_run_registers_and_emits_started_event(session):
     assert [e.event_type for e in events] == [registry.EVT_WORKFLOW_STARTED]
 
 
-def test_start_run_twice_for_same_thread_resumes_instead_of_duplicating(session):
-    """Resuming a paused run reuses its thread_id. A second registration must
+def test_start_run_twice_for_same_thread_opens_an_attempt_instead_of_duplicating(session):
+    """Re-executing a thread reuses its id. A second registration must
     continue the same timeline, not fork a new run with a reset sequence."""
     first = registry.start_run(session, thread_id="t-dup", kind="CERTIFICATION")
     second = registry.start_run(session, thread_id="t-dup", kind="CERTIFICATION")
 
     assert first.run_id == second.run_id
     assert second.last_seq == 2
-    assert registry.list_events(session, second.run_id)[-1].event_type == registry.EVT_WORKFLOW_RESUMED
     assert len(registry.list_runs(session)) == 1
+
+    # Recorded as a restart, not a resume: every caller of start_run begins a
+    # graph from the top, so a second call is a second attempt. Marking the
+    # boundary is what lets the timeline show the current attempt instead of
+    # stacking every attempt this thread ever made.
+    last = registry.list_events(session, second.run_id)[-1]
+    assert last.event_type == registry.EVT_WORKFLOW_RESTARTED
+    assert last.payload == {"attempt": 2}, "the original execution was attempt 1"
+    assert registry.attempt_number(session, second.run_id) == 2
+
+
+def test_re_executing_a_thread_clears_the_previous_attempts_state(session):
+    """A redelivered message (a worker reload mid-run is enough) must not
+    leave the run reading as failed at a stage it is about to redo."""
+    registry.start_run(session, thread_id="t-again", kind="CERTIFICATION")
+    registry.mark_waiting_for_review(session, "t-again", stage="CURRICULUM")
+    registry.mark_failed(session, "t-again", error="tool call validation failed")
+
+    registry.start_run(session, thread_id="t-again", kind="CERTIFICATION")
+
+    run = registry.get_run_by_thread(session, "t-again")
+    assert run.status == registry.RUNNING
+    assert run.error_message is None
+    assert run.current_stage is None
+    assert run.progress_pct == 0
+    assert run.completed_at is None
 
 
 def test_waiting_for_review_makes_the_run_discoverable(session):

@@ -1,5 +1,6 @@
 import { useState } from "react"
 import {
+  Loader2,
   MoreVertical,
   SendIcon,
   Trash2Icon,
@@ -17,6 +18,7 @@ import { useNavigate } from "react-router-dom"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
+import { cn } from "@/lib/utils"
 import { getFileViewUrl } from "@/services/fileService.js"
 import { getCertificationFallbackImage, getCuratedCertificationCover } from "@/lib/certification-cover-images.js"
 import {
@@ -48,11 +50,24 @@ function getErrorMessage(error, fallback = "Something went wrong.") {
   )
 }
 
-function CertificationCard({ item, certification }) {
+/**
+ * `generationStatus` is "GENERATING", "AWAITING_REVIEW", or null.
+ *
+ * While either is set the certification is a shell: AI generation writes its
+ * categories, lessons, and assessments only when the run finishes, so opening
+ * it would show an empty structure and publishing it would ship one. The card
+ * says so and refuses both, instead of looking finished the moment the
+ * generation workspace was closed.
+ */
+function CertificationCard({ item, certification, generationStatus = null }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+
+  const isGenerating = Boolean(generationStatus)
+  const generationLabel =
+      generationStatus === "AWAITING_REVIEW" ? "Waiting for review" : "Generating…"
 
   const currentCertification = certification ?? item
 
@@ -174,6 +189,14 @@ function CertificationCard({ item, certification }) {
       })
 
   function handleOpenCertification() {
+    if (isGenerating) {
+      toast.info("Still generating", {
+        description: `"${certificationTitle}" is being built. It opens once generation finishes.`,
+      })
+
+      return
+    }
+
     if (!certificationId) {
       toast.error("Cannot open certification", {
         description: "Certification ID is missing.",
@@ -200,6 +223,13 @@ function CertificationCard({ item, certification }) {
     event.preventDefault()
     event.stopPropagation()
 
+    if (isGenerating) {
+      toast.info("Still generating", {
+        description: "Wait for generation to finish before publishing.",
+      })
+      return
+    }
+
     if (isPublished) {
       toast.info("Already published", {
         description: `"${certificationTitle}" is already published.`,
@@ -222,22 +252,34 @@ function CertificationCard({ item, certification }) {
   return (
       <>
         <div
-            role="button"
-            tabIndex={0}
-            onClick={handleOpenCertification}
+            role={isGenerating ? undefined : "button"}
+            tabIndex={isGenerating ? undefined : 0}
+            aria-busy={isGenerating || undefined}
+            onClick={isGenerating ? undefined : handleOpenCertification}
             onKeyDown={(event) => {
+              if (isGenerating) return
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault()
                 handleOpenCertification()
               }
             }}
-            className="group flex h-[380px] w-full cursor-pointer flex-col overflow-hidden rounded-[32px] border border-border bg-card shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/45 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+            className={cn(
+                "group flex h-[380px] w-full flex-col overflow-hidden rounded-[32px] border border-border bg-card shadow-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
+                isGenerating
+                    // Not merely dimmed: without the cursor and hover lift the
+                    // card stops inviting a click it would only refuse.
+                    ? "cursor-default border-dashed"
+                    : "cursor-pointer hover:-translate-y-0.5 hover:border-primary/45 hover:shadow-md",
+            )}
         >
           <figure className="relative h-52 shrink-0 overflow-hidden border-b border-border bg-muted/40">
             <img
                 src={imageUrl}
                 alt={certificationTitle}
-                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                className={cn(
+                    "h-full w-full object-cover transition-transform duration-300",
+                    isGenerating ? "opacity-60 grayscale" : "group-hover:scale-105",
+                )}
                 onError={(event) => {
                   event.currentTarget.onerror = null
                   event.currentTarget.src = fallbackImage
@@ -246,6 +288,13 @@ function CertificationCard({ item, certification }) {
             />
 
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent" />
+
+            {isGenerating ? (
+                <span className="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-background/95 px-2.5 py-1 text-[11px] font-medium text-foreground shadow-sm">
+                  <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                  {generationLabel}
+                </span>
+            ) : null}
           </figure>
 
           <div className="flex min-h-0 flex-1 flex-col p-5 pb-6">
@@ -256,7 +305,11 @@ function CertificationCard({ item, certification }) {
                   {certificationIndustry}
                 </span>
 
-                  {isPublished ? (
+                  {isGenerating ? (
+                      <span className="inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
+                    {generationLabel}
+                  </span>
+                  ) : isPublished ? (
                       <span className="inline-flex rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-600">
                     Published
                   </span>
@@ -290,15 +343,17 @@ function CertificationCard({ item, certification }) {
                 >
                   <DropdownMenuGroup>
                     <DropdownMenuItem
-                        disabled={isPublishing || isDeleting || isPublished}
+                        disabled={isPublishing || isDeleting || isPublished || isGenerating}
                         onSelect={handlePublishCertification}
                     >
                       <SendIcon className="mr-2 h-4 w-4" />
-                      {isPublishing
-                          ? "Publishing..."
-                          : isPublished
-                              ? "Published"
-                              : "Publish"}
+                      {isGenerating
+                          ? "Generating…"
+                          : isPublishing
+                              ? "Publishing..."
+                              : isPublished
+                                  ? "Published"
+                                  : "Publish"}
                     </DropdownMenuItem>
 
                     <DropdownMenuItem
@@ -315,7 +370,11 @@ function CertificationCard({ item, certification }) {
             </div>
 
             <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted-foreground">
-              {certificationDescription}
+              {isGenerating
+                  ? generationStatus === "AWAITING_REVIEW"
+                      ? "Paused for your review in the generation workspace."
+                      : "Building categories, lessons, and assessments. This can take several minutes."
+                  : certificationDescription}
             </p>
 
             <div className="mt-auto pt-4">

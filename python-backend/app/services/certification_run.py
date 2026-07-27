@@ -26,7 +26,6 @@ request, and any websocket client stay attached to the same run.
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass
 from typing import Any

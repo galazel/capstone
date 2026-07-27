@@ -120,11 +120,22 @@ def start_run(
     generation_request_id: int | None = None,
     triggered_by_user_id: int | None = None,
 ) -> WorkflowRun:
-    """Registers a run, or revives the existing one for this thread.
+    """Registers a run, or opens a new attempt on the existing one.
 
-    Resuming a paused run reuses its thread_id, so this is upsert-shaped:
-    a second call for the same thread continues the existing timeline
-    instead of creating a duplicate run with a fresh event sequence.
+    Upsert-shaped so that re-executing a thread continues one timeline
+    instead of forking a duplicate run with a fresh event sequence.
+
+    Every caller of this function *starts a graph from the top* -- the two
+    queue consumers and the two direct-upload routes. Resuming a review does
+    not come through here; it goes to `mark_review_submitted`. So finding an
+    existing run means this thread is being executed again, which happens
+    whenever RabbitMQ redelivers an unacked message (a worker reload mid-run
+    is enough) or an admin restarts a failed run.
+
+    That is recorded as a restart, not a resume. The distinction is what lets
+    the workspace timeline show the attempt now running rather than every
+    attempt this thread has ever made stacked end to end -- which is how a
+    fresh generation came to open showing a dozen tasks from hours earlier.
     """
     run = session.execute(
         select(WorkflowRun).where(WorkflowRun.thread_id == thread_id)
@@ -133,8 +144,19 @@ def start_run(
     if run is not None:
         run.status = RUNNING
         run.updated_at = _now()
+        # The previous attempt's stage, error, progress, and completion time
+        # all describe work this attempt is about to redo from the beginning.
+        run.current_stage = None
+        run.error_message = None
+        run.progress_pct = 0
+        run.completed_at = None
         session.flush()
-        event = record_event(session, run, EVT_WORKFLOW_RESUMED, stage=run.current_stage)
+        # +1 because this call's own boundary event has not been recorded yet.
+        attempt = attempt_number(session, run.run_id) + 1
+        event = record_event(
+            session, run, EVT_WORKFLOW_RESTARTED,
+            task_status=TASK_RUNNING, retry_count=attempt, payload={"attempt": attempt},
+        )
         session.commit()
         _publish(run.run_id, [event])
         return run
@@ -372,15 +394,26 @@ def last_failed_stage(session: Session, run_id: str) -> str | None:
     return event.stage if event is not None else None
 
 
-def recovery_attempts(session: Session, run_id: str) -> int:
-    """How many times this run has already been retried or restarted."""
-    return len(
-        session.execute(
-            select(WorkflowEvent.seq).where(
-                WorkflowEvent.run_id == run_id,
-                WorkflowEvent.event_type.in_([EVT_WORKFLOW_RETRIED, EVT_WORKFLOW_RESTARTED]),
-            )
-        ).all()
+#: Events that begin a fresh attempt at the whole run, from its first step.
+#: `EVT_WORKFLOW_RETRIED` is deliberately absent: a retry re-runs the one step
+#: that failed and carries on, so it continues the attempt it is part of. The
+#: workspace timeline segments on exactly this set, so the two agree on what
+#: "attempt 3" means.
+ATTEMPT_BOUNDARY_EVENTS = (EVT_WORKFLOW_STARTED, EVT_WORKFLOW_RESTARTED)
+
+
+def attempt_number(session: Session, run_id: str) -> int:
+    """Which attempt this run is on, counting from 1."""
+    return max(
+        1,
+        len(
+            session.execute(
+                select(WorkflowEvent.seq).where(
+                    WorkflowEvent.run_id == run_id,
+                    WorkflowEvent.event_type.in_(ATTEMPT_BOUNDARY_EVENTS),
+                )
+            ).all()
+        ),
     )
 
 

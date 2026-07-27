@@ -43,7 +43,7 @@ def _recovery_state(db: Session, run: WorkflowRun) -> dict[str, Any]:
         "can_retry": recoverable,
         "can_restart": recoverable,
         "failed_stage": registry.last_failed_stage(db, run.run_id),
-        "recovery_attempts": registry.recovery_attempts(db, run.run_id),
+        "attempt": registry.attempt_number(db, run.run_id),
     }
 
 
@@ -230,7 +230,9 @@ async def retry_workflow_run(
     except certification_run.RecoveryError as error:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=str(error)) from error
 
-    attempt = registry.recovery_attempts(db, run_id) + 1
+    # A retry continues the attempt it is part of rather than opening a new
+    # one, so it reports the attempt it is repairing.
+    attempt = registry.attempt_number(db, run_id)
     registry.mark_retrying(db, run.thread_id, stage=pending_stage, attempt=attempt)
     background.add_task(certification_run.run_retry, context)
 
@@ -265,7 +267,8 @@ async def restart_workflow_run(
     except certification_run.RecoveryError as error:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=str(error)) from error
 
-    attempt = registry.recovery_attempts(db, run_id) + 1
+    # +1 because this restart's own boundary event is recorded by the call below.
+    attempt = registry.attempt_number(db, run_id) + 1
     registry.mark_restarted(db, run.thread_id, attempt=attempt)
     background.add_task(certification_run.run_restart, context, seed)
 

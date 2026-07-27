@@ -6,6 +6,7 @@ import CertificationCard from "../../components/certifications/certification-car
 import CertificationFormDrawer from "@/components/certifications/certification-form-drawer"
 
 import { getAllCertifications } from "../../services/certificationService"
+import { generationStatusOf, useActiveGenerations } from "@/hooks/use-active-generations"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -38,6 +39,12 @@ function Certifications() {
     queryFn: () => getAllCertifications(),
     staleTime: 1000 * 60 * 5,
   })
+
+  // A generation keeps running after its workspace is closed, so the list asks
+  // the run registry which certifications are still being built rather than
+  // inferring it from the certification rows — which look complete from the
+  // moment the shell is created.
+  const { byCertificationId: activeGenerations } = useActiveGenerations()
 
   const filteredCertifications = useMemo(() => {
     if (chosenIndustry === "all") {
@@ -137,6 +144,11 @@ function Certifications() {
                   item={certification}
                   certification={certification}
                   index={index}
+                  generationStatus={generationStatusOf(
+                      activeGenerations.get(
+                          String(certification.certificationId ?? certification.id),
+                      ),
+                  )}
               />
           ))}
 

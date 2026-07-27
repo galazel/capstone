@@ -688,6 +688,13 @@ export default function CertificationFormDrawer({
                                 onClose={() => {
                                     setGeneratingCertificationId(null)
                                     handleModalChange(false)
+                                    // Closing does not stop the run — it keeps
+                                    // going in the Python consumer. Refreshing
+                                    // the list is what puts the certification
+                                    // on screen with its "Generating" label
+                                    // instead of leaving it absent until the
+                                    // list happens to go stale.
+                                    onSaved?.()
                                 }}
                             />
                         ) : page === 1 ? (

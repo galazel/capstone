@@ -63,7 +63,7 @@ export default function GenerationWorkspacePage() {
   const waitedTooLong = useWaitedTooLong(Boolean(awaitingCertificationId) && !runId, 20_000)
 
   const stream = useWorkflowStream(runId)
-  const { run, events, tasks, currentTask, connected, isTerminal, isWaitingForReview } = stream
+  const { run, events, tasks, attempts, currentTask, connected, isTerminal, isWaitingForReview } = stream
 
   // The artifact under review lives in the LangGraph interrupt, not the event
   // log, so it is fetched when the run enters (or is found in) review — keyed
@@ -244,6 +244,11 @@ export default function GenerationWorkspacePage() {
                 </TabsList>
 
                 <TabsContent value="timeline" className="min-h-0 flex-1">
+                  {attempts > 1 ? (
+                    <p className="pb-2 text-xs text-muted-foreground">
+                      Attempt {attempts}. Earlier attempts are in the activity panel.
+                    </p>
+                  ) : null}
                   <WorkflowTimeline tasks={tasks} currentTaskId={currentTask?.id} />
                 </TabsContent>
 

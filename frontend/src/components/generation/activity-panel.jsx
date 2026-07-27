@@ -16,6 +16,12 @@ import { stageLabel } from "./task-status"
 const EVENT_LABELS = {
   "workflow.started": () => "Run started",
   "workflow.resumed": () => "Run resumed",
+  // The boundary the timeline segments on: everything below it in this feed
+  // belongs to an earlier attempt at the same run.
+  "workflow.restarted": (e) =>
+    e.payload?.attempt ? `Started again from the beginning (attempt ${e.payload.attempt})` : "Started again from the beginning",
+  "workflow.retried": (e) =>
+    e.payload?.stage ? `Retrying ${stageLabel(e.payload.stage)}` : "Retrying the step that failed",
   "workflow.completed": () => "Run completed",
   "workflow.failed": (e) => `Run failed — ${e.payload?.error ?? "unknown error"}`,
   "workflow.cancelled": () => "Run cancelled by a reviewer",

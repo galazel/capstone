@@ -3,7 +3,9 @@ import { streamWorkflow } from "@/services/aiWorkflowService"
 import {
   TERMINAL_STATUSES,
   applyEventToRun,
+  attemptCount,
   buildTasks,
+  currentAttemptEvents,
   findCurrentTask,
   maxSeq,
   mergeEvents,
@@ -110,13 +112,21 @@ export function useWorkflowStream(runId) {
     return close
   }, [runId])
 
-  const tasks = useMemo(() => buildTasks(state.events), [state.events])
+  // The timeline shows the attempt now running. A run's log is cumulative
+  // across attempts -- redelivered queue messages and admin restarts continue
+  // the same run -- so building tasks from the whole log stacked every attempt
+  // end to end and buried the live one. `events` is untouched, so the Activity
+  // tab still shows everything.
+  const attempts = useMemo(() => attemptCount(state.events), [state.events])
+  const attemptEvents = useMemo(() => currentAttemptEvents(state.events), [state.events])
+  const tasks = useMemo(() => buildTasks(attemptEvents), [attemptEvents])
   const currentTask = useMemo(() => findCurrentTask(tasks), [tasks])
 
   return {
     ...state,
     tasks,
     currentTask,
+    attempts,
     isTerminal: TERMINAL_STATUSES.has(state.run?.status),
     isWaitingForReview: state.run?.status === "WAITING_FOR_REVIEW",
   }

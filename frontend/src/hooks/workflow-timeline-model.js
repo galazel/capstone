@@ -45,9 +45,14 @@ export function applyEventToRun(run, event) {
   switch (event.event_type) {
     case "review.waiting":
       return { ...next, status: "WAITING_FOR_REVIEW" }
+    case "workflow.restarted":
+      // A new attempt from the first step: the error and stage on the run
+      // describe the attempt that just ended, not this one.
+      return { ...next, status: "RUNNING", current_stage: null, error_message: null }
+    case "workflow.retried":
     case "workflow.resumed":
     case "review.submitted":
-      return { ...next, status: "RUNNING" }
+      return { ...next, status: "RUNNING", error_message: null }
     case "workflow.completed":
       return { ...next, status: "COMPLETED" }
     case "workflow.failed":
@@ -57,6 +62,39 @@ export function applyEventToRun(run, event) {
     default:
       return next
   }
+}
+
+/**
+ * Events that begin a fresh attempt at the whole run, from its first step.
+ *
+ * `workflow.retried` is deliberately absent: a retry re-runs the one step that
+ * failed and carries on, so everything before it is still work this attempt
+ * did and belongs on the same timeline.
+ */
+export const ATTEMPT_BOUNDARY_EVENTS = new Set(["workflow.started", "workflow.restarted"])
+
+export function attemptCount(events) {
+  return (events ?? []).filter((event) => ATTEMPT_BOUNDARY_EVENTS.has(event.event_type)).length
+}
+
+/**
+ * Events belonging to the attempt now running.
+ *
+ * A run's event log is cumulative across attempts: the registry keys runs by
+ * thread id, so a redelivered queue message or an admin restart continues the
+ * same run rather than forking a new one. Drawing the whole log meant opening a
+ * generation and seeing a dozen tasks from attempts hours earlier, with the one
+ * live task buried at the bottom.
+ *
+ * Nothing is lost — the full log is still what the Activity tab renders.
+ */
+export function currentAttemptEvents(events) {
+  const list = events ?? []
+  let start = 0
+  list.forEach((event, index) => {
+    if (ATTEMPT_BOUNDARY_EVENTS.has(event.event_type)) start = index
+  })
+  return start === 0 ? list : list.slice(start)
 }
 
 /**
