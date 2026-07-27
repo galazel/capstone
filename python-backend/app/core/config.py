@@ -41,7 +41,12 @@ class Settings(BaseSettings):
     # tables (notably a legacy `learner_lesson_mastery` table in `public`).
     db_schema: str = "bkt"
 
+    groq_api_key: str = ""
+    youtube_api_key: str = ""
+    serper_api_key: str = ""
+
     redis_url: str = "redis://redis:6379/0"
+
     celery_broker_url: str = "redis://redis:6379/0"
     celery_result_backend: str = "redis://redis:6379/1"
     celery_task_always_eager: bool = False

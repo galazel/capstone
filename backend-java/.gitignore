@@ -31,4 +31,8 @@ build/
 
 
 .vscode/
-config/
+
+.env
+.env.*
+!.env.example
+

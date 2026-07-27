@@ -10,15 +10,6 @@ alembic>=1.18,<2.0
 celery[redis]==5.6.3
 redis>=5.2,<7.0
 
-# Async RabbitMQ consumer client (Phase 6) -- connects to the same
-# rebyu.exchange topology the Java backend's producers publish to.
-aio-pika>=9.4,<10.0
-
-# Reads knowledge-document files Java uploaded to S3 (Phase 6 generation
-# consumers fetch by s3_key instead of receiving file bytes in the queue
-# message itself).
-boto3>=1.34,<2.0
-
 python-multipart>=0.0.20,<1.0
 
 # pyBKT 1.4.2 is published with wheel metadata reporting itself as 1.4.1,
@@ -32,41 +23,17 @@ matplotlib>=3.8,<4.0
 joblib>=1.4,<2.0
 
 langgraph
+langchain
+langchain-core
+langchain-community
+langchain-chroma
 langchain-groq
-# langchain-core MUST stay on 1.x. It was previously unpinned and resolved to
-# 0.3.86 while langgraph-sdk/langchain were on 1.x, which broke every import
-# of app.main with:
-#   ModuleNotFoundError: langchain_core.language_models.chat_model_stream
-# That made the entire pytest suite un-collectable, not just the AI parts.
-langchain-core>=1.0,<2.0
-langchain-text-splitters>=1.0,<2.0
+chromadb
+faiss-cpu
 
-# --- RAG (Phase 2a) ------------------------------------------------------
-# Provides the FAISS vector-store wrapper. Previously only resolved
-# transitively, so a clean install could omit it entirely.
-# NOTE: langchain-community is being sunset upstream. The standalone
-# `langchain-faiss` package (0.1.1) is currently an empty placeholder that
-# exports nothing, so migration has to wait until it ships a real API.
-langchain-community>=0.4,<1.0
-# faiss-cpu was never declared at all, which made every ingestion fail at
-# runtime with "Could not import faiss python package".
-faiss-cpu>=1.8,<2.0
-# Real semantic embeddings, replacing the 256-dim SHA-256 token-hashing
-# stand-in that had no semantic capability.
-# Pulls torch. On Windows this needs MSVC redistributable v14.38+; an older
-# runtime fails with "WinError 1114 ... c10.dll". Linux/Docker is unaffected.
-sentence-transformers>=3.0,<6.0
-langchain-huggingface>=1.2,<2.0
+
 
 pypdf
 docx2txt
 python-dotenv
 requests
-tenacity
-
-# --- test ----------------------------------------------------------------
-# pytest was already required to run tests/ but was never declared.
-# pytest-asyncio is needed because graph nodes are async (Phase 2a step 4);
-# asyncio_mode=auto is configured in pyproject.toml.
-pytest>=8.0,<10.0
-pytest-asyncio>=0.24,<2.0

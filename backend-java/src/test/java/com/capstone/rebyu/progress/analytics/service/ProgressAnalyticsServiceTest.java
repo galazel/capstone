@@ -86,6 +86,8 @@ class ProgressAnalyticsServiceTest {
         learnerMasteryService = mock(LearnerMasteryService.class);
         bktEventFactory = mock(BktEventFactory.class);
 
+        OrganizationCertificationLearnerRepository organizationCertificationLearnerRepository = mock(OrganizationCertificationLearnerRepository.class);
+
         service = new ProgressAnalyticsService(
                 certificationRepository,
                 learnerCertificationRepository,
@@ -95,9 +97,11 @@ class ProgressAnalyticsServiceTest {
                 questionRepository,
                 challengeSessionRepository,
                 lessonRepository,
+                organizationCertificationLearnerRepository,
                 learnerCompletedLessonRepository,
                 learnerMasteryService,
                 bktEventFactory);
+
 
         // Default happy-path wiring; individual tests override as needed.
         when(certificationRepository.findById(CERT_ID)).thenReturn(Optional.of(certification(CERT_ID, "Cert")));

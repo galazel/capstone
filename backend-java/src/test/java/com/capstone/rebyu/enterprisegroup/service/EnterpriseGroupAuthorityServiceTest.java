@@ -43,7 +43,12 @@ class EnterpriseGroupAuthorityServiceTest {
         groupRepository = mock(EnterpriseGroupRepository.class);
         mapper = mock(EnterpriseGroupAuthorityMapper.class);
 
-        service = new EnterpriseGroupAuthorityService(authorityRepository, groupRepository, mapper);
+        UserRepository userRepository = mock(UserRepository.class);
+        UserTypeRepository userTypeRepository = mock(UserTypeRepository.class);
+        EnterpriseMemberRepository enterpriseMemberRepository = mock(EnterpriseMemberRepository.class);
+
+        service = new EnterpriseGroupAuthorityService(authorityRepository, groupRepository, mapper, userRepository, userTypeRepository, enterpriseMemberRepository);
+
 
         when(mapper.toDto(any(EnterpriseGroupAuthority.class))).thenAnswer(inv -> {
             EnterpriseGroupAuthority entity = inv.getArgument(0);
