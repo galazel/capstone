@@ -5,7 +5,7 @@ import com.capstone.rebyu.bkt.dto.ConfidenceView;
 import com.capstone.rebyu.bkt.dto.LearnerMasteryView;
 import com.capstone.rebyu.bkt.dto.LessonPriorityView;
 import com.capstone.rebyu.bkt.dto.MasteryHistoryView;
-import com.capstone.rebyu.bkt.service.BKTService;
+import com.capstone.rebyu.bkt.service.LearnerMasteryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -16,14 +16,16 @@ import java.util.Map;
 
 /**
  * REST endpoints for BKT mastery data. All calculations are performed by the
- * FastAPI PyBKT service; this controller delegates via BKTService.
+ * FastAPI PyBKT service; this controller delegates via LearnerMasteryService
+ * (the single read facade over BktClient -- see its javadoc for why it's
+ * preferred over hitting BktClient directly).
  */
 @RestController
 @RequestMapping("/api/bkt")
 @RequiredArgsConstructor
 public class BKTController {
 
-  private final BKTService bktService;
+  private final LearnerMasteryService learnerMasteryService;
 
   /**
    * Get learner's overall confidence/mastery in a certification
@@ -34,9 +36,9 @@ public class BKTController {
   public ResponseEntity<ConfidenceView> getMyConfidence(
       @PathVariable Long certificationId,
       @RequestAttribute CurrentUserDto currentUser) {
-    ConfidenceView confidence = bktService.getConfidence(currentUser.getLearnerId(), certificationId);
-    return confidence != null
-        ? ResponseEntity.ok(confidence)
+    var result = learnerMasteryService.getConfidenceForAnalytics(currentUser.getLearnerId(), certificationId);
+    return result.available() && result.confidence() != null
+        ? ResponseEntity.ok(result.confidence())
         : ResponseEntity.notFound().build();
   }
 
@@ -49,8 +51,8 @@ public class BKTController {
   public ResponseEntity<List<LessonPriorityView>> getMyLessonPriorities(
       @PathVariable Long certificationId,
       @RequestAttribute CurrentUserDto currentUser) {
-    List<LessonPriorityView> priorities = bktService.getLessonPriorities(currentUser.getLearnerId(), certificationId);
-    return ResponseEntity.ok(priorities);
+    var result = learnerMasteryService.getLessonPrioritiesForAnalytics(currentUser.getLearnerId(), certificationId);
+    return ResponseEntity.ok(result.lessons());
   }
 
   /**
@@ -62,8 +64,8 @@ public class BKTController {
   public ResponseEntity<List<MasteryHistoryView>> getMyMasteryHistory(
       @PathVariable Long certificationId,
       @RequestAttribute CurrentUserDto currentUser) {
-    List<MasteryHistoryView> history = bktService.getMasteryHistory(currentUser.getLearnerId(), certificationId);
-    return ResponseEntity.ok(history);
+    var result = learnerMasteryService.getMasteryHistoryForAnalytics(currentUser.getLearnerId(), certificationId);
+    return ResponseEntity.ok(result.history());
   }
 
   /**
@@ -74,10 +76,10 @@ public class BKTController {
   public ResponseEntity<LearnerMasteryView> getMyMastery(
       @RequestParam(required = false) List<Long> lessonIds,
       @RequestAttribute CurrentUserDto currentUser) {
-    LearnerMasteryView mastery = bktService.getLearnerMastery(currentUser.getLearnerId(), lessonIds);
-    return mastery != null
-        ? ResponseEntity.ok(mastery)
-        : ResponseEntity.noContent().build();
+    LearnerMasteryView mastery = learnerMasteryService.getMastery(currentUser.getLearnerId(), lessonIds);
+    return mastery.items().isEmpty()
+        ? ResponseEntity.noContent().build()
+        : ResponseEntity.ok(mastery);
   }
 
   /**
@@ -88,7 +90,7 @@ public class BKTController {
   public ResponseEntity<Map<String, Object>> getMyConfidenceMap(
       @PathVariable Long certificationId,
       @RequestAttribute CurrentUserDto currentUser) {
-    Map<String, Object> confidenceMap = bktService.getConfidenceMap(currentUser.getLearnerId(), certificationId);
+    Map<String, Object> confidenceMap = learnerMasteryService.getConfidence(currentUser.getLearnerId(), certificationId);
     return ResponseEntity.ok(confidenceMap);
   }
 }

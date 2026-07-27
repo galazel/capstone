@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import api from '@/services/api'
+import { base } from '@/services/base'
 
 export function useLesson() {
   const [loading, setLoading] = useState(false)
@@ -8,9 +8,9 @@ export function useLesson() {
   const completeLesson = async (lessonId) => {
     try {
       setLoading(true)
-      const response = await api.post(`/lessons/${lessonId}/complete`)
+      const data = await base(`lessons/${lessonId}/complete`, { method: 'POST' })
       toast.success('Lesson completed! Keep up the momentum 🎉')
-      return response.data
+      return data
     } catch (err) {
       toast.error('Failed to complete lesson')
       throw err

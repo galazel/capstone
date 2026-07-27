@@ -1,8 +1,8 @@
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
-from agents.tutor.tutor_agent import generation_agent, query_agent
+from app.agents.tutor.tutor_agent import get_generation_agent, get_query_agent
 from app.utils.helpers import get_config
-from graphs.tutor.state import TutorState
+from app.graphs.tutor.state import TutorState
 
 
 def check_query(state: TutorState):
@@ -12,9 +12,9 @@ def check_query(state: TutorState):
     return "GENERATE"
 
 
-def generate(state: TutorState):
+async def generate(state: TutorState):
 
-    response = generation_agent.invoke(
+    response = await get_generation_agent().ainvoke(
         {
             "messages": [
                 HumanMessage(
@@ -43,7 +43,7 @@ def generate(state: TutorState):
     }
 
 
-def answer_question(state: TutorState):
+async def answer_question(state: TutorState):
 
     messages = []
 
@@ -64,7 +64,7 @@ def answer_question(state: TutorState):
         )
     )
 
-    response = query_agent.invoke(
+    response = await get_query_agent().ainvoke(
         {
             "messages": messages
         },
@@ -98,9 +98,9 @@ def trim(state: TutorState):
     }
 
 
-def summarize_conversation(state: TutorState):
+async def summarize_conversation(state: TutorState):
 
-    summary = query_agent.invoke(
+    summary = await get_query_agent().ainvoke(
         {
             "messages": [
                 HumanMessage(

@@ -1,12 +1,14 @@
+import asyncio
+
 from langgraph.graph import StateGraph, START, END
 
 
-from app.utils.helpers import checkpointer
-from graphs.tutor.nodes import check_query, generate, answer_question, summarize_conversation, trim, should_summarize
-from graphs.tutor.state import TutorState
+from app.utils.helpers import get_checkpointer
+from app.graphs.tutor.nodes import check_query, generate, answer_question, summarize_conversation, trim, should_summarize
+from app.graphs.tutor.state import TutorState
 
 
-def build_graph():
+def build_graph(checkpointer):
 
     graph = StateGraph(TutorState)
 
@@ -51,6 +53,20 @@ def build_graph():
         END
     )
 
-    return graph.compile(
-        checkpointer=checkpointer
-    )
+    return graph.compile(checkpointer=checkpointer)
+
+
+_graph = None
+_graph_lock = asyncio.Lock()
+
+
+async def get_tutor_graph():
+    """Cached so callers stop rebuilding (and re-compiling) the graph on
+    every request -- tutor_service.py called build_graph() per invocation."""
+    global _graph
+    if _graph is not None:
+        return _graph
+    async with _graph_lock:
+        if _graph is None:
+            _graph = build_graph(await get_checkpointer())
+    return _graph

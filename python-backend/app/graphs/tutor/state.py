@@ -1,5 +1,5 @@
 from langgraph.graph import MessagesState
-from schemas.tutor.generation_schemas import QuestionFormat
+from app.schemas.tutor.generation_schemas import QuestionFormat
 
 
 class TutorState(MessagesState):

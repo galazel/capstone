@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.security import require_service_key
 from app.db.session import get_db
 from app.repositories.bkt import get_active_artifact, get_lesson_parameters
-from app.schemas.parameters import (
+from app.schemas.certification.parameters import (
     ActiveModelResponse,
     LessonParametersResponse,
     ParameterClassResponse,

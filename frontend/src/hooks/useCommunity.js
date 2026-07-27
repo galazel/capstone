@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import api from '@/services/api'
+import { base } from '@/services/base'
+import { deleteCommunityPost } from '@/services/communityService'
 
 export function useCommunity() {
   const [loading, setLoading] = useState(false)
@@ -8,9 +9,9 @@ export function useCommunity() {
   const editPost = async (postId, title, body) => {
     try {
       setLoading(true)
-      const response = await api.put(`/community/posts/${postId}`, { title, body })
+      const data = await base(`community/posts/${postId}`, { method: 'PUT', data: { title, body } })
       toast.success('Post updated')
-      return response.data
+      return data
     } catch (err) {
       toast.error('Failed to update post')
       throw err
@@ -22,7 +23,7 @@ export function useCommunity() {
   const deletePost = async (postId) => {
     try {
       setLoading(true)
-      await api.delete(`/community/posts/${postId}`)
+      await deleteCommunityPost(postId)
       toast.success('Post deleted')
     } catch (err) {
       toast.error('Failed to delete post')

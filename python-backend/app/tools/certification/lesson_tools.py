@@ -1,8 +1,11 @@
 from langchain_core.tools import tool
 from app.utils.helpers import create_id
-import os
-import requests
-
+from app.tools.certification.web_search import (
+    format_organic_results,
+    serper_image_search,
+    serper_search,
+    youtube_search,
+)
 
 @tool("add_lesson_heading",
       description="Creates a primary section heading (H1/H2 level) to introduce a major topic block inside the lesson.")
@@ -235,54 +238,44 @@ def create_media_text_block(
 @tool("search_educational_image",
       description="Searches the web via Google Custom Search / Serper for educational diagrams, technical charts, or architecture schematics matching the query and returns the direct image URL.")
 def search_educational_image(query: str) -> str:
-    api_key = os.environ.get("SERPER_API_KEY")  # Or GOOGLE_API_KEY depending on provider
-    if not api_key:
-        return "Error: Search API key not configured."
+    try:
+        images = serper_image_search(query + " diagram architecture chart", num=1)
+    except RuntimeError as e:
+        return f"Error: {e}"
+    except Exception as e:
+        return f"Search failed ({e})"
 
-    # Example utilizing Serper.dev Image endpoint
-    url = "https://google.serper.dev/images"
-    payload = {"q": query + " diagram architecture chart", "num": 1}
-    headers = {
-        "X-API-KEY": api_key,
-        "Content-Type": "application/json"
-    }
-
-    response = requests.post(url, json=payload, headers=headers)
-    if response.status_code == 200:
-        data = response.json()
-        images = data.get("images", [])
-        if images:
-            return images[0].get("imageUrl", "No image URL found.")
-
+    if images:
+        return images[0].get("imageUrl", "No image URL found.")
     return "No educational diagram found."
 
 
 @tool("search_youtube_videos",
       description="Searches YouTube for a relevant tutorial or educational video matching a query and returns the watch URL to use as a videoKey.")
 def search_youtube_videos(query: str) -> str:
-    api_key = os.environ.get("YOUTUBE_API_KEY")
-    if not api_key:
-        return "Error: YouTube API key not configured."
+    try:
+        items = youtube_search(query, max_results=1)
+    except RuntimeError as e:
+        return f"Error: {e}"
+    except Exception as e:
+        return f"Search failed ({e})"
 
-    url = "https://www.googleapis.com/youtube/v3/search"
-    params = {
-        "part": "snippet",
-        "q": query,
-        "type": "video",
-        "maxResults": 1,
-        "key": api_key
-    }
-
-    response = requests.get(url, params=params)
-    if response.status_code == 200:
-        data = response.json()
-        items = data.get("items", [])
-        if items:
-            video_id = items[0]["id"]["videoId"]
-            return f"https://www.youtube.com/watch?v={video_id}"
-
+    if items:
+        video_id = items[0]["id"]["videoId"]
+        return f"https://www.youtube.com/watch?v={video_id}"
     return "No matching videos found."
 
+
+@tool("search_more_lesson_info", description="Search more reliable and accurate info if the uploaded content or the data stored in vector database is not enough.")
+def search_more_lesson_info(query: str) -> str:
+    try:
+        results = serper_search(query, num=5)
+    except RuntimeError as e:
+        return f"Error: {e}"
+    except Exception as e:
+        return f"Search failed ({e})"
+
+    return format_organic_results(results) or "No additional reliable lesson information found."
 
 
 lesson_builder_tools = [
@@ -309,6 +302,6 @@ lesson_builder_tools = [
 lesson_search_tools = [
     search_educational_image,
     search_youtube_videos,
+    search_more_lesson_info,
 ]
-
 

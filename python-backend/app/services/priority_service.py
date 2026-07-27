@@ -121,6 +121,13 @@ def compute_lesson_priority(row: LearnerLessonMastery, settings: Settings) -> di
         if incorrect_rate >= 50:
             reasons.append("Missed at least half of recent questions")
 
+    # NOTE: priority_weight_mock/priority_weight_diagnostic re-weight the
+    # SAME mastery_weakness value computed above, not an independent
+    # mock/diagnostic-specific signal -- there is no separate "mastery as
+    # measured by mock exams only" number being tracked. Bumping these
+    # weights makes a lesson whose most recent assessment was a mock/
+    # diagnostic count as MORE urgent for the same underlying mastery, it
+    # does not add new evidence.
     last_type = (row.last_assessment_type or "").upper()
     if last_type == "MOCK_EXAM":
         components.append((mastery_weakness, settings.priority_weight_mock))

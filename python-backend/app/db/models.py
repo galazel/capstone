@@ -297,3 +297,106 @@ class LearnerCategoryPriorityHistory(Base):
     __table_args__ = (
         Index("ix_priority_history_learner_cert", "learner_id", "certification_id", "created_at"),
     )
+
+
+class GeneratedQuestionDraft(Base):
+    """One completed question-bank generation run's approved output.
+
+    Written by the Phase 6 question.generation.queue consumer once its
+    LangGraph run resolves without a pending HITL review. There is no
+    equivalent Java table -- question drafts were previously ephemeral
+    (returned straight to the browser by the old synchronous endpoint), so
+    this is the first durable place they land for the async flow.
+    """
+
+    __tablename__ = "generated_question_drafts"
+
+    generated_question_draft_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_string)
+    generation_request_id: Mapped[int] = mapped_column(BigInteger, nullable=False, unique=True)
+    certification_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    thread_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    questions: Mapped[list] = mapped_column(JSON, nullable=False)
+    generated_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class WorkflowRun(Base):
+    """One execution of a LangGraph workflow, tracked outside the checkpoint.
+
+    LangGraph's checkpointer stores a run's *state* keyed by thread_id, but
+    provides no way to ask "which runs exist, and which are waiting for a
+    human?". Without that, a HITL pause was invisible: the run sat at
+    generation_requests.status = PROCESSING forever and no admin could
+    discover a review was pending or reach the resume endpoint.
+
+    Owned by Python (this service's own schema), because workflow
+    orchestration state is Python's concern -- Java only needs the finished
+    artifacts.
+    """
+
+    __tablename__ = "workflow_runs"
+
+    run_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_string)
+    #: LangGraph thread id -- the key used to resume this run.
+    thread_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    #: CERTIFICATION | QUESTION_BANK
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    certification_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    generation_request_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    triggered_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
+    #: RUNNING | WAITING_FOR_REVIEW | COMPLETED | FAILED | CANCELLED
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    #: Human-readable stage the run is at, e.g. "CURRICULUM".
+    current_stage: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    progress_pct: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    #: Monotonic counter for events belonging to this run. Lets a
+    #: reconnecting client replay from `last_seq` instead of losing history.
+    last_seq: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        # One live registry row per LangGraph thread.
+        UniqueConstraint("thread_id", name="uq_workflow_runs_thread"),
+        Index("ix_workflow_runs_status_started", "status", "started_at"),
+    )
+
+
+class WorkflowEvent(Base):
+    """An append-only log of what a run did, and when.
+
+    Doubles as the WebSocket replay log: `seq` is monotonic per run, so a
+    client that reconnects sends its `last_seq` and receives only what it
+    missed. Without this, a dropped connection loses the timeline.
+    """
+
+    __tablename__ = "workflow_events"
+
+    event_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_string)
+    run_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workflow_runs.run_id", ondelete="CASCADE"), nullable=False
+    )
+    #: Monotonic within a run, starting at 1.
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: workflow.started | node.started | node.completed | validation.completed
+    #: | review.waiting | review.submitted | workflow.resumed
+    #: | workflow.completed | workflow.failed
+    event_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    stage: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    #: PENDING | RUNNING | COMPLETED | WAITING_FOR_REVIEW | RETRYING | FAILED
+    #: | SKIPPED | CANCELLED -- the task status the workspace renders.
+    task_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "seq", name="uq_workflow_events_run_seq"),
+        Index("ix_workflow_events_run_seq", "run_id", "seq"),
+    )

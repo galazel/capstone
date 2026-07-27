@@ -19,7 +19,7 @@ from app.core.security import require_service_key
 from app.db.models import BktModelRun
 from app.db.session import get_db
 from app.repositories.bkt import get_run, list_runs
-from app.schemas.training import (
+from app.schemas.certification.training import (
     TrainingJobCreate,
     TrainingJobListResponse,
     TrainingJobResponse,

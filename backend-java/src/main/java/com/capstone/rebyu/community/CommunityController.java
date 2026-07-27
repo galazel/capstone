@@ -2,7 +2,7 @@ package com.capstone.rebyu.community;
 
 import com.capstone.rebyu.auth.dto.CurrentUserDto;
 import com.capstone.rebyu.auth.service.CognitoAuthService;
-import com.capstone.rebyu.learningtools.StudyPracticeService;
+import com.capstone.rebyu.learningtools.service.StudyPracticeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;

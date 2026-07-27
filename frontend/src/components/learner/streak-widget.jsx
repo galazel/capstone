@@ -1,9 +1,9 @@
-import { useGameification } from '@/hooks/useGameification'
+import { useGamification } from '@/hooks/useGamification'
 import { Flame } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 
 export function StreakWidget() {
-  const { streak, recordActivity } = useGameification()
+  const { streak, recordActivity } = useGamification()
 
   if (!streak) return null
 

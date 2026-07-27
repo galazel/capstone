@@ -1,8 +1,30 @@
-from langchain.agents import create_agent
-from app.utils.helpers import llm
+from functools import lru_cache
 
-auditor_agent = create_agent(
-    model=llm,
-    tools=[],
-    system_prompt="You are an AI auditor. Determine if the uploaded document samples are relevant to the target certification. Return valid JSON with two keys: 'is_related' (boolean) and 'reason' (a short string explaining your decision)."
+from langchain.agents import create_agent
+from langchain.agents.structured_output import ToolStrategy
+
+from app.schemas.certification.auditor_schema import AuditorResult
+from app.utils.helpers import get_llm
+
+SYSTEM_PROMPT = (
+    "You are an AI auditor. Determine if the uploaded document samples are "
+    "relevant to the target certification. Return only the structured "
+    "AuditorResult: is_related (boolean) and reason (a short string "
+    "explaining your decision)."
 )
+
+
+@lru_cache(maxsize=1)
+def get_auditor_agent():
+    """Built on first use, not at import.
+
+    Constructing this at module scope instantiated a Groq client (and so
+    required GROQ_API_KEY) merely to *import* any module in the certification
+    graph, which is what made graph nodes untestable.
+    """
+    return create_agent(
+        model=get_llm("classification"),
+        tools=[],
+        response_format=ToolStrategy(AuditorResult),
+        system_prompt=SYSTEM_PROMPT,
+    )

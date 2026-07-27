@@ -10,6 +10,7 @@ import com.capstone.rebyu.certification.entity.Lesson;
 import com.capstone.rebyu.certification.entity.MajorCategory;
 import com.capstone.rebyu.certification.entity.MiddleCategory;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -22,6 +23,7 @@ import java.util.Set;
  * attempt. Every question updates only its own mapped lesson; the overall exam
  * score is never applied across lessons.
  */
+@Slf4j
 @RequiredArgsConstructor
 @Component
 public class BktEventFactory {
@@ -132,6 +134,45 @@ public class BktEventFactory {
     }
 
     /**
+     * Builds an evidence event directly from already-resolved values, for
+     * producers that don't have the formal-assessment entities the primary
+     * {@link #buildEvent} overload expects (e.g. AI-tutor/community practice
+     * quizzes). Applies the exact same difficulty/assessment-type
+     * normalization as the primary path, so every producer shares one
+     * source of truth for the mapping instead of each reimplementing it.
+     */
+    public BktMasteryEvent buildEvent(
+            String sourceEventId,
+            Long learnerId,
+            Long certificationId,
+            Long majorCategoryId,
+            String majorCategoryTitle,
+            Long middleCategoryId,
+            String middleCategoryTitle,
+            Long lessonId,
+            String lessonTitle,
+            Long questionId,
+            boolean isCorrect,
+            String rawDifficulty,
+            String rawAssessmentType) {
+        return new BktMasteryEvent(
+                sourceEventId,
+                learnerId,
+                certificationId,
+                majorCategoryId,
+                middleCategoryId,
+                lessonId,
+                lessonTitle,
+                middleCategoryTitle,
+                majorCategoryTitle,
+                questionId,
+                isCorrect,
+                normalizeDifficulty(rawDifficulty),
+                normalizeAssessmentType(rawAssessmentType),
+                LocalDateTime.now().toString());
+    }
+
+    /**
      * Objective answers carry an explicit {@code isCorrect}. Partial-credit
      * answers convert via the configurable awarded/max threshold. Never divides
      * by zero.
@@ -148,16 +189,34 @@ public class BktEventFactory {
         return ratio >= properties.getPartialCreditCorrectThreshold();
     }
 
-    /** Normalizes a raw difficulty string to a known guess/slip class. */
+    /**
+     * Normalizes a raw difficulty string to a known guess/slip class. {@code
+     * difficulty_level} has no DB-level CHECK constraint, so an unrecognized
+     * value (a new value introduced elsewhere without updating {@link
+     * #KNOWN_DIFFICULTY}) silently collapses to the fallback class -- logged
+     * here so that misclassification is at least visible instead of silent.
+     */
     public String normalizeDifficulty(String rawDifficulty) {
         if (rawDifficulty == null) {
             return properties.getFallbackDifficulty();
         }
         String value = rawDifficulty.trim().toUpperCase().replace("-", "_").replace(" ", "_");
-        return KNOWN_DIFFICULTY.contains(value) ? value : properties.getFallbackDifficulty();
+        if (KNOWN_DIFFICULTY.contains(value)) {
+            return value;
+        }
+        log.warn("Unrecognized BKT difficulty '{}'; falling back to {}",
+                rawDifficulty, properties.getFallbackDifficulty());
+        return properties.getFallbackDifficulty();
     }
 
-    /** Normalizes a raw exam-type string to a known learn/forget class. */
+    /**
+     * Normalizes a raw exam-type string to a known learn/forget class. {@code
+     * exam_type_text} has no DB-level CHECK constraint either, so an
+     * unrecognized value (e.g. a new exam type added without updating
+     * {@link #ASSESSMENT_ALIASES}/{@link #KNOWN_ASSESSMENT}) silently
+     * collapses to the fallback class -- logged here for the same reason as
+     * {@link #normalizeDifficulty}.
+     */
     public String normalizeAssessmentType(String rawAssessmentType) {
         if (rawAssessmentType == null) {
             return properties.getFallbackAssessmentType();
@@ -167,6 +226,11 @@ public class BktEventFactory {
         if (mapped != null) {
             return mapped;
         }
-        return KNOWN_ASSESSMENT.contains(value) ? value : properties.getFallbackAssessmentType();
+        if (KNOWN_ASSESSMENT.contains(value)) {
+            return value;
+        }
+        log.warn("Unrecognized BKT assessment type '{}'; falling back to {}",
+                rawAssessmentType, properties.getFallbackAssessmentType());
+        return properties.getFallbackAssessmentType();
     }
 }

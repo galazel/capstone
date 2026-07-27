@@ -9,3 +9,6 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# Graph nodes are async (Phase 2a step 4), so graph tests must await
+# ainvoke. auto mode avoids decorating every async test individually.
+asyncio_mode = "auto"

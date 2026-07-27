@@ -8,7 +8,7 @@ from app.core.security import require_service_key
 from app.db.models import BktMasteryEvent, LearnerLessonMastery, LearnerLessonMasteryHistory
 from app.db.session import get_db
 from app.repositories.bkt import list_learner_mastery, list_mastery_history
-from app.schemas.mastery import (
+from app.schemas.certification.mastery import (
     LearnerLessonMasteryResponse,
     LearnerMasteryListResponse,
     MasteryEventBatchCreate,

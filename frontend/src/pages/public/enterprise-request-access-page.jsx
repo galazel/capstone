@@ -48,7 +48,7 @@ export default function EnterpriseRequestAccessPage() {
 
   const certificationsQuery = useQuery({
     queryKey: ["certifications"],
-    queryFn: getAllCertifications,
+    queryFn: () => getAllCertifications(),
     staleTime: 5 * 60 * 1000,
   })
 

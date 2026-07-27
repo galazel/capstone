@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import api from '@/services/api'
+import { base } from '@/services/base'
 
 export function useStudyPlan() {
   const [plans, setPlans] = useState([])
@@ -9,10 +9,10 @@ export function useStudyPlan() {
   const generatePlan = async (goal) => {
     try {
       setLoading(true)
-      const res = await api.post('/study-plans/generate', { goal })
-      setPlans(prev => [res.data, ...prev])
+      const data = await base('study-plans/generate', { method: 'POST', data: { goal } })
+      setPlans(prev => [data, ...prev])
       toast.success('Study plan created!')
-      return res.data
+      return data
     } catch (err) {
       toast.error('Failed to generate plan')
       throw err
@@ -23,8 +23,8 @@ export function useStudyPlan() {
 
   const getPlans = async () => {
     try {
-      const res = await api.get('/study-plans/my-plans')
-      setPlans(res.data)
+      const data = await base('study-plans/my-plans')
+      setPlans(data)
     } catch (err) {
       console.error('Failed to load plans', err)
     }
@@ -32,7 +32,7 @@ export function useStudyPlan() {
 
   const completePlan = async (planId) => {
     try {
-      await api.post(`/study-plans/${planId}/complete`)
+      await base(`study-plans/${planId}/complete`, { method: 'POST' })
       toast.success('Plan completed!')
       getPlans()
     } catch (err) {

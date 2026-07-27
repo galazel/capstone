@@ -1,4 +1,14 @@
-import { Bell, CheckCheck, CheckCircle2, GraduationCap, Mail, Trash2, XCircle } from "lucide-react"
+import {
+  Bell,
+  CheckCheck,
+  CheckCircle2,
+  GraduationCap,
+  Mail,
+  RotateCcw,
+  Sparkles,
+  Trash2,
+  XCircle,
+} from "lucide-react"
 import { Link } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
@@ -16,6 +26,24 @@ const iconByType = {
   accepted: CheckCircle2,
   cancelled: XCircle,
   invitation: Mail,
+}
+
+// The notifications table has no `type` column -- these rows (assessment
+// results, retakes, and the Phase 6 AI generation consumers) are told apart
+// client-side by their title prefix instead.
+const iconByTitlePrefix = [
+  [/^Curriculum ready|^Questions ready/, Sparkles],
+  [/^Generation failed/, XCircle],
+  [/^Results ready/, GraduationCap],
+  [/^Retake started/, RotateCcw],
+]
+
+function resolveIcon(item) {
+  if (iconByType[item.type]) {
+    return iconByType[item.type]
+  }
+  const match = iconByTitlePrefix.find(([pattern]) => pattern.test(item.title ?? ""))
+  return match ? match[1] : Bell
 }
 
 function formatTime(value) {
@@ -111,7 +139,7 @@ export function NotificationBell({
         ) : (
           <div className="max-h-96 overflow-y-auto p-2">
             {visibleItems.map((item) => {
-              const Icon = iconByType[item.type] ?? Bell
+              const Icon = resolveIcon(item)
               return (
                 <div
                   key={item.id}

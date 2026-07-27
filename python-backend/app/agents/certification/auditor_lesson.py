@@ -1,15 +1,12 @@
+from functools import lru_cache
+
 from langchain.agents import create_agent
-from schemas.certification.lesson_audit import LessonAuditResult
 from langchain.agents.structured_output import ToolStrategy
 
+from app.schemas.certification.lesson_audit import LessonAuditResult
+from app.utils.helpers import get_llm
 
-from app.utils.helpers import llm
-
-auditor_lesson_agent = create_agent(
-    model=llm,
-    tools=[],
-    response_format=ToolStrategy(LessonAuditResult),
-    system_prompt="""
+SYSTEM_PROMPT = """
 You are an AI lesson auditor.
 
 Determine whether the generated lesson follows the provided curriculum, learning objective, and lessonGenerationInstructions.
@@ -24,5 +21,13 @@ Check that:
 
 Return only the structured LessonAuditResult.
 """
-)
 
+
+@lru_cache(maxsize=1)
+def get_auditor_lesson_agent():
+    return create_agent(
+        model=get_llm("classification"),
+        tools=[],
+        response_format=ToolStrategy(LessonAuditResult),
+        system_prompt=SYSTEM_PROMPT,
+    )

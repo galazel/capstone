@@ -19,6 +19,8 @@ from pyBKT.models import Model
 from sklearn.metrics import accuracy_score, mean_squared_error, roc_auc_score
 from sklearn.model_selection import train_test_split
 
+from app.core.config import get_settings
+
 LOGGER = logging.getLogger("rebyu_bkt.ml")
 
 REQUIRED_COLUMNS = {
@@ -53,9 +55,13 @@ FALLBACK_PARAMETERS = {
     "forgets": 0.00,
 }
 
-MASTERED_THRESHOLD = 0.85
-GOOD_THRESHOLD = 0.70
-DEVELOPING_THRESHOLD = 0.40
+# Sourced from the shared config so a standalone run of this pipeline can
+# never silently disagree with the thresholds mastery_service/priority_service
+# actually score learners against at runtime.
+_settings = get_settings()
+MASTERED_THRESHOLD = _settings.mastered_threshold
+GOOD_THRESHOLD = _settings.good_threshold
+DEVELOPING_THRESHOLD = _settings.developing_threshold
 
 
 @dataclass(frozen=True)

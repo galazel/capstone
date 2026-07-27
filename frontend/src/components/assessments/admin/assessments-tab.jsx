@@ -74,7 +74,7 @@ function normalizeAssessmentType(value) {
 }
 
 export function useAssessmentData(certificationId) {
-  const examsQuery = useQuery({ queryKey: ["exams"], queryFn: getExams })
+  const examsQuery = useQuery({ queryKey: ["exams"], queryFn: () => getExams() })
   const examTypesQuery = useQuery({
     queryKey: ["exam-types"],
     queryFn: getExamTypes,

@@ -1,5 +1,5 @@
 from langchain_core.tools import tool
-from schemas.tutor.learner_data import AdaptiveQuestionRecommendation
+from app.schemas.tutor.learner_data import AdaptiveQuestionRecommendation
 from typing import Literal
 
 

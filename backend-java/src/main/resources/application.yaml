@@ -3,26 +3,10 @@ spring:
     name: rebyu
 
   rabbitmq:
-    host: localhost
-    port: 5672
-    username: guest
-    password: guest
-    values:
-      exchanges:
-        - certification.exchange
-        - assessment.exchange
-      routes:
-        - certification.created
-        - curriculum.generated
-        - assessment.checked
-        - weakness.updated
-        - progress.updated
-      queues:
-        - curriculum.queue
-        - certification.queue
-        - check.queue
-        - bkt.queue
-        - progress.queue
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
 
   mail:
     host: smtp.gmail.com
@@ -166,24 +150,19 @@ aws:
     access-key: ${AWS_ACCESS_KEY_ID}
     secret-key: ${AWS_SECRET_ACCESS_KEY}
 
-langchain4j:
-  open-ai:
-    chat-model:
-      api-key: ${GITHUB_TOKEN}
-      base-url: https://models.github.ai/inference
-      model-name: ${GITHUB_MODEL:openai/gpt-4.1-mini}
-      temperature: 0.7
-      # Generous cap so comprehensive multi-section lesson drafts are not truncated
-      # mid-JSON. Only lesson generation approaches this; short calls never hit it.
-      max-tokens: 8192
-      timeout: 60s
-      log-requests: false
-      log-responses: false
-
 db:
   host: ${DB_HOST}
   port: ${DB_PORT:5432}
   database: ${DB_DATABASE}
+
+# Internal Python AI backend (FastAPI + LangGraph) integration for
+# certification/lesson/question generation, tutor chat, and answer grading.
+# The browser never calls Python directly; only Spring Boot does.
+ai:
+  service-url: ${AI_SERVICE_URL:http://localhost:8000/api/v1/ai}
+  api-key: ${AI_SERVICE_API_KEY:}
+  connect-timeout-ms: ${AI_CONNECT_TIMEOUT:5000}
+  read-timeout-ms: ${AI_READ_TIMEOUT:120000}
 
 # Internal FastAPI Bayesian Knowledge Tracing (BKT) service integration.
 # The browser never calls FastAPI; only Spring Boot does, over the internal
@@ -206,6 +185,16 @@ bkt:
   partial-credit-correct-threshold: ${BKT_PARTIAL_CREDIT_CORRECT_THRESHOLD:0.60}
   fallback-assessment-type: ${BKT_FALLBACK_ASSESSMENT_TYPE:LESSON_QUIZ}
   fallback-difficulty: ${BKT_FALLBACK_DIFFICULTY:AVERAGE}
+
+# Adaptive assessment retake question selection (Phase 4). Pure application
+# logic + DB queries -- no AI/external service call.
+retake:
+  enabled: ${RETAKE_ADAPTIVE_ENABLED:true}
+  weak-accuracy-threshold: ${RETAKE_WEAK_ACCURACY_THRESHOLD:0.70}
+  strong-accuracy-threshold: ${RETAKE_STRONG_ACCURACY_THRESHOLD:0.85}
+  weak-boost-factor: ${RETAKE_WEAK_BOOST_FACTOR:1.5}
+  strong-reduction-factor: ${RETAKE_STRONG_REDUCTION_FACTOR:0.5}
+  min-evidence-per-cell: ${RETAKE_MIN_EVIDENCE_PER_CELL:2}
 
 # PayMongo (test-mode payment provider). Disabled by default so a missing key
 # never accidentally reaches the live API; the paymongo-test profile (or real

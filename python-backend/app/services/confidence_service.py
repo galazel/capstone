@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.db.models import LearnerLessonMastery
-from app.schemas.priority import ConfidenceResponse
+from app.schemas.certification.priority import ConfidenceResponse
 
 
 def compute_confidence(

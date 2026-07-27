@@ -1,3 +1,5 @@
+from typing import Optional
+
 from langchain_core.tools import tool
 from app.utils.helpers import create_id
 
@@ -81,7 +83,7 @@ def create_programming_question(
     question: str,
     starter_code: str,
     test_cases: list[dict],
-    sub_questions: list[dict] = [],
+    sub_questions: Optional[list[dict]] = None,
     difficulty: str = "average",
     image_key: str = ""
 ):
@@ -92,7 +94,7 @@ def create_programming_question(
         "imageKey": image_key,
         "starterCode": starter_code,
         "testCases": test_cases,
-        "subQuestions": sub_questions,
+        "subQuestions": sub_questions or [],
         "difficulty": difficulty
     }
 
@@ -108,7 +110,7 @@ def create_diagram_question(
     reference_diagram_xml: str,
     reference_nodes: list,
     reference_edges: list,
-    sub_questions: list = [],
+    sub_questions: Optional[list] = None,
     difficulty: str = "average",
     image_key: str = ""
 ):
@@ -122,7 +124,7 @@ def create_diagram_question(
         "referenceDiagramXml": reference_diagram_xml,
         "referenceDiagramNodes": reference_nodes,
         "referenceDiagramEdges": reference_edges,
-        "subQuestions": sub_questions,
+        "subQuestions": sub_questions or [],
         "difficulty": difficulty
     }
 

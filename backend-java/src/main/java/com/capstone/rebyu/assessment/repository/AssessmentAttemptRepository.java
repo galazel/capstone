@@ -31,4 +31,8 @@ public interface AssessmentAttemptRepository extends JpaRepository<AssessmentAtt
 
     List<AssessmentAttempt> findByLearnerIdAndExam_Certification_CertificationIdAndStatus(
             Long learnerId, Long certificationId, AssessmentAttempt.Status status);
+
+    /** Past graded attempts of this exam by this learner, for adaptive retake analysis. */
+    List<AssessmentAttempt> findByExam_ExamIdAndLearnerIdAndStatus(
+            Long examId, Long learnerId, AssessmentAttempt.Status status);
 }

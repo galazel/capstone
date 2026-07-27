@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import api from '@/services/api'
+import { base } from '@/services/base'
 
 export function useAssessment() {
   const [loading, setLoading] = useState(false)
@@ -9,10 +9,10 @@ export function useAssessment() {
   const startAttempt = async (assessmentId) => {
     try {
       setLoading(true)
-      const response = await api.post(`/assessments/${assessmentId}/attempts`)
-      setAttempt(response.data)
+      const data = await base(`assessments/${assessmentId}/attempts`, { method: 'POST' })
+      setAttempt(data)
       toast.success('Assessment started')
-      return response.data
+      return data
     } catch (err) {
       toast.error('Failed to start assessment')
       throw err
@@ -23,11 +23,12 @@ export function useAssessment() {
 
   const submitAnswer = async (attemptId, questionId, answer) => {
     try {
-      const response = await api.post(`/assessments/attempts/${attemptId}/submit-answer`, null, {
-        params: { questionId, answer },
-      })
-      setAttempt(response.data)
-      return response.data
+      const data = await base(
+        `assessments/attempts/${attemptId}/submit-answer?questionId=${encodeURIComponent(questionId)}&answer=${encodeURIComponent(answer)}`,
+        { method: 'POST' }
+      )
+      setAttempt(data)
+      return data
     } catch (err) {
       toast.error('Failed to submit answer')
       throw err
@@ -37,10 +38,10 @@ export function useAssessment() {
   const submitAttempt = async (attemptId) => {
     try {
       setLoading(true)
-      const response = await api.post(`/assessments/attempts/${attemptId}/submit`)
-      setAttempt(response.data)
+      const data = await base(`assessments/attempts/${attemptId}/submit`, { method: 'POST' })
+      setAttempt(data)
       toast.success('Assessment submitted!')
-      return response.data
+      return data
     } catch (err) {
       toast.error('Failed to submit assessment')
       throw err

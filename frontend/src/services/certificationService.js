@@ -49,7 +49,7 @@ export async function getCertificationPublishingRequirements(id) {
 
 
 
-export async function generateCertificationStructure(certificationId, files) {
+export async function generateCertificationStructure(certificationId, files, onUploadProgress) {
     const formData = new FormData()
 
     formData.append("certificationId", String(certificationId))
@@ -61,6 +61,7 @@ export async function generateCertificationStructure(certificationId, files) {
     return await base("ai/curriculum/generate", {
         method: "POST",
         data: formData,
+        onUploadProgress,
     })
 }
 

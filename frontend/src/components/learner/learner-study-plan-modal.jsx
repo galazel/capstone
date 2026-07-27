@@ -3,7 +3,7 @@ import { CalendarDays, ChevronLeft, ChevronRight, Sparkles } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { StudyPlanGenerator } from "@/pages/learner/learner-study-plan.jsx"
+import { StudyPlanGenerator } from "@/pages/learner/learning/learner-study-plan.jsx"
 import { useLearnerEntitlements } from "@/hooks/use-learner-entitlements.js"
 import { FEATURES } from "@/services/subscriptionService.js"
 

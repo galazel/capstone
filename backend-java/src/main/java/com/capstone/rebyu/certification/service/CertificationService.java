@@ -1,6 +1,10 @@
 package com.capstone.rebyu.certification.service;
 
 import com.capstone.rebyu.certification.dto.CertificationDto;
+import com.capstone.rebyu.certification.dto.ExamSummaryDto;
+import com.capstone.rebyu.certification.dto.LessonDto;
+import com.capstone.rebyu.certification.dto.MajorCategoryDto;
+import com.capstone.rebyu.certification.dto.MiddleCategoryDto;
 import com.capstone.rebyu.certification.entity.Certification;
 import com.capstone.rebyu.certification.entity.Lesson;
 import com.capstone.rebyu.certification.entity.MajorCategory;
@@ -26,7 +30,9 @@ import org.springframework.util.StringUtils;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -83,7 +89,76 @@ public class CertificationService {
                             .toList()
             );
         }
+        attachExamSummaries(dto, certification.getCertificationId(), includeGroupId);
         return dto;
+    }
+
+    /**
+     * Links every category assessment, mock/diagnostic exam, and lesson quiz
+     * onto the matching node in the certification's tree (or the
+     * certification itself, for certification-scoped exams), so the
+     * frontend can display them without a separate, unlinked call to the
+     * flat {@code /api/exams} list.
+     */
+    private void attachExamSummaries(CertificationDto dto, Long certificationId, Long includeGroupId) {
+        List<Exam> exams = examRepository.findByCertification_CertificationId(certificationId);
+
+        Map<Long, MajorCategoryDto> majorsById = new HashMap<>();
+        Map<Long, MiddleCategoryDto> middlesById = new HashMap<>();
+        Map<Long, LessonDto> lessonsById = new HashMap<>();
+        if (dto.getMajorCategory() != null) {
+            for (MajorCategoryDto major : dto.getMajorCategory()) {
+                majorsById.put(major.getMajorCategoryId(), major);
+                if (major.getMiddleCategory() == null) continue;
+                for (MiddleCategoryDto middle : major.getMiddleCategory()) {
+                    middlesById.put(middle.getMiddleCategoryId(), middle);
+                    if (middle.getLessons() == null) continue;
+                    for (LessonDto lesson : middle.getLessons()) {
+                        lessonsById.put(lesson.getLessonId(), lesson);
+                    }
+                }
+            }
+        }
+
+        List<ExamSummaryDto> certificationLevelExams = new ArrayList<>();
+        for (Exam exam : exams) {
+            if (exam.getOwnerGroup() != null
+                    && (includeGroupId == null
+                        || !exam.getOwnerGroup().getEnterpriseGroupId().equals(includeGroupId))) {
+                continue; // group-owned exam not visible to this caller
+            }
+            ExamSummaryDto summary = toExamSummary(exam);
+            LessonDto lessonDto = exam.getLesson() != null ? lessonsById.get(exam.getLesson().getLessonId()) : null;
+            MiddleCategoryDto middleDto = exam.getMiddleCategory() != null
+                    ? middlesById.get(exam.getMiddleCategory().getMiddleCategoryId()) : null;
+            MajorCategoryDto majorDto = exam.getMajorCategory() != null
+                    ? majorsById.get(exam.getMajorCategory().getMajorCategoryId()) : null;
+
+            if (lessonDto != null) {
+                if (lessonDto.getExams() == null) lessonDto.setExams(new ArrayList<>());
+                lessonDto.getExams().add(summary);
+            } else if (middleDto != null) {
+                if (middleDto.getExams() == null) middleDto.setExams(new ArrayList<>());
+                middleDto.getExams().add(summary);
+            } else if (majorDto != null) {
+                if (majorDto.getExams() == null) majorDto.setExams(new ArrayList<>());
+                majorDto.getExams().add(summary);
+            } else {
+                certificationLevelExams.add(summary);
+            }
+        }
+        dto.setExams(certificationLevelExams);
+    }
+
+    private static ExamSummaryDto toExamSummary(Exam exam) {
+        return new ExamSummaryDto(
+                exam.getExamId(),
+                exam.getTitle(),
+                exam.getExamType() != null ? exam.getExamType().getExamTypeText() : null,
+                exam.getTargetScope(),
+                exam.getTotalQuestions(),
+                exam.effectiveStatus().name()
+        );
     }
 
     public CertificationDto create(CertificationDto dto) {
@@ -407,28 +482,6 @@ public class CertificationService {
 
         executeDelete("""
                 DELETE FROM learner_completed_lessons
-                WHERE lesson_id IN (
-                    SELECT l.lesson_id
-                    FROM lessons l
-                    JOIN middle_categories mc ON mc.middle_category_id = l.middle_category_id
-                    JOIN major_categories maj ON maj.major_category_id = mc.major_category_id
-                    WHERE maj.certification_id = :certificationId
-                )
-                """, certificationId);
-
-        executeDelete("""
-                DELETE FROM learner_lesson_mastery
-                WHERE lesson_id IN (
-                    SELECT l.lesson_id
-                    FROM lessons l
-                    JOIN middle_categories mc ON mc.middle_category_id = l.middle_category_id
-                    JOIN major_categories maj ON maj.major_category_id = mc.major_category_id
-                    WHERE maj.certification_id = :certificationId
-                )
-                """, certificationId);
-
-        executeDelete("""
-                DELETE FROM learner_weak_areas
                 WHERE lesson_id IN (
                     SELECT l.lesson_id
                     FROM lessons l

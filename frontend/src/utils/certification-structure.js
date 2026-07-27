@@ -60,6 +60,7 @@ export function mapCertificationToModuleStructure(certification) {
           majorCategory.majorCategoryId ?? majorCategory.id ?? null,
       title: majorCategory.title ?? "",
       isOpen: true,
+      exams: Array.isArray(majorCategory.exams) ? majorCategory.exams : [],
 
       middleCategories: (Array.isArray(middleCategories)
           ? middleCategories
@@ -75,6 +76,7 @@ export function mapCertificationToModuleStructure(certification) {
               null,
           title: middleCategory.title ?? "",
           isOpen: true,
+          exams: Array.isArray(middleCategory.exams) ? middleCategory.exams : [],
 
           lessons: (Array.isArray(lessons) ? lessons : []).map(
               (lesson) => ({
@@ -83,6 +85,7 @@ export function mapCertificationToModuleStructure(certification) {
                 name: lesson.name ?? lesson.title ?? "",
                 lessonComponentStructure:
                     getLessonComponentStructure(lesson),
+                exams: Array.isArray(lesson.exams) ? lesson.exams : [],
               })
           ),
         }

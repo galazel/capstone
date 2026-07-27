@@ -8,6 +8,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -22,4 +24,7 @@ public class LessonDto {
     private String name;
 
     private String lessonComponentStructure = "";
+
+    /** Lesson-scoped exams (the lesson quiz). */
+    private List<ExamSummaryDto> exams;
 }

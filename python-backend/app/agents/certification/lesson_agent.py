@@ -1,14 +1,15 @@
-from tools.certification.lesson_tools import (
+from functools import lru_cache
+
+from app.tools.certification.lesson_tools import (
     lesson_search_tools,
     lesson_builder_tools
 )
 from langchain.agents import create_agent
-from app.utils.helpers import llm
+from langchain.agents.structured_output import ToolStrategy
+from app.schemas.certification.lesson_schema import GeneratedLesson
+from app.utils.helpers import get_llm
 
-lesson_generation_agent = create_agent(
-    model=llm,
-    tools=lesson_search_tools + lesson_builder_tools,
-    system_prompt="""
+SYSTEM_PROMPT = """
     You are REBYU Lesson Generation Agent.
 
     Your responsibility is to generate one complete lesson from the certification curriculum.
@@ -124,22 +125,24 @@ lesson_generation_agent = create_agent(
     LESSON STRUCTURE
     --------------------------------------------------
 
-    A complete lesson should generally contain:
+    The introduction, learning objectives, key terms, and summary are
+    SEPARATE STRUCTURED FIELDS (see FINAL ANSWER) -- do not build them as
+    blocks.
 
-    1. Introduction
-    2. Learning Objectives
-    3. Prerequisites
-    4. Main Concepts
-    5. Technical Explanation
-    6. Visual Diagrams
-    7. Examples
-    8. Real-world Applications
-    9. Comparisons
-    10. Common Mistakes
-    11. Best Practices
-    12. Relationships Between Concepts
-    13. Certification Tips
-    14. Lesson Summary
+    The blocks you build with tools are the MAIN INSTRUCTIONAL CONTENT, and
+    should generally cover:
+
+    1. Prerequisites
+    2. Main Concepts
+    3. Technical Explanation
+    4. Visual Diagrams
+    5. Examples
+    6. Real-world Applications
+    7. Comparisons
+    8. Common Mistakes
+    9. Best Practices
+    10. Relationships Between Concepts
+    11. Certification Tips
 
     --------------------------------------------------
     DO NOT GENERATE
@@ -159,6 +162,35 @@ lesson_generation_agent = create_agent(
 
     Generate only the lesson corresponding to the provided lesson from the curriculum.
 
-    Return only the lesson blocks created through the available tools.
+    --------------------------------------------------
+    FINAL ANSWER
+    --------------------------------------------------
+
+    After calling every tool needed to build the lesson, return your final
+    structured answer with ALL of these fields:
+
+    - title: the lesson name.
+    - introduction: 2-4 sentences opening the lesson ("In this lesson...").
+      At least 40 characters.
+    - learning_objectives: 2-5 concrete, measurable objectives.
+    - estimated_minutes: realistic study time, typically 10-45.
+    - sections: every block you built for the MAIN INSTRUCTIONAL CONTENT, in
+      the exact JSON shape each tool returned, in reading order. Do not
+      summarize or paraphrase them.
+    - key_terms: the important terms, each with a short definition.
+    - summary: 2-4 sentences closing the lesson. At least 40 characters.
+
+    Do NOT put the introduction, objectives, key terms, or summary inside
+    `sections` — they are separate fields, rendered around the main content
+    automatically.
     """
-)
+
+
+@lru_cache(maxsize=1)
+def get_lesson_generation_agent():
+    return create_agent(
+        model=get_llm("generation"),
+        tools=lesson_search_tools + lesson_builder_tools,
+        response_format=ToolStrategy(GeneratedLesson),
+        system_prompt=SYSTEM_PROMPT,
+    )

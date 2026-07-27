@@ -1,6 +1,6 @@
 package com.capstone.rebyu.assessment.service;
 
-import com.capstone.rebyu.ai.service.AiAnswerGradingService;
+import com.capstone.rebyu.aigateway.service.AiAnswerGradingService;
 import com.capstone.rebyu.assessment.dto.attempt.LearnerAttemptDtos.*;
 import com.capstone.rebyu.assessment.dto.attempt.ProgrammingAttemptDtos.*;
 import com.capstone.rebyu.assessment.entity.*;
@@ -55,6 +55,8 @@ class AssessmentAttemptServiceTest {
     @Mock private BktOutboxService bktOutboxService;
     @Mock private AiAnswerGradingService aiAnswerGradingService;
     @Mock private CodeExecutionService codeExecutionService;
+    @Mock private AdaptiveRetakeQuestionSelectionService adaptiveRetakeQuestionSelectionService;
+    @Mock private AssessmentEventProducer assessmentEventProducer;
 
     private AssessmentAttemptService service;
 
@@ -72,7 +74,8 @@ class AssessmentAttemptServiceTest {
                 attemptExecutionRepository, questionRubricCriterionRepository,
                 lessonRepository, learnerEntitlementService, bktOutboxService,
                 new ObjectMapper(), aiAnswerGradingService, codeExecutionService,
-                new DiagramGradingService(new DiagramGraphExtractor()));
+                new DiagramGradingService(new DiagramGraphExtractor()),
+                adaptiveRetakeQuestionSelectionService, assessmentEventProducer);
 
         Certification certification = new Certification();
         certification.setCertificationId(1L);
@@ -399,7 +402,7 @@ class AssessmentAttemptServiceTest {
         // The AI grader awards partial credit and feedback — auto-finalized,
         // no admin review step.
         when(aiAnswerGradingService.grade(any())).thenReturn(Optional.of(
-                new com.capstone.rebyu.ai.dto.AnswerGradingResultDto(
+                new com.capstone.rebyu.aigateway.dto.AnswerGradingResultDto(
                         new BigDecimal("7.00"),
                         "Good reasoning but missing the query-pattern trade-off.",
                         List.of())));

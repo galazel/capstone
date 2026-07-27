@@ -110,6 +110,40 @@ public class BktOutboxService {
     }
 
     /**
+     * Enqueues one already-built event from a producer that doesn't go
+     * through {@link #enqueueForAttempt} (e.g. AI-tutor/community practice
+     * quizzes) -- same idempotency-by-event-id and PENDING-row shape as the
+     * primary path, without duplicating the outbox-row construction.
+     */
+    public boolean enqueueEvent(BktMasteryEvent event, String batchId, Long certificationId, Long examResultId) {
+        if (!properties.isEnabled()) {
+            return false;
+        }
+        try {
+            if (outboxRepository.existsByEventId(event.sourceEventId())) {
+                return false; // already enqueued (idempotent)
+            }
+            outboxRepository.save(BktEventOutbox.builder()
+                    .eventId(event.sourceEventId())
+                    .batchId(batchId)
+                    .learnerId(event.learnerId())
+                    .certificationId(certificationId)
+                    .examResultId(examResultId)
+                    .attemptNo(1)
+                    .eventType("MASTERY")
+                    .payloadJson(objectMapper.writeValueAsString(event))
+                    .status(BktOutboxStatus.PENDING)
+                    .createdAt(LocalDateTime.now())
+                    .build());
+            return true;
+        } catch (Exception e) {
+            // Analytics evidence is best-effort; reconciliation will recover it.
+            log.warn("Could not enqueue BKT event {}: {}", event.sourceEventId(), e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Admin retry: force FAILED / DEAD_LETTER rows back to PENDING for immediate
      * redelivery. Idempotency on the FastAPI side keeps this safe.
      */
@@ -181,6 +215,23 @@ public class BktOutboxService {
                 row.setStatus(BktOutboxStatus.PENDING);
                 row.setNextRetryAt(now.plusSeconds(backoffSeconds(attempts)));
             }
+        }
+    }
+
+    /**
+     * Moves rows straight to DEAD_LETTER, bypassing the retry counter/backoff
+     * entirely. For failures that can never succeed on their own (e.g. a
+     * payload that fails to deserialize) -- retrying those with
+     * {@link #markRetry} would just burn through {@code maxRetries} attempts
+     * and up to the full backoff ceiling before reaching the same outcome.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void markDeadLetter(List<Long> ids, String error) {
+        for (BktEventOutbox row : outboxRepository.findAllById(ids)) {
+            row.setStatus(BktOutboxStatus.DEAD_LETTER);
+            row.setLastError(truncate(error));
+            row.setLockedBy(null);
+            row.setLockedAt(null);
         }
     }
 

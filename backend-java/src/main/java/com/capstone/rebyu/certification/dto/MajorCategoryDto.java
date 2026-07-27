@@ -31,4 +31,7 @@ public class MajorCategoryDto {
     private Long ownerGroupId;
 
     private List<MiddleCategoryDto> middleCategory;
+
+    /** Major-category-scoped exams (e.g. the major category assessment). */
+    private List<ExamSummaryDto> exams;
 }
