@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from app.db.session import SessionLocal
@@ -179,6 +180,46 @@ def finalize(context: RunContext, result: dict) -> dict[str, Any]:
     }
 
 
+class RunFailed(RuntimeError):
+    """The graph raised. The run is already marked failed and the admin
+    notified; this carries the outcome out to a caller that needs to report it.
+    """
+
+    def __init__(self, outcome: dict[str, Any]) -> None:
+        super().__init__(outcome.get("error") or "Certification run failed.")
+        self.outcome = outcome
+
+
+async def advance(context: RunContext, graph_input: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Drives the thread one step further and applies whatever came of it,
+    returning `(graph result, finalisation outcome)`.
+
+    Both halves are returned because the two callers need different ones: the
+    consumer reports the outcome, while the HTTP routes have to hand the
+    reviewer the interrupt payload inside the raw result.
+
+    Every path that moves a certification thread goes through here, so the
+    checkpoint can never advance without the registry and the Java side being
+    told what happened. The HTTP resume route used to call `graph.ainvoke`
+    directly, which meant a run resumed from a review pause reported nothing:
+    on success the curriculum, assessments, and generation request were never
+    persisted, and on failure the run stayed WAITING_FOR_REVIEW while its
+    checkpoint moved past the interrupt -- leaving it stuck, since only FAILED
+    runs are retryable.
+
+    Raises `RunFailed` rather than returning an outcome, so a caller cannot
+    mistake a failure for a result.
+    """
+    graph = await get_certification_graph()
+    try:
+        result = await graph.ainvoke(graph_input, config=_thread_config(context.thread_id))
+    except Exception as error:
+        logger.exception("Certification run %s failed", context.thread_id)
+        raise RunFailed(fail(context, str(error))) from error
+
+    return result, finalize(context, result)
+
+
 async def execute(context: RunContext, graph_input: Any) -> dict[str, Any]:
     """Runs the graph to its next stopping point and finalises the outcome.
 
@@ -187,13 +228,11 @@ async def execute(context: RunContext, graph_input: Any) -> dict[str, Any]:
     that failed.
     """
     try:
-        graph = await get_certification_graph()
-        result = await graph.ainvoke(graph_input, config=_thread_config(context.thread_id))
-    except Exception as error:
-        logger.exception("Certification run %s failed", context.thread_id)
-        return fail(context, str(error))
+        _, outcome = await advance(context, graph_input)
+    except RunFailed as failure:
+        return failure.outcome
 
-    return finalize(context, result)
+    return outcome
 
 
 # --- recovery -------------------------------------------------------------
@@ -203,6 +242,107 @@ async def execute(context: RunContext, graph_input: Any) -> dict[str, Any]:
 #: registry cannot tell those apart -- so it is excluded rather than risk two
 #: workers driving one thread.
 RECOVERABLE_STATUSES = {registry.FAILED}
+
+
+#: How quiet a run must be before reconciliation will touch it. Comfortably
+#: longer than the gap between a node finishing and the next one starting --
+#: including a rate-limit backoff, which routinely idles a healthy run for
+#: tens of seconds without emitting anything.
+RECONCILE_AFTER_IDLE_SECONDS = 180.0
+
+
+def _seconds_since(moment) -> float:
+    """Age of a timestamp, tolerating a naive one.
+
+    The column is timezone-aware, but not every backend hands it back that
+    way. An unreadable timestamp reports as infinitely old rather than
+    blocking a repair -- the interrupt check below is the real safeguard.
+    """
+    if not isinstance(moment, datetime):
+        return float("inf")
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - moment).total_seconds()
+
+
+def _has_pending_interrupt(snapshot) -> bool:
+    """Whether the thread is actually parked at a HITL interrupt.
+
+    Read from the tasks rather than from `snapshot.next`, because a thread
+    with a *failed* node pending also has a non-empty `next` -- and telling
+    those two apart is the entire point of the reconciliation below.
+    """
+    return any(getattr(task, "interrupts", None) for task in (getattr(snapshot, "tasks", None) or ()))
+
+
+async def reconcile(run) -> dict[str, Any]:
+    """Brings a run's registry status back in line with its checkpoint.
+
+    The two can only disagree in one direction: the graph is the source of
+    truth and the registry is told afterwards, so anything that interrupts
+    that handoff strands a run claiming WAITING_FOR_REVIEW while its thread
+    has already moved on. Such a run is unreachable -- `/review` has nothing
+    to show, and recovery refuses it because only FAILED runs are retryable.
+
+    The live case was a resume that raised outside the run lifecycle, now
+    fixed at source in `advance`; a process killed between `ainvoke` returning
+    and the registry write leaves the same wreckage, so the repair stays.
+
+    What the thread holds decides the outcome:
+
+    * a pending interrupt -- genuinely paused, left alone;
+    * pending work but no interrupt -- the resumed step died without being
+      recorded, so record it now and let Retry re-run exactly that step;
+    * nothing pending -- the graph finished and only the handoff was lost, so
+      finalise it rather than strand the output in a checkpoint nobody reads.
+
+    Idempotent: a reconciled run is no longer WAITING_FOR_REVIEW, so a second
+    call is a no-op.
+    """
+    if run.kind != "CERTIFICATION":
+        return {"reconciled": False, "reason": f"{run.kind} runs are not reconciled here."}
+    if run.status != registry.WAITING_FOR_REVIEW:
+        return {"reconciled": False, "reason": f"Run is {run.status}, not awaiting review."}
+
+    # Every event bumps `updated_at`, so a run that is emitting anything is a
+    # run still doing something. Repairing one is how a *live* run twice got
+    # marked failed while it was mid-generation. A genuinely stranded run has
+    # nothing left to emit, so waiting out the grace period costs it nothing.
+    idle_for = _seconds_since(run.updated_at)
+    if idle_for < RECONCILE_AFTER_IDLE_SECONDS:
+        return {
+            "reconciled": False,
+            "reason": f"Run emitted an event {idle_for:.0f}s ago; still progressing.",
+        }
+
+    graph = await get_certification_graph()
+    snapshot = await graph.aget_state(_thread_config(run.thread_id))
+
+    if _has_pending_interrupt(snapshot):
+        return {"reconciled": False, "reason": "Run is genuinely awaiting review."}
+
+    context = context_for(run)
+
+    if snapshot is None or not snapshot.values:
+        logger.warning("Run %s claims review but has no checkpoint at all", run.run_id)
+        return {
+            "reconciled": True,
+            "outcome": fail(context, "The run's checkpoint is gone. Restart it."),
+        }
+
+    if snapshot.next:
+        stage = snapshot.next[0]
+        logger.warning(
+            "Reconciling run %s: claimed WAITING_FOR_REVIEW, but %s is pending with no interrupt",
+            run.run_id, stage,
+        )
+        return {
+            "reconciled": True,
+            "outcome": fail(context, f"Resuming failed inside {stage}; the run can be retried."),
+        }
+
+    logger.info("Reconciling run %s: the graph finished but the outcome was never applied", run.run_id)
+    return {"reconciled": True, "outcome": finalize(context, dict(snapshot.values))}
 
 
 def _load_java_context(run) -> tuple[dict | None, dict | None]:

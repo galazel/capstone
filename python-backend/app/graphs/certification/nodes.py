@@ -9,6 +9,7 @@ from app.schemas.certification.lesson_schema import GeneratedLesson
 from .state import CertificationState
 from app.ai.invocation import invoke_agent, invoke_question_agent, questions_as_dicts
 from app.domain.lesson_blocks import lesson_to_blocks
+from app.domain.lesson_media import resolve_media
 from app.domain.validation import validate_lessons
 from app.ai.prompts.certification import (
     build_curriculum_prompt,
@@ -86,10 +87,11 @@ async def document_ingestion_node(state: CertificationState):
 
 async def _invoke_auditor(state: CertificationState, combined_samples: str):
     return await invoke_agent(
-        get_auditor_agent(),
+        get_auditor_agent,
         build_document_audit_prompt(
             state["certification_name"], state["certification_description"], combined_samples
         ),
+        agent_type="classification",
     )
 
 
@@ -136,7 +138,7 @@ def route_after_validation(state: CertificationState) -> str:
 
 async def _invoke_curriculum_agent(state: CertificationState, context: str) -> CertificationCurriculum:
     return await invoke_agent(
-        get_curriculum_agent(),
+        get_curriculum_agent,
         build_curriculum_prompt(
             state["certification_name"], state["certification_description"], context
         ),
@@ -206,7 +208,7 @@ def _flatten_middles(curriculum: dict) -> list[tuple[dict, dict]]:
 
 async def _invoke_lesson_agent(state: CertificationState) -> GeneratedLesson:
     return await invoke_agent(
-        get_lesson_generation_agent(),
+        get_lesson_generation_agent,
         build_lesson_prompt(
             state["certification_name"], state["major"], state["middle"], state["lesson"]
         ),
@@ -215,10 +217,11 @@ async def _invoke_lesson_agent(state: CertificationState) -> GeneratedLesson:
 
 async def _invoke_lesson_auditor(state: CertificationState) -> LessonAuditResult:
     return await invoke_agent(
-        get_auditor_lesson_agent(),
+        get_auditor_lesson_agent,
         build_lesson_audit_prompt(
             state["certification_name"], state["curriculum"], state["lessons"]
         ),
+        agent_type="classification",
     )
 
 
@@ -438,6 +441,11 @@ async def lesson_content_node(state: CertificationState):
             },
         }
     result = await _invoke_lesson_agent(scoped)
+
+    # The model states what each picture should show; the searches run here,
+    # off the event loop, where a failed lookup costs an illustration rather
+    # than the lesson. See `app.domain.lesson_media`.
+    result.sections = await asyncio.to_thread(resolve_media, result.sections)
 
     return {
         "lessons": [

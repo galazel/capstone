@@ -89,41 +89,36 @@ function isMultipleChoice(question) {
   return type === "MULTIPLE_CHOICE" || type === "MCQ"
 }
 
+// Type badges use the design system accents, matching the landing hero:
+// Macaw for code, Beetle for diagram, Bee for open-ended written work.
 const QUESTION_TYPE_STYLES = {
   MULTIPLE_CHOICE: {
     label: "Multiple Choice",
-    className:
-        "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300",
+    className: "border-rb-macaw bg-rb-macaw-wash text-rb-macaw-lip",
   },
   SHORT_ANSWER: {
     label: "Short Answer",
-    className:
-        "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300",
+    className: "border-rb-macaw bg-rb-macaw-wash text-rb-macaw-lip",
   },
   DESCRIPTIVE: {
     label: "Descriptive",
-    className:
-        "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
+    className: "border-rb-bee bg-rb-bee-wash text-[#8a6d00]",
   },
   CRITICAL_THINKING: {
     label: "Critical Thinking",
-    className:
-        "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300",
+    className: "border-rb-fox bg-rb-fox-wash text-rb-fox-lip",
   },
   PROGRAMMING: {
     label: "Programming",
-    className:
-        "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
+    className: "border-rb-macaw bg-rb-macaw-wash text-rb-macaw-lip",
   },
   DIAGRAM: {
     label: "Diagram",
-    className:
-        "border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300",
+    className: "border-rb-beetle bg-rb-beetle-wash text-rb-beetle-lip",
   },
   DEFAULT: {
     label: "Question",
-    className:
-        "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300",
+    className: "border-rb-swan bg-rb-polar text-rb-wolf",
   },
 }
 
@@ -262,9 +257,14 @@ function NormalQuestionPanel({ question, index, answer, onAnswer }) {
                   <label
                       key={choice.choiceId ?? choiceIndex}
                       className={cn(
-                          "flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition hover:bg-muted/40",
-                          answer?.selectedChoiceId === choice.choiceId &&
-                          "border-primary bg-primary/5"
+                          // Large tactile target with a solid lip, matching the
+                          // answer options on the landing hero. Selection changes
+                          // colour only, so the box never resizes under the tap.
+                          "flex min-h-16 cursor-pointer items-start gap-3 rounded-2xl border-2 p-4 transition",
+                          "active:translate-y-[3px] active:shadow-none",
+                          answer?.selectedChoiceId === choice.choiceId
+                              ? "border-rb-macaw bg-rb-macaw-wash shadow-[0_3px_0_var(--color-rb-macaw)]"
+                              : "border-rb-swan bg-rb-snow shadow-[0_3px_0_var(--color-rb-swan)] hover:bg-rb-polar"
                       )}
                   >
                     <RadioGroupItem
@@ -394,7 +394,7 @@ function WorkspaceQuestionPanel({ question, index, answer, onAnswer }) {
               }
           />
       ) : format === "DIAGRAM" ? (
-          <div className="h-full min-h-[420px] overflow-hidden rounded-xl border">
+          <div className="h-full min-h-[420px] overflow-hidden rounded-2xl border-2 border-rb-swan">
             <DiagramArea
                 initialXml={answer?.diagramSubmissionData}
                 onChange={(diagramXml) =>
@@ -420,12 +420,12 @@ function WorkspaceQuestionPanel({ question, index, answer, onAnswer }) {
 
   return (
       <div className="grid h-full min-h-0 gap-4 lg:grid-cols-[320px_1fr]">
-        <ScrollArea className="max-h-full rounded-xl border bg-card p-4">
+        <ScrollArea className="max-h-full rounded-2xl border-2 border-rb-swan bg-rb-snow p-4">
           {problemPanel}
         </ScrollArea>
         <div className="flex min-h-0 flex-col gap-3">
           {format !== "TEXT" && subQuestionTabs ? (
-              <div className="rounded-xl border bg-card p-3">{subQuestionTabs}</div>
+              <div className="rounded-2xl border-2 border-rb-swan bg-rb-snow p-3">{subQuestionTabs}</div>
           ) : null}
           <div className="min-h-0 flex-1">{workspace}</div>
         </div>
@@ -786,9 +786,10 @@ export default function LearnerAssessmentAttemptPage() {
   )
 
   return (
-      <div className="flex h-dvh flex-col overflow-hidden bg-muted/30">
-        <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b bg-background px-3 sm:px-4">
-          <div className="flex min-w-0 items-center gap-2">
+      <div className="rebyu-ds flex h-dvh flex-col overflow-hidden bg-rb-polar">
+        {/* Window chrome, matching the workspace shown on the landing hero. */}
+        <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b-2 border-rb-swan bg-rb-snow px-3 sm:px-4">
+          <div className="flex min-w-0 items-center gap-3">
             <Button
                 variant="ghost"
                 size="sm"
@@ -799,10 +800,10 @@ export default function LearnerAssessmentAttemptPage() {
               <span className="hidden sm:inline">Exit</span>
             </Button>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">
+              <p className="truncate font-rb-display text-base font-extrabold lowercase text-rb-eel">
                 {attempt.assessmentTitle}
               </p>
-              <p className="truncate text-xs text-muted-foreground">
+              <p className="truncate text-xs font-semibold text-rb-wolf">
                 Question {currentIndex + 1} of {questions.length} · Attempt{" "}
                 {attempt.attemptNumber}
               </p>
@@ -814,15 +815,18 @@ export default function LearnerAssessmentAttemptPage() {
 
           <div className="flex items-center gap-3">
             <SaveStatusIndicator status={saveStatus} />
+            {/* The timer escalates Wolf -> Fox -> Cardinal and never pulses or
+                shakes: this is the most stressful screen in the product, so the
+                clock reports rather than nags. */}
             {remainingSeconds != null ? (
                 <span
                     className={cn(
-                        "flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-sm tabular-nums",
-                        remainingSeconds <= 60
-                            ? "border-destructive text-destructive"
+                        "flex items-center gap-1.5 rounded-full border-2 px-3 py-1.5 text-sm font-bold tabular-nums",
+                        remainingSeconds <= 120
+                            ? "border-rb-cardinal bg-rb-cardinal-wash text-rb-cardinal-lip"
                             : remainingSeconds <= 600
-                                ? "border-amber-400 text-amber-600"
-                                : "text-muted-foreground"
+                                ? "border-rb-fox bg-rb-fox-wash text-rb-fox-lip"
+                                : "border-rb-swan bg-rb-polar text-rb-eel"
                     )}
                     role="timer"
                     aria-label="Time remaining"
@@ -870,7 +874,7 @@ export default function LearnerAssessmentAttemptPage() {
                       editingLocked && "pointer-events-none opacity-70"
                   )}
               >
-                <div className="mb-3 shrink-0 rounded-xl border bg-background px-4 py-3">
+                <div className="mb-3 shrink-0 rounded-2xl border-2 border-rb-swan bg-rb-snow px-4 py-3">
                   <QuestionMetaRow
                       question={currentQuestion}
                       index={currentIndex}
@@ -897,7 +901,7 @@ export default function LearnerAssessmentAttemptPage() {
               </div>
           ) : isDiagram && currentQuestion ? (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                <div className="mb-3 shrink-0 rounded-xl border bg-background px-4 py-3">
+                <div className="mb-3 shrink-0 rounded-2xl border-2 border-rb-swan bg-rb-snow px-4 py-3">
                   <QuestionMetaRow
                       question={currentQuestion}
                       index={currentIndex}

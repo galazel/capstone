@@ -70,6 +70,10 @@ const EnterpriseOrganizationPage = lazy(() => import("./pages/enterprise/account
 const EnterpriseQuestionBankPage = lazy(() => import("./pages/enterprise/certifications/enterprise-question-bank-page.jsx"))
 const EnterpriseRequestAccessPage = lazy(() => import("./pages/public/enterprise-request-access-page.jsx"))
 const CompilerArea = lazy(() => import("./pages/challenges/compiler-area-page.jsx"))
+const CodeStrikePage = lazy(() => import("./pages/learner/challenges/codestrike-page.jsx"))
+const BlueprintArenaPage = lazy(() => import("./pages/learner/challenges/blueprint-arena-page.jsx"))
+const WorldCupPage = lazy(() => import("./pages/learner/challenges/world-cup-page.jsx"))
+const ArenaConfig = lazy(() => import("./pages/admin/arena-config-page.jsx"))
 const NotificationsPage = lazy(() => import("./pages/notifications-page.jsx"))
 const NotFoundPage = lazy(() => import("./pages/public/not-found-page.jsx"))
 const ForbiddenPage = lazy(() => import("./pages/public/forbidden-page.jsx"))
@@ -127,11 +131,25 @@ export function App() {
                 element={<AcceptEnterpriseInvitationPage />}
             />
 
+            {/* ---------------------------------------------------------------
+                TEMPORARY UI PREVIEW ROUTES — move these three back inside the
+                LEARNER ProtectedRoute block before shipping.
+
+                Public purely so the new arena designs can be opened without
+                signing in. They are full-screen surfaces (like the attempt
+                page) that render local mock data and call no API, so nothing
+                is exposed by leaving them open during review.
+                --------------------------------------------------------------- */}
+            <Route path="/learner/challenges/codestrike" element={<CodeStrikePage />} />
+            <Route path="/learner/challenges/blueprint-arena" element={<BlueprintArenaPage />} />
+            <Route path="/learner/challenges/world-cup" element={<WorldCupPage />} />
+
             <Route element={<ProtectedRoute allowedRoles={["ADMIN"]} />}>
                 <Route path="/admin" element={<DashboardLayout />}>
                     <Route index element={<Certifications />} />
                     <Route path="dashboard" element={<AdminDashboard />} />
                     <Route path="challenges" element={<Challenges />} />
+                    <Route path="arenas" element={<ArenaConfig />} />
                     <Route path="question-bank" element={<QuestionBank />} />
                     <Route path="organizations" element={<Organizations />} />
                     <Route
@@ -212,6 +230,7 @@ export function App() {
                 {/* Sprint Challenge destination — the standalone compiler
                     playground the challenges carousel links to. */}
                 <Route path="/challenges" element={<CompilerArea />} />
+
 
                 {/* PayMongo hosted-checkout redirect targets (success_url/cancel_url
                     built server-side in PayMongoClient). The success page is what

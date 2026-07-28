@@ -119,7 +119,7 @@ class _Recorder:
 @pytest.fixture()
 def graph_env(monkeypatch):
     recorder = _Recorder()
-    monkeypatch.setattr(invocation, "get_question_generation_agent", lambda: recorder)
+    monkeypatch.setattr(invocation, "get_question_generation_agent", lambda *_: recorder)
 
     # Skip document/curriculum stages: this suite is about the loops.
     async def _validated(state):

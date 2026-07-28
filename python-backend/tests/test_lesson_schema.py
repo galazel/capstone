@@ -181,3 +181,86 @@ def test_aggregate_report_on_no_lessons_is_an_error():
     assert not report.passed
     assert report.score == 0
     assert report.issues[0].code == "NO_LESSONS"
+
+
+# --- block normalisation --------------------------------------------------
+#
+# The eighteen lesson-builder tools were pure shape constructors, so binding
+# them to the agent added no capability -- only a two-phase protocol it got
+# wrong, emitting `<function=add_lesson_heading>{...}</function>` *inside* the
+# sections array, which the provider rejects. The blocks are now written
+# directly and the bookkeeping those tools did happens here.
+
+
+def _lesson_with(section: dict) -> list[dict]:
+    return _lesson(sections=[*_blocks(), section]).sections
+
+
+def test_list_items_are_given_ids_the_model_never_has_to_write():
+    """Strictly better than the tool was: a model cannot forget to do it."""
+    block = _lesson_with(
+        {"type": "unordered-list", "data": {"items": [{"text": "a"}, {"text": "b"}]}}
+    )[-1]
+
+    ids = [item["id"] for item in block["data"]["items"]]
+    assert all(ids) and len(set(ids)) == 2, "every item needs its own stable id"
+
+
+@pytest.mark.parametrize("collection", ["items", "cards", "gridItems"])
+def test_every_item_collection_is_covered(collection):
+    block = _lesson_with({"type": "flip-grid", "data": {collection: [{"title": "t"}]}})[-1]
+    assert block["data"][collection][0]["id"]
+
+
+def test_an_id_the_model_did_supply_is_not_overwritten():
+    block = _lesson_with(
+        {"type": "accordion", "data": {"items": [{"id": "keep-me", "title": "t"}]}}
+    )[-1]
+    assert block["data"]["items"][0]["id"] == "keep-me"
+
+
+def test_media_blocks_get_the_file_slot_the_renderer_reads():
+    """`file` is the admin-uploaded override; the tools always emitted it and
+    the model has no reason to."""
+    block = _lesson_with({"type": "image", "data": {"imageKey": "https://x/y.png"}})[-1]
+    assert block["data"]["file"] is None
+
+
+def test_non_media_blocks_are_not_given_a_file_slot():
+    block = _lesson_with({"type": "heading", "data": {"text": "Overview"}})[-1]
+    assert "file" not in block["data"]
+
+
+def test_block_content_is_otherwise_left_exactly_as_written():
+    block = _lesson_with(
+        {"type": "media-text-block", "data": {"smallHeader": "H", "layout": "image-right"}}
+    )[-1]
+    assert block["data"]["smallHeader"] == "H"
+    assert block["data"]["layout"] == "image-right"
+    assert block["type"] == "media-text-block"
+
+
+def test_a_malformed_block_is_passed_through_for_the_anatomy_check_to_judge():
+    """Normalisation must not raise -- `_enforce_lesson_anatomy` and the
+    quality report are what decide whether a lesson is usable."""
+    assert _lesson_with({"type": "heading"})[-1] == {"type": "heading"}
+
+
+def test_every_block_type_the_prompt_documents_is_one_the_renderer_handles():
+    """The prompt is now the only description of the block shapes -- the
+    builder tools used to be. A type it invents renders as nothing, and a type
+    it omits is a block the UI supports but no lesson can ever use.
+    """
+    import re
+    from pathlib import Path
+
+    from app.agents.certification.lesson_agent import SYSTEM_PROMPT
+
+    renderer = Path(__file__).parents[2] / "frontend/src/components/certifications/lesson-content-renderer.jsx"
+    if not renderer.exists():  # pragma: no cover - backend checked out alone
+        pytest.skip("frontend not present")
+
+    documented = set(re.findall(r'"type": "([a-z-]+)"', SYSTEM_PROMPT))
+    rendered = set(re.findall(r'tool\.type === "([a-z-]+)"', renderer.read_text(encoding="utf-8")))
+
+    assert documented == rendered

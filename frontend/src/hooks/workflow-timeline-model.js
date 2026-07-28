@@ -193,3 +193,136 @@ export function findCurrentTask(tasks) {
       .find((task) => task.status === "RUNNING" || task.status === "WAITING_FOR_REVIEW") ?? null
   )
 }
+
+/**
+ * Which unit of work a stage belongs to.
+ *
+ * Three graph nodes run for every lesson — write it, quiz it, check it — and a
+ * fourth pauses for review. Listed flat, a twenty-lesson certification is eighty
+ * rows of near-identical text and the reviewer has to count to work out which
+ * lesson is being built. Grouped, it is one row per lesson with its steps
+ * nested underneath, which is the level the reviewer actually thinks at.
+ */
+const STAGE_FAMILIES = {
+  validate_documents: "documents",
+  ingest_documents: "documents",
+  plan_curriculum: "curriculum",
+  CURRICULUM: "curriculum",
+  major_generate: "major",
+  major_validate: "major",
+  MAJOR: "major",
+  middle_generate: "middle",
+  middle_validate: "middle",
+  MIDDLE: "middle",
+  lesson_content: "lesson",
+  lesson_quiz_generate: "lesson",
+  lesson_validate: "lesson",
+  LESSON: "lesson",
+  generate_diagnostic_exam: "diagnostic_exam",
+  DIAGNOSTIC_EXAM: "diagnostic_exam",
+  generate_mock_exam: "mock_exam",
+  MOCK_EXAM: "mock_exam",
+  generate_question_bank: "question_bank",
+  QUESTION_BANK: "question_bank",
+  resolve_scope: "scope",
+  generate_batch: "question_batch",
+  validate_batch: "question_batch",
+  QUESTION_BATCH: "question_batch",
+}
+
+const FAMILY_LABELS = {
+  documents: "Source documents",
+  curriculum: "Curriculum",
+  major: "Major category",
+  middle: "Middle category",
+  lesson: "Lesson",
+  diagnostic_exam: "Diagnostic exam",
+  mock_exam: "Mock exam",
+  question_bank: "Question bank",
+  scope: "Scope",
+  question_batch: "Question batch",
+}
+
+/**
+ * Status of a group, from the statuses of its steps.
+ *
+ * Ordered by what the reviewer needs to see first: a group holding a failure or
+ * a review pause is reported as such even if later steps completed, because
+ * those are the two states that need a person. "All steps skipped" stays
+ * SKIPPED — reporting it COMPLETED would claim work that was deliberately left
+ * out actually happened.
+ */
+function groupStatus(steps) {
+  const has = (status) => steps.some((step) => step.status === status)
+  if (has("WAITING_FOR_REVIEW")) return "WAITING_FOR_REVIEW"
+  if (has("FAILED")) return "FAILED"
+  if (has("RETRYING")) return "RETRYING"
+  if (has("RUNNING")) return "RUNNING"
+  if (has("CANCELLED")) return "CANCELLED"
+  if (steps.every((step) => step.status === "SKIPPED")) return "SKIPPED"
+  if (has("COMPLETED")) return "COMPLETED"
+  return "PENDING"
+}
+
+/**
+ * Collapses the task list into the grouped feed the transcript draws.
+ *
+ * Consecutive tasks sharing a family and an item number are one group, so order
+ * is preserved and a stage revisited later (a regenerated lesson 7 after lesson
+ * 8 started) opens a second group rather than reordering the feed to rejoin the
+ * first. Reading the transcript top to bottom still tells you what happened
+ * when, which is the property a merged-by-key grouping would lose.
+ */
+export function buildTranscript(tasks) {
+  const groups = []
+
+  ;(tasks ?? []).forEach((task) => {
+    const family = STAGE_FAMILIES[task.stage] ?? `stage:${task.stage}`
+    const key = `${family}#${task.itemNumber ?? ""}`
+    const last = groups[groups.length - 1]
+
+    if (last?.key === key) {
+      last.steps.push(task)
+      return
+    }
+
+    // A review pause carries no item number: `review.waiting` reports the stage
+    // and the validation report, and the item lives in the LangGraph interrupt
+    // the event log never sees. But the graph always wires generate → validate →
+    // review for one item, so the pause belongs to the group just before it —
+    // without this it opened a second, apparently empty "Lesson" group directly
+    // under the lesson it was reviewing.
+    if (task.isReview && task.itemNumber == null && last?.family === family) {
+      last.steps.push(task)
+      return
+    }
+
+    groups.push({
+      id: `${key}@${task.seq}`,
+      key,
+      family,
+      label: FAMILY_LABELS[family] ?? stageTitle(task.stage),
+      itemNumber: task.itemNumber ?? null,
+      steps: [task],
+    })
+  })
+
+  return groups.map((group) => {
+    const durations = group.steps.map((step) => step.durationMs).filter((ms) => ms != null)
+
+    return {
+      ...group,
+      status: groupStatus(group.steps),
+      // Summed rather than wall-clock: the graph runs one node at a time, and
+      // there is no group-level start/end event to subtract.
+      durationMs: durations.length ? durations.reduce((total, ms) => total + ms, 0) : null,
+      error: group.steps.find((step) => step.error)?.error ?? null,
+    }
+  })
+}
+
+/** Fallback label for a stage with no family, matching stageLabel's shape. */
+function stageTitle(stage) {
+  if (!stage) return "Workflow"
+  return stage.replace(/_/g, " ").replace(/^\w/, (character) => character.toUpperCase())
+}

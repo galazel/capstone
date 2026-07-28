@@ -1,59 +1,62 @@
 import { AlertCircle, TrendingUp, Zap, BookOpen, CheckCircle, Clock } from 'lucide-react'
 
+// Priority tags remapped onto the design system palette. Labels, icons and
+// descriptions are unchanged — only the colours move onto the Rebyu ramp
+// (Cardinal -> Fox -> Bee -> Macaw -> Feather) so priority reads as one scale.
 export const PRIORITY_CONFIG = {
   CRITICAL_PRIORITY: {
     label: '🔴 Critical',
-    bgColor: 'bg-red-100 dark:bg-red-950',
-    textColor: 'text-red-800 dark:text-red-300',
+    bgColor: 'bg-rb-cardinal-wash',
+    textColor: 'text-rb-cardinal-lip',
     icon: AlertCircle,
     description: 'Focus here first',
   },
   HIGH_PRIORITY: {
     label: '🟠 High Priority',
-    bgColor: 'bg-orange-100 dark:bg-orange-950',
-    textColor: 'text-orange-800 dark:text-orange-300',
+    bgColor: 'bg-rb-fox-wash',
+    textColor: 'text-rb-fox-lip',
     icon: Zap,
     description: 'Important to review',
   },
   MEDIUM_PRIORITY: {
     label: '🟡 Medium',
-    bgColor: 'bg-yellow-100 dark:bg-yellow-950',
-    textColor: 'text-yellow-800 dark:text-yellow-300',
+    bgColor: 'bg-rb-bee-wash',
+    textColor: 'text-[#8a6d00]',
     icon: BookOpen,
     description: 'Good to practice',
   },
   LOW_PRIORITY: {
     label: '🔵 Low',
-    bgColor: 'bg-blue-100 dark:bg-blue-950',
-    textColor: 'text-blue-800 dark:text-blue-300',
+    bgColor: 'bg-rb-macaw-wash',
+    textColor: 'text-rb-macaw-lip',
     icon: TrendingUp,
     description: 'Optional review',
   },
   STRONG: {
     label: '✅ Strong',
-    bgColor: 'bg-green-100 dark:bg-green-950',
-    textColor: 'text-green-800 dark:text-green-300',
+    bgColor: 'bg-rb-feather-wash',
+    textColor: 'text-[#3d6b06]',
     icon: CheckCircle,
     description: 'Well mastered',
   },
   ON_TRACK: {
     label: '⭐ On Track',
-    bgColor: 'bg-slate-100 dark:bg-slate-800',
-    textColor: 'text-slate-800 dark:text-slate-300',
+    bgColor: 'bg-rb-polar',
+    textColor: 'text-rb-wolf',
     icon: Clock,
     description: 'Making good progress',
   },
   NOT_ENOUGH_DATA: {
     label: '❓ Insufficient Data',
-    bgColor: 'bg-gray-100 dark:bg-gray-800',
-    textColor: 'text-gray-700 dark:text-gray-300',
+    bgColor: 'bg-rb-polar',
+    textColor: 'text-rb-hare',
     icon: Clock,
     description: 'Take more assessments',
   },
   NEEDS_REASSESSMENT: {
     label: '🔄 Reassess',
-    bgColor: 'bg-purple-100 dark:bg-purple-950',
-    textColor: 'text-purple-800 dark:text-purple-300',
+    bgColor: 'bg-rb-beetle-wash',
+    textColor: 'text-rb-beetle-lip',
     icon: Clock,
     description: 'Assessment expired',
   },

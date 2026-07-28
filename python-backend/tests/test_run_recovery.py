@@ -394,3 +394,343 @@ def test_document_refs_carry_pointers_not_bytes():
     )
 
     assert refs == [{"s3_key": "a", "filename": "a.pdf", "content_type": "application/pdf"}]
+
+
+# --- a resumed run reports its outcome ------------------------------------
+#
+# A live run paused for review, was resumed over HTTP, and the lesson node
+# raised. The registry kept saying WAITING_FOR_REVIEW while the checkpoint had
+# already moved past the interrupt, so `/review` reported the run as desynced
+# and Retry refused it -- only FAILED runs are recoverable. The cause was the
+# resume route calling `graph.ainvoke` directly, around the lifecycle.
+
+
+class _ExplodingGraph(_FakeGraph):
+    async def ainvoke(self, graph_input, config=None):
+        self.invoked_with.append(graph_input)
+        raise KeyError("structured_response")
+
+
+async def test_a_failed_advance_marks_the_run_failed_so_retry_can_pick_it_up(
+    fake_graph, monkeypatch
+):
+    graph = _ExplodingGraph(_Snapshot({}, ()))
+
+    async def _get():
+        return graph
+
+    monkeypatch.setattr(certification_run, "get_certification_graph", _get)
+
+    marked = {}
+    monkeypatch.setattr(
+        certification_run.registry,
+        "mark_failed",
+        lambda session, thread_id, error: marked.update(thread_id=thread_id, error=error),
+    )
+    monkeypatch.setattr(certification_run, "_notify", lambda *a, **kw: None)
+
+    context = certification_run.RunContext(thread_id="t1", certification_title="TOPCIT")
+    with pytest.raises(certification_run.RunFailed):
+        await certification_run.advance(context, None)
+
+    assert marked["thread_id"] == "t1"
+    assert "structured_response" in marked["error"]
+
+
+async def test_advance_returns_the_graph_result_alongside_the_outcome(fake_graph, monkeypatch):
+    """The HTTP routes need the raw result -- it carries the interrupt payload
+    the reviewer is shown -- while the consumer needs the outcome."""
+    fake_graph(_Snapshot({}, ()))
+    monkeypatch.setattr(certification_run, "finalize", lambda context, result: {"outcome": "X"})
+
+    context = certification_run.RunContext(thread_id="t1", certification_title="TOPCIT")
+    result, outcome = await certification_run.advance(context, None)
+
+    assert result["status"] == "CURRICULUM_CREATED"
+    assert outcome == {"outcome": "X"}
+
+
+async def test_a_successful_advance_finalises_rather_than_dropping_the_output(
+    fake_graph, monkeypatch
+):
+    """Resuming used to bypass finalisation entirely: an approved run's
+    curriculum and assessments were never persisted to Java."""
+    fake_graph(_Snapshot({}, ()))
+    finalised = []
+    monkeypatch.setattr(
+        certification_run,
+        "finalize",
+        lambda context, result: finalised.append(result) or {"outcome": "COMPLETED"},
+    )
+
+    context = certification_run.RunContext(thread_id="t1", certification_title="TOPCIT")
+    await certification_run.advance(context, None)
+
+    assert len(finalised) == 1
+
+
+# --- reconciling a stranded run -------------------------------------------
+#
+# The registry is written *after* the graph, so anything that interrupts the
+# handoff leaves a run claiming WAITING_FOR_REVIEW while its thread has moved
+# on. That run is unreachable: /review has nothing to show and recovery takes
+# only FAILED runs. Reconciliation repairs it against the checkpoint.
+
+
+class _Task:
+    def __init__(self, interrupts=()):
+        self.interrupts = interrupts
+
+
+class _ReviewSnapshot(_Snapshot):
+    def __init__(self, values, next_, tasks=()):
+        super().__init__(values, next_)
+        self.tasks = tasks
+
+
+def _waiting_run(idle_seconds=600, **kwargs):
+    """A run paused for review. `idle_seconds` is how long since it last
+    emitted anything -- reconciliation ignores a run that is still talking,
+    so the default is comfortably past the grace period."""
+    from datetime import datetime, timedelta, timezone
+
+    return SimpleNamespace(
+        run_id="r1", thread_id="t1", kind="CERTIFICATION",
+        status=registry.WAITING_FOR_REVIEW,
+        updated_at=datetime.now(timezone.utc) - timedelta(seconds=idle_seconds),
+        certification_id=None, generation_request_id=None, triggered_by_user_id=None,
+        **kwargs,
+    )
+
+
+@pytest.fixture()
+def captured_outcome(monkeypatch):
+    """Records what reconciliation decided, without touching Java or the db."""
+    seen = {}
+    monkeypatch.setattr(certification_run, "_notify", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        certification_run.registry, "mark_failed",
+        lambda session, thread_id, error: seen.update(status=registry.FAILED, error=error),
+    )
+    monkeypatch.setattr(
+        certification_run.registry, "mark_completed",
+        lambda session, thread_id, payload=None: seen.update(status=registry.COMPLETED),
+    )
+    monkeypatch.setattr(
+        certification_run.repo, "mark_generation_request_failed", lambda *a, **kw: None
+    )
+    return seen
+
+
+async def test_a_genuinely_paused_run_is_left_alone(fake_graph, captured_outcome):
+    """The check that keeps this from stealing runs out from under reviewers."""
+    fake_graph(_ReviewSnapshot({"curriculum": {}}, ("review",), tasks=(_Task(interrupts=("i",)),)))
+
+    result = await certification_run.reconcile(_waiting_run())
+
+    assert result["reconciled"] is False
+    assert captured_outcome == {}
+
+
+async def test_a_step_that_died_mid_resume_is_recorded_so_retry_becomes_available(
+    fake_graph, captured_outcome
+):
+    """The live wreckage: the lesson node raised, the registry was never told,
+    and Retry refused the run because it did not read as FAILED."""
+    fake_graph(_ReviewSnapshot({"curriculum": {}}, ("write_lesson",), tasks=(_Task(),)))
+
+    result = await certification_run.reconcile(_waiting_run())
+
+    assert result["reconciled"] is True
+    assert captured_outcome["status"] == registry.FAILED
+    assert "write_lesson" in captured_outcome["error"]
+
+
+async def test_a_reconciled_run_is_then_accepted_by_retry(fake_graph, captured_outcome):
+    """The point of marking it failed rather than merely reporting it."""
+    fake_graph(_ReviewSnapshot({"certification_name": "T"}, ("write_lesson",), tasks=(_Task(),)))
+    run = _waiting_run()
+
+    await certification_run.reconcile(run)
+    run.status = captured_outcome["status"]
+
+    context, pending = await certification_run.prepare_retry(run)
+    assert pending == "write_lesson"
+    assert context.thread_id == "t1"
+
+
+async def test_a_run_that_actually_finished_is_finalised_not_failed(
+    fake_graph, captured_outcome
+):
+    """Only the handoff was lost. Marking it failed would throw away a
+    completed curriculum still sitting in the checkpoint."""
+    fake_graph(
+        _ReviewSnapshot(
+            {"status": "COMPLETED", "curriculum": {"majorCategories": [{"name": "M"}]}},
+            (),
+            tasks=(),
+        )
+    )
+
+    result = await certification_run.reconcile(_waiting_run())
+
+    assert result["reconciled"] is True
+    assert captured_outcome["status"] == registry.COMPLETED
+
+
+async def test_a_run_with_no_checkpoint_left_is_failed_with_a_restart_hint(
+    fake_graph, captured_outcome
+):
+    fake_graph(_ReviewSnapshot({}, (), tasks=()))
+
+    result = await certification_run.reconcile(_waiting_run())
+
+    assert result["reconciled"] is True
+    assert "Restart" in captured_outcome["error"]
+
+
+async def test_reconciliation_is_a_no_op_for_a_run_that_is_not_awaiting_review(
+    fake_graph, captured_outcome
+):
+    """Idempotence: once repaired the run is FAILED, so polling again does
+    nothing rather than re-failing it."""
+    fake_graph(_ReviewSnapshot({}, (), tasks=()))
+    run = _waiting_run()
+    run.status = registry.FAILED
+
+    result = await certification_run.reconcile(run)
+
+    assert result["reconciled"] is False
+    assert captured_outcome == {}
+
+
+async def test_a_question_bank_run_is_not_reconciled_by_the_certification_path(
+    fake_graph, captured_outcome
+):
+    fake_graph(_ReviewSnapshot({}, (), tasks=()))
+    run = _waiting_run()
+    run.kind = "QUESTION_BANK"
+
+    assert (await certification_run.reconcile(run))["reconciled"] is False
+    assert captured_outcome == {}
+
+
+async def test_the_review_endpoint_repairs_a_stranded_run_and_reports_it(
+    session, session_factory, routes, fake_graph, monkeypatch
+):
+    """End to end: the workspace polls /review whenever a run reads as
+    waiting, so a stranded run heals as soon as anyone opens it."""
+    from app.graphs.certification import workflow as cert_workflow
+
+    graph = fake_graph(_ReviewSnapshot({"curriculum": {}}, ("write_lesson",), tasks=(_Task(),)))
+
+    async def _get():
+        return graph
+
+    # The route imports the graph accessor itself, so both call sites need it.
+    monkeypatch.setattr(cert_workflow, "get_certification_graph", _get)
+    monkeypatch.setattr(certification_run, "_notify", lambda *a, **kw: None)
+    # Reconciliation writes through its own session, as every registry
+    # transition does -- point it at the test database.
+    monkeypatch.setattr(certification_run, "SessionLocal", session_factory)
+
+    registry.start_run(session, thread_id="t-strand", kind="CERTIFICATION")
+    registry.mark_waiting_for_review(session, "t-strand", stage="LESSON")
+    run = registry.get_run_by_thread(session, "t-strand")
+    assert run.status == registry.WAITING_FOR_REVIEW
+
+    # Genuinely stranded: nothing has been emitted for a long time. A run that
+    # is still talking is left alone -- see
+    # `test_a_run_still_emitting_events_is_never_reconciled`.
+    from datetime import datetime, timedelta, timezone
+
+    run.updated_at = datetime.now(timezone.utc) - timedelta(hours=1)
+    session.commit()
+
+    response = await routes.get_pending_review(run.run_id, db=session)
+
+    assert response["desynced"] is True
+    assert response["reconciled"] is True
+    assert response["status"] == registry.FAILED
+    assert response["recovery"]["can_retry"] is True, (
+        "the whole point: the stranded run must become retryable"
+    )
+
+
+# --- a resumed run must stop reading as paused ----------------------------
+
+async def test_resuming_leaves_waiting_for_review_before_the_work_starts(
+    session, session_factory, monkeypatch
+):
+    """Nothing recorded this transition, so a run stayed WAITING_FOR_REVIEW for
+    the several minutes a resume took to reach the next checkpoint. Long enough
+    for reconciliation to read it as stranded, mark it failed, and offer Retry
+    on a run that was busy executing -- which is how two drivers ended up on
+    one thread and the seq collision surfaced.
+    """
+    from app.api.routes import certification as cert_routes
+
+    monkeypatch.setattr(cert_routes, "SessionLocal", session_factory)
+
+    seen = {}
+
+    async def _fake_advance(context, graph_input):
+        with session_factory() as s:
+            seen["status"] = registry.get_run_by_thread(s, "t-resume").status
+        return {}, {"outcome": registry.WAITING_FOR_REVIEW}
+
+    monkeypatch.setattr(cert_routes.certification_run, "advance", _fake_advance)
+    monkeypatch.setattr(
+        cert_routes.certification_run, "context_for",
+        lambda run: certification_run.RunContext(thread_id=run.thread_id, certification_title="T"),
+    )
+
+    registry.start_run(session, thread_id="t-resume", kind="CERTIFICATION")
+    registry.mark_waiting_for_review(session, "t-resume", stage="MAJOR")
+
+    await cert_routes._advance("t-resume", None, decision="approve")
+
+    assert seen["status"] == registry.RUNNING, (
+        "the run must read as running while the graph is actually running"
+    )
+
+
+async def test_a_run_that_is_executing_is_never_reconciled_as_stranded(
+    fake_graph, captured_outcome
+):
+    """The guard that follows from the above: a resumed run is RUNNING, so
+    reconciliation -- which only ever looks at WAITING_FOR_REVIEW runs --
+    cannot mistake its missing interrupt for a lost handoff."""
+    fake_graph(_ReviewSnapshot({"curriculum": {}}, ("write_lesson",), tasks=(_Task(),)))
+    run = _waiting_run()
+    run.status = registry.RUNNING
+
+    assert (await certification_run.reconcile(run))["reconciled"] is False
+    assert captured_outcome == {}
+
+
+async def test_a_run_still_emitting_events_is_never_reconciled(fake_graph, captured_outcome):
+    """The live regression this guards. A double-clicked approval put two
+    drivers on one thread; the faster finished and parked the run back at
+    WAITING_FOR_REVIEW while the slower was still generating, and
+    reconciliation failed a run that was working. The claim in
+    `mark_review_submitted` stops the double-drive; this stops the repair from
+    ever firing on a run that is visibly progressing.
+    """
+    fake_graph(_ReviewSnapshot({"curriculum": {}}, ("lesson_quiz_generate",), tasks=(_Task(),)))
+
+    result = await certification_run.reconcile(_waiting_run(idle_seconds=5))
+
+    assert result["reconciled"] is False
+    assert "progressing" in result["reason"]
+    assert captured_outcome == {}
+
+
+async def test_a_long_idle_run_is_still_repaired(fake_graph, captured_outcome):
+    """The grace period must not make stranded runs unrecoverable."""
+    fake_graph(_ReviewSnapshot({"curriculum": {}}, ("lesson_quiz_generate",), tasks=(_Task(),)))
+
+    result = await certification_run.reconcile(_waiting_run(idle_seconds=600))
+
+    assert result["reconciled"] is True
+    assert captured_outcome["status"] == registry.FAILED

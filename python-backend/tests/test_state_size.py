@@ -137,7 +137,8 @@ async def _run_question_bank(monkeypatch, initial_state, thread_id):
         async def ainvoke(self, payload):
             return {"structured_response": batch}
 
-    monkeypatch.setattr(invocation, "get_question_generation_agent", lambda: _Stub())
+    # Takes the model argument `app.ai.router` passes when it builds the agent.
+    monkeypatch.setattr(invocation, "get_question_generation_agent", lambda *_: _Stub())
     monkeypatch.setattr(qb_nodes, "retrieve_context", lambda ns, q: "")
     # This test measures state size, not parsing.
     monkeypatch.setattr(qb_nodes, "resolve_documents", lambda refs, inline: [])

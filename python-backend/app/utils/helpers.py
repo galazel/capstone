@@ -72,17 +72,22 @@ async def close_checkpointer() -> None:
 def create_id():
     return str(uuid4())
 
-def get_llm(agent_type: str = "generation"):
+def get_llm(agent_type: str = "generation", model: str | None = None):
     """
     Builds the chat model for an agent. `agent_type` selects which model
     setting to use ("generation" for curriculum/lesson/question authoring,
     "classification" for cheap yes/no-style audit agents) so the two can be
     pointed at different models later without touching agent code.
+
+    `model` overrides the configured choice outright. `app.ai.router` uses it to
+    rebuild an agent against a fallback model when the primary model's daily
+    token budget is spent.
     """
     settings = get_settings()
-    model = (
+    classification = agent_type == "classification"
+    model = model or (
         settings.ai_classification_model
-        if agent_type == "classification"
+        if classification
         else settings.ai_generation_model
     ) or settings.ai_default_model
 
@@ -90,7 +95,12 @@ def get_llm(agent_type: str = "generation"):
         api_key=os.getenv("GROQ_API_KEY"),
         model=model,
         temperature=settings.ai_temperature,
-        max_tokens=settings.ai_max_tokens
+        # Sized per agent type: `max_tokens` is counted toward the request's
+        # rate-limit estimate, so giving a yes/no auditor the full generation
+        # budget made small prompts exceed a small model's TPM limit.
+        max_tokens=(
+            settings.ai_classification_max_tokens if classification else settings.ai_max_tokens
+        ),
     )
 
 def get_config(learner_id: int,lesson_id: int):

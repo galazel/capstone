@@ -2,15 +2,18 @@ package com.capstone.rebyu.aigateway.client;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.util.UriBuilder;
 import reactor.core.publisher.Flux;
 
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Client for the Python AI backend's workflow-run registry: which generation
@@ -80,15 +83,25 @@ public class WorkflowClient {
     }
 
     public Map<String, Object> cancelRun(String runId) {
-        try {
-            return webClient.post()
-                    .uri(uri -> uri.path("/workflows/{runId}/cancel").build(runId))
-                    .retrieve()
-                    .bodyToMono(MAP)
-                    .block();
-        } catch (Exception e) {
-            throw new AiServiceException("Cancel workflow run " + runId + " failed", e);
-        }
+        return postToRun("/workflows/{runId}/cancel", runId, "Cancel workflow run ");
+    }
+
+    /**
+     * Re-runs the single step a failed run died on, keeping everything before
+     * it. LangGraph checkpoints after every superstep, so the thread is still
+     * parked with the failed node pending.
+     */
+    public Map<String, Object> retryRun(String runId) {
+        return postToRun("/workflows/{runId}/retry", runId, "Retry workflow run ");
+    }
+
+    /**
+     * Discards a failed run's checkpoints and starts it again from step one,
+     * re-reading the certification's documents so anything uploaded since the
+     * failure is picked up.
+     */
+    public Map<String, Object> restartRun(String runId) {
+        return postToRun("/workflows/{runId}/restart", runId, "Restart workflow run ");
     }
 
     /**
@@ -146,6 +159,52 @@ public class WorkflowClient {
                     .block();
         } catch (Exception e) {
             throw new AiServiceException(what + " failed", e);
+        }
+    }
+
+    /** A bodyless POST addressed by run id -- cancel, retry, restart. */
+    private Map<String, Object> postToRun(String path, String runId, String what) {
+        try {
+            return webClient.post()
+                    .uri(uri -> uri.path(path).build(runId))
+                    .retrieve()
+                    .bodyToMono(MAP)
+                    .block();
+        } catch (WebClientResponseException e) {
+            throw refusal(e, what + runId + " failed");
+        } catch (Exception e) {
+            throw new AiServiceException(what + runId + " failed", e);
+        }
+    }
+
+    /**
+     * Turns Python's error response into one the browser can act on.
+     *
+     * <p>A 4xx here is a decision, not a malfunction: "only failed runs can be
+     * retried", "that run was cancelled". Collapsing it into a 500 threw away
+     * both the status and the sentence explaining it, so the workspace could
+     * only show a generic failure. 5xx stays an {@link AiServiceException} —
+     * that really is Python breaking.
+     */
+    private RuntimeException refusal(WebClientResponseException e, String fallback) {
+        if (!e.getStatusCode().is4xxClientError()) {
+            return new AiServiceException(fallback, e);
+        }
+        HttpStatus status = HttpStatus.resolve(e.getStatusCode().value());
+        return new AiServiceStatusException(
+                status == null ? HttpStatus.BAD_REQUEST : status,
+                detailOf(e).orElse(fallback));
+    }
+
+    /** FastAPI puts the human-readable reason in {@code detail}. */
+    private Optional<String> detailOf(WebClientResponseException e) {
+        try {
+            Object detail = e.getResponseBodyAs(Map.class).get("detail");
+            return detail == null ? Optional.empty() : Optional.of(String.valueOf(detail));
+        } catch (Exception ignored) {
+            // A non-JSON or unexpected body is not worth failing over -- the
+            // caller's fallback message still names the action that failed.
+            return Optional.empty();
         }
     }
 

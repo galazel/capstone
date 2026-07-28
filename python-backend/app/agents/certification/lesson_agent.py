@@ -1,9 +1,6 @@
 from functools import lru_cache
 
-from app.tools.certification.lesson_tools import (
-    lesson_search_tools,
-    lesson_builder_tools
-)
+from app.tools.certification.lesson_tools import lesson_research_tools
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 from app.schemas.certification.lesson_schema import GeneratedLesson
@@ -74,52 +71,84 @@ SYSTEM_PROMPT = """
     The expected learner outcome should be reflected in the completed lesson.
 
     --------------------------------------------------
-    TOOL USAGE
+    TOOLS
     --------------------------------------------------
 
-    You MUST build the lesson using the available tools.
-
-    Never manually construct lesson block JSON.
-
-    Always call the appropriate tools.
-
-    Available tools include:
-
-    - add_lesson_heading
-    - add_lesson_subheading
-    - add_lesson_paragraph
-    - add_bullet_list
-    - add_numbered_list
-    - add_image_left_layout
-    - add_image_right_layout
-    - add_standalone_image
-    - add_standalone_video
-    - add_tabbed_content
-    - add_accordion_section
-    - add_interactive_flip_cards
-    - add_intro_image_card
-    - add_header_with_grid_cards
-    - add_image_with_feature_grid
-    - add_review_card_grid
-    - add_content_accordion_block
-    - add_media_text_block
-    - search_educational_image
-    - search_youtube_videos
+    You have exactly one tool: search_more_lesson_info, which returns
+    reference material. Call it before you answer if you need more source
+    material. There are no tools for building lesson content and none for
+    finding pictures -- you write the content blocks yourself, as JSON, in
+    the `sections` field of your final answer.
 
     --------------------------------------------------
     VISUAL CONTENT
     --------------------------------------------------
 
-    Whenever the curriculum recommends a visual:
+    You never provide image or video URLs, and you never search for them.
 
-    1. Search for an educational diagram.
-    2. Use the returned image.
-    3. Never invent image URLs.
+    Instead, a block that should carry a picture or a video says what it
+    wants, in plain words:
 
-    Whenever a tutorial is useful:
+      "imageQuery": "requirement management process diagram"
+      "videoQuery": "requirement management tutorial"
 
-    1. Search YouTube.
-    2. Embed the returned video.
+    The actual media is found and attached afterwards. Write the query as an
+    ordinary JSON string -- never a URL, never a tool call.
+
+    --------------------------------------------------
+    CONTENT BLOCKS
+    --------------------------------------------------
+
+    Every entry in `sections` is an object with exactly two keys, "type" and
+    "data". Use only the types below, with exactly the fields shown. Omit the
+    "id" of list entries -- those are assigned for you.
+
+    {"type": "heading",      "data": {"text": ""}}
+    {"type": "subheading",   "data": {"text": ""}}
+    {"type": "description",  "data": {"text": ""}}
+
+    {"type": "unordered-list", "data": {"items": [{"text": ""}]}}
+    {"type": "ordered-list",   "data": {"items": [{"text": ""}]}}
+
+    {"type": "image", "data": {"imageQuery": ""}}
+    {"type": "video", "data": {"videoQuery": ""}}
+
+    {"type": "image-left-text",
+     "data": {"imageQuery": "", "title": "", "description": ""}}
+    {"type": "image-right-text",
+     "data": {"imageQuery": "", "title": "", "description": ""}}
+
+    {"type": "tabs",
+     "data": {"items": [{"label": "", "title": "", "description": ""}]}}
+    {"type": "accordion",
+     "data": {"items": [{"title": "", "description": ""}]}}
+    {"type": "flip-grid",
+     "data": {"cards": [{"frontTitle": "", "backTitle": "", "description": ""}]}}
+    {"type": "review-card-grid",
+     "data": {"cards": [{"frontTitle": "", "backTitle": "", "description": ""}]}}
+
+    {"type": "intro-image-card",
+     "data": {"smallHeader": "", "description": "", "imageQuery": ""}}
+    {"type": "header-description-grid",
+     "data": {"smallHeader": "", "description": "",
+              "gridItems": [{"title": "", "description": ""}]}}
+    {"type": "image-feature-grid",
+     "data": {"smallHeader": "", "description": "", "imageQuery": "",
+              "gridItems": [{"title": "", "description": ""}]}}
+    {"type": "content-accordion-block",
+     "data": {"smallHeader": "", "description": "",
+              "items": [{"title": "", "description": ""}]}}
+    {"type": "content-tabs-block",
+     "data": {"smallHeader": "", "description": "",
+              "items": [{"label": "", "title": "", "description": ""}]}}
+    {"type": "media-text-block",
+     "data": {"smallHeader": "", "description": "", "mediaType": "image",
+              "imageQuery": "", "videoQuery": "", "supportingTitle": "",
+              "supportingDescription": "", "layout": "image-left"}}
+
+    A block is plain JSON data. Never write a function call, a tool name, or
+    anything of the form <function=...> anywhere inside `sections` -- not as a
+    value, not inside a string. Every value is literal text you wrote.
 
     --------------------------------------------------
     LESSON STRUCTURE
@@ -129,8 +158,8 @@ SYSTEM_PROMPT = """
     SEPARATE STRUCTURED FIELDS (see FINAL ANSWER) -- do not build them as
     blocks.
 
-    The blocks you build with tools are the MAIN INSTRUCTIONAL CONTENT, and
-    should generally cover:
+    The blocks in `sections` are the MAIN INSTRUCTIONAL CONTENT, and should
+    generally cover:
 
     1. Prerequisites
     2. Main Concepts
@@ -166,17 +195,16 @@ SYSTEM_PROMPT = """
     FINAL ANSWER
     --------------------------------------------------
 
-    After calling every tool needed to build the lesson, return your final
-    structured answer with ALL of these fields:
+    After any searches you need, return your final structured answer in a
+    single call with ALL of these fields:
 
     - title: the lesson name.
     - introduction: 2-4 sentences opening the lesson ("In this lesson...").
       At least 40 characters.
     - learning_objectives: 2-5 concrete, measurable objectives.
     - estimated_minutes: realistic study time, typically 10-45.
-    - sections: every block you built for the MAIN INSTRUCTIONAL CONTENT, in
-      the exact JSON shape each tool returned, in reading order. Do not
-      summarize or paraphrase them.
+    - sections: the MAIN INSTRUCTIONAL CONTENT as content blocks, in the
+      shapes listed above, in reading order.
     - key_terms: the important terms, each with a short definition.
     - summary: 2-4 sentences closing the lesson. At least 40 characters.
 
@@ -186,11 +214,26 @@ SYSTEM_PROMPT = """
     """
 
 
-@lru_cache(maxsize=1)
-def get_lesson_generation_agent():
+@lru_cache(maxsize=None)
+def get_lesson_generation_agent(model: str | None = None):
+    """One research tool, and nothing whose output belongs in the answer.
+
+    This agent has now shed two sets of tools for the same reason. The
+    eighteen `lesson_builder_tools` were pure shape constructors, adding no
+    capability -- only a protocol the model got wrong, emitting
+    `<function=add_lesson_heading>{...}</function>` inside `sections`. The two
+    media searches then failed identically, one layer down:
+    `"imageKey": "<function=search_educational_image{...`.
+
+    The rule both cases teach: when a tool's result has to appear *inside* the
+    structured answer, the model eventually writes the call where the result
+    belongs, and the provider rejects the whole thing. So block shapes live in
+    the prompt, item ids are filled in by `GeneratedLesson`, and media URLs are
+    resolved by `app.domain.lesson_media` after the answer comes back.
+    """
     return create_agent(
-        model=get_llm("generation"),
-        tools=lesson_search_tools + lesson_builder_tools,
+        model=get_llm("generation", model),
+        tools=lesson_research_tools,
         response_format=ToolStrategy(GeneratedLesson),
         system_prompt=SYSTEM_PROMPT,
     )

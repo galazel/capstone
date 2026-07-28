@@ -1,21 +1,12 @@
 import { useEffect, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { BookOpenIcon, BrainIcon, FlameIcon, TrophyIcon } from "lucide-react"
 
-import { BrandLogo } from "@/components/brand-logo.tsx"
-
+// Original messages, restyled only — these cycle as the app boots.
 const MESSAGES = [
   "Calculating your readiness...",
   "Syncing mastery progress...",
   "Leveling up your study plan...",
   "Loading your next challenge...",
-]
-
-const BADGES = [
-  { Icon: TrophyIcon, delay: 0 },
-  { Icon: FlameIcon, delay: 0.15 },
-  { Icon: BrainIcon, delay: 0.3 },
-  { Icon: BookOpenIcon, delay: 0.45 },
 ]
 
 export function LoadingScreen() {
@@ -29,58 +20,51 @@ export function LoadingScreen() {
   }, [])
 
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-8 bg-background px-4">
-      <motion.div
-        initial={{ scale: 0.85, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.4, ease: "easeOut" }}
-        className="relative flex items-center justify-center"
-      >
+    <div className="rebyu-ds flex min-h-svh flex-col items-center justify-center bg-rb-snow px-6">
+      <div className="flex w-full max-w-sm flex-col items-center">
+        {/* Typographic monogram on a Polar disc — reads as an illustration
+            rather than a logo dropped onto an empty page. */}
         <motion.div
-          animate={{ scale: [1, 1.12, 1], opacity: [0.35, 0.15, 0.35] }}
-          transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute size-24 rounded-full bg-primary/30 blur-xl"
-          aria-hidden="true"
-        />
-        <BrandLogo className="relative size-16" />
-      </motion.div>
-
-      <div className="flex items-center gap-3" aria-hidden="true">
-        {BADGES.map(({ Icon, delay }, index) => (
-          <motion.div
-            key={index}
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.35, ease: "easeOut" }}
+          className="relative grid size-40 place-items-center"
+        >
+          <span className="absolute inset-0 rounded-full bg-rb-polar" aria-hidden="true" />
+          <motion.span
             animate={{ y: [0, -8, 0] }}
-            transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut", delay }}
-            className="flex size-9 items-center justify-center rounded-full border bg-card text-primary shadow-sm"
+            transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+            className="relative grid size-20 place-items-center rounded-3xl bg-rb-feather shadow-[0_5px_0_var(--color-rb-feather-lip)]"
+            aria-hidden="true"
           >
-            <Icon className="size-4" />
-          </motion.div>
-        ))}
-      </div>
-
-      <div className="flex w-full max-w-xs flex-col items-center gap-3">
-        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-          <motion.div
-            className="h-full w-1/3 rounded-full bg-gradient-to-r from-primary/40 via-primary to-primary/40"
-            animate={{ x: ["-100%", "220%"] }}
-            transition={{ duration: 1.3, repeat: Infinity, ease: "easeInOut" }}
-          />
-        </div>
+            <span className="font-rb-display text-4xl font-black lowercase leading-none text-rb-snow">
+              r
+            </span>
+          </motion.span>
+        </motion.div>
 
         <AnimatePresence mode="wait">
           <motion.p
             key={messageIndex}
-            initial={{ opacity: 0, y: 6 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.3 }}
-            className="text-sm font-medium text-muted-foreground"
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.28 }}
+            className="mt-10 text-center text-lg font-semibold text-rb-wolf"
             role="status"
             aria-live="polite"
           >
             {MESSAGES[messageIndex]}
           </motion.p>
         </AnimatePresence>
+
+        <div className="mt-8 h-4 w-full max-w-xs overflow-hidden rounded-full bg-rb-swan">
+          <motion.div
+            className="h-full w-1/3 rounded-full bg-rb-feather"
+            animate={{ x: ["-110%", "330%"] }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+          />
+        </div>
       </div>
     </div>
   )

@@ -350,7 +350,10 @@ async def test_sse_and_websocket_yield_the_same_messages(db, monkeypatch):
 
     messages = [m async for m in stream_module.stream_events(run_id, 0)]
 
-    assert [m["type"] for m in messages] == ["snapshot", "complete"]
+    # The two replayed events between them are workflow.started and
+    # workflow.completed, each its own frame -- see
+    # `test_no_sse_frame_grows_with_the_length_of_the_run`.
+    assert [m["type"] for m in messages] == ["snapshot", "event", "event", "complete"]
     # And the SSE encoder can render every one of them.
     from app.api.routes.workflow_stream import _sse_frame
     for message in messages:

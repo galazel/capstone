@@ -30,7 +30,9 @@ export default function ItemNavigatorCard({ item, index, isCurrent, onJump }) {
       aria-current={isCurrent ? "true" : undefined}
       aria-label={srLabel}
       className={cn(
-        "relative flex min-h-16 flex-col justify-between rounded-lg border p-1.5 text-left transition outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "relative flex min-h-16 flex-col justify-between rounded-xl border-2 p-2 text-left font-bold outline-none transition",
+        "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-rb-macaw",
+        "active:translate-y-[2px]",
         status.card
       )}
     >
@@ -58,7 +60,7 @@ export default function ItemNavigatorCard({ item, index, isCurrent, onJump }) {
       {item.flagged ? (
         <FlagIcon
           aria-hidden="true"
-          className="absolute -right-1 -top-1 size-3.5 fill-amber-400 text-amber-500"
+          className="absolute -right-1.5 -top-1.5 size-4 fill-rb-bee text-rb-bee-lip"
         />
       ) : null}
     </button>

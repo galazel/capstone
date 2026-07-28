@@ -1,6 +1,8 @@
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
 from app.agents.tutor.tutor_agent import get_generation_agent, get_query_agent
+from app.ai.invocation import structured
+from app.ai.router import ainvoke_with_fallback
 from app.utils.helpers import get_config
 from app.graphs.tutor.state import TutorState
 
@@ -14,7 +16,8 @@ def check_query(state: TutorState):
 
 async def generate(state: TutorState):
 
-    response = await get_generation_agent().ainvoke(
+    response = await ainvoke_with_fallback(
+        structured(get_generation_agent),
         {
             "messages": [
                 HumanMessage(
@@ -39,7 +42,7 @@ async def generate(state: TutorState):
     )
 
     return {
-        "questions": response["structured_response"]
+        "questions": response
     }
 
 
@@ -64,11 +67,12 @@ async def answer_question(state: TutorState):
         )
     )
 
-    response = await get_query_agent().ainvoke(
+    response = await ainvoke_with_fallback(
+        structured(get_query_agent),
         {
             "messages": messages
         },
-        get_config(
+        config=get_config(
             state["learnerId"],
             state["lessonId"]
         )
@@ -77,7 +81,7 @@ async def answer_question(state: TutorState):
     return {
         "messages": [
             AIMessage(
-                content=response["structured_response"]
+                content=response
             )
         ]
     }
@@ -100,7 +104,8 @@ def trim(state: TutorState):
 
 async def summarize_conversation(state: TutorState):
 
-    summary = await get_query_agent().ainvoke(
+    summary = await ainvoke_with_fallback(
+        structured(get_query_agent),
         {
             "messages": [
                 HumanMessage(
@@ -115,5 +120,5 @@ async def summarize_conversation(state: TutorState):
     )
 
     return {
-        "summary": summary["structured_response"]
+        "summary": summary
     }

@@ -90,8 +90,23 @@ async def stream_events(run_id: str, last_seq: int = 0) -> AsyncIterator[dict[st
     queue = broadcaster.subscribe(run_id)
 
     try:
-        yield {"type": "snapshot", "run": run, "events": missed}
-        seen = max([e["seq"] for e in missed], default=last_seq)
+        # The replayed history is streamed as individual event frames rather
+        # than embedded in the snapshot. Embedding it made the *first* frame
+        # grow with the run: at 150 events it reached 284 KB, past the 256 KB
+        # in-memory buffer the Java relay's WebClient decodes each SSE frame
+        # into. The relay then failed the stream, the browser reconnected, and
+        # got the same oversized frame again -- a permanent reconnect loop
+        # whose only symptom was an empty timeline, and one that any long run
+        # was guaranteed to reach eventually.
+        #
+        # Live events already went one per frame, so this simply makes replay
+        # behave like the steady state. `events` stays in the snapshot message
+        # for shape compatibility; clients merge by seq either way.
+        yield {"type": "snapshot", "run": run, "events": []}
+        seen = last_seq
+        for replayed in missed:
+            seen = replayed["seq"]
+            yield {"type": "event", "event": replayed}
 
         if _is_terminal(run["status"]) and seen >= run["last_seq"]:
             # Nothing further will ever arrive; don't hold the connection.

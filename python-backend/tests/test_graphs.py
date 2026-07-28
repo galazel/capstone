@@ -223,7 +223,10 @@ def test_commit_batch_caps_overshoot_at_target():
 
 async def test_question_bank_graph_pauses_for_review_then_completes(monkeypatch):
     stub = _StubAgent([_draft("Q1"), _draft("Q2")])
-    monkeypatch.setattr(invocation, "get_question_generation_agent", lambda: stub)
+    # Takes *_ because the agent factories are now called with a model name:
+    # app.ai.router rebuilds the agent per model to fall back off an exhausted
+    # daily token budget.
+    monkeypatch.setattr(invocation, "get_question_generation_agent", lambda *_: stub)
 
     graph = build_question_bank_graph(checkpointer=InMemorySaver())
     config = {"configurable": {"thread_id": "run-1"}}
@@ -245,7 +248,10 @@ async def test_review_payload_carries_the_validation_report(monkeypatch):
     """The brief requires the admin to see the artifact *and* its AI
     validation report together at each checkpoint."""
     stub = _StubAgent([_draft("Q1"), _draft("Q2")])
-    monkeypatch.setattr(invocation, "get_question_generation_agent", lambda: stub)
+    # Takes *_ because the agent factories are now called with a model name:
+    # app.ai.router rebuilds the agent per model to fall back off an exhausted
+    # daily token budget.
+    monkeypatch.setattr(invocation, "get_question_generation_agent", lambda *_: stub)
 
     graph = build_question_bank_graph(checkpointer=InMemorySaver())
     config = {"configurable": {"thread_id": "report-run"}}
@@ -267,7 +273,10 @@ async def test_validation_flags_duplicates_in_a_real_graph_run(monkeypatch):
     duplicate = "What is the primary purpose of a database index?"
     near_duplicate = "What is the main purpose of a database index?"
     stub = _StubAgent([_draft(duplicate), _draft(near_duplicate)])
-    monkeypatch.setattr(invocation, "get_question_generation_agent", lambda: stub)
+    # Takes *_ because the agent factories are now called with a model name:
+    # app.ai.router rebuilds the agent per model to fall back off an exhausted
+    # daily token budget.
+    monkeypatch.setattr(invocation, "get_question_generation_agent", lambda *_: stub)
 
     graph = build_question_bank_graph(checkpointer=InMemorySaver())
     config = {"configurable": {"thread_id": "dupe-run"}}
@@ -283,7 +292,10 @@ async def test_validation_flags_duplicates_in_a_real_graph_run(monkeypatch):
 
 async def test_question_bank_improve_regenerates_and_records_version(monkeypatch):
     stub = _StubAgent([_draft("Q1")])
-    monkeypatch.setattr(invocation, "get_question_generation_agent", lambda: stub)
+    # Takes *_ because the agent factories are now called with a model name:
+    # app.ai.router rebuilds the agent per model to fall back off an exhausted
+    # daily token budget.
+    monkeypatch.setattr(invocation, "get_question_generation_agent", lambda *_: stub)
 
     graph = build_question_bank_graph(checkpointer=InMemorySaver())
     config = {"configurable": {"thread_id": "run-2"}}
@@ -312,7 +324,10 @@ async def test_question_bank_improve_regenerates_and_records_version(monkeypatch
 
 async def test_question_bank_edit_replaces_batch_with_admin_version(monkeypatch):
     stub = _StubAgent([_draft("AI question")])
-    monkeypatch.setattr(invocation, "get_question_generation_agent", lambda: stub)
+    # Takes *_ because the agent factories are now called with a model name:
+    # app.ai.router rebuilds the agent per model to fall back off an exhausted
+    # daily token budget.
+    monkeypatch.setattr(invocation, "get_question_generation_agent", lambda *_: stub)
 
     graph = build_question_bank_graph(checkpointer=InMemorySaver())
     config = {"configurable": {"thread_id": "run-3"}}

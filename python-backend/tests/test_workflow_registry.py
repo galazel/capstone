@@ -193,3 +193,50 @@ def test_list_is_newest_first(session):
     registry.start_run(session, thread_id="o-2", kind="CERTIFICATION")
     threads = [r.thread_id for r in registry.list_runs(session)]
     assert set(threads) == {"o-1", "o-2"}
+
+
+# --- concurrent emitters --------------------------------------------------
+
+def test_two_sessions_that_both_loaded_the_run_get_distinct_seqs(session_factory):
+    """The live 500: a Retry click landed while a resume was mid-flight
+    emitting node events, both sessions had the run at seq N, both computed
+    N+1, and the second insert violated uq_workflow_events_run_seq.
+
+    The allocation now happens inside `UPDATE ... RETURNING`, so the value is
+    computed under the statement's own row lock instead of from a read each
+    session took before the other wrote.
+    """
+    with session_factory() as setup:
+        run = registry.start_run(setup, thread_id="t-race", kind="CERTIFICATION")
+        run_id = run.run_id
+
+    with session_factory() as a, session_factory() as b:
+        # Both load the run *before* either writes -- the stale reads that made
+        # the Python-side increment unsafe.
+        run_a = registry.get_run(a, run_id)
+        run_b = registry.get_run(b, run_id)
+        assert run_a.last_seq == run_b.last_seq
+
+        first = registry.record_event(a, run_a, registry.EVT_NODE_COMPLETED, stage="s1")
+        a.commit()
+        second = registry.record_event(b, run_b, registry.EVT_WORKFLOW_RETRIED, stage="s2")
+        b.commit()
+
+    assert first.seq != second.seq
+    assert {first.seq, second.seq} == {2, 3}
+
+
+def test_the_run_row_reflects_the_seq_the_database_allocated(session_factory):
+    """Callers read `run.last_seq` straight back out -- it must not still hold
+    the value the session loaded before the UPDATE."""
+    with session_factory() as setup:
+        run_id = registry.start_run(setup, thread_id="t-sync", kind="CERTIFICATION").run_id
+
+    with session_factory() as other:
+        registry.record_event(other, registry.get_run(other, run_id), registry.EVT_NODE_STARTED)
+        other.commit()
+
+    with session_factory() as session:
+        run = registry.get_run(session, run_id)
+        event = registry.record_event(session, run, registry.EVT_NODE_COMPLETED)
+        assert run.last_seq == event.seq == 3

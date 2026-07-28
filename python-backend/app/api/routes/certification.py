@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Annotated, Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -8,7 +9,7 @@ from pydantic import BaseModel
 
 from app.core.security import require_service_key
 from app.db.session import SessionLocal
-from app.services import workflow_registry as registry
+from app.services import certification_run, workflow_registry as registry
 from app.graphs.certification.workflow import get_certification_graph
 from app.utils.helpers import create_id
 
@@ -74,6 +75,68 @@ def _reject_if_cancelled(thread_id: str) -> None:
             )
 
 
+async def _advance(
+    thread_id: str, graph_input: Any, *, title: str | None = None, decision: str | None = None
+) -> dict:
+    """Moves a thread forward through the run lifecycle rather than around it.
+
+    These routes used to call `graph.ainvoke` directly. That skipped
+    finalisation entirely, so a run driven over HTTP never persisted its
+    curriculum or assessments on success, and on failure kept whatever status
+    it already had while its checkpoint advanced past the interrupt -- the live
+    symptom being a run reported as WAITING_FOR_REVIEW with no pending
+    interrupt, unrecoverable because only FAILED runs may be retried.
+
+    Accepting the review `decision` also lets the run leave WAITING_FOR_REVIEW
+    the moment work restarts. Nothing recorded that transition before, so a
+    resumed run kept reading as paused for the several minutes it took to reach
+    the next checkpoint -- long enough for the workspace to offer Retry on a run
+    that was busy executing, and for two drivers to end up on one thread.
+
+    A thread with no registry row is still driven, just without the Java-side
+    persistence there is nothing to attach.
+    """
+    with SessionLocal() as session:
+        run = registry.get_run_by_thread(session, thread_id)
+        if decision and run is not None:
+            # Claiming the pause is what admits exactly one driver to the
+            # thread. Losing means someone else is already resuming it, and
+            # running the graph anyway is what produced two concurrent
+            # executions of every node -- so refuse rather than proceed.
+            if registry.mark_review_submitted(
+                session, thread_id, stage=run.current_stage, decision=decision
+            ) is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"Run {thread_id} is {run.status}, not awaiting review. "
+                        "It has already been resumed."
+                    ),
+                )
+
+    if run is None:
+        context = certification_run.RunContext(
+            thread_id=thread_id, certification_title=title or f"thread {thread_id}"
+        )
+    else:
+        context = certification_run.context_for(run)
+        if title and context.certification_id is None:
+            # A direct-upload run has no certification row, so `context_for`
+            # can only name it "certification None". The caller knows better.
+            context = replace(context, certification_title=title)
+
+    try:
+        result, _ = await certification_run.advance(context, graph_input)
+    except certification_run.RunFailed as failure:
+        # Already logged with a traceback and recorded as FAILED by `advance`;
+        # the detail is what the reviewer sees in the workspace.
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(failure)
+        ) from failure
+
+    return result
+
+
 def _to_response(thread_id: str, result: dict) -> dict:
     if "__interrupt__" in result:
         interrupt = result["__interrupt__"][0]
@@ -133,21 +196,18 @@ async def generate_certification(
     with SessionLocal() as session:
         registry.start_run(session, thread_id=thread_id, kind="CERTIFICATION")
 
-    try:
-        graph = await get_certification_graph()
-        result = await graph.ainvoke(
-            {
-                "thread_id": thread_id,
-                "certification_name": certification_name,
-                "certification_description": certification_description,
-                "industry": industry,
-                "uploaded_files": uploaded_documents,
-                "status": "STARTED",
-            },
-            config=_thread_config(thread_id),
-        )
-    except Exception as error:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
+    result = await _advance(
+        thread_id,
+        {
+            "thread_id": thread_id,
+            "certification_name": certification_name,
+            "certification_description": certification_description,
+            "industry": industry,
+            "uploaded_files": uploaded_documents,
+            "status": "STARTED",
+        },
+        title=certification_name,
+    )
 
     if result.get("status") == "VALIDATION_FAILED":
         raise HTTPException(
@@ -171,13 +231,9 @@ async def resume_certification(thread_id: str, request: ResumeRequest) -> dict[s
     """
     _reject_if_cancelled(thread_id)
 
-    config = _thread_config(thread_id)
-    try:
-        graph = await get_certification_graph()
-        result = await graph.ainvoke(Command(resume=request.as_resume_value()), config=config)
-    except Exception as error:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
-
+    result = await _advance(
+        thread_id, Command(resume=request.as_resume_value()), decision=request.action
+    )
     return _to_response(thread_id, result)
 
 

@@ -31,10 +31,13 @@ Return only the structured QuestionBatch.
 """
 
 
-@lru_cache(maxsize=1)
-def get_question_generation_agent():
+@lru_cache(maxsize=None)
+def get_question_generation_agent(model: str | None = None):
+    """`model` overrides the configured generation model. Cached per model name
+    so `app.ai.router` can swap to a fallback without rebuilding on every call;
+    the key space is the length of the configured chain, so it stays bounded."""
     return create_agent(
-        model=get_llm("generation"),
+        model=get_llm("generation", model),
         tools=[],
         response_format=ToolStrategy(QuestionBatch),
         system_prompt=SYSTEM_PROMPT,

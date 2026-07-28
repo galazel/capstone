@@ -77,9 +77,11 @@ export function ActivityPanel({ events, className }) {
   }, [events, problemsOnly])
 
   return (
-    <div className={cn("flex h-full min-h-0 flex-col gap-2", className)}>
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">Activity</span>
+    <div className={cn("flex h-full min-h-0 flex-col gap-1.5", className)}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+          Every event, in order
+        </span>
         <Button
           size="sm"
           variant={problemsOnly ? "secondary" : "ghost"}
@@ -88,11 +90,14 @@ export function ActivityPanel({ events, className }) {
           Problems only
         </Button>
       </div>
+
       <ScrollArea className="min-h-0 flex-1">
-        <ul className="space-y-1 pr-3">
+        <ul className="space-y-0.5 pr-3">
           {rows.map((row) => (
-            <li key={row.seq} className="flex gap-2 text-xs">
-              <span className="shrink-0 tabular-nums text-muted-foreground">{formatTime(row.created_at)}</span>
+            <li key={row.seq} className="flex gap-2.5 font-mono text-[11px] leading-5">
+              <span className="shrink-0 tabular-nums text-muted-foreground/70">
+                {formatTime(row.created_at)}
+              </span>
               <span
                 className={cn(
                   "min-w-0 break-words",
@@ -103,11 +108,12 @@ export function ActivityPanel({ events, className }) {
               >
                 {row.text}
                 {row.duration_ms != null ? (
-                  <span className="ml-1 text-muted-foreground">({row.duration_ms}ms)</span>
+                  <span className="ml-1 text-muted-foreground/70">({row.duration_ms}ms)</span>
                 ) : null}
               </span>
             </li>
           ))}
+
           {!rows.length ? (
             <li className="py-6 text-center text-xs text-muted-foreground">
               {problemsOnly ? "No problems reported." : "No activity yet."}

@@ -20,9 +20,11 @@ export default function QuestionNavigator({
   return (
       <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
         <div className="flex shrink-0 items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold">Item Navigation</h3>
+          <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-rb-wolf">
+            Item Navigation
+          </h3>
 
-          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+          <span className="shrink-0 rounded-full bg-rb-polar px-2.5 py-1 text-xs font-bold tabular-nums text-rb-wolf">
           {totalPoints} pts
         </span>
         </div>
@@ -36,7 +38,7 @@ export default function QuestionNavigator({
           [&::-webkit-scrollbar]:hidden
         "
         >
-          <div className="grid w-full grid-cols-5 auto-rows-max gap-1.5">
+          <div className="grid w-full grid-cols-5 auto-rows-max gap-2">
             {list.map((item, index) => (
                 <ItemNavigatorCard
                     key={item.attemptQuestionId ?? index}
@@ -49,7 +51,7 @@ export default function QuestionNavigator({
           </div>
         </div>
 
-        <div className="mt-3 shrink-0 rounded-xl border p-3">
+        <div className="mt-3 shrink-0 rounded-2xl border-2 border-rb-swan bg-rb-polar p-3">
           <ItemStatusLegend />
         </div>
 

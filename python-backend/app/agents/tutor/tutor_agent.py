@@ -43,20 +43,20 @@ QUERY_SYSTEM_PROMPT = """
     """
 
 
-@lru_cache(maxsize=1)
-def get_generation_agent():
+@lru_cache(maxsize=None)
+def get_generation_agent(model: str | None = None):
     return create_agent(
-        model=get_llm(),
+        model=get_llm("generation", model),
         tools=generation_tools,
         system_prompt=GENERATION_SYSTEM_PROMPT,
         response_format=ToolStrategy(QuestionFormat),
     )
 
 
-@lru_cache(maxsize=1)
-def get_query_agent():
+@lru_cache(maxsize=None)
+def get_query_agent(model: str | None = None):
     return create_agent(
-        model=get_llm(),
+        model=get_llm("generation", model),
         system_prompt=QUERY_SYSTEM_PROMPT,
         response_format=ToolStrategy(AIResponse),
     )

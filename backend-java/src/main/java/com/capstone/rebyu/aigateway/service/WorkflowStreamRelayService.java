@@ -80,11 +80,18 @@ public class WorkflowStreamRelayService {
                 out.data(event.data());
             }
             emitter.send(out);
-        } catch (IOException | IllegalStateException e) {
+        } catch (IOException e) {
             // The client went away mid-send. Expected, not an error worth a
             // stack trace; completing here triggers onCompletion, which
             // disposes the upstream subscription.
             log.debug("Client disconnected from workflow stream {}: {}", runId, e.toString());
+            emitter.complete();
+        } catch (IllegalStateException e) {
+            // NOT a disconnect: the emitter was already completed or not yet
+            // initialised. Lumping it in with IOException above meant an
+            // internal fault closed the stream as quietly as a closed tab, so
+            // a browser stuck reconnecting left no trace of why.
+            log.warn("Workflow stream {} could not be written: {}", runId, e.toString());
             emitter.complete();
         }
     }

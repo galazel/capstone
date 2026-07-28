@@ -1,10 +1,20 @@
-from typing import List
+from typing import Any, List
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from app.utils.helpers import create_id
 
 # Shorter than this and the field is a stub the model gave up on, not content.
 MIN_INTRODUCTION_CHARS = 40
 MIN_SUMMARY_CHARS = 40
+
+#: The keys under `data` that hold lists of renderable items. Each entry needs
+#: a stable `id` for React keys and for editing a single item later.
+ITEM_COLLECTIONS = ("items", "cards", "gridItems")
+
+#: Blocks whose renderer reads `file` (an admin-uploaded asset that overrides
+#: the searched URL). Absent from model output, present in every stored block.
+MEDIA_KEYS = ("imageKey", "videoKey")
 
 
 class KeyTerm(BaseModel):
@@ -38,6 +48,48 @@ class GeneratedLesson(BaseModel):
     sections: List[dict] = Field(default_factory=list)
     key_terms: List[KeyTerm] = Field(default_factory=list)
     summary: str = ""
+
+    @field_validator("sections", mode="before")
+    @classmethod
+    def _normalise_blocks(cls, value: Any) -> Any:
+        """Fills in the bookkeeping the builder tools used to add.
+
+        Those tools were pure shape constructors -- no side effects, no
+        external calls -- so their only real contribution was `create_id()` on
+        list items and a `file: None` slot. Requiring the model to call
+        eighteen of them and then repeat each result verbatim into `sections`
+        bought nothing and broke reliably: it tried to inline
+        `<function=add_lesson_heading>{...}</function>` *inside* the sections
+        array, which the provider rejects outright.
+
+        Generating the ids here is also strictly better than the tools were --
+        a model cannot forget to do it.
+        """
+        if not isinstance(value, list):
+            return value
+
+        blocks = []
+        for block in value:
+            if not isinstance(block, dict):
+                blocks.append(block)
+                continue
+
+            data = block.get("data")
+            if isinstance(data, dict):
+                data = dict(data)
+                for key in ITEM_COLLECTIONS:
+                    entries = data.get(key)
+                    if isinstance(entries, list):
+                        data[key] = [
+                            {"id": create_id(), **entry} if isinstance(entry, dict) else entry
+                            for entry in entries
+                        ]
+                if any(media in data for media in MEDIA_KEYS):
+                    data.setdefault("file", None)
+                block = {**block, "data": data}
+
+            blocks.append(block)
+        return blocks
 
     @model_validator(mode="after")
     def _enforce_lesson_anatomy(self) -> "GeneratedLesson":

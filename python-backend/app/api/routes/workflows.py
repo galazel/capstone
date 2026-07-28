@@ -189,13 +189,30 @@ async def get_pending_review(run_id: str, db: Session = Depends(get_db)) -> dict
     snapshot = await graph.aget_state({"configurable": {"thread_id": run.thread_id}})
     interrupts = snapshot.tasks[0].interrupts if (snapshot and snapshot.tasks) else ()
     if not interrupts:
-        # The registry says waiting but the graph has no pending interrupt --
-        # reported rather than papered over, because it means the two have
-        # diverged and the run needs a human to look at it.
-        logger.warning(
-            "Run %s is WAITING_FOR_REVIEW but has no pending interrupt", run_id
-        )
-        return {"run_id": run_id, "waiting": False, "review": None, "desynced": True}
+        # The registry says waiting but the graph has no pending interrupt, so
+        # the two have diverged. Reporting it was not enough: such a run is
+        # unreachable, since `/review` has nothing to show and recovery accepts
+        # only FAILED runs. Repair it against the checkpoint -- which either
+        # marks the unrecorded failure (making Retry available) or finalises a
+        # run that actually finished. Idempotent, and the workspace polls this
+        # endpoint whenever a run reads as waiting, so a stranded run heals as
+        # soon as anyone looks at it.
+        if run.kind == "CERTIFICATION":
+            repair = await certification_run.reconcile(run)
+        else:
+            logger.warning("Run %s is WAITING_FOR_REVIEW but has no pending interrupt", run_id)
+            repair = {"reconciled": False, "reason": f"{run.kind} runs are not reconciled here."}
+
+        db.refresh(run)
+        return {
+            "run_id": run_id,
+            "waiting": False,
+            "review": None,
+            "desynced": True,
+            "reconciled": repair.get("reconciled", False),
+            "status": run.status,
+            "recovery": _recovery_state(db, run),
+        }
 
     return {
         "run_id": run_id,
