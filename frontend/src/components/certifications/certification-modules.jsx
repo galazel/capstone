@@ -1,23 +1,19 @@
-import React, { useEffect, useState } from "react"
+import React, { useCallback, useEffect, useState } from "react"
 import {
-    AlertCircleIcon,
     BookOpen,
     ChevronDown,
     ChevronRight,
-    FileSpreadsheet,
     FileText,
     FolderTree,
     Plus,
     Sparkles,
     Trash2,
-    UploadIcon,
-    XIcon,
 } from "lucide-react"
 
 import { toast } from "sonner"
 
-import { formatBytes, useFileUpload } from "@/hooks/use-file-upload"
 import { Button } from "@/components/ui/button"
+import { DocumentUploadStep } from "@/components/certifications/document-upload-step.jsx"
 import { GenerationHandoffProgress } from "@/components/certifications/generation-handoff-progress.jsx"
 import { generateCertificationStructure } from "@/services/certificationService"
 import { mapCertificationToModuleStructure } from "@/utils/certification-structure"
@@ -80,316 +76,11 @@ function ExamBadges({ exams }) {
     )
 }
 
-function getFileExtension(fileName = "") {
-    return fileName.split(".").pop()?.toLowerCase() ?? ""
-}
-
-function getDocumentLabel(fileName) {
-    const extension = getFileExtension(fileName)
-
-    if (extension === "pdf") {
-        return "PDF document"
-    }
-
-    if (extension === "doc" || extension === "docx") {
-        return "Word document"
-    }
-
-    if (extension === "csv") {
-        return "CSV spreadsheet"
-    }
-
-    return "Document"
-}
-
-function DocumentIcon({ fileName }) {
-    const extension = getFileExtension(fileName)
-
-    if (extension === "csv") {
-        return (
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                <FileSpreadsheet size={19} />
-            </div>
-        )
-    }
-
-    if (extension === "pdf") {
-        return (
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600">
-                <FileText size={19} />
-            </div>
-        )
-    }
-
-    return (
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-            <FileText size={19} />
-        </div>
-    )
-}
-
-function GenerateCertificationStructure({
-                                            onCancel,
-                                            onGenerate,
-                                            isGenerating = false,
-                                        }) {
-    const maxSizeMB = 10
-    const maxSize = maxSizeMB * 1024 * 1024
-    const maxFiles = 10
-
-    const [submitError, setSubmitError] = useState("")
-
-    const [
-        { files, isDragging, errors },
-        {
-            handleDragEnter,
-            handleDragLeave,
-            handleDragOver,
-            handleDrop,
-            openFileDialog,
-            removeFile,
-            clearFiles,
-            getInputProps,
-        },
-    ] = useFileUpload({
-        accept: [
-            "application/pdf",
-            "application/msword",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "text/csv",
-            ".pdf",
-            ".doc",
-            ".docx",
-            ".csv",
-        ].join(","),
-        initialFiles: [],
-        maxFiles,
-        maxSize,
-        multiple: true,
-    })
-
-    useEffect(() => {
-        if (files.length > 0 && submitError) {
-            setSubmitError("")
-        }
-    }, [files.length, submitError])
-
-    const handleGenerate = async () => {
-        const selectedDocuments = files.map((item) => item.file)
-
-        if (selectedDocuments.length === 0) {
-            setSubmitError(
-                "Upload at least one document before generating the certification structure."
-            )
-            return
-        }
-
-        if (errors.length > 0) {
-            setSubmitError(
-                "Fix the upload error before generating the certification structure."
-            )
-            return
-        }
-
-        setSubmitError("")
-
-        try {
-            await onGenerate?.(selectedDocuments)
-        } catch (error) {
-
-
-            setSubmitError(
-                getBackendErrorMessage(
-                    error,
-                    "Structure generation failed. Please try again."
-                )
-            )
-        }
-    }
-
-    const handleClearFiles = () => {
-        clearFiles()
-        setSubmitError("")
-    }
-
-    const hasUploadError = Boolean(submitError || errors.length > 0)
-
-    return (
-        <section className="w-full pb-28">
-            <div className="mb-6 rounded-2xl border border-zinc-200 bg-zinc-50/70 p-5">
-                <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-white">
-                        <Sparkles size={18} />
-                    </div>
-
-                    <div>
-                        <h2 className="text-base font-semibold text-zinc-950">
-                            Generate Certification Structure
-                        </h2>
-
-                        <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-500">
-                            Upload a syllabus, curriculum, topic outline, certification
-                            guide, or CSV file. REBYU will use the document to generate
-                            major categories, middle categories, and lessons.
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-6">
-                <div className="flex flex-col gap-2">
-                    <div
-                        className={`relative flex min-h-56 flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed p-4 transition-colors has-[input:focus]:ring-2 data-[dragging=true]:bg-zinc-50 ${
-                            hasUploadError
-                                ? "border-red-500 bg-red-50/40 has-[input:focus]:border-red-500 has-[input:focus]:ring-red-100"
-                                : "border-zinc-300 has-[input:focus]:border-zinc-950 has-[input:focus]:ring-zinc-200"
-                        }`}
-                        data-dragging={isDragging || undefined}
-                        onDragEnter={handleDragEnter}
-                        onDragLeave={handleDragLeave}
-                        onDragOver={handleDragOver}
-                        onDrop={handleDrop}
-                    >
-                        <input
-                            {...getInputProps()}
-                            aria-label="Upload certification documents"
-                            className="sr-only"
-                        />
-
-                        <div className="flex flex-col items-center justify-center px-4 py-3 text-center">
-                            <div className="mb-3 flex size-12 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-600">
-                                <FileText size={20} />
-                            </div>
-
-                            <p className="mb-1.5 text-sm font-medium text-zinc-900">
-                                Drop your documents here
-                            </p>
-
-                            <p className="max-w-sm text-xs leading-5 text-zinc-500">
-                                PDF, DOC, DOCX, or CSV files. Maximum {maxFiles} files and{" "}
-                                {maxSizeMB} MB per file.
-                            </p>
-
-                            <Button
-                                type="button"
-                                className="mt-4"
-                                onClick={openFileDialog}
-                                variant="outline"
-                            >
-                                <UploadIcon
-                                    aria-hidden="true"
-                                    className="-ms-1 size-4 opacity-60"
-                                />
-                                Select documents
-                            </Button>
-                        </div>
-                    </div>
-
-                    {(submitError || errors.length > 0) && (
-                        <div
-                            className="flex items-start gap-1.5 text-xs leading-5 text-red-600"
-                            role="alert"
-                        >
-                            <AlertCircleIcon className="mt-0.5 size-3 shrink-0" />
-                            <span>{submitError || errors[0]}</span>
-                        </div>
-                    )}
-
-                    {files.length > 0 && (
-                        <div className="mt-3 space-y-2">
-                            <div className="flex items-center justify-between">
-                                <p className="text-sm font-medium text-zinc-800">
-                                    Uploaded documents
-                                </p>
-
-                                <p className="text-xs text-zinc-500">
-                                    {files.length} of {maxFiles} selected
-                                </p>
-                            </div>
-
-                            {files.map((file) => (
-                                <div
-                                    key={file.id}
-                                    className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white p-3"
-                                >
-                                    <div className="flex min-w-0 items-center gap-3 overflow-hidden">
-                                        <DocumentIcon fileName={file.file.name} />
-
-                                        <div className="min-w-0">
-                                            <p className="truncate text-sm font-medium text-zinc-900">
-                                                {file.file.name}
-                                            </p>
-
-                                            <p className="mt-0.5 text-xs text-zinc-500">
-                                                {getDocumentLabel(file.file.name)} ·{" "}
-                                                {formatBytes(file.file.size)}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <Button
-                                        type="button"
-                                        aria-label={`Remove ${file.file.name}`}
-                                        className="size-8 shrink-0 text-zinc-500 hover:bg-red-50 hover:text-red-600"
-                                        onClick={() => removeFile(file.id)}
-                                        size="icon"
-                                        variant="ghost"
-                                    >
-                                        <XIcon aria-hidden="true" className="size-4" />
-                                    </Button>
-                                </div>
-                            ))}
-
-                            {files.length > 1 && (
-                                <div className="pt-1">
-                                    <Button
-                                        type="button"
-                                        onClick={handleClearFiles}
-                                        size="sm"
-                                        variant="outline"
-                                    >
-                                        Remove all files
-                                    </Button>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-zinc-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-8">
-                <div className="mx-auto flex max-w-6xl items-center justify-end gap-3">
-                    <Button
-                        type="button"
-                        onClick={onCancel}
-                        variant="outline"
-                        disabled={isGenerating}
-                    >
-                        Cancel
-                    </Button>
-
-                    <Button
-                        type="button"
-                        onClick={handleGenerate}
-                        className="gap-2"
-                        disabled={isGenerating}
-                    >
-                        <Sparkles size={16} />
-                        {isGenerating ? "Generating..." : "Generate"}
-                    </Button>
-                </div>
-            </div>
-        </section>
-    )
-}
-
 function CertificationModules({
                                   certificationId = null,
                                   value,
                                   onChange,
                                   onCreateMiddleExam,
-                                  onGenerateForNewCertification,
-                                  onGenerationComplete,
                                   onGenerationStarted,
                               }) {
     const [localCategories, setLocalCategories] = useState([])
@@ -399,6 +90,15 @@ function CertificationModules({
     // happening instead of advancing on a timer.
     const [uploadPercent, setUploadPercent] = useState(0)
     const [pendingFileCount, setPendingFileCount] = useState(0)
+    const [selectedDocuments, setSelectedDocuments] = useState([])
+    const [generateError, setGenerateError] = useState("")
+
+    // Identity-stable so the upload step's reporting effect does not re-fire on
+    // every render of this editor.
+    const handleDocumentsChange = useCallback((documents) => {
+        setSelectedDocuments(documents)
+        setGenerateError((current) => (documents.length > 0 ? "" : current))
+    }, [])
 
     const categories = Array.isArray(value) ? value : localCategories
 
@@ -651,33 +351,39 @@ function CertificationModules({
         onCreateMiddleExam?.(examContext)
     }
 
-    const handleGenerateDocuments = async (selectedDocuments) => {
+    const handleGenerateDocuments = async () => {
+        if (selectedDocuments.length === 0) {
+            setGenerateError(
+                "Upload at least one document before generating the structure."
+            )
+            return
+        }
+
         try {
+            setGenerateError("")
             setIsGeneratingStructure(true)
             setPendingFileCount(selectedDocuments.length)
             setUploadPercent(0)
 
-            let savedCertification = null
-
-            if (certificationId != null) {
-                savedCertification = await generateCertificationStructure(
-                    certificationId,
-                    selectedDocuments,
-                    (event) =>
-                        setUploadPercent(
-                            event.total
-                                ? Math.round((event.loaded / event.total) * 100)
-                                : 0
-                        )
-                )
-            } else if (onGenerateForNewCertification) {
-                savedCertification =
-                    await onGenerateForNewCertification(selectedDocuments)
-            } else {
+            // Only reachable for a saved certification: creating one is
+            // generation-only now and runs from the create modal, so there is no
+            // longer an unsaved-certification branch here.
+            if (certificationId == null) {
                 throw new Error(
                     "Save the certification first before generating its structure."
                 )
             }
+
+            const savedCertification = await generateCertificationStructure(
+                certificationId,
+                selectedDocuments,
+                (event) =>
+                    setUploadPercent(
+                        event.total
+                            ? Math.round((event.loaded / event.total) * 100)
+                            : 0
+                    )
+            )
 
             // Curriculum generation now runs asynchronously in the background
             // (see the RabbitMQ-driven Python consumer) -- the response here
@@ -694,20 +400,14 @@ function CertificationModules({
             // steers -- it pauses for their review repeatedly -- and sending
             // them to a different page mid-flow loses the thread of what they
             // were doing.
-            const targetId = certificationId ?? savedCertification?.certificationId
-            if (targetId != null) {
-                onGenerationStarted?.(targetId)
-                return
-            }
-
-            // No id to follow (a brand-new certification whose save did not
-            // return one): announce it rather than opening a monitor that has
-            // nothing to attach to.
-            onGenerationComplete?.({
-                title: "AI generation started",
-                description:
-                    "Building the curriculum in the background — you'll get a notification here when it's ready to review.",
-            })
+            onGenerationStarted?.(certificationId)
+        } catch (error) {
+            setGenerateError(
+                getBackendErrorMessage(
+                    error,
+                    "Structure generation failed. Please try again."
+                )
+            )
         } finally {
             setIsGeneratingStructure(false)
             setUploadPercent(0)
@@ -733,11 +433,40 @@ function CertificationModules({
     if (currentPage === "generate") {
         return (
             <>
-                <GenerateCertificationStructure
-                    onCancel={() => setCurrentPage("default")}
-                    onGenerate={handleGenerateDocuments}
-                    isGenerating={isGeneratingStructure}
-                />
+                <div className="space-y-5">
+                    <DocumentUploadStep
+                        disabled={isGeneratingStructure}
+                        error={generateError}
+                        onFilesChange={handleDocumentsChange}
+                    />
+
+                    {/* A normal row, not the viewport-fixed bar this used to
+                        have: inside a modal, `fixed bottom-0` anchors to the
+                        window rather than the dialog. */}
+                    <div className="flex items-center justify-end gap-3 border-t border-border pt-4">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={isGeneratingStructure}
+                            onClick={() => {
+                                setCurrentPage("default")
+                                setGenerateError("")
+                            }}
+                        >
+                            Cancel
+                        </Button>
+
+                        <Button
+                            type="button"
+                            className="gap-2"
+                            disabled={isGeneratingStructure}
+                            onClick={handleGenerateDocuments}
+                        >
+                            <Sparkles size={16} />
+                            {isGeneratingStructure ? "Generating..." : "Generate"}
+                        </Button>
+                    </div>
+                </div>
 
                 <GenerationHandoffProgress
                     phase={

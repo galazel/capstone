@@ -28,6 +28,8 @@ from tenacity import (
     wait_exponential_jitter,
 )
 
+from app.ai.quota import is_daily_quota_exhausted, is_request_too_large
+
 logger = logging.getLogger(__name__)
 
 # Structured-output failures: the model returned something that didn't
@@ -82,6 +84,19 @@ def _is_tool_call_failure(exc: BaseException) -> bool:
 
 
 def is_retryable(exc: BaseException) -> bool:
+    # A spent *daily* budget is a 429, so it matches RateLimitError below, but
+    # it does not clear within any backoff this policy can express -- the live
+    # error asks for 1h34m against a 60s ceiling. `app.ai.router` handles it by
+    # switching models, which only works if the exception reaches it promptly,
+    # so it must not be absorbed here. Per-minute 429s stay retryable.
+    if is_daily_quota_exhausted(exc):
+        return False
+    # A request bigger than the model's whole per-minute allowance cannot
+    # succeed on a later attempt either -- next minute's budget is full and
+    # still too small. Excluded explicitly rather than relying on the provider
+    # SDK mapping 413 to a type that happens not to be listed below.
+    if is_request_too_large(exc):
+        return False
     return isinstance(exc, RETRYABLE_ERRORS) or _is_tool_call_failure(exc)
 
 

@@ -61,6 +61,30 @@ class Settings(BaseSettings):
     ai_classification_model: str = "llama-3.3-70b-versatile"
     ai_temperature: float = 0.0
     ai_max_tokens: int = 6000
+    #: Completion budget for the classification agents (document validation,
+    #: lesson audits). They return a boolean and a sentence, so reserving the
+    #: generation budget for them was never useful -- and it was actively
+    #: harmful: Groq counts `max_tokens` toward a request's TPM estimate, so a
+    #: ~300-token audit prompt asked for 6332 tokens against `llama-3.1-8b-
+    #: instant`'s 6000 TPM limit and was rejected outright with a 413. No
+    #: amount of waiting fixes a single request that exceeds the whole
+    #: per-minute allowance.
+    ai_classification_max_tokens: int = 1024
+
+    # --- Model fallback on quota exhaustion -----------------------------------
+    # Groq scopes rate limits per model, so a model whose daily token budget is
+    # spent can be swapped for one with its own untouched budget instead of
+    # failing the run. Ordered most-capable first: a fallback trades output
+    # quality for availability, so it is a last resort, not a load-balancer.
+    #
+    # Comma-separated rather than list[str] because pydantic-settings expects
+    # JSON for complex types, which makes overriding this in .env awkward
+    # (AI_GENERATION_FALLBACKS='["a","b"]' vs AI_GENERATION_FALLBACKS=a,b).
+    ai_generation_fallbacks: str = "llama-3.1-8b-instant"
+    ai_classification_fallbacks: str = "llama-3.1-8b-instant"
+    #: Cooldown applied when a 429 carries no parseable reset time. Groq's daily
+    #: buckets reset on a rolling window, so an hour is a safe assumption.
+    ai_quota_cooldown_seconds: float = 3600.0
 
     artifact_dir: Path = Path("artifacts")
     training_view_name: str = "rebyu_bkt_training_data_v"

@@ -125,3 +125,124 @@ def test_a_list_still_validates_unchanged():
 def test_non_string_scalars_are_still_rejected():
     with pytest.raises(ValueError):
         _instructions(concepts=42)
+
+
+# --- Mis-nested major categories -------------------------------------------
+#
+# A second live TOPCIT run failed all five attempts with the same
+# `tool_use_failed` 400: every sample put the second *major* category inside
+# the first one's `middleCategories` array, so that entry had
+# `middleCategories` where the schema required `lessons`.
+
+
+def _lesson(name: str) -> dict:
+    return {
+        "name": name,
+        "learning_objective": "o",
+        "lessonGenerationInstructions": _instructions().model_dump(),
+    }
+
+
+def _middle(name: str) -> dict:
+    return {"name": name, "description": "d", "lessons": [_lesson(f"{name} lesson")]}
+
+
+def _major(name: str, *middles: dict) -> dict:
+    return {"name": name, "description": "d", "middleCategories": list(middles)}
+
+
+def _misnested() -> dict:
+    """The live payload's shape: two majors, the second buried in the first."""
+    return {
+        "certification_name": "TOPCIT",
+        "curriculum": {
+            "majorCategories": [
+                _major(
+                    "Software Development",
+                    _middle("Requirement Management"),
+                    _major("Database Construction and Management", _middle("Data Modeling")),
+                )
+            ]
+        },
+    }
+
+
+def test_lessons_is_not_required_by_the_provider_schema():
+    """What produced the 400: the mis-nested branch has no `lessons`, so a
+    required `lessons` meant the provider rejected the call before any local
+    repair could run."""
+    middle = _tool_schema()["properties"]["curriculum"]["properties"]["majorCategories"]["items"][
+        "properties"
+    ]["middleCategories"]["items"]
+    assert "lessons" not in middle["required"]
+
+
+def test_a_misnested_major_category_is_hoisted_to_the_top_level():
+    curriculum = CertificationCurriculum(**_misnested()).curriculum
+    assert [major.name for major in curriculum.majorCategories] == [
+        "Software Development",
+        "Database Construction and Management",
+    ]
+
+
+def test_hoisting_leaves_the_real_middle_categories_in_place():
+    majors = CertificationCurriculum(**_misnested()).curriculum.majorCategories
+    assert [middle.name for middle in majors[0].middleCategories] == ["Requirement Management"]
+    assert [middle.name for middle in majors[1].middleCategories] == ["Data Modeling"]
+
+
+def test_hoisting_recurses_through_repeated_misnesting():
+    payload = {
+        "certification_name": "TOPCIT",
+        "curriculum": {
+            "majorCategories": [
+                _major(
+                    "A",
+                    _middle("a1"),
+                    _major("B", _middle("b1"), _major("C", _middle("c1"))),
+                )
+            ]
+        },
+    }
+    majors = CertificationCurriculum(**payload).curriculum.majorCategories
+    assert [major.name for major in majors] == ["A", "B", "C"]
+
+
+def test_a_major_left_with_no_lessons_is_dropped_rather_than_kept_empty():
+    payload = {
+        "certification_name": "TOPCIT",
+        "curriculum": {
+            "majorCategories": [_major("Shell", _major("Real", _middle("m1")))],
+        },
+    }
+    majors = CertificationCurriculum(**payload).curriculum.majorCategories
+    assert [major.name for major in majors] == ["Real"]
+
+
+def test_a_wellformed_curriculum_is_left_untouched():
+    payload = {
+        "certification_name": "TOPCIT",
+        "curriculum": {"majorCategories": [_major("A", _middle("a1")), _major("B", _middle("b1"))]},
+    }
+    majors = CertificationCurriculum(**payload).curriculum.majorCategories
+    assert [major.name for major in majors] == ["A", "B"]
+    assert [middle.name for middle in majors[0].middleCategories] == ["a1"]
+
+
+def test_a_curriculum_with_no_lessons_anywhere_is_rejected_for_resampling():
+    payload = {
+        "certification_name": "TOPCIT",
+        "curriculum": {"majorCategories": [_major("A"), _major("B")]},
+    }
+    with pytest.raises(ValueError):
+        CertificationCurriculum(**payload)
+
+
+def test_an_explicitly_empty_curriculum_is_still_allowed():
+    """`majorCategories: []` is the graph's own empty value, not a bad sample."""
+    assert (
+        CertificationCurriculum(
+            certification_name="TOPCIT", curriculum={"majorCategories": []}
+        ).curriculum.majorCategories
+        == []
+    )

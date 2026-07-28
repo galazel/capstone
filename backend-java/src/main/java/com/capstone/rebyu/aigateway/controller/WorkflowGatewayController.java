@@ -99,6 +99,25 @@ public class WorkflowGatewayController {
     }
 
     /**
+     * Recovery for a failed run. Retry re-runs only the step it died on,
+     * keeping the minutes of ingestion and generation that preceded it;
+     * restart throws the checkpoints away and begins again.
+     *
+     * <p>Python has had both since the workspace was built, but neither was
+     * reachable from the browser -- so a failed run was a dead end in the UI
+     * however recoverable it was underneath.
+     */
+    @PostMapping("/{runId}/retry")
+    public Map<String, Object> retry(@PathVariable String runId) {
+        return workflowClient.retryRun(runId);
+    }
+
+    @PostMapping("/{runId}/restart")
+    public Map<String, Object> restart(@PathVariable String runId) {
+        return workflowClient.restartRun(runId);
+    }
+
+    /**
      * Submits a reviewer's decision for a certification run.
      *
      * <p>Body: {@code action} (approve | edit | improve | regenerate | skip |

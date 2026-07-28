@@ -14,8 +14,8 @@ SYSTEM_PROMPT = (
 )
 
 
-@lru_cache(maxsize=1)
-def get_auditor_agent():
+@lru_cache(maxsize=None)
+def get_auditor_agent(model: str | None = None):
     """Built on first use, not at import.
 
     Constructing this at module scope instantiated a Groq client (and so
@@ -23,7 +23,7 @@ def get_auditor_agent():
     graph, which is what made graph nodes untestable.
     """
     return create_agent(
-        model=get_llm("classification"),
+        model=get_llm("classification", model),
         tools=[],
         response_format=ToolStrategy(AuditorResult),
         system_prompt=SYSTEM_PROMPT,

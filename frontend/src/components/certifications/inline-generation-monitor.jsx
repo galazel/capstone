@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { AlertTriangle, Ban } from "lucide-react"
+import { AlertTriangle, Ban, ChevronDown, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { cn } from "@/lib/utils"
 import { useWorkflowStream } from "@/hooks/useWorkflowStream"
 import {
   cancelWorkflowRun,
@@ -15,14 +14,16 @@ import {
   submitCertificationReview,
 } from "@/services/aiWorkflowService"
 import { ActivityPanel } from "@/components/generation/activity-panel"
-import { ArtifactViewer } from "@/components/generation/artifact-viewer"
-import { ReviewPanel } from "@/components/generation/review-panel"
-import { VersionHistory } from "@/components/generation/version-history"
-import { WorkflowTimeline } from "@/components/generation/workflow-timeline"
+import {
+  GenerationStatusBar,
+  GenerationTranscript,
+} from "@/components/generation/generation-transcript"
+import { ReviewCheckpoint } from "@/components/generation/review-checkpoint"
+import { RunRecoveryPanel } from "@/components/generation/run-recovery-panel"
 import { TaskStatusIcon, stageLabel } from "@/components/generation/task-status"
 
 /**
- * The live generation timeline, rendered inside the certification modal.
+ * The live generation transcript, rendered inside the certification modal.
  *
  * Same data and same components as the standalone workspace — this is a second
  * mount of them, not a second implementation, so the two cannot drift. Keeping
@@ -64,7 +65,8 @@ export function InlineGenerationMonitor({ certificationId, onClose }) {
   }, [runId])
 
   const stream = useWorkflowStream(runId)
-  const { run, events, tasks, attempts, currentTask, connected, isTerminal, isWaitingForReview } = stream
+  const { run, events, tasks, attempts, currentTask, connected, isTerminal, isWaitingForReview } =
+    stream
 
   const review = useQuery({
     queryKey: ["workflow-review", runId, isWaitingForReview, run?.last_seq],
@@ -102,23 +104,22 @@ export function InlineGenerationMonitor({ certificationId, onClose }) {
 
   if (!runId) {
     return (
-      <div className="flex flex-col items-center gap-2 py-12 text-center">
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 py-16 text-center">
         {waitedTooLong ? (
           <>
             <AlertTriangle className="size-5 text-amber-600 dark:text-amber-400" />
-            <p className="text-sm font-medium">Nothing has picked this up yet</p>
-            <p className="max-w-md text-xs text-muted-foreground">
-              The build was queued but no worker has claimed it — usually the Python
-              generation service is not running, or cannot reach RabbitMQ or the
-              database. Still watching.
+            <p className="text-sm font-medium text-foreground">Nothing has picked this up yet</p>
+            <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
+              The build was queued but no worker has claimed it — usually the Python generation
+              service is not running, or cannot reach RabbitMQ or the database. Still watching.
             </p>
           </>
         ) : (
           <>
-            <TaskStatusIcon status="RUNNING" className="size-5" />
-            <p className="text-sm font-medium">Queuing the build…</p>
-            <p className="max-w-sm text-xs text-muted-foreground">
-              Waiting for a worker to pick this up. The timeline starts as soon as it does.
+            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+            <p className="text-sm font-medium text-foreground">Queuing the build…</p>
+            <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
+              Waiting for a worker to pick this up. The transcript starts as soon as it does.
             </p>
           </>
         )}
@@ -127,116 +128,145 @@ export function InlineGenerationMonitor({ certificationId, onClose }) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <TaskStatusIcon status={run?.status === "RUNNING" ? "RUNNING" : run?.status ?? "PENDING"} />
-          <span className="text-sm font-medium">
-            {currentTask ? stageLabel(currentTask.stage) : (run?.status ?? "").replace(/_/g, " ").toLowerCase()}
-          </span>
-          {isTerminal ? (
-            <Badge variant="secondary">Finished</Badge>
-          ) : connected ? (
-            <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400">Live</Badge>
-          ) : (
-            <Badge variant="outline" className="text-muted-foreground">Reconnecting</Badge>
-          )}
-        </div>
-        <div className="flex gap-2">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <header className="flex flex-wrap items-center gap-x-2.5 gap-y-2 border-b border-border px-4 py-2.5 sm:px-6">
+        <TaskStatusIcon status={run?.status === "RUNNING" ? "RUNNING" : (run?.status ?? "PENDING")} />
+
+        <span className="text-sm font-medium text-foreground">
+          {currentTask
+            ? stageLabel(currentTask.stage)
+            : (run?.status ?? "").replace(/_/g, " ").toLowerCase()}
+        </span>
+
+        {isTerminal ? (
+          <Badge variant="secondary">Finished</Badge>
+        ) : connected ? (
+          <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400">
+            Live
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="text-muted-foreground">
+            Reconnecting
+          </Badge>
+        )}
+
+        {attempts > 1 ? <Badge variant="outline">Attempt {attempts}</Badge> : null}
+
+        <span className="ml-auto flex items-center gap-2">
+          {/* Leaving and stopping were the same button before: the only control
+              on a live run was labelled "Cancel", so closing the workspace meant
+              clicking the thing that kills the run. They are now two buttons
+              that say what they do. */}
           {!isTerminal ? (
             <>
-              {/* Leaving and stopping were the same button before: the only
-                  control on a live run was labelled "Cancel", so closing the
-                  workspace meant clicking the thing that kills the run. They
-                  are now two buttons that say what they do. */}
-              <Button size="sm" onClick={onClose}>Close</Button>
               <Button
                 size="sm"
-                variant="outline"
+                variant="ghost"
                 disabled={cancel.isPending}
                 onClick={() => cancel.mutate()}
               >
                 <Ban className="mr-2 size-4" />
                 Stop generating
               </Button>
+              <Button size="sm" onClick={onClose}>
+                Close
+              </Button>
             </>
           ) : (
-            <Button size="sm" onClick={onClose}>Done</Button>
+            <Button size="sm" onClick={onClose}>
+              Done
+            </Button>
           )}
-        </div>
-      </div>
+        </span>
+      </header>
 
       {!isTerminal ? (
-        <p className="text-xs text-muted-foreground">
-          Generation runs on the server — closing this leaves it running. The
-          certification stays marked as generating until it finishes.
+        <p className="border-b border-border bg-muted/30 px-4 py-2 text-xs leading-relaxed text-muted-foreground sm:px-6">
+          Generation runs on the server — closing this leaves it running. The certification stays
+          marked as generating until it finishes.
         </p>
       ) : null}
 
-      <Tabs defaultValue="timeline" className="flex min-h-0 flex-1 flex-col">
-        <TabsList>
-          <TabsTrigger value="timeline">Timeline</TabsTrigger>
-          <TabsTrigger value="review">
-            Review
-            {isWaitingForReview ? (
-              <span className="ml-1.5 size-2 rounded-full bg-amber-500" aria-label="waiting" />
-            ) : null}
-          </TabsTrigger>
-          <TabsTrigger value="versions">Versions</TabsTrigger>
-          <TabsTrigger value="activity">Activity</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="timeline" className="min-h-0 flex-1">
-          {attempts > 1 ? (
-            <p className="pb-2 text-xs text-muted-foreground">
-              Attempt {attempts}. Earlier attempts are in Activity.
-            </p>
+      <div className="min-h-0 flex-1 px-2 sm:px-4">
+        <GenerationTranscript tasks={tasks} currentTaskId={currentTask?.id}>
+          {isWaitingForReview ? (
+            review.data?.review ? (
+              <ReviewCheckpoint
+                review={review.data.review}
+                versions={versions.data?.versions}
+                submitting={submitReview.isPending}
+                onSubmit={(decision) => submitReview.mutate(decision)}
+                onRestore={(version) =>
+                  submitReview.mutate({
+                    action: "edit",
+                    payload: version.artifact,
+                    restoredFrom: version.revision,
+                  })
+                }
+              />
+            ) : (
+              <p className="flex items-center gap-2 px-2.5 py-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                Loading the item waiting for review…
+              </p>
+            )
           ) : null}
-          <WorkflowTimeline tasks={tasks} currentTaskId={currentTask?.id} />
-        </TabsContent>
 
-        <TabsContent value="review" className="min-h-0 flex-1">
-          {isWaitingForReview && review.data?.review ? (
-            <ScrollArea className="h-full">
-              <div className="space-y-4 pr-3">
-                <div className="rounded-md border p-3">
-                  <ArtifactViewer payload={review.data.review.payload} />
-                </div>
-                <ReviewPanel
-                  review={review.data.review}
-                  submitting={submitReview.isPending}
-                  onSubmit={(decision) => submitReview.mutate(decision)}
-                />
-              </div>
-            </ScrollArea>
-          ) : (
-            <p className="py-10 text-center text-sm text-muted-foreground">
-              {isTerminal
-                ? "This run has finished — nothing left to review."
-                : "Nothing waiting for review right now."}
-            </p>
-          )}
-        </TabsContent>
+          {run?.status === "FAILED" ? (
+            <RunRecoveryPanel
+              runId={runId}
+              lastSeq={run?.last_seq}
+              errorMessage={run?.error_message}
+            />
+          ) : null}
+        </GenerationTranscript>
+      </div>
 
-        <TabsContent value="versions" className="min-h-0 flex-1">
-          <VersionHistory
-            versions={versions.data?.versions}
-            restoring={submitReview.isPending}
-            disabled={!isWaitingForReview}
-            onRestore={(version) =>
-              submitReview.mutate({
-                action: "edit",
-                payload: version.artifact,
-                restoredFrom: version.revision,
-              })
-            }
-          />
-        </TabsContent>
+      <RawEventLog events={events} />
 
-        <TabsContent value="activity" className="min-h-0 flex-1">
+      <GenerationStatusBar
+        status={run?.status === "RUNNING" ? "RUNNING" : (run?.status ?? "PENDING")}
+        stage={
+          currentTask
+            ? stageLabel(currentTask.stage)
+            : (run?.status ?? "").replace(/_/g, " ").toLowerCase()
+        }
+        startedAt={currentTask?.startedAt}
+        live={Boolean(currentTask) && !isTerminal}
+        connected={connected}
+        terminal={isTerminal}
+        className="px-4 sm:px-6"
+      />
+    </div>
+  )
+}
+
+/** The full event log, closed by default — a debugging aid, not the main view. */
+function RawEventLog({ events }) {
+  const [open, setOpen] = useState(false)
+  const count = events?.length ?? 0
+
+  return (
+    <div className="border-t border-border">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-1.5 px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground sm:px-6"
+      >
+        <ChevronDown
+          aria-hidden="true"
+          className={cn("size-3.5 transition-transform", open && "rotate-180")}
+        />
+        Event log
+        <span className="font-mono tabular-nums">({count})</span>
+      </button>
+
+      {open ? (
+        <div className="h-48 border-t border-border px-4 py-2.5 sm:px-6">
           <ActivityPanel events={events} />
-        </TabsContent>
-      </Tabs>
+        </div>
+      ) : null}
     </div>
   )
 }

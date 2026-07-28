@@ -4,6 +4,7 @@ import jakarta.persistence.EntityNotFoundException;
 import com.capstone.rebyu.aigateway.common.AiProviderRateLimitException;
 import com.capstone.rebyu.aigateway.common.InvalidAiGeneratedQuestionException;
 import com.capstone.rebyu.aigateway.common.InvalidAiResponseException;
+import com.capstone.rebyu.aigateway.client.AiServiceStatusException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -93,6 +94,18 @@ public class GlobalExceptionHandler {
         log.warn("Invalid generated question draft: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
                 .body(new ErrorResponse(HttpStatus.UNPROCESSABLE_ENTITY.value(), ex.getMessage(), null));
+    }
+
+    /**
+     * A refusal the Python AI backend already explained — passed through with
+     * its own status and sentence rather than flattened into a 500, so the
+     * workspace can tell an admin why a retry was declined.
+     */
+    @ExceptionHandler(AiServiceStatusException.class)
+    public ResponseEntity<ErrorResponse> handleAiServiceStatus(AiServiceStatusException ex) {
+        log.warn("AI service refused the request ({}): {}", ex.status(), ex.getMessage());
+        return ResponseEntity.status(ex.status())
+                .body(new ErrorResponse(ex.status().value(), ex.getMessage(), null));
     }
 
     @ExceptionHandler(AiProviderRateLimitException.class)

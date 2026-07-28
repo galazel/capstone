@@ -11,12 +11,12 @@ export default function ItemStatusLegend() {
   ]
 
   return (
-    <ul className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+    <ul className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs font-semibold text-rb-wolf">
       {entries.map((entry) => {
         const Icon = entry.icon
         return (
           <li key={entry.key} className="flex items-center gap-1.5">
-            <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+            <Icon className={`size-3.5 shrink-0 ${entry.dot ?? "text-rb-bee"}`} aria-hidden="true" />
             <span>{entry.label}</span>
           </li>
         )

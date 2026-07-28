@@ -49,6 +49,23 @@ export const cancelWorkflowRun = (runId) =>
   base(`ai/workflows/${runId}/cancel`, { method: "POST" })
 
 /**
+ * Recovery for a failed run, offered when the run reports `recovery.can_retry`.
+ *
+ * Retry re-runs only the step that died, keeping everything before it — a
+ * curriculum call that failed after a two-minute document ingestion does not
+ * repeat the ingestion. Restart discards the checkpoints and begins again,
+ * re-reading the certification's documents, which is the answer when the run's
+ * state is itself the problem.
+ *
+ * Both return immediately; the work continues on the run's event stream.
+ */
+export const retryWorkflowRun = (runId) =>
+  base(`ai/workflows/${runId}/retry`, { method: "POST" })
+
+export const restartWorkflowRun = (runId) =>
+  base(`ai/workflows/${runId}/restart`, { method: "POST" })
+
+/**
  * Submits a reviewer's decision for the item a run is paused on.
  *
  * `action` is one of approve | edit | improve | regenerate | skip |

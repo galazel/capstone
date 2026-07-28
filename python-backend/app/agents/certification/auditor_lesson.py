@@ -23,10 +23,10 @@ Return only the structured LessonAuditResult.
 """
 
 
-@lru_cache(maxsize=1)
-def get_auditor_lesson_agent():
+@lru_cache(maxsize=None)
+def get_auditor_lesson_agent(model: str | None = None):
     return create_agent(
-        model=get_llm("classification"),
+        model=get_llm("classification", model),
         tools=[],
         response_format=ToolStrategy(LessonAuditResult),
         system_prompt=SYSTEM_PROMPT,

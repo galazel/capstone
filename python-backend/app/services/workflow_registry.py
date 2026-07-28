@@ -15,7 +15,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.db.models import WorkflowEvent, WorkflowRun
@@ -191,18 +191,36 @@ def record_event(
 ) -> WorkflowEvent:
     """Appends an event and advances the run's sequence counter.
 
-    `seq` is allocated from the run row itself rather than from
-    `max(seq)+1`, so two concurrent emitters cannot be handed the same
-    number -- the row update serialises them.
+    `seq` is allocated by the *database*, with `UPDATE ... SET last_seq =
+    last_seq + 1 RETURNING last_seq`. Incrementing the ORM attribute instead
+    was a read-modify-write across the round trip: two sessions that had both
+    loaded the run at seq 127 each computed 128, and the row lock only
+    serialised the writes, not the stale reads either had already taken. The
+    second insert then hit `uq_workflow_events_run_seq`, which is how a Retry
+    click landed on a 500 while a resume was mid-flight emitting node events.
+
+    Computing the value inside the UPDATE means the increment happens under
+    the row lock that the statement itself takes, so concurrent emitters are
+    handed distinct numbers.
 
     Does not commit: callers batch events into their own transaction.
     """
-    run.last_seq += 1
-    run.updated_at = _now()
+    # Autoflushes any pending changes to `run` first (status, stage, ...), so
+    # this statement extends the same row lock rather than racing it.
+    seq = session.execute(
+        update(WorkflowRun)
+        .where(WorkflowRun.run_id == run.run_id)
+        .values(last_seq=WorkflowRun.last_seq + 1, updated_at=_now())
+        .returning(WorkflowRun.last_seq)
+    ).scalar_one()
+
+    # Keep the identity-mapped instance in step with what the database now
+    # holds; callers read `run.last_seq` straight back out.
+    session.refresh(run, ["last_seq", "updated_at"])
 
     event = WorkflowEvent(
         run_id=run.run_id,
-        seq=run.last_seq,
+        seq=seq,
         event_type=event_type,
         stage=stage,
         task_status=task_status,
@@ -283,10 +301,48 @@ def mark_waiting_for_review(
 def mark_review_submitted(
     session: Session, thread_id: str, *, stage: str | None, decision: str
 ) -> WorkflowRun | None:
-    return _transition(
-        session, thread_id, status=RUNNING, event_type=EVT_REVIEW_SUBMITTED,
-        stage=stage, task_status=TASK_RUNNING, payload={"decision": decision},
+    """Claims a paused run for exactly one resumer.
+
+    Returns None when the run was not actually awaiting review, which means
+    another caller already claimed it -- or it was never paused at all.
+
+    The status change is a compare-and-swap rather than a read-then-write
+    because two resumes for one pause is not hypothetical: a double-click sent
+    two approvals for the same lesson, both read WAITING_FOR_REVIEW, and both
+    drove the same LangGraph thread. The timeline recorded every node twice,
+    the slower driver was still executing when the faster one finished and
+    parked the run back at WAITING_FOR_REVIEW, and reconciliation then read
+    that as a stranded run and failed it. One winner per pause is the fix; the
+    loser is told the run has moved on.
+    """
+    run = session.execute(
+        select(WorkflowRun).where(WorkflowRun.thread_id == thread_id)
+    ).scalar_one_or_none()
+    if run is None:
+        logger.warning("No workflow run registered for thread_id=%s", thread_id)
+        return None
+
+    claimed = session.execute(
+        update(WorkflowRun)
+        .where(WorkflowRun.run_id == run.run_id, WorkflowRun.status == WAITING_FOR_REVIEW)
+        .values(status=RUNNING, error_message=None, completed_at=None, updated_at=_now())
+        .returning(WorkflowRun.run_id)
+    ).scalar_one_or_none()
+
+    if claimed is None:
+        return None
+
+    session.refresh(run)
+    if stage is not None:
+        run.current_stage = stage
+    event = record_event(
+        session, run, EVT_REVIEW_SUBMITTED,
+        stage=stage or run.current_stage, task_status=TASK_RUNNING,
+        payload={"decision": decision},
     )
+    session.commit()
+    _publish(run.run_id, [event])
+    return run
 
 
 def mark_completed(

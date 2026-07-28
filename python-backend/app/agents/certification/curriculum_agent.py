@@ -24,6 +24,12 @@ SYSTEM_PROMPT = """
                     - Major Categories contain only Middle Categories.
                     - Middle Categories contain only Lessons.
                     - Never create separate arrays for categories and lessons.
+                    - Every Major Category is a separate entry in the
+                      top-level "majorCategories" array. Never place a
+                      Major Category inside another Major Category's
+                      "middleCategories" array. An entry inside
+                      "middleCategories" ALWAYS has a "lessons" array and
+                      NEVER has a "middleCategories" array of its own.
                     - Return only curriculum JSON data.
                     - Do not return JSON schema.
 
@@ -80,11 +86,25 @@ SYSTEM_PROMPT = """
                     - expected_learner_outcome   (string)
 
 
+                    Size:
+
+                    A curriculum is the whole certification, not a sample of
+                    it. Produce:
+
+                    - 3 to 6 Major Categories
+                    - 2 to 4 Middle Categories inside EVERY Major Category
+                    - 3 to 5 Lessons inside EVERY Middle Category
+
+                    Never stop after one Major Category, and never leave a
+                    Middle Category with a single lesson. A real certification
+                    syllabus has dozens of lessons; match its breadth.
+
+
                     Rules:
 
                     - Follow beginner to advanced progression.
                     - Avoid duplicate topics.
-                    - Cover exam objectives.
+                    - Cover every exam objective, not just the first few.
                     - Do not generate lesson content.
                     - Do not create quizzes.
                     - Do not create assessments.
@@ -98,10 +118,10 @@ SYSTEM_PROMPT = """
                     """
 
 
-@lru_cache(maxsize=1)
-def get_curriculum_agent():
+@lru_cache(maxsize=None)
+def get_curriculum_agent(model: str | None = None):
     return create_agent(
-        model=get_llm("generation"),
+        model=get_llm("generation", model),
         tools=curriculum_tools,
         response_format=ToolStrategy(CertificationCurriculum),
         system_prompt=SYSTEM_PROMPT,
