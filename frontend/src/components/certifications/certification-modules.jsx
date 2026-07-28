@@ -1,24 +1,24 @@
-import React, { useEffect, useState } from "react"
+import React, { useCallback, useEffect, useState } from "react"
 import {
-    AlertCircleIcon,
     BookOpen,
     ChevronDown,
     ChevronRight,
-    FileSpreadsheet,
     FileText,
     FolderTree,
     Plus,
     Sparkles,
     Trash2,
-    UploadIcon,
-    XIcon,
 } from "lucide-react"
 
 import { toast } from "sonner"
 
-import { formatBytes, useFileUpload } from "@/hooks/use-file-upload"
 import { Button } from "@/components/ui/button"
+<<<<<<< Updated upstream
 import AiGenerationProgress from "@/components/commons/ai-generation-progress.jsx"
+=======
+import { DocumentUploadStep } from "@/components/certifications/document-upload-step.jsx"
+import { GenerationHandoffProgress } from "@/components/certifications/generation-handoff-progress.jsx"
+>>>>>>> Stashed changes
 import { generateCertificationStructure } from "@/services/certificationService"
 import { mapCertificationToModuleStructure } from "@/utils/certification-structure"
 
@@ -56,6 +56,7 @@ function IconButton({
     )
 }
 
+<<<<<<< Updated upstream
 function getFileExtension(fileName = "") {
     return fileName.split(".").pop()?.toLowerCase() ?? ""
 }
@@ -100,10 +101,33 @@ function DocumentIcon({ fileName }) {
     return (
         <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
             <FileText size={19} />
+=======
+function ExamBadges({ exams }) {
+    if (!Array.isArray(exams) || exams.length === 0) {
+        return null
+    }
+
+    return (
+        <div className="mt-1 flex flex-wrap items-center gap-1">
+            {exams.map((exam) => (
+                <span
+                    key={exam.examId}
+                    title={`${exam.examType ?? "Exam"} · ${exam.status ?? "DRAFT"}`}
+                    className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2 py-0.5 text-[11px] font-medium text-zinc-600"
+                >
+                    <FileText size={11} className="text-zinc-400" />
+                    {exam.title}
+                    {exam.totalQuestions != null && (
+                        <span className="text-zinc-400">· {exam.totalQuestions}Q</span>
+                    )}
+                </span>
+            ))}
+>>>>>>> Stashed changes
         </div>
     )
 }
 
+<<<<<<< Updated upstream
 function GenerateCertificationStructure({
                                             onCancel,
                                             onGenerate,
@@ -359,16 +383,38 @@ function GenerateCertificationStructure({
     )
 }
 
+=======
+>>>>>>> Stashed changes
 function CertificationModules({
                                   certificationId = null,
                                   value,
                                   onChange,
                                   onCreateMiddleExam,
+<<<<<<< Updated upstream
                                   onGenerateForNewCertification,
+=======
+                                  onGenerationStarted,
+>>>>>>> Stashed changes
                               }) {
     const [localCategories, setLocalCategories] = useState([])
     const [currentPage, setCurrentPage] = useState("default")
     const [isGeneratingStructure, setIsGeneratingStructure] = useState(false)
+<<<<<<< Updated upstream
+=======
+    // Real byte progress from axios, so the panel reports what is actually
+    // happening instead of advancing on a timer.
+    const [uploadPercent, setUploadPercent] = useState(0)
+    const [pendingFileCount, setPendingFileCount] = useState(0)
+    const [selectedDocuments, setSelectedDocuments] = useState([])
+    const [generateError, setGenerateError] = useState("")
+
+    // Identity-stable so the upload step's reporting effect does not re-fire on
+    // every render of this editor.
+    const handleDocumentsChange = useCallback((documents) => {
+        setSelectedDocuments(documents)
+        setGenerateError((current) => (documents.length > 0 ? "" : current))
+    }, [])
+>>>>>>> Stashed changes
 
     const categories = Array.isArray(value) ? value : localCategories
 
@@ -621,9 +667,18 @@ function CertificationModules({
         onCreateMiddleExam?.(examContext)
     }
 
-    const handleGenerateDocuments = async (selectedDocuments) => {
+    const handleGenerateDocuments = async () => {
+        if (selectedDocuments.length === 0) {
+            setGenerateError(
+                "Upload at least one document before generating the structure."
+            )
+            return
+        }
+
         try {
+            setGenerateError("")
             setIsGeneratingStructure(true)
+<<<<<<< Updated upstream
 
             if (certificationId != null) {
 
@@ -657,6 +712,53 @@ function CertificationModules({
 
             throw new Error(
                 "Save the certification first before generating its structure."
+=======
+            setPendingFileCount(selectedDocuments.length)
+            setUploadPercent(0)
+
+            // Only reachable for a saved certification: creating one is
+            // generation-only now and runs from the create modal, so there is no
+            // longer an unsaved-certification branch here.
+            if (certificationId == null) {
+                throw new Error(
+                    "Save the certification first before generating its structure."
+                )
+            }
+
+            const savedCertification = await generateCertificationStructure(
+                certificationId,
+                selectedDocuments,
+                (event) =>
+                    setUploadPercent(
+                        event.total
+                            ? Math.round((event.loaded / event.total) * 100)
+                            : 0
+                    )
+            )
+
+            // Curriculum generation now runs asynchronously in the background
+            // (see the RabbitMQ-driven Python consumer) -- the response here
+            // only confirms the request was queued, not that any categories
+            // or lessons exist yet. Reflect whatever came back (an empty
+            // structure) and let the notification bell announce completion.
+            updateCategories(
+                mapCertificationToModuleStructure(savedCertification)
+            )
+            setCurrentPage("default")
+
+            // Hand the run to the monitor rendered in this same modal rather
+            // than navigating away. Generation is a long conversation the admin
+            // steers -- it pauses for their review repeatedly -- and sending
+            // them to a different page mid-flow loses the thread of what they
+            // were doing.
+            onGenerationStarted?.(certificationId)
+        } catch (error) {
+            setGenerateError(
+                getBackendErrorMessage(
+                    error,
+                    "Structure generation failed. Please try again."
+                )
+>>>>>>> Stashed changes
             )
         } finally {
             setIsGeneratingStructure(false)
@@ -682,11 +784,40 @@ function CertificationModules({
     if (currentPage === "generate") {
         return (
             <>
-                <GenerateCertificationStructure
-                    onCancel={() => setCurrentPage("default")}
-                    onGenerate={handleGenerateDocuments}
-                    isGenerating={isGeneratingStructure}
-                />
+                <div className="space-y-5">
+                    <DocumentUploadStep
+                        disabled={isGeneratingStructure}
+                        error={generateError}
+                        onFilesChange={handleDocumentsChange}
+                    />
+
+                    {/* A normal row, not the viewport-fixed bar this used to
+                        have: inside a modal, `fixed bottom-0` anchors to the
+                        window rather than the dialog. */}
+                    <div className="flex items-center justify-end gap-3 border-t border-border pt-4">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={isGeneratingStructure}
+                            onClick={() => {
+                                setCurrentPage("default")
+                                setGenerateError("")
+                            }}
+                        >
+                            Cancel
+                        </Button>
+
+                        <Button
+                            type="button"
+                            className="gap-2"
+                            disabled={isGeneratingStructure}
+                            onClick={handleGenerateDocuments}
+                        >
+                            <Sparkles size={16} />
+                            {isGeneratingStructure ? "Generating..." : "Generate"}
+                        </Button>
+                    </div>
+                </div>
 
                 <AiGenerationProgress
                     open={isGeneratingStructure}

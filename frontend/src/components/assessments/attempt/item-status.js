@@ -9,41 +9,44 @@ import {
 // Single source of truth for item states so the navigator cards, the legend,
 // and screen-reader labels never drift. States are conveyed with icon + border
 // + text, never color alone.
+// Colours mirror the navigator shown on the landing hero so the marketing
+// promise and the real exam surface read as the same product: Macaw = answered,
+// Bee = flagged, Eel outline = where you are, Swan = untouched.
 export const ITEM_STATUS = {
   current: {
     key: "current",
     label: "Current",
     icon: CircleDotIcon,
-    card: "border-primary bg-primary text-primary-foreground ring-2 ring-primary/40",
-    dot: "text-primary",
+    card: "border-rb-eel bg-rb-snow text-rb-eel shadow-[0_3px_0_var(--color-rb-swan)]",
+    dot: "text-rb-eel",
   },
   answered: {
     key: "answered",
     label: "Answered",
     icon: CheckIcon,
-    card: "border-primary/50 bg-primary/10 text-foreground",
-    dot: "text-primary",
+    card: "border-rb-macaw bg-rb-macaw text-rb-snow",
+    dot: "text-rb-macaw",
   },
   partial: {
     key: "partial",
     label: "Partially answered",
     icon: CircleDotIcon,
-    card: "border-amber-400 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
-    dot: "text-amber-500",
+    card: "border-rb-fox bg-rb-fox-wash text-rb-fox-lip",
+    dot: "text-rb-fox",
   },
   skipped: {
     key: "skipped",
     label: "Skipped",
     icon: SkipForwardIcon,
-    card: "border-dashed border-muted-foreground/50 bg-muted/40 text-muted-foreground",
-    dot: "text-muted-foreground",
+    card: "border-dashed border-rb-hare bg-rb-polar text-rb-wolf",
+    dot: "text-rb-hare",
   },
   unanswered: {
     key: "unanswered",
     label: "Not answered",
     icon: CircleDashedIcon,
-    card: "border-border bg-background text-muted-foreground",
-    dot: "text-muted-foreground/60",
+    card: "border-rb-swan bg-rb-polar text-rb-hare",
+    dot: "text-rb-hare",
   },
 }
 

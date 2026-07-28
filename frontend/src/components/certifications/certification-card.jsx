@@ -1,5 +1,10 @@
 import { useState } from "react"
 import {
+<<<<<<< Updated upstream
+=======
+  ActivityIcon,
+  Loader2,
+>>>>>>> Stashed changes
   MoreVertical,
   SendIcon,
   Trash2Icon,
@@ -17,6 +22,11 @@ import { useNavigate } from "react-router-dom"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
+<<<<<<< Updated upstream
+=======
+import { cn } from "@/lib/utils"
+import { generationStatusOf } from "@/hooks/use-active-generations"
+>>>>>>> Stashed changes
 import { getFileViewUrl } from "@/services/fileService.js"
 import {
   deleteCertification,
@@ -50,12 +60,38 @@ function getErrorMessage(error, fallback = "Something went wrong.") {
   )
 }
 
+<<<<<<< Updated upstream
 function CertificationCard({ item, certification }) {
+=======
+/**
+ * `generationRun` is the live workflow run building this certification, or null.
+ *
+ * While one exists the certification is a shell: AI generation writes its
+ * categories, lessons, and assessments only when the run finishes, so opening
+ * it would show an empty structure and publishing it would ship one. The card
+ * refuses both, instead of looking finished the moment the generation
+ * workspace was closed.
+ *
+ * It does not become a dead end, though. Closing the workspace leaves the run
+ * going, so the card carries the way back to it — otherwise the only view of a
+ * generation in progress would be the modal that started it, and closing that
+ * would lose sight of it until it finished.
+ */
+function CertificationCard({ item, certification, generationRun = null }) {
+>>>>>>> Stashed changes
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
+<<<<<<< Updated upstream
+=======
+  const generationStatus = generationStatusOf(generationRun)
+  const isGenerating = Boolean(generationStatus)
+  const generationLabel =
+      generationStatus === "AWAITING_REVIEW" ? "Waiting for review" : "Generating…"
+
+>>>>>>> Stashed changes
   const currentCertification = certification ?? item
 
   const certificationId =
@@ -173,7 +209,34 @@ function CertificationCard({ item, certification }) {
         },
       })
 
+  /** Back to the live run this card is tracking. */
+  function handleOpenGeneration(event) {
+    event?.preventDefault()
+    event?.stopPropagation()
+
+    if (!generationRun?.run_id) {
+      toast.error("Cannot open the generation", {
+        description: "This run is no longer available.",
+      })
+      return
+    }
+
+    // Relative, like the certification route below: both resolve under /admin.
+    navigate(`generation/${generationRun.run_id}`)
+  }
+
   function handleOpenCertification() {
+<<<<<<< Updated upstream
+=======
+    if (isGenerating) {
+      toast.info("Still generating", {
+        description: `"${certificationTitle}" is being built. Open the progress view to watch it.`,
+      })
+
+      return
+    }
+
+>>>>>>> Stashed changes
     if (!certificationId) {
       toast.error("Cannot open certification", {
         description: "Certification ID is missing.",
@@ -233,7 +296,7 @@ function CertificationCard({ item, certification }) {
             }}
             className="group flex h-[380px] w-full cursor-pointer flex-col overflow-hidden rounded-[32px] border border-border bg-card shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/45 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
         >
-          <figure className="relative h-52 shrink-0 overflow-hidden border-b border-border bg-muted/40">
+          <figure className="relative h-48 shrink-0 overflow-hidden border-b border-border bg-muted/40">
             <img
                 src={imageUrl}
                 alt={certificationTitle}
@@ -248,26 +311,34 @@ function CertificationCard({ item, certification }) {
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent" />
           </figure>
 
-          <div className="flex min-h-0 flex-1 flex-col p-5 pb-6">
-            <div className="flex items-start justify-between gap-3">
+          <div className="flex min-h-0 flex-1 flex-col p-5">
+            <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex max-w-full truncate rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
-                  {certificationIndustry}
-                </span>
-
-                  {isPublished ? (
-                      <span className="inline-flex rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-600">
-                    Published
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="inline-flex max-w-full truncate rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
+                    {certificationIndustry}
                   </span>
+
+<<<<<<< Updated upstream
+                  {isPublished ? (
+=======
+                  {/* While generating, the pill on the cover image already says
+                      so — repeating it here only crowds the industry pill. */}
+                  {isGenerating ? null : isPublished ? (
+>>>>>>> Stashed changes
+                      <span className="inline-flex rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-600">
+                        Published
+                      </span>
                   ) : (
                       <span className="inline-flex rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-600">
-                    Draft
-                  </span>
+                        Draft
+                      </span>
                   )}
                 </div>
 
-                <h2 className="font-heading mt-2 line-clamp-2 text-md font-semibold leading-6 text-foreground">
+                {/* `text-md` is not a Tailwind utility and never was — the title
+                    was silently inheriting the body size. */}
+                <h2 className="font-heading mt-2.5 line-clamp-2 text-base leading-6 font-semibold text-foreground">
                   {certificationTitle}
                 </h2>
               </div>
@@ -289,6 +360,15 @@ function CertificationCard({ item, certification }) {
                     onClick={(event) => event.stopPropagation()}
                 >
                   <DropdownMenuGroup>
+                    {isGenerating ? (
+                        <DropdownMenuItem onSelect={handleOpenGeneration}>
+                          <ActivityIcon className="mr-2 h-4 w-4" />
+                          {generationStatus === "AWAITING_REVIEW"
+                              ? "Review now"
+                              : "View progress"}
+                        </DropdownMenuItem>
+                    ) : null}
+
                     <DropdownMenuItem
                         disabled={isPublishing || isDeleting || isPublished}
                         onSelect={handlePublishCertification}
@@ -314,12 +394,36 @@ function CertificationCard({ item, certification }) {
               </DropdownMenu>
             </div>
 
+<<<<<<< Updated upstream
             <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted-foreground">
               {certificationDescription}
+=======
+            <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
+              {isGenerating
+                  ? generationStatus === "AWAITING_REVIEW"
+                      ? "Paused for your review in the generation workspace."
+                      : "Building categories, lessons, and assessments. This can take several minutes."
+                  : certificationDescription}
+>>>>>>> Stashed changes
             </p>
 
-            <div className="mt-auto pt-4">
-              <div className="h-1 w-10 shrink-0 rounded-full bg-primary" />
+            <div className="mt-auto pt-5">
+              {isGenerating ? (
+                  <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="w-full"
+                      onClick={handleOpenGeneration}
+                  >
+                    <ActivityIcon className="mr-2 h-4 w-4" />
+                    {generationStatus === "AWAITING_REVIEW"
+                        ? "Review now"
+                        : "View progress"}
+                  </Button>
+              ) : (
+                  <div className="h-1 w-10 shrink-0 rounded-full bg-primary" />
+              )}
             </div>
           </div>
         </div>

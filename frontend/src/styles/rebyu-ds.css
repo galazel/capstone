@@ -1,0 +1,991 @@
+/* ===========================================================================
+   REBYU DESIGN SYSTEM
+   ---------------------------------------------------------------------------
+   Tactile, motivating certification learning. Duolingo-derived colour and
+   typographic hierarchy, original visual identity.
+
+   Scoping note: the palette lives under `.rebyu-ds` rather than `:root` so the
+   existing portal themes (netacad blue) keep rendering unchanged while this
+   system is reviewed. Promoting it to the whole app later means changing the
+   `.rebyu-ds` selector below to `:root`.
+   =========================================================================== */
+
+/* --- Tailwind utility generation ------------------------------------------
+   Additive only: every token is namespaced `rb-` so no existing utility is
+   redefined. Gives us `bg-rb-feather`, `text-rb-eel`, `rounded-rb-card`, etc. */
+@theme {
+    /* Core brand */
+    --color-rb-feather: #58cc02;
+    --color-rb-feather-lip: #46a302;
+    --color-rb-mask: #89e219;
+    --color-rb-mask-lip: #6fb814;
+
+    /* Accents */
+    --color-rb-macaw: #1cb0f6;
+    --color-rb-macaw-lip: #1899d6;
+    --color-rb-cardinal: #ff4b4b;
+    --color-rb-cardinal-lip: #e03d3d;
+    --color-rb-bee: #ffc800;
+    --color-rb-bee-lip: #e6a800;
+    --color-rb-fox: #ff9600;
+    --color-rb-fox-lip: #e08600;
+    --color-rb-beetle: #ce82ff;
+    --color-rb-beetle-lip: #b061e6;
+    --color-rb-humpback: #2b70c9;
+    --color-rb-humpback-lip: #225aa3;
+
+    /* Neutrals */
+    --color-rb-eel: #4b4b4b;
+    --color-rb-wolf: #777777;
+    --color-rb-hare: #afafaf;
+    --color-rb-swan: #e5e5e5;
+    --color-rb-polar: #f7f7f7;
+    --color-rb-snow: #ffffff;
+
+    /* Tinted surfaces — accent washes for full-bleed section blocks */
+    --color-rb-feather-wash: #eefce3;
+    --color-rb-macaw-wash: #e3f5fe;
+    --color-rb-bee-wash: #fff7de;
+    --color-rb-fox-wash: #fff1e0;
+    --color-rb-beetle-wash: #f6ecff;
+    --color-rb-cardinal-wash: #ffecec;
+
+    /* Type families.
+       Feather Bold and DIN Next Rounded are the licensed faces and lead both
+       stacks — if either is installed locally or self-hosted (see the
+       @font-face block below) it wins. Nunito / Nunito Sans ship as the
+       fallbacks: same rounded terminals and geometric skeleton, so the
+       metrics and voice hold up when the licensed files are absent. */
+    --font-rb-display: "Feather Bold", "Nunito", ui-rounded, system-ui, sans-serif;
+    --font-rb-body:
+        "DIN Next Rounded", "DIN Next Rounded LT Pro", "Nunito Sans", ui-sans-serif, system-ui,
+        sans-serif;
+
+    /* Shape */
+    --radius-rb-card: 24px;
+    --radius-rb-tile: 16px;
+    --radius-rb-pill: 999px;
+}
+
+/* --- Self-hosting the licensed faces ---------------------------------------
+   Drop the licensed woff2 files into `frontend/public/fonts/` and uncomment.
+   Nothing else changes: both names already lead their stacks above, so the
+   Nunito fallbacks stop being used the moment these resolve.
+
+@font-face {
+    font-family: "Feather Bold";
+    src: url("/fonts/feather-bold.woff2") format("woff2");
+    font-weight: 700 900;
+    font-display: swap;
+}
+@font-face {
+    font-family: "DIN Next Rounded";
+    src: url("/fonts/din-next-rounded-regular.woff2") format("woff2");
+    font-weight: 400;
+    font-display: swap;
+}
+@font-face {
+    font-family: "DIN Next Rounded";
+    src: url("/fonts/din-next-rounded-medium.woff2") format("woff2");
+    font-weight: 500;
+    font-display: swap;
+}
+@font-face {
+    font-family: "DIN Next Rounded";
+    src: url("/fonts/din-next-rounded-bold.woff2") format("woff2");
+    font-weight: 700;
+    font-display: swap;
+}
+--------------------------------------------------------------------------- */
+
+.rebyu-ds {
+    /* 8px spacing system */
+    --rb-s1: 8px;
+    --rb-s2: 16px;
+    --rb-s3: 24px;
+    --rb-s4: 32px;
+    --rb-s5: 40px;
+    --rb-s6: 48px;
+    --rb-s8: 64px;
+    --rb-s10: 80px;
+    --rb-s12: 96px;
+
+    /* Tactile depth. The "lip" is a solid offset, not a blur — it is what makes
+       a control read as a physical key rather than a flat rectangle. */
+    --rb-lip: 4px;
+    --rb-lip-lg: 6px;
+
+    /* Marketing surface is light-only; ignore any inherited portal dark mode. */
+    color-scheme: light;
+}
+
+/* Inherited defaults live in @layer base so a `bg-rb-polar` / `text-*` utility
+   on the same element still wins. Unlayered rules outrank every Tailwind layer,
+   which would otherwise pin every `.rebyu-ds` root to a Snow background. */
+@layer base {
+    .rebyu-ds {
+        color: var(--color-rb-eel);
+        font-family: var(--font-rb-body);
+        background: var(--color-rb-snow);
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   TYPOGRAPHY
+   Display headings are set lowercase and left-aligned by rule — the playful
+   rhythm is structural, not a per-instance decision. Body copy never borrows
+   the display face mid-sentence.
+   --------------------------------------------------------------------------- */
+.rebyu-ds .rb-display {
+    font-family: var(--font-rb-display);
+    font-weight: 800;
+    text-transform: lowercase;
+    text-align: left;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+    color: var(--color-rb-eel);
+}
+
+.rebyu-ds .rb-display-xl {
+    font-size: clamp(2.5rem, 6vw, 4.25rem);
+}
+.rebyu-ds .rb-display-lg {
+    font-size: clamp(2rem, 4.2vw, 3rem);
+}
+.rebyu-ds .rb-display-md {
+    font-size: clamp(1.5rem, 2.6vw, 2rem);
+    line-height: 1.15;
+}
+.rebyu-ds .rb-display-sm {
+    font-size: 1.25rem;
+    line-height: 1.25;
+}
+
+/* Eyebrow: uppercase utility label. Body face — it is data, not voice. */
+.rebyu-ds .rb-eyebrow {
+    font-family: var(--font-rb-body);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-rb-wolf);
+}
+
+.rebyu-ds .rb-body {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--color-rb-wolf);
+}
+.rebyu-ds .rb-body-lg {
+    font-size: 1.125rem;
+    line-height: 1.65;
+    color: var(--color-rb-wolf);
+}
+
+/* Numerals in stat positions must not jitter as values change. */
+.rebyu-ds .rb-numeric {
+    font-family: var(--font-rb-display);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-rb-eel);
+}
+
+/* ---------------------------------------------------------------------------
+   TACTILE BUTTON
+   56px tall, fully rounded, solid lip beneath. Pressing compresses the button
+   into its own shadow so the travel is visible rather than implied.
+   --------------------------------------------------------------------------- */
+.rebyu-ds .rb-btn {
+    --rb-btn-face: var(--color-rb-feather);
+    --rb-btn-lip: var(--color-rb-feather-lip);
+    --rb-btn-ink: var(--color-rb-snow);
+
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--rb-s1);
+    min-height: 56px;
+    padding: 0 var(--rb-s4);
+    border: 0;
+    border-radius: var(--radius-rb-pill);
+    background: var(--rb-btn-face);
+    color: var(--rb-btn-ink);
+    box-shadow: 0 var(--rb-lip) 0 var(--rb-btn-lip);
+
+    font-family: var(--font-rb-display);
+    font-weight: 800;
+    font-size: 1rem;
+    letter-spacing: 0.01em;
+    text-transform: lowercase;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+
+    transition:
+        transform 0.06s ease-out,
+        box-shadow 0.06s ease-out,
+        filter 0.15s ease-out;
+}
+
+.rebyu-ds .rb-btn:hover {
+    filter: brightness(1.06);
+}
+
+/* The compression: travel down exactly the lip height, and remove the lip. */
+.rebyu-ds .rb-btn:active {
+    transform: translateY(var(--rb-lip));
+    box-shadow: 0 0 0 var(--rb-btn-lip);
+    filter: brightness(0.98);
+}
+
+.rebyu-ds .rb-btn:focus-visible {
+    outline: 3px solid var(--color-rb-macaw);
+    outline-offset: 3px;
+}
+
+.rebyu-ds .rb-btn[disabled],
+.rebyu-ds .rb-btn[aria-disabled="true"] {
+    --rb-btn-face: var(--color-rb-swan);
+    --rb-btn-lip: var(--color-rb-swan);
+    --rb-btn-ink: var(--color-rb-hare);
+    box-shadow: none;
+    cursor: not-allowed;
+    filter: none;
+}
+
+.rebyu-ds .rb-btn-lg {
+    min-height: 64px;
+    padding: 0 var(--rb-s5);
+    font-size: 1.125rem;
+}
+.rebyu-ds .rb-btn-sm {
+    min-height: 44px;
+    padding: 0 var(--rb-s3);
+    font-size: 0.9375rem;
+}
+
+/* Variants — face + lip only, geometry is shared. */
+.rebyu-ds .rb-btn-mask {
+    --rb-btn-face: var(--color-rb-mask);
+    --rb-btn-lip: var(--color-rb-mask-lip);
+    --rb-btn-ink: #3d6b06;
+}
+.rebyu-ds .rb-btn-macaw {
+    --rb-btn-face: var(--color-rb-macaw);
+    --rb-btn-lip: var(--color-rb-macaw-lip);
+}
+.rebyu-ds .rb-btn-beetle {
+    --rb-btn-face: var(--color-rb-beetle);
+    --rb-btn-lip: var(--color-rb-beetle-lip);
+}
+.rebyu-ds .rb-btn-fox {
+    --rb-btn-face: var(--color-rb-fox);
+    --rb-btn-lip: var(--color-rb-fox-lip);
+}
+.rebyu-ds .rb-btn-cardinal {
+    --rb-btn-face: var(--color-rb-cardinal);
+    --rb-btn-lip: var(--color-rb-cardinal-lip);
+}
+
+/* Ghost: outlined, still travels. Reads as the quieter of a button pair. */
+.rebyu-ds .rb-btn-ghost {
+    --rb-btn-face: var(--color-rb-snow);
+    --rb-btn-lip: var(--color-rb-swan);
+    --rb-btn-ink: var(--color-rb-wolf);
+    border: 2px solid var(--color-rb-swan);
+}
+.rebyu-ds .rb-btn-ghost:hover {
+    filter: none;
+    border-color: var(--color-rb-hare);
+    color: var(--color-rb-eel);
+}
+
+/* On dark or saturated blocks the lip must darken the face, not the block. */
+.rebyu-ds .rb-btn-snow {
+    --rb-btn-face: var(--color-rb-snow);
+    --rb-btn-lip: #d8d8d8;
+    --rb-btn-ink: var(--color-rb-eel);
+}
+
+/* ---------------------------------------------------------------------------
+   SURFACES
+   --------------------------------------------------------------------------- */
+.rebyu-ds .rb-card {
+    background: var(--color-rb-snow);
+    border: 2px solid var(--color-rb-swan);
+    border-radius: var(--radius-rb-card);
+    padding: var(--rb-s3);
+}
+
+/* Elevated: carries the same lip language as the buttons so cards read as
+   part of the same physical family. */
+.rebyu-ds .rb-card-raised {
+    box-shadow: 0 var(--rb-lip) 0 var(--color-rb-swan);
+}
+
+/* Interactive cards travel on press, exactly like a key. */
+.rebyu-ds .rb-card-press {
+    cursor: pointer;
+    transition:
+        transform 0.08s ease-out,
+        box-shadow 0.08s ease-out,
+        border-color 0.15s ease-out;
+}
+.rebyu-ds .rb-card-press:hover {
+    border-color: var(--color-rb-hare);
+}
+.rebyu-ds .rb-card-press:active {
+    transform: translateY(var(--rb-lip));
+    box-shadow: 0 0 0 var(--color-rb-swan);
+}
+
+.rebyu-ds .rb-tile {
+    background: var(--color-rb-polar);
+    border-radius: var(--radius-rb-tile);
+    padding: var(--rb-s2);
+}
+
+/* ---------------------------------------------------------------------------
+   ANSWER OPTION — the core learning control.
+   Large hit area, instant state colour, no layout shift between states.
+   --------------------------------------------------------------------------- */
+.rebyu-ds .rb-answer {
+    display: flex;
+    align-items: center;
+    gap: var(--rb-s2);
+    width: 100%;
+    min-height: 64px;
+    padding: var(--rb-s2) var(--rb-s3);
+    text-align: left;
+    background: var(--color-rb-snow);
+    border: 2px solid var(--color-rb-swan);
+    border-radius: var(--radius-rb-tile);
+    box-shadow: 0 var(--rb-lip) 0 var(--color-rb-swan);
+    color: var(--color-rb-eel);
+    font-family: var(--font-rb-body);
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+        transform 0.08s ease-out,
+        box-shadow 0.08s ease-out,
+        background-color 0.15s ease-out,
+        border-color 0.15s ease-out;
+}
+.rebyu-ds .rb-answer:hover {
+    background: var(--color-rb-polar);
+}
+.rebyu-ds .rb-answer:active {
+    transform: translateY(var(--rb-lip));
+    box-shadow: 0 0 0 var(--color-rb-swan);
+}
+.rebyu-ds .rb-answer:focus-visible {
+    outline: 3px solid var(--color-rb-macaw);
+    outline-offset: 3px;
+}
+
+.rebyu-ds .rb-answer[data-state="selected"] {
+    background: var(--color-rb-macaw-wash);
+    border-color: var(--color-rb-macaw);
+    box-shadow: 0 var(--rb-lip) 0 var(--color-rb-macaw);
+}
+.rebyu-ds .rb-answer[data-state="correct"] {
+    background: var(--color-rb-feather-wash);
+    border-color: var(--color-rb-feather);
+    box-shadow: 0 var(--rb-lip) 0 var(--color-rb-feather-lip);
+    color: #3d6b06;
+}
+.rebyu-ds .rb-answer[data-state="wrong"] {
+    background: var(--color-rb-cardinal-wash);
+    border-color: var(--color-rb-cardinal);
+    box-shadow: 0 var(--rb-lip) 0 var(--color-rb-cardinal-lip);
+    color: #b82020;
+}
+
+/* Key cap: the A/B/C/D marker. Mirrors the option's own state. */
+.rebyu-ds .rb-answer-key {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border: 2px solid currentColor;
+    border-radius: 8px;
+    opacity: 0.55;
+    font-family: var(--font-rb-display);
+    font-weight: 800;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+}
+.rebyu-ds .rb-answer[data-state="correct"] .rb-answer-key,
+.rebyu-ds .rb-answer[data-state="wrong"] .rb-answer-key,
+.rebyu-ds .rb-answer[data-state="selected"] .rb-answer-key {
+    opacity: 1;
+}
+
+/* ---------------------------------------------------------------------------
+   PATH NODE — the circular milestone button on the learning path.
+   A deeper lip than the standard button (8px) so the nodes read as chunky
+   physical keys sitting on the page rather than flat circles.
+   --------------------------------------------------------------------------- */
+.rebyu-ds .rb-node {
+    --rb-node-face: var(--color-rb-feather);
+    --rb-node-lip: var(--color-rb-feather-lip);
+
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 72px;
+    height: 72px;
+    border: 0;
+    border-radius: var(--radius-rb-pill);
+    background: var(--rb-node-face);
+    color: var(--color-rb-snow);
+    box-shadow: 0 8px 0 var(--rb-node-lip);
+    cursor: pointer;
+    transition:
+        transform 0.08s ease-out,
+        box-shadow 0.08s ease-out,
+        filter 0.15s ease-out;
+}
+
+/* Top-light: a soft highlight across the upper face, which is what stops the
+   circle reading as a flat disc. */
+.rebyu-ds .rb-node::before {
+    content: "";
+    position: absolute;
+    inset: 6px 10px auto;
+    height: 22px;
+    border-radius: var(--radius-rb-pill);
+    background: rgb(255 255 255 / 0.22);
+    pointer-events: none;
+}
+
+.rebyu-ds .rb-node:hover {
+    filter: brightness(1.06);
+}
+.rebyu-ds .rb-node:active {
+    transform: translateY(8px);
+    box-shadow: 0 0 0 var(--rb-node-lip);
+}
+.rebyu-ds .rb-node:focus-visible {
+    outline: 3px solid var(--color-rb-macaw);
+    outline-offset: 4px;
+}
+
+.rebyu-ds .rb-node-bee {
+    --rb-node-face: var(--color-rb-bee);
+    --rb-node-lip: var(--color-rb-bee-lip);
+    color: #7a5c00;
+}
+.rebyu-ds .rb-node-macaw {
+    --rb-node-face: var(--color-rb-macaw);
+    --rb-node-lip: var(--color-rb-macaw-lip);
+}
+.rebyu-ds .rb-node-beetle {
+    --rb-node-face: var(--color-rb-beetle);
+    --rb-node-lip: var(--color-rb-beetle-lip);
+}
+
+/* Locked nodes lose the highlight too — they should look inert, not just grey. */
+.rebyu-ds .rb-node-locked {
+    --rb-node-face: var(--color-rb-swan);
+    --rb-node-lip: #cfcfcf;
+    color: var(--color-rb-hare);
+    cursor: not-allowed;
+}
+.rebyu-ds .rb-node-locked::before {
+    display: none;
+}
+.rebyu-ds .rb-node-locked:hover {
+    filter: none;
+}
+.rebyu-ds .rb-node-locked:active {
+    transform: none;
+    box-shadow: 0 8px 0 var(--rb-node-lip);
+}
+
+/* "start here" bubble above the active node */
+@keyframes rb-bob {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-6px);
+    }
+}
+.rebyu-ds .rb-bob {
+    animation: rb-bob 1.6s ease-in-out infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   ARENA — the tournament broadcast surface.
+   ---------------------------------------------------------------------------
+   The only dark surface in the system, and the only place display type is set
+   UPPERCASE. That is deliberate: a tournament bracket is a broadcast graphic,
+   not a study screen, and the shift in voice is what separates "competing" from
+   "revising". Everything is still built from the same accent tokens — Fox for
+   outer seats, Macaw for inner, Cardinal for the final, Bee for the trophy.
+   --------------------------------------------------------------------------- */
+.rb-arena {
+    position: relative;
+    /* Same Snow/Polar canvas as the rest of the product, lifted by a soft
+       Feather wash at the top so the stage still feels like an event. */
+    background:
+        radial-gradient(ellipse 90% 55% at 50% 0%, var(--color-rb-feather-wash) 0%, transparent 70%),
+        var(--color-rb-polar);
+    color: var(--color-rb-eel);
+    isolation: isolate;
+}
+
+/* Arena surfaces — ordinary system cards, so a tournament screen is still
+   recognisably the same product as a lesson screen. */
+.rb-arena .rb-apanel {
+    background: var(--color-rb-snow);
+    border: 2px solid var(--color-rb-swan);
+    border-radius: var(--radius-rb-card);
+}
+
+.rb-arena .rb-apanel-line {
+    border-color: var(--color-rb-swan);
+}
+
+/* Working surfaces — editor, canvas — sink to Polar so the thing you are
+   typing into reads as recessed rather than floating. */
+.rb-arena .rb-awell {
+    background: var(--color-rb-polar);
+    border: 2px solid var(--color-rb-swan);
+    border-radius: var(--radius-rb-tile);
+}
+
+.rb-arena .rb-aeyebrow {
+    font-family: var(--font-rb-body);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-rb-wolf);
+}
+
+/* Angled broadcast banner — the chevron plate headings sit on. */
+.rb-arena .rb-plate {
+    display: inline-block;
+    padding: 0.6rem 3rem;
+    clip-path: polygon(2.2rem 0, 100% 0, calc(100% - 2.2rem) 100%, 0 100%);
+    font-family: var(--font-rb-display);
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #ffffff;
+}
+
+/* Primary plate is Feather — the brand anchor, same as every other primary
+   surface in the product. Cardinal stays reserved for the final. */
+.rb-arena .rb-plate-macaw {
+    background: linear-gradient(135deg, var(--color-rb-feather), var(--color-rb-feather-lip));
+}
+.rb-arena .rb-plate-cardinal {
+    background: linear-gradient(135deg, var(--color-rb-cardinal), var(--color-rb-cardinal-lip));
+}
+
+/* Bracket seat. Outer rounds are Fox, inner are Macaw, the final is Cardinal —
+   so the round a seat belongs to is readable from colour alone at a glance. */
+.rb-arena .rb-seat {
+    display: flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 0.75rem;
+    border-radius: 6px;
+    font-family: var(--font-rb-body);
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-shadow: 0 3px 0 rgb(0 0 0 / 0.28);
+}
+
+.rb-arena .rb-seat-outer {
+    background: linear-gradient(135deg, #ffb03a, #ff7a00);
+}
+.rb-arena .rb-seat-inner {
+    background: linear-gradient(135deg, #4cc4ff, #1478d6);
+}
+.rb-arena .rb-seat-final {
+    background: linear-gradient(135deg, #ff5f5f, #c62828);
+}
+/* Eliminated: recedes to Polar rather than vanishing, so the bracket still
+   reads as a completed path. */
+.rb-arena .rb-seat-out {
+    background: var(--color-rb-polar);
+    border: 2px solid var(--color-rb-swan);
+    color: var(--color-rb-hare);
+    box-shadow: none;
+}
+
+/* Trophy halo behind the centre stage. */
+.rb-arena .rb-halo::after {
+    content: "";
+    position: absolute;
+    inset: -45%;
+    z-index: -1;
+    border-radius: 999px;
+    background: radial-gradient(circle, rgb(255 200 0 / 0.32) 0%, transparent 68%);
+    pointer-events: none;
+}
+
+/* ---------------------------------------------------------------------------
+   TRACK SELECT — full-bleed skewed panels.
+   ---------------------------------------------------------------------------
+   Three vertical blades filling the screen. Hovering (or focusing) one grows it
+   and reveals its detail while the others recede, so choosing a track is one
+   sweep of the mouse rather than a form. The skew is applied to the blade and
+   undone on its contents, which keeps type upright while the edges stay angled.
+   --------------------------------------------------------------------------- */
+.rebyu-ds .rb-blades {
+    display: flex;
+    gap: 10px;
+    /* Overhang past both edges so the skewed ends are cropped by the viewport
+       instead of leaving triangular gaps. */
+    width: calc(100% + 12rem);
+    margin-left: -6rem;
+}
+
+.rebyu-ds .rb-blade {
+    position: relative;
+    flex: 1 1 0;
+    overflow: hidden;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    transform: skewX(-7deg);
+    transition: flex-grow 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.rebyu-ds .rb-blade:hover,
+.rebyu-ds .rb-blade:focus-visible {
+    flex-grow: 2.4;
+}
+
+.rebyu-ds .rb-blade:focus-visible {
+    outline: 3px solid var(--color-rb-snow);
+    outline-offset: -6px;
+}
+
+/* Counter-skew: everything inside sits upright again. */
+.rebyu-ds .rb-blade-inner {
+    height: 100%;
+    transform: skewX(7deg);
+}
+
+/* Detail block. Visible by default and only hidden where a pointer can
+   actually hover — on a touch screen there is no hover event to bring it back,
+   so hiding it there would strand the copy permanently. */
+.rebyu-ds .rb-blade-detail {
+    transition:
+        opacity 0.35s ease-out 0.1s,
+        transform 0.35s ease-out 0.1s;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .rebyu-ds .rb-blade-detail {
+        opacity: 0;
+        transform: translateY(14px);
+    }
+    .rebyu-ds .rb-blade:hover .rb-blade-detail,
+    .rebyu-ds .rb-blade:focus-visible .rb-blade-detail {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Ghost wordmark rotated up the blade — the "vertical" read. */
+.rebyu-ds .rb-blade-ghost {
+    position: absolute;
+    bottom: 8rem;
+    left: -1rem;
+    transform: rotate(-90deg);
+    transform-origin: left bottom;
+    font-family: var(--font-rb-display);
+    font-weight: 900;
+    font-style: italic;
+    font-size: 4.5rem;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: rgb(255 255 255 / 0.16);
+    pointer-events: none;
+    user-select: none;
+}
+
+/* Below lg the blades stack into bands and stay open — a skewed column is
+   unreadable at 390px, and there is no hover on touch to reveal detail. */
+@media (max-width: 1023px) {
+    .rebyu-ds .rb-blades {
+        flex-direction: column;
+        width: 100%;
+        margin-left: 0;
+    }
+    .rebyu-ds .rb-blade {
+        transform: none;
+        min-height: 168px;
+        border-radius: 18px;
+    }
+    .rebyu-ds .rb-blade-inner {
+        transform: none;
+    }
+    .rebyu-ds .rb-blade:hover,
+    .rebyu-ds .rb-blade:focus-visible {
+        flex-grow: 1;
+    }
+    .rebyu-ds .rb-blade-detail {
+        opacity: 1 !important;
+        transform: none !important;
+    }
+    .rebyu-ds .rb-blade-ghost {
+        transform: none;
+        transform-origin: center;
+        bottom: auto;
+        top: 0.5rem;
+        left: auto;
+        right: 0.75rem;
+        font-size: 3rem;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   LOBBY BANNER — the vertical player standee.
+   Portrait rather than a row: eight of them read as a line-up, which a stack of
+   horizontal cards never does.
+   --------------------------------------------------------------------------- */
+.rb-arena .rb-standee {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1rem 0.75rem 1.75rem;
+    border-radius: 16px 16px 0 0;
+    background: var(--color-rb-snow);
+    border: 2px solid var(--color-rb-swan);
+    border-bottom: 0;
+    /* notched foot, like a hanging banner */
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 1.1rem), 0 100%);
+}
+
+.rb-arena .rb-standee-empty {
+    background: var(--color-rb-polar);
+    border-style: dashed;
+    border-color: var(--color-rb-hare);
+}
+
+.rb-arena .rb-standee-you {
+    background: var(--color-rb-feather-wash);
+    border-color: var(--color-rb-feather);
+}
+
+/* Tier frame around the avatar. */
+.rb-arena .rb-frame {
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
+    border-radius: 999px;
+    border: 3px solid;
+    background: var(--color-rb-polar);
+    font-family: var(--font-rb-display);
+    font-weight: 900;
+    font-size: 1.125rem;
+    text-transform: lowercase;
+    color: var(--color-rb-eel);
+}
+
+@keyframes rb-pulse-slot {
+    0%,
+    100% {
+        opacity: 0.35;
+    }
+    50% {
+        opacity: 0.75;
+    }
+}
+.rb-arena .rb-pulse-slot {
+    animation: rb-pulse-slot 1.8s ease-in-out infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   PROGRESS
+   --------------------------------------------------------------------------- */
+.rebyu-ds .rb-progress {
+    position: relative;
+    height: 16px;
+    border-radius: var(--radius-rb-pill);
+    background: var(--color-rb-swan);
+    overflow: hidden;
+}
+.rebyu-ds .rb-progress-fill {
+    height: 100%;
+    border-radius: var(--radius-rb-pill);
+    background: var(--color-rb-mask);
+    transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* The sheen is what separates a "filling" bar from a static one. */
+.rebyu-ds .rb-progress-fill::after {
+    content: "";
+    display: block;
+    height: 4px;
+    margin: 4px 8px 0;
+    border-radius: var(--radius-rb-pill);
+    background: rgb(255 255 255 / 0.4);
+}
+
+/* ---------------------------------------------------------------------------
+   BADGES & CHIPS
+   --------------------------------------------------------------------------- */
+.rebyu-ds .rb-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: var(--radius-rb-pill);
+    background: var(--color-rb-polar);
+    color: var(--color-rb-wolf);
+    font-family: var(--font-rb-body);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+   INPUTS
+   --------------------------------------------------------------------------- */
+.rebyu-ds .rb-input {
+    width: 100%;
+    min-height: 56px;
+    padding: 0 var(--rb-s3);
+    background: var(--color-rb-polar);
+    border: 2px solid var(--color-rb-swan);
+    border-radius: var(--radius-rb-tile);
+    color: var(--color-rb-eel);
+    font-family: var(--font-rb-body);
+    font-size: 1rem;
+    transition:
+        border-color 0.15s ease-out,
+        background-color 0.15s ease-out;
+}
+.rebyu-ds .rb-input::placeholder {
+    color: var(--color-rb-hare);
+}
+.rebyu-ds .rb-input:focus {
+    outline: none;
+    background: var(--color-rb-snow);
+    border-color: var(--color-rb-macaw);
+}
+.rebyu-ds .rb-input[aria-invalid="true"] {
+    border-color: var(--color-rb-cardinal);
+    background: var(--color-rb-cardinal-wash);
+}
+
+/* ---------------------------------------------------------------------------
+   ACCESSIBLE CONTRAST MODE (opt-in)
+   ---------------------------------------------------------------------------
+   Measured contrast of white label text on the mandated brand faces:
+
+       Snow on Feather   2.09:1     Snow on Macaw   2.44:1
+       Snow on Cardinal  3.30:1     Wolf on Polar   4.18:1
+
+   WCAG AA wants 4.5:1 for normal text and 3:1 for large (>=18.66px bold).
+   The brand palette is fixed by the brief and these are the same values
+   Duolingo itself ships, so the defaults above are left untouched.
+
+   Add `rb-a11y` alongside `rebyu-ds` on the app root to swap in darkened
+   faces that clear AA for large text and pull body copy back over 4.5:1.
+   Nothing but colour changes — geometry, depth and motion are identical.
+   --------------------------------------------------------------------------- */
+.rebyu-ds.rb-a11y {
+    --color-rb-feather: #3f8f02;
+    --color-rb-feather-lip: #2f6b01;
+    --color-rb-macaw: #0d7fb8;
+    --color-rb-macaw-lip: #0a6494;
+    --color-rb-cardinal: #d62c2c;
+    --color-rb-cardinal-lip: #ab2020;
+    --color-rb-wolf: #5f5f5f;
+}
+
+/* ---------------------------------------------------------------------------
+   MOTION
+   Every animation below is opt-out via prefers-reduced-motion at the foot of
+   this file.
+   --------------------------------------------------------------------------- */
+@keyframes rb-pop-in {
+    0% {
+        opacity: 0;
+        transform: scale(0.94) translateY(8px);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+.rebyu-ds .rb-pop-in {
+    animation: rb-pop-in 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes rb-rise {
+    0% {
+        opacity: 0;
+        transform: translateY(100%);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+.rebyu-ds .rb-rise {
+    animation: rb-rise 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Scroll reveal.
+   The hiding class is applied by JS, never by the markup, so a scripting
+   failure leaves every section visible rather than blanking the page. */
+.rebyu-ds .rb-reveal {
+    opacity: 0;
+    transform: translateY(28px);
+    transition:
+        opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.rebyu-ds .rb-reveal.rb-revealed {
+    opacity: 1;
+    transform: none;
+}
+
+/* Streak flame pulse — used only on the streak counter, never decoratively. */
+@keyframes rb-flicker {
+    0%,
+    100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.12);
+    }
+}
+.rebyu-ds .rb-flicker {
+    animation: rb-flicker 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .rebyu-ds *,
+    .rebyu-ds *::before,
+    .rebyu-ds *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}

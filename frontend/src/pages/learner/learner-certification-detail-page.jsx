@@ -354,42 +354,37 @@ export default function LearnerCertificationDetailPage() {
             </Button>
           </div>
 
-          {/* Hero header (mirrors the admin certification view) */}
-          <header className="relative isolate overflow-hidden rounded-3xl border border-border bg-muted px-6 py-12 sm:px-10 lg:py-16">
-            <img
-                src={imageUrl}
-                alt=""
+          {/* Guidebook header: a solid Feather banner rather than a blurred
+              cover photo. The title has to survive at any length, and text over
+              an arbitrary uploaded image never reliably does. */}
+          <header className="relative isolate overflow-hidden rounded-3xl bg-rb-feather px-6 py-10 shadow-[0_6px_0_var(--color-rb-feather-lip)] sm:px-10 lg:py-14">
+            {/* oversized wordmark as texture, clipped by the banner */}
+            <span
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-0 h-full w-full scale-105 object-cover blur-sm brightness-[0.55]"
-                onError={(event) => {
-                  event.currentTarget.style.display = "none"
-                }}
-            />
-
-            <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 bg-background/10"
-            />
+                className="pointer-events-none absolute -bottom-8 -right-4 select-none font-rb-display text-[7rem] font-black lowercase leading-none tracking-tight text-white/15"
+            >
+              {certification.title?.slice(0, 8)}
+            </span>
 
             <div className="relative z-10">
               <Badge
                   variant="secondary"
-                  className="mb-5 border border-black/10 bg-white/85 px-3 py-1 text-xs font-semibold text-black shadow-sm backdrop-blur-sm hover:bg-white/85"
+                  className="mb-5 border-0 bg-white/25 px-3 py-1 text-xs font-bold text-white hover:bg-white/25"
               >
                 {certification.industry || "Certification Program"}
               </Badge>
 
-              <h1 className="max-w-3xl break-words font-heading text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl [overflow-wrap:anywhere]">
+              <h1 className="max-w-3xl break-words font-rb-display text-3xl font-extrabold lowercase tracking-tight text-white sm:text-4xl lg:text-5xl [overflow-wrap:anywhere]">
                 {certification.title}
               </h1>
 
-              <p className="mt-4 max-w-3xl text-sm leading-7 text-white/85 sm:text-base">
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-white/90 sm:text-base">
                 {certification.description ||
                     "A comprehensive certification review designed to build your expertise, prepare you for the examination, and accelerate your career."}
               </p>
 
-              <div className="mt-8 flex flex-wrap gap-3 text-sm">
-                <div className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-white/90 backdrop-blur-sm">
+              <div className="mt-8 flex flex-wrap gap-2.5 text-sm">
+                <div className="flex items-center gap-2 rounded-full bg-white/20 px-4 py-2 font-bold text-white">
                   <Layers3 className="h-4 w-4" />
                   <span>
                     {modules.length} major{" "}
@@ -397,14 +392,14 @@ export default function LearnerCertificationDetailPage() {
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-white/90 backdrop-blur-sm">
+                <div className="flex items-center gap-2 rounded-full bg-white/20 px-4 py-2 font-bold text-white">
                   <BookOpen className="h-4 w-4" />
                   <span>
                     {moduleCount} modules · {lessonCount} lessons
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-white/90 backdrop-blur-sm">
+                <div className="flex items-center gap-2 rounded-full bg-white/20 px-4 py-2 font-bold text-white">
                   <Clock3 className="h-4 w-4" />
                   <span>{formatDuration(totalMinutes)}</span>
                 </div>
@@ -496,13 +491,27 @@ export default function LearnerCertificationDetailPage() {
                                           <AccordionItem
                                               key={itemValue}
                                               value={itemValue}
-                                              className="overflow-hidden rounded-xl border bg-card px-2"
+                                              className="overflow-hidden rounded-2xl border-2 border-rb-swan bg-rb-snow px-2"
                                           >
-                                            <AccordionTrigger className="rounded-lg px-4 py-5 transition-colors hover:bg-muted/50 hover:no-underline">
+                                            <AccordionTrigger className="rounded-xl px-4 py-5 transition-colors hover:bg-rb-polar hover:no-underline">
                                               <div className="flex flex-col items-start text-left">
+<<<<<<< Updated upstream:frontend/src/pages/learner/learner-certification-detail-page.jsx
                                                 <span className="font-semibold text-foreground">
                                                   {middle.title ?? "Untitled Module"}
                                                 </span>
+=======
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                  <span className="font-rb-display text-base font-extrabold text-rb-eel">
+                                                    {middle.title ?? "Untitled Module"}
+                                                  </span>
+                                                  {middlePriority?.priority_tag && (
+                                                      <PriorityTag
+                                                          tag={middlePriority.priority_tag}
+                                                          size="sm"
+                                                      />
+                                                  )}
+                                                </div>
+>>>>>>> Stashed changes:frontend/src/pages/learner/learning/learner-certification-detail-page.jsx
                                                 <span className="mt-1 text-sm font-normal text-muted-foreground">
                                                   {middleLessons.length}{" "}
                                                   {middleLessons.length === 1

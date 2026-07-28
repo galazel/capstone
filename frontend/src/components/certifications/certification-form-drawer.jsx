@@ -1,17 +1,20 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import {
     ArrowLeft,
     ArrowRight,
     CheckCircle2,
     CircleAlert,
+<<<<<<< Updated upstream
     CircleChevronLeft,
+=======
+    Sparkles,
+>>>>>>> Stashed changes
     X,
 } from "lucide-react"
 import { useMutation } from "@tanstack/react-query"
 import { toast } from "sonner"
 
 import {
-    addCertification,
     addCertificationWithAi,
     updateCertification,
 } from "@/services/certificationService"
@@ -23,9 +26,16 @@ import {
 
 import CertificationDetails from "@/components/certifications/certification-details"
 import CertificationModules from "@/components/certifications/certification-modules"
+<<<<<<< Updated upstream
+=======
+import { DocumentUploadStep } from "@/components/certifications/document-upload-step.jsx"
+import { InlineGenerationMonitor } from "@/components/certifications/inline-generation-monitor.jsx"
+>>>>>>> Stashed changes
 
 import { Button } from "@/components/ui/button"
+import { Progress } from "@/components/ui/progress"
 import {
+<<<<<<< Updated upstream
     Drawer,
     DrawerClose,
     DrawerContent,
@@ -34,6 +44,14 @@ import {
     DrawerTitle,
     DrawerTrigger,
 } from "@/components/ui/drawer"
+=======
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
+>>>>>>> Stashed changes
 import {
     Alert,
     AlertDescription,
@@ -46,10 +64,16 @@ import {
     AlertDialogDescription,
     AlertDialogFooter,
     AlertDialogHeader,
+    AlertDialogMedia,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 
 const TOTAL_STEPS = 2
+
+const STEP_LABELS = {
+    create: ["Certification details", "Source documents"],
+    edit: ["Certification details", "Categories and lessons"],
+}
 
 
 const MIN_TITLE_LENGTH = 3
@@ -364,21 +388,30 @@ export default function CertificationFormDrawer({
     const [moduleCategories, setModuleCategories] = useState([])
     const [detailsErrors, setDetailsErrors] = useState({})
     const [submissionError, setSubmissionError] = useState("")
+<<<<<<< Updated upstream
+=======
+    // Set once generation is queued. The modal then shows the run's live
+    // transcript in place of the form, so the admin never leaves the flow.
+    const [generatingCertificationId, setGeneratingCertificationId] = useState(null)
+>>>>>>> Stashed changes
     const [submissionDialog, setSubmissionDialog] = useState(
         emptySubmissionDialog
     )
 
+    // Create is AI-only: step 2 collects the source documents rather than a
+    // hand-built category tree. Editing keeps the manual structure editor, which
+    // is how a generated certification gets corrected afterwards.
+    const [sourceDocuments, setSourceDocuments] = useState([])
+    const [uploadPercent, setUploadPercent] = useState(0)
+
+    // Update only. The create branch this used to carry called `addCertification`
+    // to save a hand-built structure; creating now always goes through
+    // generation, so that path — and the plain POST behind it — is gone.
     const {
         mutateAsync: saveCertification,
         isPending: isSavingCertification,
     } = useMutation({
-        mutationFn: async (payload) => {
-            if (isEditing) {
-                return await updateCertification(certificationId, payload)
-            }
-
-            return await addCertification(payload)
-        },
+        mutationFn: (payload) => updateCertification(certificationId, payload),
     })
 
     const {
@@ -388,7 +421,20 @@ export default function CertificationFormDrawer({
         mutationFn: savePhotoCertification,
     })
 
-    const isBusy = isSavingCertification || isUploadingImage
+    const {
+        mutateAsync: createWithAi,
+        isPending: isQueueingGeneration,
+    } = useMutation({
+        mutationFn: ({ payload, documents }) =>
+            addCertificationWithAi(payload, documents, (event) =>
+                setUploadPercent(
+                    event.total ? Math.round((event.loaded / event.total) * 100) : 0
+                )
+            ),
+    })
+
+    const isBusy =
+        isSavingCertification || isUploadingImage || isQueueingGeneration
     const isFirstStep = page === 1
     const isLastStep = page === TOTAL_STEPS
 
@@ -403,6 +449,8 @@ export default function CertificationFormDrawer({
             isEditing ? mapCertificationToModuleStructure(certification) : []
         )
 
+        setSourceDocuments([])
+        setUploadPercent(0)
         setDetailsErrors({})
         setSubmissionError("")
         setSubmissionDialog(emptySubmissionDialog)
@@ -437,6 +485,15 @@ export default function CertificationFormDrawer({
         setSubmissionError("")
     }
 
+    // Identity-stable so the upload step's reporting effect does not re-fire on
+    // every render of this modal.
+    const handleDocumentsChange = useCallback((documents) => {
+        setSourceDocuments(documents)
+        setSubmissionError((current) =>
+            documents.length > 0 ? "" : current
+        )
+    }, [])
+
     function handlePrevious() {
         if (isFirstStep || isBusy) {
             return
@@ -459,6 +516,7 @@ export default function CertificationFormDrawer({
         setPage(2)
     }
 
+    /** Editing only — a new certification is always built by generation. */
     async function handleSubmit() {
         const detailsValidationErrors =
             validateCertificationDetails(certificationDetails)
@@ -476,7 +534,7 @@ export default function CertificationFormDrawer({
             return
         }
 
-        if (isEditing && !certificationId) {
+        if (!certificationId) {
             setSubmissionError(
                 "Cannot update this certification because its ID is missing."
             )
@@ -576,23 +634,91 @@ export default function CertificationFormDrawer({
 
 
 
-    async function handleGenerateForNewCertification(selectedDocuments) {
-        const errors = validateCertificationDetails(certificationDetails)
+    /**
+     * The create path: save the certification and hand its documents to AI
+     * generation in one request.
+     *
+     * There is no manual alternative. A certification is a curriculum plus
+     * twenty-odd lessons and their assessments; typing that structure by hand
+     * produced empty shells that then had to be generated anyway, so the form
+     * now asks for the two things generation actually needs — what the
+     * certification is, and the documents to read.
+     */
+    async function handleGenerate() {
+        const detailsValidationErrors =
+            validateCertificationDetails(certificationDetails)
 
-        if (Object.keys(errors).length > 0) {
-            setDetailsErrors(errors)
+        if (Object.keys(detailsValidationErrors).length > 0) {
+            setDetailsErrors(detailsValidationErrors)
             setPage(1)
+            return
+        }
 
-            throw new Error(
-                "Complete the certification details on step 1 before generating with AI."
+        if (sourceDocuments.length === 0) {
+            setSubmissionError(
+                "Upload at least one document for the AI to build the certification from."
             )
+            return
         }
 
-        let imageKey = certificationDetails.existingImageKey
+        try {
+            setSubmissionError("")
 
-        if (certificationDetails.imageFile) {
-            imageKey = await uploadCoverImage(certificationDetails.imageFile)
+            let imageKey = certificationDetails.existingImageKey
+
+            if (certificationDetails.imageFile) {
+                imageKey = await uploadCoverImage(certificationDetails.imageFile)
+            }
+
+            if (!imageKey) {
+                throw new Error("Certification cover image is required.")
+            }
+
+            const payload = {
+                title: certificationDetails.title.trim(),
+                description: certificationDetails.description.trim(),
+                industry: certificationDetails.industry.trim(),
+                imageKey,
+                dateCreated: formatLocalDateTime(),
+            }
+
+            const savedCertification = await createWithAi({
+                payload,
+                documents: sourceDocuments,
+            })
+
+            await onSaved?.(savedCertification)
+
+            const newId = getCertificationId(savedCertification)
+
+            // Hand the run to the monitor in this same modal rather than
+            // navigating away. Generation is a long conversation the admin
+            // steers — it pauses for their review repeatedly — and sending them
+            // to another page mid-flow loses the thread of what they were doing.
+            if (newId != null) {
+                setGeneratingCertificationId(newId)
+                return
+            }
+
+            // No id to follow: announce it rather than opening a monitor with
+            // nothing to attach to.
+            setSubmissionDialog({
+                open: true,
+                title: "Generation started",
+                description:
+                    "The certification was saved and its curriculum is being generated in the " +
+                    "background. You'll get a notification here when it's ready to review.",
+            })
+        } catch (error) {
+            const message = getErrorMessage(error)
+
+            setSubmissionError(message)
+
+            toast.error("Could not start generation", { description: message })
+        } finally {
+            setUploadPercent(0)
         }
+<<<<<<< Updated upstream
 
         if (!imageKey) {
             throw new Error("Certification cover image is required.")
@@ -623,15 +749,22 @@ export default function CertificationFormDrawer({
             description:
                 "The certification and its AI-generated categories, modules, and lessons were saved.",
         })
+=======
+>>>>>>> Stashed changes
     }
 
     function handleMainAction() {
-        if (isLastStep) {
+        if (!isLastStep) {
+            handleNext()
+            return
+        }
+
+        if (isEditing) {
             handleSubmit()
             return
         }
 
-        handleNext()
+        handleGenerate()
     }
 
     function handleCloseAfterSuccess() {
@@ -660,6 +793,7 @@ export default function CertificationFormDrawer({
                         </button>
                     </DrawerClose>
 
+<<<<<<< Updated upstream
                     <div className="min-w-0 flex-1">
                         <DrawerTitle className="text-lg font-semibold text-foreground">
                             {isEditing
@@ -765,6 +899,174 @@ export default function CertificationFormDrawer({
                     </div>
                 </DrawerFooter>
             </DrawerContent>
+=======
+            {/* `sm:max-w-none` is load-bearing: DialogContent ships with
+                `sm:max-w-lg` (512px), and an unprefixed `max-w-none` does not
+                override it -- tailwind-merge treats the two breakpoints as
+                separate utilities, so the modal stayed clamped to 512px no
+                matter what width was set. */}
+            <DialogContent className="flex h-[88vh] w-[96vw] max-w-none flex-col gap-0 overflow-hidden p-0 sm:w-[92vw] sm:max-w-none lg:w-[86vw] xl:w-[76vw] 2xl:w-[68vw]">
+                {/* DialogContent renders its own close button, so the drawer's
+                    back-chevron is gone -- two close affordances in one header
+                    is worse than one, and a left-chevron reads as "back" in a
+                    centered modal that has nothing to go back to.
+
+                    `py-4` rather than `py-5`: the close button is absolutely
+                    positioned at `top-4`, so anything else vertically centres
+                    the title against it. */}
+                <DialogHeader className="gap-1 border-b border-border px-5 py-4 pr-14 text-left sm:px-6">
+                    <DialogTitle className="text-lg">
+                        {generatingCertificationId
+                            ? "Generating certification"
+                            : isEditing
+                                ? "Edit Certification"
+                                : "Create Certification"}
+                    </DialogTitle>
+
+                    <p className="text-xs text-muted-foreground">
+                        {generatingCertificationId
+                            ? "Watch it build, and review each item as it is produced"
+                            : `${STEP_LABELS[isEditing ? "edit" : "create"][page - 1]} · step ${page} of ${TOTAL_STEPS}`}
+                    </p>
+                </DialogHeader>
+
+                {/* The generation transcript owns its own scrolling, header rule,
+                    and status bar, so it fills the body edge to edge. The form
+                    steps get the padded, scrollable body instead -- one wrapper
+                    each rather than the nested pair that used to double up the
+                    scroll containers. */}
+                {generatingCertificationId ? (
+                    <InlineGenerationMonitor
+                        certificationId={generatingCertificationId}
+                        onClose={() => {
+                            setGeneratingCertificationId(null)
+                            handleModalChange(false)
+                            // Closing does not stop the run — it keeps going in
+                            // the Python consumer. Refreshing the list is what
+                            // puts the certification on screen with its
+                            // "Generating" label instead of leaving it absent
+                            // until the list happens to go stale.
+                            onSaved?.()
+                        }}
+                    />
+                ) : (
+                    <>
+                        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 sm:px-6">
+                            {page === 1 ? (
+                                <CertificationDetails
+                                    value={certificationDetails}
+                                    onChange={handleDetailsChange}
+                                    errors={detailsErrors}
+                                    mode={mode}
+                                />
+                            ) : isEditing ? (
+                                <CertificationModules
+                                    certificationId={certificationId}
+                                    value={moduleCategories}
+                                    onChange={handleModulesChange}
+                                    onCreateMiddleExam={() => {}}
+                                    onGenerationStarted={setGeneratingCertificationId}
+                                />
+                            ) : (
+                                <DocumentUploadStep
+                                    disabled={isBusy}
+                                    onFilesChange={handleDocumentsChange}
+                                />
+                            )}
+                        </div>
+
+                        {/* A plain footer rather than `DialogFooter`: that
+                            primitive is a right-aligned button row, and this
+                            needs an error alert stacked above split Previous /
+                            Next controls. Using it meant overriding its
+                            direction at two breakpoints to get there. */}
+                        <div className="flex flex-col gap-3 border-t border-border bg-background px-5 py-4 sm:px-6">
+                            {submissionError && (
+                                <Alert variant="destructive" className="relative pr-12">
+                                    <CircleAlert className="h-4 w-4" />
+
+                                    <AlertTitle>
+                                        Cannot{" "}
+                                        {isEditing ? "update" : "create"}{" "}
+                                        certification
+                                    </AlertTitle>
+
+                                    <AlertDescription>
+                                        {submissionError}
+                                    </AlertDescription>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setSubmissionError("")}
+                                        aria-label="Dismiss error"
+                                        className="absolute top-3 right-3 rounded-md p-1 text-destructive transition hover:bg-destructive/10"
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </button>
+                                </Alert>
+                            )}
+
+                            {/* Real byte progress while the documents upload:
+                                ten 10 MB PDFs is a slow request, and a button
+                                stuck on "Starting…" cannot say whether anything
+                                is moving. */}
+                            {isQueueingGeneration && (
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                                        <span>
+                                            {uploadPercent < 100
+                                                ? `Uploading ${sourceDocuments.length} document${sourceDocuments.length === 1 ? "" : "s"}…`
+                                                : "Queuing generation…"}
+                                        </span>
+                                        <span className="font-mono tabular-nums">
+                                            {uploadPercent}%
+                                        </span>
+                                    </div>
+
+                                    <Progress value={uploadPercent} className="h-1.5" />
+                                </div>
+                            )}
+
+                            <div className="flex items-center justify-between gap-3">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={handlePrevious}
+                                    disabled={isFirstStep || isBusy}
+                                    className="min-w-[118px] gap-2"
+                                >
+                                    <ArrowLeft className="h-4 w-4" />
+                                    Previous
+                                </Button>
+
+                                <Button
+                                    type="button"
+                                    onClick={handleMainAction}
+                                    disabled={isBusy}
+                                    className="min-w-[185px] gap-2"
+                                >
+                                    {isBusy ? (
+                                        isEditing ? "Saving..." : "Starting..."
+                                    ) : !isLastStep ? (
+                                        <>
+                                            Next
+                                            <ArrowRight className="h-4 w-4" />
+                                        </>
+                                    ) : isEditing ? (
+                                        "Save Changes"
+                                    ) : (
+                                        <>
+                                            <Sparkles className="h-4 w-4" />
+                                            Generate Certification
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+                        </div>
+                    </>
+                )}
+            </DialogContent>
+>>>>>>> Stashed changes
 
             <AlertDialog
                 open={submissionDialog.open}
@@ -775,25 +1077,29 @@ export default function CertificationFormDrawer({
                     }))
                 }}
             >
-                <AlertDialogContent className="max-w-md rounded-2xl">
+                {/* Sized, spaced, and rounded by the primitive: the ad-hoc
+                    `rounded-2xl`, media circle, and `mt-3` this used to carry
+                    made it the one dialog in the app that did not match the
+                    others. */}
+                <AlertDialogContent size="sm">
                     <AlertDialogHeader>
-                        <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary">
-                            <CheckCircle2 className="h-6 w-6" />
-                        </div>
+                        <AlertDialogMedia className="bg-primary/10 text-primary">
+                            <CheckCircle2 />
+                        </AlertDialogMedia>
 
                         <AlertDialogTitle>
                             {submissionDialog.title}
                         </AlertDialogTitle>
 
-                        <AlertDialogDescription className="leading-6">
+                        <AlertDialogDescription>
                             {submissionDialog.description}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
 
-                    <AlertDialogFooter className="mt-3">
+                    <AlertDialogFooter>
                         <AlertDialogAction
                             onClick={handleCloseAfterSuccess}
-                            className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90"
+                            className="col-span-2"
                         >
                             Close
                         </AlertDialogAction>

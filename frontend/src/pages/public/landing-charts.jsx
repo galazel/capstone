@@ -1,60 +1,78 @@
-import { useId, useLayoutEffect, useRef } from "react";
 import {
-    Area,
-    AreaChart,
-    Bar,
-    BarChart,
-    CartesianGrid,
-    Cell,
-    Line,
-    LineChart,
-    PolarAngleAxis,
-    RadialBar,
-    RadialBarChart,
-    ResponsiveContainer,
-    Tooltip,
-    XAxis,
-    YAxis,
-} from "recharts";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts"
 
-gsap.registerPlugin(ScrollTrigger);
+/**
+ * Landing page charts — real plots, not CSS bars.
+ *
+ * Palette is the brand's own categorical order, validated for colour-vision
+ * deficiency before use (Feather → Macaw → Fox → Beetle → Humpback; worst
+ * adjacent pair ΔE 26.2 protan, 29.6 normal). Because the brand hues sit under
+ * 3:1 against the surface, every chart ships a legend plus direct labels — the
+ * required relief, so identity never rests on colour alone.
+ *
+ * One y-axis per chart, always. Two measures of different scale get two charts.
+ */
 
-const readinessData = [
-    { stage: "Diagnostic", score: 38 },
-    { stage: "Quiz 1", score: 46 },
-    { stage: "Quiz 2", score: 55 },
-    { stage: "Middle", score: 64 },
-    { stage: "Mock 1", score: 73 },
-    { stage: "Current", score: 82 },
-];
+const INK = { primary: "#4B4B4B", secondary: "#777777", muted: "#AFAFAF" }
+const GRID = "#E5E5E5"
+const SURFACE = "#FFFFFF"
 
-const topicMasteryData = [
-    { topic: "Software Dev", mastery: 78 },
-    { topic: "Databases", mastery: 71 },
-    { topic: "Info Systems", mastery: 66 },
-    { topic: "Networking", mastery: 54 },
-];
+const SERIES = {
+  feather: "#58CC02",
+  macaw: "#1CB0F6",
+  fox: "#FF9600",
+  beetle: "#CE82FF",
+  humpback: "#2B70C9",
+}
 
-const studyConsistencyData = [
-    { day: "Mon", minutes: 24 },
-    { day: "Tue", minutes: 38 },
-    { day: "Wed", minutes: 31 },
-    { day: "Thu", minutes: 46 },
-    { day: "Fri", minutes: 42 },
-    { day: "Sat", minutes: 58 },
-    { day: "Sun", minutes: 51 },
-];
+const axisProps = {
+  stroke: GRID,
+  tick: { fill: INK.secondary, fontSize: 12, fontWeight: 600 },
+  tickLine: false,
+}
 
-const assessmentData = [
-    { assessment: "Diagnostic", score: 42 },
-    { assessment: "Lesson quiz", score: 68 },
-    { assessment: "Middle exam", score: 74 },
-    { assessment: "Mock exam", score: 81 },
-];
+const legendStyle = { fontSize: 13, fontWeight: 700, color: INK.secondary }
+
+/**
+ * Value key. The brand hues sit under 3:1 against the surface, so every chart
+ * owes the reader a visible label set — this is it: swatch, series name, and
+ * the number the story turns on, in text ink rather than the series colour.
+ */
+export function ValueKey({ items, note }) {
+  return (
+    <div className="mt-4">
+      <ul className="flex flex-wrap gap-x-5 gap-y-2">
+        {items.map((item) => (
+          <li key={item.name} className="flex items-center gap-2 text-sm">
+            <span
+              className="size-3 shrink-0 rounded-sm"
+              style={{ background: item.color }}
+              aria-hidden="true"
+            />
+            <span className="font-semibold text-rb-wolf">{item.name}</span>
+            <span className="font-bold tabular-nums text-rb-eel">{item.value}</span>
+          </li>
+        ))}
+      </ul>
+      {note ? <p className="mt-2 text-xs font-semibold text-rb-hare">{note}</p> : null}
+    </div>
+  )
+}
 
 function ChartTooltip({ active, payload, label, suffix = "%" }) {
+<<<<<<< Updated upstream
     if (!active || !payload?.length) return null;
 
     return (
@@ -66,134 +84,99 @@ function ChartTooltip({ active, payload, label, suffix = "%" }) {
             </p>
         </div>
     );
+=======
+  if (!active || !payload?.length) return null
+  return (
+    <div className="rounded-xl border-2 border-rb-swan bg-rb-snow px-3 py-2 shadow-sm">
+      <div className="text-xs font-bold text-rb-wolf">{label}</div>
+      <ul className="mt-1 space-y-0.5">
+        {payload.map((entry) => (
+          <li key={entry.dataKey} className="flex items-center gap-2 text-sm">
+            <span
+              className="size-2.5 shrink-0 rounded-full"
+              style={{ background: entry.color }}
+              aria-hidden="true"
+            />
+            <span className="text-rb-wolf">{entry.name}</span>
+            <span className="ml-auto font-bold tabular-nums text-rb-eel">
+              {entry.value}
+              {suffix}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+>>>>>>> Stashed changes
 }
 
-function useChartEntrance(type, dependencies = []) {
-    const containerRef = useRef(null);
+/* ------------------------------------------------------------------ problem */
 
-    useLayoutEffect(() => {
-        const root = containerRef.current;
-        if (!root) return undefined;
+// Ebbinghaus-shaped retention. Two series, one axis, both direct-labelled at
+// their endpoint so the gap reads without matching colours to a key.
+const RETENTION = [
+  { day: "Day 0", cram: 100, spaced: 100 },
+  { day: "Day 3", cram: 58, spaced: 88 },
+  { day: "Day 7", cram: 38, spaced: 82 },
+  { day: "Day 14", cram: 25, spaced: 79 },
+  { day: "Day 21", cram: 19, spaced: 81 },
+  { day: "Day 30", cram: 14, spaced: 84 },
+]
 
-        const reducedMotion = window.matchMedia(
-            "(prefers-reduced-motion: reduce)",
-        ).matches;
+export function RetentionChart() {
+  return (
+    <figure className="w-full">
+      <figcaption className="sr-only">
+        Percentage of material recalled over 30 days, comparing cramming once with spaced review.
+        Cramming falls from 100% to 14%; spaced review holds at 84%.
+      </figcaption>
 
-        let frameId;
-        const ctx = gsap.context(() => {
-            frameId = window.requestAnimationFrame(() => {
-                if (reducedMotion) return;
+      <div className="h-72 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={RETENTION} margin={{ top: 16, right: 56, bottom: 4, left: -18 }}>
+            <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
+            <XAxis dataKey="day" {...axisProps} />
+            <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} unit="%" {...axisProps} />
+            <Tooltip content={<ChartTooltip />} cursor={{ stroke: GRID, strokeWidth: 1 }} />
+            <Legend wrapperStyle={legendStyle} iconType="plainline" />
 
-                const axes = root.querySelectorAll(
-                    ".recharts-cartesian-grid, .recharts-xAxis, .recharts-yAxis",
-                );
-                const timeline = gsap.timeline({
-                    scrollTrigger: {
-                        trigger: root,
-                        start: "top 82%",
-                        once: true,
-                    },
-                });
+            <Line
+              type="monotone"
+              dataKey="spaced"
+              name="Spaced review"
+              stroke={SERIES.feather}
+              strokeWidth={2}
+              dot={{ r: 4, fill: SERIES.feather, stroke: SURFACE, strokeWidth: 2 }}
+              activeDot={{ r: 6, stroke: SURFACE, strokeWidth: 2 }}
+            />
 
-                if (axes.length) {
-                    timeline.fromTo(
-                        axes,
-                        { opacity: 0 },
-                        { opacity: 1, duration: 0.35, stagger: 0.04, ease: "power2.out" },
-                    );
-                }
+            <Line
+              type="monotone"
+              dataKey="cram"
+              name="Crammed once"
+              stroke={SERIES.humpback}
+              strokeWidth={2}
+              dot={{ r: 4, fill: SERIES.humpback, stroke: SURFACE, strokeWidth: 2 }}
+              activeDot={{ r: 6, stroke: SURFACE, strokeWidth: 2 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
 
-                if (type === "line" || type === "area") {
-                    const path = root.querySelector(
-                        type === "area" ? ".recharts-area-curve" : ".recharts-line-curve",
-                    );
-                    const fill = root.querySelector(".recharts-area-area");
-                    const dots = root.querySelectorAll(".recharts-dot");
-
-                    if (path instanceof SVGPathElement) {
-                        const length = path.getTotalLength();
-                        gsap.set(path, {
-                            strokeDasharray: length,
-                            strokeDashoffset: length,
-                        });
-                        timeline.to(
-                            path,
-                            { strokeDashoffset: 0, duration: 1, ease: "power2.out" },
-                            axes.length ? "-=0.05" : 0,
-                        );
-                    }
-
-                    if (fill) {
-                        timeline.fromTo(
-                            fill,
-                            { opacity: 0 },
-                            { opacity: 1, duration: 0.55, ease: "power2.out" },
-                            "-=0.6",
-                        );
-                    }
-
-                    if (dots.length) {
-                        timeline.fromTo(
-                            dots,
-                            { opacity: 0, scale: 0, transformOrigin: "50% 50%" },
-                            {
-                                opacity: 1,
-                                scale: 1,
-                                duration: 0.28,
-                                stagger: 0.05,
-                                ease: "back.out(1.8)",
-                            },
-                            "-=0.2",
-                        );
-                    }
-                }
-
-                if (type === "horizontal-bars") {
-                    const bars = root.querySelectorAll(".recharts-bar-rectangle path");
-                    timeline.fromTo(
-                        bars,
-                        { scaleX: 0, transformOrigin: "0% 50%" },
-                        {
-                            scaleX: 1,
-                            duration: 0.7,
-                            stagger: 0.09,
-                            ease: "power3.out",
-                        },
-                        axes.length ? "-=0.05" : 0,
-                    );
-                }
-
-                if (type === "vertical-bars") {
-                    const bars = root.querySelectorAll(".recharts-bar-rectangle path");
-                    timeline.fromTo(
-                        bars,
-                        { scaleY: 0, transformOrigin: "50% 100%" },
-                        {
-                            scaleY: 1,
-                            duration: 0.7,
-                            stagger: 0.09,
-                            ease: "power3.out",
-                        },
-                        axes.length ? "-=0.05" : 0,
-                    );
-                }
-            });
-        }, root);
-
-        return () => {
-            if (frameId) window.cancelAnimationFrame(frameId);
-            ctx.revert();
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, dependencies);
-
-    return containerRef;
+      <ValueKey
+        items={[
+          { name: "Spaced review", value: "84%", color: SERIES.feather },
+          { name: "Crammed once", value: "14%", color: SERIES.humpback },
+        ]}
+        note="Recall remaining at day 30"
+      />
+    </figure>
+  )
 }
 
-export function ReadinessTrendChart({ className = "h-48" }) {
-    const gradientId = useId().replaceAll(":", "");
-    const containerRef = useChartEntrance("area");
+/* ----------------------------------------------------------------- solution */
 
+<<<<<<< Updated upstream
     return (
         <div ref={containerRef} className={`${className} w-full`}>
             <ResponsiveContainer width="100%" height="100%">
@@ -239,11 +222,72 @@ export function ReadinessTrendChart({ className = "h-48" }) {
             </ResponsiveContainer>
         </div>
     );
+=======
+const MASTERY = [
+  { week: "W1", databases: 22, networks: 30, os: 41, programming: 55 },
+  { week: "W2", databases: 28, networks: 34, os: 49, programming: 63 },
+  { week: "W3", databases: 31, networks: 39, os: 55, programming: 70 },
+  { week: "W4", databases: 34, networks: 41, os: 58, programming: 74 },
+  { week: "W5", databases: 36, networks: 43, os: 60, programming: 76 },
+  { week: "W6", databases: 38, networks: 44, os: 62, programming: 78 },
+]
+
+const MASTERY_SERIES = [
+  { key: "programming", name: "Programming", color: SERIES.feather },
+  { key: "os", name: "Operating systems", color: SERIES.macaw },
+  { key: "networks", name: "Networks", color: SERIES.fox },
+  { key: "databases", name: "Databases", color: SERIES.beetle },
+]
+
+export function MasteryChart() {
+  return (
+    <figure className="w-full">
+      <figcaption className="sr-only">
+        Estimated mastery per domain over six weeks. Programming rises from 55% to 78%; Databases
+        remains the weakest at 38%.
+      </figcaption>
+
+      <div className="h-72 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={MASTERY} margin={{ top: 16, right: 16, bottom: 4, left: -18 }}>
+            <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
+            <XAxis dataKey="week" {...axisProps} />
+            <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} unit="%" {...axisProps} />
+            <Tooltip content={<ChartTooltip />} cursor={{ stroke: GRID, strokeWidth: 1 }} />
+            <Legend wrapperStyle={legendStyle} iconType="plainline" />
+
+            {MASTERY_SERIES.map((series) => (
+              <Line
+                key={series.key}
+                type="monotone"
+                dataKey={series.key}
+                name={series.name}
+                stroke={series.color}
+                strokeWidth={2}
+                dot={{ r: 4, fill: series.color, stroke: SURFACE, strokeWidth: 2 }}
+                activeDot={{ r: 6, stroke: SURFACE, strokeWidth: 2 }}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      <ValueKey
+        items={MASTERY_SERIES.map((series) => ({
+          name: series.name,
+          value: `${MASTERY[MASTERY.length - 1][series.key]}%`,
+          color: series.color,
+        }))}
+        note="Mastery at week 6"
+      />
+    </figure>
+  )
+>>>>>>> Stashed changes
 }
 
-export function TopicMasteryChart({ className = "h-52" }) {
-    const containerRef = useChartEntrance("horizontal-bars");
+/* ----------------------------------------------------------------- features */
 
+<<<<<<< Updated upstream
     return (
         <div ref={containerRef} className={`${className} w-full`}>
             <ResponsiveContainer width="100%" height="100%">
@@ -496,3 +540,81 @@ export function ReadinessRadialChart({ value = 84, className = "h-40 w-40" }) {
         </div>
     );
 }
+=======
+// Two states, not a value ramp: at-or-above target vs below. Ordering carries
+// priority; colour only says whether the bar has cleared the line.
+const DOMAINS = [
+  { domain: "Databases", mastery: 38 },
+  { domain: "Networks", mastery: 44 },
+  { domain: "Operating sys.", mastery: 62 },
+  { domain: "Security", mastery: 66 },
+  { domain: "Programming", mastery: 78 },
+  { domain: "Foundation", mastery: 94 },
+]
+
+const TARGET = 70
+
+export function DomainMasteryChart() {
+  return (
+    <figure className="w-full">
+      <figcaption className="sr-only">
+        Mastery by exam domain against a 70% target. Databases 38%, Networks 44%, Operating systems
+        62%, Security 66%, Programming 78%, Foundation 94%.
+      </figcaption>
+
+      <div className="h-80 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart
+            data={DOMAINS}
+            layout="vertical"
+            margin={{ top: 16, right: 48, bottom: 4, left: 8 }}
+            barCategoryGap="28%"
+          >
+            <CartesianGrid stroke={GRID} strokeWidth={1} horizontal={false} />
+            <XAxis
+              type="number"
+              domain={[0, 100]}
+              ticks={[0, 25, 50, 75, 100]}
+              unit="%"
+              {...axisProps}
+            />
+            <YAxis type="category" dataKey="domain" width={112} {...axisProps} />
+            <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(0,0,0,0.03)" }} />
+
+            <ReferenceLine
+              x={TARGET}
+              stroke={INK.muted}
+              strokeWidth={1}
+              label={{
+                value: `target ${TARGET}%`,
+                position: "top",
+                fill: INK.secondary,
+                fontSize: 12,
+                fontWeight: 700,
+              }}
+            />
+
+            <Bar dataKey="mastery" name="Mastery" barSize={20} radius={[0, 4, 4, 0]}>
+              {DOMAINS.map((entry) => (
+                <Cell
+                  key={entry.domain}
+                  fill={entry.mastery >= TARGET ? SERIES.feather : SERIES.macaw}
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      <ValueKey
+        items={DOMAINS.map((entry) => ({
+          name: entry.domain,
+          value: `${entry.mastery}%`,
+          color: entry.mastery >= TARGET ? SERIES.feather : SERIES.macaw,
+        }))}
+        note={`Green is at or above the ${TARGET}% target; blue is below it.`}
+      />
+    </figure>
+  )
+}
+>>>>>>> Stashed changes

@@ -59,7 +59,7 @@ export async function generateCertificationStructure(certificationId, files) {
     })
 }
 
-export async function addCertificationWithAi(data, files) {
+export async function addCertificationWithAi(data, files, onUploadProgress) {
     const formData = new FormData()
 
     formData.append(
@@ -74,5 +74,9 @@ export async function addCertificationWithAi(data, files) {
     return await base("certifications/generate", {
         method: "POST",
         data: formData,
+        // Ten 10 MB documents is a slow upload on a bad connection. Reporting
+        // real byte progress beats a spinner that cannot say whether anything
+        // is moving.
+        onUploadProgress,
     })
 }

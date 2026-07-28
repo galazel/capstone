@@ -1,0 +1,11 @@
+# Local development overrides. Gitignored -- never commit real secrets.
+#
+# Spring Boot reads ./config/application.yaml from the working directory
+# automatically, at higher precedence than src/main/resources, so this needs no
+# profile flag and no IDE run-configuration change.
+#
+# This key must match SERVICE_API_KEY in python-backend/.env. When they differ,
+# every call from Java to Python fails with 401 and the generation workspace
+# shows an empty run list with no obvious cause.
+ai:
+  api-key: 0DCAbwbe_xi40JMqLXE2YsULtsOghozYW1fvGVRW5H0

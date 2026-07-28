@@ -1,43 +1,88 @@
 
+<<<<<<< Updated upstream
 @import url("https://fonts.googleapis.com/css2?family=Elms+Sans:ital,wght@0,100..900;1,100..900&family=Google+Sans+Flex:opsz,wght@6..144,1..1000&display=swap");
+=======
+@import url("https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,400..700&family=JetBrains+Mono:wght@400;500&display=swap");
+/* REBYU design system faces. The licensed pair is Feather Bold (display) and
+   DIN Next Rounded (body); these two are the shipping fallbacks that match
+   their rounded-terminal geometry until the licensed files are self-hosted. */
+@import url("https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Nunito+Sans:opsz,wght@6..12,400..700&display=swap");
+>>>>>>> Stashed changes
 @import "tailwindcss";
 @import "flowbite-react/plugin/tailwindcss";
 @source "../.flowbite-react/class-list.json";
 @plugin "daisyui";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "./styles/rebyu-ds.css";
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
 
+<<<<<<< Updated upstream
     --background: oklch(0.99 0.002 255);
     --foreground: oklch(0.18 0.03 265);
+=======
+    /* REBYU theme. Semantic tokens map onto the Duolingo-derived palette, so
+       every page built on bg-primary / text-foreground / border-border adopts
+       the system without being rewritten. Raw palette values and the tactile
+       component layer live in styles/rebyu-ds.css. */
+    --background: #ffffff; /* Snow */
+    --foreground: #4b4b4b; /* Eel — never pure black */
+>>>>>>> Stashed changes
 
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.18 0.03 265);
+    --card: #ffffff;
+    --card-foreground: #4b4b4b;
 
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.18 0.03 265);
+    --popover: #ffffff;
+    --popover-foreground: #4b4b4b;
 
+<<<<<<< Updated upstream
 
     --primary: oklch(0.53 0.19 260);
     --primary-foreground: oklch(0.985 0.003 255);
+=======
+    --primary: #58cc02; /* Feather Green */
+    --primary-foreground: #ffffff;
+>>>>>>> Stashed changes
 
+    --secondary: #f7f7f7; /* Polar */
+    --secondary-foreground: #4b4b4b;
 
+<<<<<<< Updated upstream
     --secondary: oklch(0.97 0.003 255);
     --secondary-foreground: oklch(0.22 0.03 265);
 
     --muted: oklch(0.965 0.004 255);
     --muted-foreground: oklch(0.5 0.02 265);
+=======
+    --muted: #f7f7f7;
+    --muted-foreground: #777777; /* Wolf */
 
+    --accent: #eefce3; /* Feather wash */
+    --accent-foreground: #3d6b06;
+>>>>>>> Stashed changes
 
+    --destructive: #ff4b4b; /* Cardinal */
+    --destructive-foreground: #ffffff;
+
+<<<<<<< Updated upstream
     --accent: oklch(0.95 0.025 255);
     --accent-foreground: oklch(0.22 0.05 265);
+=======
+    --border: #e5e5e5; /* Swan */
+    --input: #e5e5e5;
+    --ring: #1cb0f6; /* Macaw — focus is always Macaw */
+>>>>>>> Stashed changes
 
-    --destructive: oklch(0.59 0.22 27);
-    --destructive-foreground: oklch(0.985 0 0);
+    --chart-1: #58cc02;
+    --chart-2: #1cb0f6;
+    --chart-3: #ffc800;
+    --chart-4: #ce82ff;
+    --chart-5: #ff9600;
 
+<<<<<<< Updated upstream
     --border: oklch(0.9 0.008 255);
     --input: oklch(0.9 0.008 255);
     --ring: oklch(0.53 0.19 260);
@@ -49,20 +94,48 @@
     --chart-5: oklch(0.37 0.05 265);
 
     --radius: 0.8rem;
+=======
+    --radius: 1rem;
 
+    /* Legacy brand-* tokens are remapped rather than removed: existing pages
+       still reference them, and remapping pulls those surfaces on-theme. */
+    --brand-navy: #4b4b4b;
+    --brand-navy-soft: #5f5f5f;
 
+    --brand-blue: #58cc02;
+    --brand-blue-dark: #46a302;
+    --brand-blue-soft: #eefce3;
+>>>>>>> Stashed changes
+
+    --brand-sky: #1cb0f6;
+    --brand-sky-soft: #e3f5fe;
+
+<<<<<<< Updated upstream
     --brand-navy: oklch(0.18 0.03 265);
     --brand-navy-soft: oklch(0.29 0.05 265);
 
     --brand-blue: oklch(0.53 0.19 260);
     --brand-blue-dark: oklch(0.4 0.15 263);
     --brand-blue-soft: oklch(0.95 0.025 255);
+=======
+    --brand-yellow: #ffc800;
+    --brand-yellow-foreground: #4b4b4b;
+    --brand-yellow-soft: #fff7de;
 
+    --brand-lilac: #f6ecff;
+    --brand-lilac-foreground: #b061e6;
+>>>>>>> Stashed changes
 
-    --brand-sky: oklch(0.72 0.1 235);
-    --brand-sky-soft: oklch(0.96 0.02 235);
+    --sidebar: #ffffff;
+    --sidebar-foreground: #4b4b4b;
 
+    --sidebar-primary: #58cc02;
+    --sidebar-primary-foreground: #ffffff;
 
+    --sidebar-accent: #eefce3;
+    --sidebar-accent-foreground: #3d6b06;
+
+<<<<<<< Updated upstream
     --brand-yellow: oklch(0.87 0.16 94);
     --brand-yellow-foreground: oklch(0.2 0.03 265);
     --brand-yellow-soft: oklch(0.975 0.055 95);
@@ -85,6 +158,596 @@
     --sidebar-ring: oklch(0.53 0.19 260);
 }
 
+=======
+    --sidebar-border: #e5e5e5;
+    --sidebar-ring: #1cb0f6;
+}
+
+/* REBYU editorial application foundation. These rules intentionally replace
+   the older boxed portal treatment without changing component behavior. */
+@layer components {
+    .rebyu-page {
+        @apply mx-auto flex min-h-[calc(100dvh-4rem)] min-w-0 w-full max-w-[1440px] flex-1 flex-col items-stretch gap-8 px-4 py-6 sm:px-6 sm:py-8 lg:px-8;
+    }
+
+    .rebyu-page > * {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .rebyu-page-header {
+        @apply flex flex-col gap-4 border-b border-border/60 pb-6 sm:flex-row sm:items-end sm:justify-between;
+    }
+
+    .rebyu-section {
+        @apply space-y-6;
+    }
+
+    .rebyu-reading-width {
+        max-width: 72ch;
+    }
+}
+
+.public-auth-shell :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]) {
+    min-height: 2.75rem;
+    border-color: #cbd8e5;
+    border-radius: 0.625rem;
+    background: #ffffff;
+}
+
+.public-auth-shell :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]):focus-visible {
+    border-color: #5a9ddd;
+    box-shadow: 0 0 0 3px rgb(90 157 221 / 0.16);
+}
+
+.public-auth-shell [data-slot="button"] {
+    min-height: 2.75rem;
+    border-radius: 0.625rem;
+    font-weight: 600;
+}
+
+.netacad-portal,
+body.netacad-overlay-theme {
+    --background: #fbfcfe;
+    --foreground: #182033;
+    --card: #ffffff;
+    --card-foreground: #182033;
+    --primary: #2f7dd3;
+    --primary-foreground: #ffffff;
+    --secondary: #f1f5f9;
+    --secondary-foreground: #27344a;
+    --muted: #f4f6f8;
+    --muted-foreground: #667085;
+    --accent: #eff6ff;
+    --accent-foreground: #1d4ed8;
+    --border: #e4e7ec;
+    --input: #d0d5dd;
+    --ring: #5a9ddd;
+    --radius: 0.625rem;
+}
+
+.netacad-portal [data-slot="card"] {
+    border-color: color-mix(in srgb, var(--border) 78%, transparent);
+    border-radius: 0.625rem;
+    box-shadow: none;
+}
+
+.netacad-portal [data-slot="table-container"] {
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+.netacad-portal [data-slot="table-header"] {
+    background: color-mix(in srgb, var(--muted) 70%, transparent);
+}
+
+.netacad-portal [data-slot="table-head"] {
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+:is(.admin-portal, .enterprise-portal) :is(.rounded-xl, .rounded-2xl, .rounded-3xl).border:is(.bg-card, .bg-background, .bg-white),
+:is(.admin-portal, .enterprise-portal) :is(section, article).rounded-xl.border {
+    border-color: color-mix(in srgb, var(--border) 78%, transparent);
+    border-radius: 0.625rem;
+    box-shadow: none;
+}
+
+.netacad-portal > header {
+    box-shadow: none;
+}
+
+.netacad-portal :is(p, li) {
+    line-height: 1.65;
+}
+
+.netacad-portal code,
+.netacad-portal pre,
+.netacad-portal kbd {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* Keep page-local native tables visually aligned with the shared Table
+   primitive while retaining their responsive wrappers and event handlers. */
+.netacad-portal table:not([data-slot="table"]) thead {
+    background: color-mix(in srgb, var(--muted) 70%, transparent);
+    color: var(--muted-foreground);
+}
+
+.netacad-portal table:not([data-slot="table"]) th {
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.netacad-portal table:not([data-slot="table"]) :is(th, td) {
+    padding-block: 0.75rem;
+}
+
+.netacad-portal table:not([data-slot="table"]) tr {
+    border-color: color-mix(in srgb, var(--border) 75%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* Portal system: Snow surfaces with a Feather Green interaction language.
+   Shared by the admin, enterprise, and learner layouts. */
+.netacad-portal,
+body.netacad-overlay-theme {
+    --background: #f7f7f7; /* Polar canvas so Snow cards separate from it */
+    --foreground: #4b4b4b;
+    --card: #ffffff;
+    --card-foreground: #4b4b4b;
+    --popover: #ffffff;
+    --popover-foreground: #4b4b4b;
+    --primary: #58cc02;
+    --primary-foreground: #ffffff;
+    --secondary: #f7f7f7;
+    --secondary-foreground: #4b4b4b;
+    --muted: #f7f7f7;
+    --muted-foreground: #777777;
+    --accent: #eefce3;
+    --accent-foreground: #3d6b06;
+    --border: #e5e5e5;
+    --input: #e5e5e5;
+    --ring: #1cb0f6;
+    --radius: 1rem;
+    --chart-1: #58cc02;
+    --chart-2: #1cb0f6;
+    --chart-3: #ffc800;
+    --chart-4: #ce82ff;
+    --chart-5: #ff9600;
+    --sidebar: #ffffff;
+    --sidebar-foreground: #4b4b4b;
+    --sidebar-primary: #58cc02;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #eefce3;
+    --sidebar-accent-foreground: #3d6b06;
+    --sidebar-border: #e5e5e5;
+    --sidebar-ring: #1cb0f6;
+    background: var(--background);
+}
+
+/* Dark portal: neutral charcoals derived from Eel rather than a blue-grey, so
+   Feather Green stays the only saturated colour in the interface. */
+.dark .netacad-portal,
+.dark body.netacad-overlay-theme {
+    --background: #1a1a1a;
+    --foreground: #f2f2f2;
+    --card: #242424;
+    --card-foreground: #f2f2f2;
+    --popover: #242424;
+    --popover-foreground: #f2f2f2;
+    --primary: #58cc02;
+    --primary-foreground: #10240a;
+    --secondary: #2e2e2e;
+    --secondary-foreground: #f2f2f2;
+    --muted: #2e2e2e;
+    --muted-foreground: #afafaf;
+    --accent: #2a3d1c;
+    --accent-foreground: #b7f08a;
+    --border: #3a3a3a;
+    --input: #3a3a3a;
+    --ring: #1cb0f6;
+    --chart-1: #58cc02;
+    --chart-2: #1cb0f6;
+    --chart-3: #ffc800;
+    --chart-4: #ce82ff;
+    --chart-5: #ff9600;
+    --sidebar: #1f1f1f;
+    --sidebar-foreground: #f2f2f2;
+    --sidebar-primary: #58cc02;
+    --sidebar-primary-foreground: #10240a;
+    --sidebar-accent: #2a3d1c;
+    --sidebar-accent-foreground: #b7f08a;
+    --sidebar-border: #3a3a3a;
+    --sidebar-ring: #1cb0f6;
+    color-scheme: dark;
+}
+
+.dark .netacad-portal > [data-slot="sidebar-inset"] > header {
+    background: rgb(19 29 43 / 0.96);
+}
+
+.dark .netacad-portal [data-slot="card"],
+.dark .netacad-portal [data-slot="table-container"],
+.dark :is(.admin-portal, .enterprise-portal) :is(.rounded-xl, .rounded-2xl, .rounded-3xl).border:is(.bg-card, .bg-background, .bg-white),
+.dark :is(.admin-portal, .enterprise-portal) :is(section, article).rounded-xl.border {
+    background-color: var(--card);
+}
+
+.dark .netacad-portal .bg-white {
+    background-color: var(--card);
+}
+
+.dark .netacad-portal :is(.text-zinc-950, .text-zinc-900, .text-neutral-900) {
+    color: var(--foreground);
+}
+
+.dark .netacad-portal :is(.text-zinc-500, .text-zinc-600, .text-neutral-500, .text-neutral-600) {
+    color: var(--muted-foreground);
+}
+
+.dark body.netacad-overlay-theme :is(
+    [data-slot="dialog-content"],
+    [data-slot="alert-dialog-content"],
+    [data-slot="sheet-content"],
+    [data-slot="drawer-content"],
+    [data-slot="dropdown-menu-content"],
+    [data-slot="select-content"]
+) {
+    background: var(--popover);
+    color: var(--popover-foreground);
+    border-color: var(--border);
+}
+
+.netacad-portal [data-slot="sidebar-container"] > div,
+.netacad-portal [data-mobile="true"] {
+    border-color: var(--sidebar-border);
+    box-shadow: 4px 0 18px rgb(15 42 67 / 0.12);
+}
+
+.netacad-portal [data-slot="sidebar-inset"] {
+    background: var(--background);
+}
+
+.netacad-portal > [data-slot="sidebar-inset"] > header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    border-top: 1px solid #e1e4e8;
+    border-bottom: 1px solid var(--border);
+    background: rgb(255 255 255 / 0.96);
+    box-shadow: 0 2px 8px rgb(23 43 77 / 0.06);
+    backdrop-filter: blur(12px);
+}
+
+.netacad-portal [data-slot="card"] {
+    border-color: var(--border);
+    border-radius: 0.625rem;
+    background: #ffffff;
+    box-shadow: none;
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.netacad-portal [data-slot="table-container"] {
+    overflow: hidden;
+    border-block: 1px solid var(--border);
+    border-inline: 0;
+    border-radius: 0;
+    background: #ffffff;
+    box-shadow: none;
+}
+
+/* Normalize older page-local panels to the same card treatment used by the
+   shared Card primitive. */
+:is(.admin-portal, .enterprise-portal) :is(.rounded-xl, .rounded-2xl, .rounded-3xl).border:is(.bg-card, .bg-background, .bg-white),
+:is(.admin-portal, .enterprise-portal) :is(section, article).rounded-xl.border {
+    border-color: var(--border);
+    border-radius: 0.625rem;
+    background-color: #ffffff;
+    box-shadow: none;
+}
+
+.netacad-portal h1,
+.netacad-portal h2,
+.netacad-portal h3 {
+    letter-spacing: -0.015em;
+}
+
+/* Component language shared by inline portal UI and Radix content portaled to
+   document.body. Explicit data slots keep this independent from page markup. */
+:is(.netacad-portal, .netacad-overlay-theme) [data-slot="button"] {
+    border-radius: 999px;
+    font-weight: 700;
+    letter-spacing: 0;
+}
+
+/* Solid buttons carry the lip; the press travels its full height. */
+:is(.netacad-portal, .netacad-overlay-theme) [data-slot="button"][data-variant="default"] {
+    background: var(--primary);
+    border: 0;
+    box-shadow: 0 4px 0 #46a302;
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) [data-slot="button"][data-variant="default"]:hover {
+    background: var(--primary);
+    filter: brightness(1.06);
+}
+
+:is(.netacad-portal, .netacad-overlay-theme)
+    [data-slot="button"][data-variant="default"]:active:not([disabled]) {
+    transform: translateY(4px);
+    box-shadow: none;
+}
+
+:is(.netacad-portal, .netacad-overlay-theme)
+    [data-slot="button"][data-variant="destructive"] {
+    box-shadow: 0 4px 0 #e03d3d;
+}
+
+:is(.netacad-portal, .netacad-overlay-theme)
+    [data-slot="button"][data-variant="destructive"]:active:not([disabled]) {
+    transform: translateY(4px);
+    box-shadow: none;
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) [data-slot="button"][data-variant="outline"] {
+    border-color: var(--border);
+    background: var(--background);
+    color: var(--foreground);
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) [data-slot="button"][data-variant="outline"]:hover {
+    border-color: var(--primary);
+    background: var(--accent);
+    color: var(--accent-foreground);
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) :is(
+    [data-slot="input"],
+    [data-slot="textarea"],
+    [data-slot="select-trigger"]
+) {
+    border-radius: 0.75rem;
+    border-width: 2px;
+    border-color: var(--input);
+    background: var(--card);
+    box-shadow: none;
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) :is(
+    [data-slot="input"],
+    [data-slot="textarea"],
+    [data-slot="select-trigger"]
+):focus-visible {
+    border-color: var(--ring);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 18%, transparent);
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) :is(
+    [data-slot="dialog-content"],
+    [data-slot="alert-dialog-content"]
+) {
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    box-shadow: 0 24px 64px rgb(15 23 42 / 0.16);
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) :is(
+    [data-slot="dialog-title"],
+    [data-slot="alert-dialog-title"],
+    [data-slot="sheet-title"],
+    [data-slot="drawer-title"]
+) {
+    color: var(--foreground);
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) :is(
+    [data-slot="sheet-content"],
+    [data-slot="drawer-content"]
+) {
+    border-color: var(--border);
+    background: #ffffff;
+    box-shadow: 0 24px 64px rgb(15 23 42 / 0.16);
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) :is(
+    [data-slot="dropdown-menu-content"],
+    [data-slot="dropdown-menu-sub-content"],
+    [data-slot="select-content"],
+    [data-slot="popover-content"]
+) {
+    border: 1px solid var(--border);
+    border-radius: 0.625rem;
+    box-shadow: 0 12px 32px rgb(15 23 42 / 0.12);
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) [data-slot="tabs-list"] {
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    background: transparent;
+    padding: 0;
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) [data-slot="tabs-trigger"] {
+    min-height: 2.75rem;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) [data-slot="tabs-trigger"][data-state="active"] {
+    border-bottom-color: var(--primary);
+    background: var(--accent);
+    color: var(--accent-foreground);
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) [data-slot="tabs-content"] {
+    outline: none;
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) [data-slot="table-header"] {
+    background: var(--muted);
+    color: var(--foreground);
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) [data-slot="table-head"] {
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) [data-slot="table-row"] {
+    border-color: #d5dce3;
+    transition: background-color 140ms ease;
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) [data-slot="table-body"] [data-slot="table-row"]:hover {
+    background: #fafafa;
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) [data-slot="badge"] {
+    border-radius: 999px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) :is(
+    [data-slot="accordion-item"],
+    [data-slot="collapsible-content"]
+) {
+    border-color: var(--border);
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) [data-slot="accordion-trigger"] {
+    border-radius: 0.25rem;
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) [data-slot="accordion-trigger"]:hover {
+    background: var(--accent);
+    color: var(--accent-foreground);
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) [data-slot="skeleton"] {
+    border-radius: 0.3rem;
+    background: #e9edf1;
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) [data-slot="alert"] {
+    border-radius: 0.25rem;
+    border-left-width: 4px;
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) [data-slot="progress"] {
+    border-radius: 999px;
+    background: #dce3e9;
+}
+
+[data-sonner-toaster] {
+    --width: min(500px, calc(100vw - 32px));
+    font-family: var(--font-sans);
+}
+
+[data-sonner-toast].netacad-toast {
+    min-height: 0;
+    align-items: center;
+    gap: 10px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--popover);
+    color: var(--foreground);
+    padding: 14px 46px 14px 14px;
+    box-shadow: 0 12px 32px rgb(15 23 42 / 0.12);
+}
+
+.netacad-toast-content {
+    min-width: 0;
+    flex: 1;
+    padding-top: 0;
+}
+
+.netacad-toast-title {
+    color: var(--foreground);
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.netacad-toast-description {
+    margin-top: 3px;
+    color: var(--muted-foreground);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.netacad-toast-icon {
+    display: flex;
+    width: 20px;
+    height: 20px;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
+    margin-top: 0;
+}
+
+.netacad-toast-action,
+.netacad-toast-cancel {
+    align-self: center;
+    flex-shrink: 0;
+    height: 30px;
+    border-radius: 0.375rem;
+    padding-inline: 10px;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.netacad-toast-action {
+    background: var(--primary);
+    color: var(--primary-foreground);
+}
+
+.netacad-toast-cancel {
+    border: 1px solid var(--border);
+    background: var(--secondary);
+    color: var(--secondary-foreground);
+}
+
+.netacad-toast-close {
+    position: absolute !important;
+    top: 50% !important;
+    right: 12px !important;
+    left: auto !important;
+    width: 24px !important;
+    height: 24px !important;
+    transform: translateY(-50%) !important;
+    border: 0;
+    background: transparent;
+    color: #5d6b7a;
+    box-shadow: none;
+}
+
+>>>>>>> Stashed changes
 .dark {
     --background: oklch(0.17 0.025 265);
     --foreground: oklch(0.975 0.004 255);
@@ -151,8 +814,18 @@
 }
 
 @theme inline {
+<<<<<<< Updated upstream
     --font-sans: "Google Sans Flex", sans-serif;
     --font-heading: "Elms Sans", sans-serif;
+=======
+    /* Body copy takes DIN Next Rounded (Nunito Sans fallback); headings take
+       Feather Bold (Nunito fallback). See styles/rebyu-ds.css for self-hosting. */
+    --font-sans:
+        "DIN Next Rounded", "DIN Next Rounded LT Pro", "Nunito Sans", ui-sans-serif, system-ui,
+        sans-serif;
+    --font-heading: "Feather Bold", "Nunito", ui-rounded, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+>>>>>>> Stashed changes
 
     --color-background: var(--background);
     --color-foreground: var(--foreground);
@@ -267,7 +940,170 @@
     textarea,
     select {
         font: inherit;
+<<<<<<< Updated upstream
         font-family: "Google Sans Flex", sans-serif;
     }
 }
 
+=======
+        font-family:
+            "DIN Next Rounded", "DIN Next Rounded LT Pro", "Nunito Sans", ui-sans-serif, system-ui,
+            sans-serif;
+    }
+
+    /* Headings carry the display face at heavier weights than the old theme —
+       the rounded faces read lighter at the same numeric weight. */
+    h1,
+    h2,
+    h3 {
+        font-weight: 800;
+    }
+}
+
+/* Shared component scale: readable, study-friendly, and consistent across
+   learner, institution, and administrator surfaces. */
+:is(.netacad-portal, .netacad-overlay-theme) :is(
+    [data-slot="dropdown-menu-content"],
+    [data-slot="select-content"],
+    [data-slot="popover-content"]
+) {
+    border-color: var(--border);
+    border-radius: 0.75rem;
+    box-shadow: 0 12px 32px rgb(39 52 82 / 0.12);
+    font-size: 0.9375rem;
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) :is(
+    [data-slot="dropdown-menu-item"],
+    [data-slot="select-item"]
+) {
+    min-height: 2.5rem;
+    border-radius: 0.5rem;
+    font-size: 0.9375rem;
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) :is(
+    [data-slot="table-cell"],
+    [data-slot="table-head"]
+) {
+    font-size: 0.9375rem;
+}
+
+:is(.netacad-portal, .netacad-overlay-theme) [data-slot="tooltip-content"] {
+    font-size: 0.8125rem;
+}
+
+
+/* ===========================================================================
+   REBYU TACTILE LAYER (global)
+   ---------------------------------------------------------------------------
+   Applies the design system's physical feel to the shared shadcn primitives so
+   every existing page inherits it without being rewritten. Deliberately
+   restrained: colour, radius and press travel only. Control heights are left
+   alone so dense admin tables keep their density — the full 56px treatment is
+   opt-in via the `.rebyu-ds` component classes.
+   =========================================================================== */
+
+/* --- Buttons --------------------------------------------------------------- */
+[data-slot="button"] {
+    border-radius: 999px;
+    font-weight: 700;
+    transition:
+        transform 0.06s ease-out,
+        box-shadow 0.06s ease-out,
+        background-color 0.15s ease-out;
+}
+
+/* The lip only goes on solid-filled buttons; ghost and link variants would
+   read as floating boxes with a shadow under them. */
+[data-slot="button"].bg-primary {
+    box-shadow: 0 4px 0 #46a302;
+}
+[data-slot="button"].bg-destructive {
+    box-shadow: 0 4px 0 #e03d3d;
+}
+[data-slot="button"]:is(.bg-primary, .bg-destructive):active:not([disabled]) {
+    transform: translateY(4px);
+    box-shadow: none;
+}
+[data-slot="button"]:not(.bg-primary, .bg-destructive):active:not([disabled]) {
+    transform: translateY(2px);
+}
+[data-slot="button"][disabled] {
+    box-shadow: none;
+}
+
+[data-slot="button"]:focus-visible {
+    outline: 3px solid #1cb0f6;
+    outline-offset: 2px;
+}
+
+/* --- Surfaces -------------------------------------------------------------- */
+/* Overrides the portal's flattened card treatment further up this file. */
+.netacad-portal [data-slot="card"],
+:is(.admin-portal, .enterprise-portal)
+    :is(.rounded-xl, .rounded-2xl, .rounded-3xl).border:is(.bg-card, .bg-background, .bg-white),
+:is(.admin-portal, .enterprise-portal) :is(section, article).rounded-xl.border {
+    border-color: var(--border);
+    border-width: 2px;
+    border-radius: 1rem;
+    box-shadow: none;
+}
+
+.netacad-portal [data-slot="table-container"] {
+    border-radius: 1rem;
+}
+
+.netacad-portal [data-slot="table-header"] {
+    background: var(--muted);
+}
+
+/* --- Inputs ---------------------------------------------------------------- */
+:is(.netacad-portal, .public-auth-shell)
+    :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]) {
+    border-width: 2px;
+    border-color: var(--border);
+    border-radius: 0.75rem;
+    background: var(--card);
+}
+:is(.netacad-portal, .public-auth-shell)
+    :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]):focus-visible {
+    border-color: #1cb0f6;
+    box-shadow: none;
+    outline: 3px solid rgb(28 176 246 / 0.25);
+    outline-offset: 0;
+}
+:is(.netacad-portal, .public-auth-shell)
+    :is([data-slot="input"], [data-slot="textarea"])[aria-invalid="true"] {
+    border-color: #ff4b4b;
+}
+
+/* --- Badges & chips -------------------------------------------------------- */
+[data-slot="badge"] {
+    border-radius: 999px;
+    font-weight: 700;
+}
+
+/* --- Progress -------------------------------------------------------------- */
+[data-slot="progress"] {
+    border-radius: 999px;
+    background: var(--border);
+}
+[data-slot="progress-indicator"] {
+    border-radius: 999px;
+    background: #89e219;
+}
+
+/* --- Auth shell ------------------------------------------------------------ */
+/* Overrides the compact defaults declared near the top of this file: auth is a
+   low-density, high-intent surface, so it takes the full tactile sizing. */
+.public-auth-shell :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]) {
+    min-height: 3.25rem;
+    border-radius: 0.75rem;
+}
+.public-auth-shell [data-slot="button"] {
+    min-height: 3.25rem;
+    border-radius: 999px;
+    font-weight: 800;
+}
+>>>>>>> Stashed changes
