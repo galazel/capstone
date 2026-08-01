@@ -21,6 +21,7 @@ from typing import Any
 from langchain_core.messages import HumanMessage
 
 from app.agents.certification.question_agent import get_question_generation_agent
+from app.ai import guardrails
 from app.ai.prompts.question import build_question_batch_prompt
 from app.ai.router import ainvoke_with_fallback
 from app.schemas.certification.question_schema import QuestionBatch
@@ -70,12 +71,20 @@ class _StructuredAgent:
         else:
             response = await self._agent.ainvoke(payload, config)
         try:
-            return response["structured_response"]
+            structured = response["structured_response"]
         except (KeyError, TypeError) as error:
             raise MissingStructuredResponse(
                 f"{self._label} returned no structured response; "
                 "the model answered without calling its output tool."
             ) from error
+
+        # Screened here, inside the retried call, for the same reason the
+        # extraction above is: a `GuardrailViolation` is a ValueError, so the
+        # retry policy resamples it and the offending text never leaves this
+        # method. Doing it in the graph node instead would turn a blockable
+        # sample into a failed run.
+        guardrails.screen(structured, label=self._label)
+        return structured
 
 
 def structured(build_agent):

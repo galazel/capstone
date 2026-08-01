@@ -89,6 +89,21 @@ def _item_context(state: dict, stage: str) -> dict | None:
     return {"item_index": index, "item_number": index + 1}
 
 
+def _halt_if_cancelled(thread_id: str | None, stage: str) -> None:
+    """Stops the graph at a node boundary once a reviewer has cancelled.
+
+    Raising unwinds `ainvoke` and leaves the checkpoint where it is, so a
+    cancelled run stops without losing the work already approved. Deliberately
+    *before* the node-started event: emitting one for a node that never runs
+    would leave a task showing as permanently in-progress on the timeline.
+    """
+    from app.graphs.cancellation import RunCancelled, is_cancel_requested
+
+    if is_cancel_requested(thread_id):
+        logger.info("Halting run %s before %s: cancelled by a reviewer", thread_id, stage)
+        raise RunCancelled(stage)
+
+
 def instrument(node: Callable, stage: str) -> Callable:
     """Wraps `node` so it reports its own start, duration, and outcome.
 
@@ -102,6 +117,11 @@ def instrument(node: Callable, stage: str) -> Callable:
         @functools.wraps(node)
         async def async_wrapper(state: dict, *args: Any, **kwargs: Any):
             thread_id = state.get("thread_id")
+            # Between-node cancellation check. An in-flight LLM call cannot be
+            # aborted, so this boundary is the tightest bound available -- and
+            # it belongs here rather than in individual nodes, which is how
+            # cancelling during document validation used to do nothing.
+            _halt_if_cancelled(thread_id, stage)
             _emit(
                 thread_id, registry.EVT_NODE_STARTED, stage=stage,
                 task_status=registry.TASK_RUNNING, payload=_item_context(state, stage),
@@ -130,6 +150,7 @@ def instrument(node: Callable, stage: str) -> Callable:
     @functools.wraps(node)
     def sync_wrapper(state: dict, *args: Any, **kwargs: Any):
         thread_id = state.get("thread_id")
+        _halt_if_cancelled(thread_id, stage)
         _emit(
             thread_id, registry.EVT_NODE_STARTED, stage=stage,
             task_status=registry.TASK_RUNNING, payload=_item_context(state, stage),

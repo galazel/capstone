@@ -74,8 +74,19 @@ class LessonGenerationInstructions(BaseModel):
 
 class Lesson(BaseModel):
     name: str
-    learning_objective: str
-    lessonGenerationInstructions: LessonGenerationInstructions
+    #: Both optional purely so the provider's schema check lets a *middle
+    #: category* mis-nested inside `lessons` through to `_hoist_middles`, which
+    #: lifts it back out. A surviving entry with no instructions is not a
+    #: lesson at all and is dropped there, so nothing incomplete is persisted.
+    learning_objective: str = ""
+    #: Typed non-optional with a `None` default on purpose. What has to change
+    #: is only that the provider stops *requiring* it -- the default achieves
+    #: that -- while the advertised shape stays a plain object. Writing
+    #: `Optional[...]` instead would emit an `anyOf`, and a schema wrinkle at
+    #: exactly the node this model keeps mis-nesting is the last thing wanted.
+    #: Pydantic does not validate defaults, so `None` survives; a value the
+    #: model does supply is validated normally.
+    lessonGenerationInstructions: LessonGenerationInstructions = None  # type: ignore[assignment]
 
 
 class MiddleCategory(BaseModel):
@@ -91,6 +102,40 @@ class MajorCategory(BaseModel):
     name: str
     description: str
     middleCategories: List[MiddleCategory]
+
+
+def _is_misnested_middle(node: Any) -> bool:
+    """True for a would-be lesson that is really a middle category.
+
+    Structural tell again: it carries its own `lessons` where a lesson carries
+    `lessonGenerationInstructions`. This is the same mistake as
+    `_is_misnested_major` one level down -- the model flattens a level of the
+    hierarchy and keeps going -- and it arrived the same way, as a
+    `tool_use_failed` 400 with four sibling lessons and two middle categories
+    all sitting in one `lessons` array.
+    """
+    return (
+        isinstance(node, dict)
+        and isinstance(node.get("lessons"), list)
+        and bool(node["lessons"])
+        and not node.get("lessonGenerationInstructions")
+    )
+
+
+def _hoist_middles(middle: dict) -> List[dict]:
+    """Returns `middle` plus every middle category wrongly nested in its
+    `lessons`. Recursive, since a hoisted one can repeat the mistake."""
+    lessons: List[Any] = []
+    hoisted: List[dict] = []
+
+    for child in middle.get("lessons") or []:
+        if _is_misnested_middle(child):
+            hoisted.extend(_hoist_middles(child))
+        elif isinstance(child, dict) and child.get("lessonGenerationInstructions"):
+            lessons.append(child)
+
+    repaired = {**middle, "lessons": lessons}
+    return [repaired, *hoisted] if lessons else hoisted
 
 
 def _is_misnested_major(node: Any) -> bool:
@@ -120,7 +165,10 @@ def _hoist_majors(node: dict) -> List[dict]:
         if _is_misnested_major(child):
             hoisted.extend(_hoist_majors(child))
         elif isinstance(child, dict) and child.get("lessons"):
-            middles.append(child)
+            # Repair the level below on the way past: a middle category can
+            # have further middle categories buried in its `lessons`, and one
+            # pass over the tree fixes both depths.
+            middles.extend(_hoist_middles(child))
 
     repaired = {**node, "middleCategories": middles}
     return [repaired, *hoisted] if middles else hoisted

@@ -266,13 +266,35 @@ def persist_generated_assessments(
 
     session.commit()
 
+    # What the run *produced*, against what actually landed. Every drop above
+    # is a warning, and warnings scroll past: a live run generated seven
+    # assessments, saved none of them because `exam_types` was unseeded, and
+    # still reported "completed". Counting both sides is what lets `finalize`
+    # tell a successful run from an empty one.
+    expected = {
+        "exams": (
+            len(result.get("lesson_quizzes") or [])
+            + len(result.get("middle_quizzes") or [])
+            + len(result.get("major_quizzes") or [])
+            + (1 if diagnostic.get("questions") else 0)
+            + (1 if mock.get("questions") else 0)
+        ),
+        "bank_questions": len(bank),
+        "lessons": len(result.get("lessons") or []),
+    }
+
     logger.info(
-        "Persisted %d exam(s) and %d question-bank item(s) for certification %s",
-        len(created), len(bank_ids), certification_id,
+        "Persisted %d/%d exam(s), %d/%d bank item(s), %d/%d lesson bod(y/ies) "
+        "for certification %s",
+        len(created), expected["exams"],
+        len(bank_ids), expected["bank_questions"],
+        lessons_written, expected["lessons"],
+        certification_id,
     )
     return {
         "exams": created,
         "bank_questions": len(bank_ids),
         "lessons_written": lessons_written,
+        "expected": expected,
         "warnings": warnings,
     }

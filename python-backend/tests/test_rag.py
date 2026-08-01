@@ -15,7 +15,15 @@ from langchain_core.embeddings import Embeddings
 from app.core.config import get_settings
 from app.rag.chunking import chunk_documents
 from app.rag.retriever import format_context, retrieve
-from app.rag.store import add_documents, delete_index, index_exists, load_index, namespace_for
+from app.rag.store import (
+    VectorStoreUnavailable,
+    add_documents,
+    count,
+    delete_index,
+    index_exists,
+    load_index,
+    namespace_for,
+)
 
 
 class StubEmbeddings(Embeddings):
@@ -45,12 +53,40 @@ def stub() -> StubEmbeddings:
     return StubEmbeddings()
 
 
-@pytest.fixture(autouse=True)
-def isolated_index_dir(tmp_path, monkeypatch):
-    """Points the index at a temp dir so tests never touch a real faiss_db."""
-    settings = get_settings()
-    monkeypatch.setattr(settings, "rag_index_dir", tmp_path / "faiss_db", raising=False)
-    yield
+@pytest.fixture()
+def ns(monkeypatch):
+    """Builds throwaway Qdrant collection names and drops them afterwards.
+
+    Vectors moved from local files to a shared service, so isolation can no
+    longer be a temp directory -- an unprefixed `cert_1` here would write into
+    the real certification 1's collection. Only tests that actually touch the
+    store request this fixture, which is also what scopes the skip below to
+    them: the pure-function tests still run with no Qdrant at all.
+    """
+    import uuid
+
+    from app.rag import store
+
+    try:
+        store.get_client().get_collections()
+    except Exception:
+        pytest.skip("Qdrant unreachable; start it with docker run -p 6333:6333 qdrant/qdrant")
+
+    prefix = f"test-{uuid.uuid4().hex[:8]}-"
+    created: set[str] = set()
+
+    def make(certification_id: int) -> str:
+        namespace = prefix + namespace_for(certification_id=certification_id)
+        created.add(namespace)
+        return namespace
+
+    yield make
+
+    for namespace in created:
+        try:
+            store.delete_index(namespace)
+        except Exception:  # a leaked test collection is harmless
+            pass
 
 
 # --- chunking -------------------------------------------------------------
@@ -89,8 +125,8 @@ def test_namespace_prefers_id_and_slugifies_name():
 
 # --- store ----------------------------------------------------------------
 
-def test_add_documents_creates_then_appends(stub):
-    ns = namespace_for(certification_id=1)
+def test_add_documents_creates_then_appends(stub, ns):
+    ns = ns(1)
     assert not index_exists(ns)
 
     add_documents(ns, [Document(page_content="network routing", metadata={})], embeddings=stub)
@@ -100,28 +136,28 @@ def test_add_documents_creates_then_appends(stub):
 
     index = load_index(ns, stub)
     # Appended, not replaced: both chunks must survive.
-    assert index.index.ntotal == 2
+    assert count(ns) == 2
 
 
-def test_second_certification_does_not_erase_the_first(stub):
+def test_second_certification_does_not_erase_the_first(stub, ns):
     """The exact regression that made the old vector_db unusable."""
-    cert_a = namespace_for(certification_id=1)
-    cert_b = namespace_for(certification_id=2)
+    cert_a = ns(1)
+    cert_b = ns(2)
 
     add_documents(cert_a, [Document(page_content="network security", metadata={})], embeddings=stub)
     add_documents(cert_b, [Document(page_content="python database", metadata={})], embeddings=stub)
 
     assert index_exists(cert_a), "ingesting cert B destroyed cert A's index"
-    assert load_index(cert_a, stub).index.ntotal == 1
-    assert load_index(cert_b, stub).index.ntotal == 1
+    assert count(cert_a) == 1
+    assert count(cert_b) == 1
 
 
-def test_load_index_missing_returns_none(stub):
-    assert load_index(namespace_for(certification_id=999), stub) is None
+def test_load_index_missing_returns_none(stub, ns):
+    assert load_index(ns(999), stub) is None
 
 
-def test_delete_index(stub):
-    ns = namespace_for(certification_id=3)
+def test_delete_index(stub, ns):
+    ns = ns(3)
     add_documents(ns, [Document(page_content="exam prep", metadata={})], embeddings=stub)
     assert delete_index(ns) is True
     assert not index_exists(ns)
@@ -130,9 +166,9 @@ def test_delete_index(stub):
 
 # --- retrieval ------------------------------------------------------------
 
-def test_retrieve_returns_scoped_results(stub, monkeypatch):
+def test_retrieve_returns_scoped_results(stub, monkeypatch, ns):
     monkeypatch.setattr(get_settings(), "rag_rerank_enabled", False, raising=False)
-    ns = namespace_for(certification_id=4)
+    ns = ns(4)
     add_documents(
         ns,
         [
@@ -147,8 +183,8 @@ def test_retrieve_returns_scoped_results(stub, monkeypatch):
     assert "network" in results[0].page_content
 
 
-def test_retrieve_on_missing_index_returns_empty_not_error(stub):
-    assert retrieve(namespace_for(certification_id=888), "anything", embeddings=stub) == []
+def test_retrieve_on_missing_index_returns_empty_not_error(stub, ns):
+    assert retrieve(ns(888), "anything", embeddings=stub) == []
 
 
 def test_format_context_includes_provenance_and_respects_budget():

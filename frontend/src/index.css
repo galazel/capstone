@@ -29,7 +29,7 @@
     --popover: #ffffff;
     --popover-foreground: #4b4b4b;
 
-    --primary: #58cc02; /* Feather Green */
+    --primary: #1b6ef3; /* Azure — brand anchor (token name kept, see rebyu-ds.css) */
     --primary-foreground: #ffffff;
 
     --secondary: #f7f7f7; /* Polar */
@@ -38,7 +38,7 @@
     --muted: #f7f7f7;
     --muted-foreground: #777777; /* Wolf */
 
-    --accent: #eefce3; /* Feather wash */
+    --accent: #e8f1fe; /* Feather wash */
     --accent-foreground: #3d6b06;
 
     --destructive: #ff4b4b; /* Cardinal */
@@ -48,9 +48,9 @@
     --input: #e5e5e5;
     --ring: #1cb0f6; /* Macaw — focus is always Macaw */
 
-    --chart-1: #58cc02;
+    --chart-1: #1b6ef3;
     --chart-2: #1cb0f6;
-    --chart-3: #ffc800;
+    --chart-3: #1e3a8a;
     --chart-4: #ce82ff;
     --chart-5: #ff9600;
 
@@ -61,16 +61,16 @@
     --brand-navy: #4b4b4b;
     --brand-navy-soft: #5f5f5f;
 
-    --brand-blue: #58cc02;
-    --brand-blue-dark: #46a302;
-    --brand-blue-soft: #eefce3;
+    --brand-blue: #1b6ef3;
+    --brand-blue-dark: #1553c4;
+    --brand-blue-soft: #e8f1fe;
 
     --brand-sky: #1cb0f6;
     --brand-sky-soft: #e3f5fe;
 
-    --brand-yellow: #ffc800;
+    --brand-yellow: #00b8d4;
     --brand-yellow-foreground: #4b4b4b;
-    --brand-yellow-soft: #fff7de;
+    --brand-yellow-soft: #e0f9fd;
 
     --brand-lilac: #f6ecff;
     --brand-lilac-foreground: #b061e6;
@@ -78,10 +78,10 @@
     --sidebar: #ffffff;
     --sidebar-foreground: #4b4b4b;
 
-    --sidebar-primary: #58cc02;
+    --sidebar-primary: #1b6ef3;
     --sidebar-primary-foreground: #ffffff;
 
-    --sidebar-accent: #eefce3;
+    --sidebar-accent: #e8f1fe;
     --sidebar-accent-foreground: #3d6b06;
 
     --sidebar-border: #e5e5e5;
@@ -229,7 +229,7 @@ body.netacad-overlay-theme {
     }
 }
 
-/* Portal system: Snow surfaces with a Feather Green interaction language.
+/* Portal system: Snow surfaces with an Azure interaction language.
    Shared by the admin, enterprise, and learner layouts. */
 .netacad-portal,
 body.netacad-overlay-theme {
@@ -239,28 +239,28 @@ body.netacad-overlay-theme {
     --card-foreground: #4b4b4b;
     --popover: #ffffff;
     --popover-foreground: #4b4b4b;
-    --primary: #58cc02;
+    --primary: #1b6ef3;
     --primary-foreground: #ffffff;
     --secondary: #f7f7f7;
     --secondary-foreground: #4b4b4b;
     --muted: #f7f7f7;
     --muted-foreground: #777777;
-    --accent: #eefce3;
+    --accent: #e8f1fe;
     --accent-foreground: #3d6b06;
     --border: #e5e5e5;
     --input: #e5e5e5;
     --ring: #1cb0f6;
     --radius: 1rem;
-    --chart-1: #58cc02;
+    --chart-1: #1b6ef3;
     --chart-2: #1cb0f6;
-    --chart-3: #ffc800;
+    --chart-3: #1e3a8a;
     --chart-4: #ce82ff;
     --chart-5: #ff9600;
     --sidebar: #ffffff;
     --sidebar-foreground: #4b4b4b;
-    --sidebar-primary: #58cc02;
+    --sidebar-primary: #1b6ef3;
     --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #eefce3;
+    --sidebar-accent: #e8f1fe;
     --sidebar-accent-foreground: #3d6b06;
     --sidebar-border: #e5e5e5;
     --sidebar-ring: #1cb0f6;
@@ -268,7 +268,7 @@ body.netacad-overlay-theme {
 }
 
 /* Dark portal: neutral charcoals derived from Eel rather than a blue-grey, so
-   Feather Green stays the only saturated colour in the interface. */
+   Azure stays the only saturated colour in the interface. */
 .dark .netacad-portal,
 .dark body.netacad-overlay-theme {
     --background: #1a1a1a;
@@ -277,7 +277,7 @@ body.netacad-overlay-theme {
     --card-foreground: #f2f2f2;
     --popover: #242424;
     --popover-foreground: #f2f2f2;
-    --primary: #58cc02;
+    --primary: #1b6ef3;
     --primary-foreground: #10240a;
     --secondary: #2e2e2e;
     --secondary-foreground: #f2f2f2;
@@ -288,14 +288,14 @@ body.netacad-overlay-theme {
     --border: #3a3a3a;
     --input: #3a3a3a;
     --ring: #1cb0f6;
-    --chart-1: #58cc02;
+    --chart-1: #1b6ef3;
     --chart-2: #1cb0f6;
-    --chart-3: #ffc800;
+    --chart-3: #1e3a8a;
     --chart-4: #ce82ff;
     --chart-5: #ff9600;
     --sidebar: #1f1f1f;
     --sidebar-foreground: #f2f2f2;
-    --sidebar-primary: #58cc02;
+    --sidebar-primary: #1b6ef3;
     --sidebar-primary-foreground: #10240a;
     --sidebar-accent: #2a3d1c;
     --sidebar-accent-foreground: #b7f08a;
@@ -406,7 +406,7 @@ body.netacad-overlay-theme {
 :is(.netacad-portal, .netacad-overlay-theme) [data-slot="button"][data-variant="default"] {
     background: var(--primary);
     border: 0;
-    box-shadow: 0 4px 0 #46a302;
+    box-shadow: 0 4px 0 #1553c4;
 }
 
 :is(.netacad-portal, .netacad-overlay-theme) [data-slot="button"][data-variant="default"]:hover {
@@ -703,7 +703,7 @@ body.netacad-overlay-theme {
 
     --chart-1: #78b7e8;
     --chart-2: #5aa4e6;
-    --chart-3: #e4bd54;
+    --chart-3: #22d3ee;
     --chart-4: #a7d6f4;
     --chart-5: #4f87b5;
 
@@ -717,7 +717,7 @@ body.netacad-overlay-theme {
     --brand-sky: oklch(0.74 0.1 235);
     --brand-sky-soft: oklch(0.28 0.04 235);
 
-    --brand-yellow: oklch(0.84 0.15 94);
+    --brand-yellow: #22d3ee;
     --brand-yellow-foreground: oklch(0.16 0.025 265);
     --brand-yellow-soft: oklch(0.31 0.05 94);
 
@@ -930,7 +930,7 @@ body.netacad-overlay-theme {
 /* The lip only goes on solid-filled buttons; ghost and link variants would
    read as floating boxes with a shadow under them. */
 [data-slot="button"].bg-primary {
-    box-shadow: 0 4px 0 #46a302;
+    box-shadow: 0 4px 0 #1553c4;
 }
 [data-slot="button"].bg-destructive {
     box-shadow: 0 4px 0 #e03d3d;
@@ -1004,7 +1004,7 @@ body.netacad-overlay-theme {
 }
 [data-slot="progress-indicator"] {
     border-radius: 999px;
-    background: #89e219;
+    background: #5aa9ff;
 }
 
 /* --- Auth shell ------------------------------------------------------------ */

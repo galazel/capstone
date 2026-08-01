@@ -142,7 +142,21 @@ class Settings(BaseSettings):
     # be swapped (e.g. to BAAI/bge-base-en-v1.5) without touching rag/ code.
     rag_embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     rag_embedding_device: str = "cpu"
+    #: Retained only so an existing deployment's `faiss_db/` path stays
+    #: configurable while it is cleaned up. Nothing reads it for retrieval
+    #: any more -- vectors live in Qdrant.
     rag_index_dir: Path = Path("faiss_db")
+
+    # --- Qdrant ------------------------------------------------------------
+    # Run it with:  docker run -p 6333:6333 -p 6334:6334 \
+    #                 -v qdrant_storage:/qdrant/storage qdrant/qdrant
+    # One collection per certification (see `app.rag.store.namespace_for`), so
+    # a retrieval cannot read another certification's documents even if a
+    # metadata filter is forgotten.
+    qdrant_url: str = "http://localhost:6333"
+    #: Empty for a local container; set for Qdrant Cloud.
+    qdrant_api_key: str = ""
+    qdrant_timeout_seconds: float = 30.0
     # ~1000 chars/150 overlap on sentence boundaries, vs the old 300-char
     # fixed-width slices that cut mid-word and carried ~75 tokens of context.
     rag_chunk_size: int = 1000

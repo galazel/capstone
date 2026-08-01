@@ -42,15 +42,34 @@ langchain-core>=1.0,<2.0
 langchain-text-splitters>=1.0,<2.0
 
 # --- RAG (Phase 2a) ------------------------------------------------------
-# Provides the FAISS vector-store wrapper. Previously only resolved
-# transitively, so a clean install could omit it entirely.
-# NOTE: langchain-community is being sunset upstream. The standalone
-# `langchain-faiss` package (0.1.1) is currently an empty placeholder that
-# exports nothing, so migration has to wait until it ships a real API.
+# Vectors live in Qdrant, one collection per certification. It replaced local
+# FAISS files, which could not be shared between processes, vanished with the
+# container, and had to be loaded with `allow_dangerous_deserialization=True`
+# because the format is a pickle.
+# Used directly rather than through `langchain-qdrant`: that package still
+# pins langchain-core<1, and installing it silently downgraded core to 0.3.86,
+# which breaks langgraph (needs >=1.3.1). The wrapper it would have provided is
+# a dozen lines -- see `QdrantIndex` in app/rag/store.py.
+qdrant-client>=1.12,<2.0
+
+# --- Output guardrails ----------------------------------------------------
+# `app.ai.guardrails` screens every structured agent answer for secrets,
+# injected instructions, and off-topic content. The deterministic scanners
+# need nothing installed; guardrails-ai adds model-backed PII and toxicity
+# detection on top and is consulted only when present, so leaving it out
+# degrades the screen rather than breaking generation.
+#
+#   pip install "guardrails-ai>=0.6,<1.0"
+#   guardrails hub install hub://guardrails/toxic_language
+#   guardrails hub install hub://guardrails/detect_pii
+#
+# Left commented deliberately: it pulls its own transformer models, and an
+# unpinned install here already cost us once -- langchain-qdrant silently
+# downgraded langchain-core and broke langgraph.
+# guardrails-ai>=0.6,<1.0
+# Still used elsewhere in the stack (document loaders); no longer the vector
+# store. Being sunset upstream, so treat new usage as a migration debt.
 langchain-community>=0.4,<1.0
-# faiss-cpu was never declared at all, which made every ingestion fail at
-# runtime with "Could not import faiss python package".
-faiss-cpu>=1.8,<2.0
 # Real semantic embeddings, replacing the 256-dim SHA-256 token-hashing
 # stand-in that had no semantic capability.
 # Pulls torch. On Windows this needs MSVC redistributable v14.38+; an older

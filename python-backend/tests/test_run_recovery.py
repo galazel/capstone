@@ -734,3 +734,109 @@ async def test_a_long_idle_run_is_still_repaired(fake_graph, captured_outcome):
 
     assert result["reconciled"] is True
     assert captured_outcome["status"] == registry.FAILED
+
+
+# --- a run that saved nothing is not a success ----------------------------
+
+def test_generated_but_unstored_output_fails_the_run():
+    """The live case: seven assessments generated, `exam_types` unseeded, zero
+    stored -- and the run logged "completed". Warnings scroll past; a status
+    does not."""
+    stranded = certification_run._stranded_output({
+        "exams": [], "bank_questions": 40, "lessons_written": 2,
+        "expected": {"exams": 7, "bank_questions": 40, "lessons": 2},
+    })
+    assert stranded == ["7 assessment(s) generated, none stored"]
+
+
+def test_a_partial_loss_is_left_to_the_per_item_warnings():
+    """One unmatched lesson name is not a systemic failure, and failing the
+    whole run over it would throw away everything that did save."""
+    assert certification_run._stranded_output({
+        "exams": [1, 2], "bank_questions": 38, "lessons_written": 2,
+        "expected": {"exams": 3, "bank_questions": 40, "lessons": 2},
+    }) == []
+
+
+def test_generating_nothing_of_a_kind_is_not_a_loss():
+    """A curriculum with no mock exam simply has none to store."""
+    assert certification_run._stranded_output({
+        "exams": [], "bank_questions": 0, "lessons_written": 0,
+        "expected": {"exams": 0, "bank_questions": 0, "lessons": 0},
+    }) == []
+
+
+def test_every_kind_is_reported_not_just_the_first():
+    stranded = certification_run._stranded_output({
+        "exams": [], "bank_questions": 0, "lessons_written": 0,
+        "expected": {"exams": 7, "bank_questions": 40, "lessons": 2},
+    })
+    assert len(stranded) == 3
+
+
+# --- cancellation reaches every node --------------------------------------
+
+def _instrumented(stage, calls):
+    from app.graphs.instrumentation import instrument
+
+    async def node(state):
+        calls.append(stage)
+        return {}
+
+    return instrument(node, stage)
+
+
+async def test_cancelling_during_an_early_node_actually_stops_the_run(monkeypatch):
+    """The live gap: the gate lived only in the review-loop nodes, so
+    cancelling during `validate_documents` did nothing and the run carried on
+    through ingestion and curriculum planning before parking at a review."""
+    from app.graphs import cancellation, instrumentation
+
+    monkeypatch.setattr(cancellation, "is_cancel_requested", lambda thread_id: True)
+    monkeypatch.setattr(instrumentation, "_emit", lambda *a, **kw: None)
+
+    calls: list[str] = []
+    with pytest.raises(cancellation.RunCancelled):
+        await _instrumented("validate_documents", calls)({"thread_id": "t1"})
+
+    assert calls == [], "the node must not run at all once cancelled"
+
+
+async def test_an_uncancelled_run_is_untouched(monkeypatch):
+    from app.graphs import cancellation, instrumentation
+
+    monkeypatch.setattr(cancellation, "is_cancel_requested", lambda thread_id: False)
+    monkeypatch.setattr(instrumentation, "_emit", lambda *a, **kw: None)
+
+    calls: list[str] = []
+    await _instrumented("plan_curriculum", calls)({"thread_id": "t1"})
+    assert calls == ["plan_curriculum"]
+
+
+async def test_a_cancelled_run_is_not_relabelled_as_failed(fake_graph, captured_outcome):
+    """A reviewer's own decision must not be reported back to them as a
+    generator bug -- that invites retrying the work they just stopped."""
+    from app.graphs.cancellation import RunCancelled
+
+    class _CancellingGraph(_FakeGraph):
+        async def ainvoke(self, graph_input, config=None):
+            raise RunCancelled("write_lesson")
+
+    graph = _CancellingGraph(_Snapshot({}, ()))
+
+    async def _get():
+        return graph
+
+    import app.services.certification_run as cr
+
+    original = cr.get_certification_graph
+    cr.get_certification_graph = _get
+    try:
+        context = cr.RunContext(thread_id="t1", certification_title="T")
+        with pytest.raises(cr.RunFailed) as caught:
+            await cr.advance(context, None)
+    finally:
+        cr.get_certification_graph = original
+
+    assert caught.value.outcome["outcome"] == registry.CANCELLED
+    assert captured_outcome == {}, "must not overwrite the status with FAILED"

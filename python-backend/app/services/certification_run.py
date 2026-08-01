@@ -32,6 +32,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.db.session import SessionLocal
+from app.graphs.cancellation import RunCancelled
 from app.graphs.certification.workflow import get_certification_graph
 from app.repositories import java_backend as repo
 from app.services import workflow_registry as registry
@@ -104,6 +105,27 @@ def fail(context: RunContext, error: str) -> dict[str, Any]:
     return {"outcome": registry.FAILED, "error": error}
 
 
+def _stranded_output(summary: dict[str, Any]) -> list[str]:
+    """Artifacts the run generated that reached the database as nothing.
+
+    A *total* loss for a kind is what counts. A partial one already surfaces
+    as a per-item warning and usually means a single unmatched name, whereas
+    "produced seven, saved zero" is systemic -- an unseeded exam type, a
+    missing table, a failed commit -- and must not be reported as success.
+    """
+    expected = summary.get("expected") or {}
+    stranded = []
+
+    if expected.get("exams") and not summary.get("exams"):
+        stranded.append(f"{expected['exams']} assessment(s) generated, none stored")
+    if expected.get("bank_questions") and not summary.get("bank_questions"):
+        stranded.append(f"{expected['bank_questions']} question(s) generated, none stored")
+    if expected.get("lessons") and not summary.get("lessons_written"):
+        stranded.append(f"{expected['lessons']} lesson bod(y/ies) generated, none stored")
+
+    return stranded
+
+
 def finalize(context: RunContext, result: dict) -> dict[str, Any]:
     """Turns a graph result into run status, persisted output, and a notice.
 
@@ -154,6 +176,19 @@ def finalize(context: RunContext, result: dict) -> dict[str, Any]:
         summary = persist_generated_assessments(session, context.certification_id, result)
     for warning in summary["warnings"]:
         logger.warning("Assessment persistence: %s", warning)
+
+    stranded = _stranded_output(summary)
+    if stranded:
+        # The run did the work and the storage layer dropped it. Reporting
+        # COMPLETED here is how a certification came to show two lessons and
+        # no assessments while the log said success -- the drops were only
+        # ever warnings, and warnings scroll past.
+        return fail(
+            context,
+            "Generation succeeded but its output was not saved: "
+            + "; ".join(stranded)
+            + ". The run can be retried once the cause is fixed.",
+        )
 
     with SessionLocal() as session:
         repo.mark_generation_request_done(session, context.generation_request_id)
@@ -213,6 +248,13 @@ async def advance(context: RunContext, graph_input: Any) -> tuple[dict[str, Any]
     graph = await get_certification_graph()
     try:
         result = await graph.ainvoke(graph_input, config=_thread_config(context.thread_id))
+    except RunCancelled as cancelled:
+        # Already CANCELLED in the registry -- the graph is unwinding on
+        # purpose. Marking it FAILED here would report a reviewer's own
+        # decision as a generator bug, and offer to retry the work they just
+        # stopped.
+        logger.info("Certification run %s stopped: %s", context.thread_id, cancelled)
+        raise RunFailed({"outcome": registry.CANCELLED, "error": str(cancelled)}) from cancelled
     except Exception as error:
         logger.exception("Certification run %s failed", context.thread_id)
         raise RunFailed(fail(context, str(error))) from error

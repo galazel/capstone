@@ -143,8 +143,14 @@ def _lesson(name: str) -> dict:
     }
 
 
-def _middle(name: str) -> dict:
-    return {"name": name, "description": "d", "lessons": [_lesson(f"{name} lesson")]}
+def _middle(name: str, lessons: int = 3) -> dict:
+    """Three lessons by default so fixtures clear `MIN_TOTAL_LESSONS`. The
+    breadth floor is a real product rule, not something tests should dodge."""
+    return {
+        "name": name,
+        "description": "d",
+        "lessons": [_lesson(f"{name} lesson {i}") for i in range(lessons)],
+    }
 
 
 def _major(name: str, *middles: dict) -> dict:
@@ -212,11 +218,16 @@ def test_a_major_left_with_no_lessons_is_dropped_rather_than_kept_empty():
     payload = {
         "certification_name": "TOPCIT",
         "curriculum": {
-            "majorCategories": [_major("Shell", _major("Real", _middle("m1")))],
+            "majorCategories": [
+                _major("Shell", _major("Real", _middle("m1"))),
+                _major("Other", _middle("m2")),
+            ],
         },
     }
     majors = CertificationCurriculum(**payload).curriculum.majorCategories
-    assert [major.name for major in majors] == ["Real"]
+    assert [major.name for major in majors] == ["Real", "Other"], (
+        "the empty shell contributes nothing and is dropped"
+    )
 
 
 def test_a_wellformed_curriculum_is_left_untouched():
@@ -246,3 +257,81 @@ def test_an_explicitly_empty_curriculum_is_still_allowed():
         ).curriculum.majorCategories
         == []
     )
+
+
+# --- breadth ---------------------------------------------------------------
+#
+# A live TOPCIT run produced one major category, two middles and two lessons
+# for a whole certification. Structurally valid, useless as a syllabus, and it
+# persisted happily -- the certification then showed two lessons and nothing
+# else. The prompt now asks for 3-6 majors with 3-5 lessons each; these are the
+# numbers below which the sample is rejected and resampled.
+
+
+def test_a_token_curriculum_is_rejected_so_it_gets_resampled():
+    """The exact shape of the live failure: one major, two lessons."""
+    payload = {
+        "certification_name": "TOPCIT",
+        "curriculum": {
+            "majorCategories": [_major("Only", _middle("m1", lessons=1), _middle("m2", lessons=1))]
+        },
+    }
+    with pytest.raises(ValueError, match="too small to be a syllabus"):
+        CertificationCurriculum(**payload)
+
+
+def test_enough_lessons_but_only_one_major_is_still_rejected():
+    """Breadth is two-dimensional -- one category is not a certification."""
+    payload = {
+        "certification_name": "TOPCIT",
+        "curriculum": {"majorCategories": [_major("Only", _middle("m1", lessons=9))]},
+    }
+    with pytest.raises(ValueError, match="too small"):
+        CertificationCurriculum(**payload)
+
+
+def test_enough_majors_but_too_few_lessons_is_still_rejected():
+    payload = {
+        "certification_name": "TOPCIT",
+        "curriculum": {
+            "majorCategories": [
+                _major("A", _middle("a1", lessons=1)),
+                _major("B", _middle("b1", lessons=1)),
+            ]
+        },
+    }
+    with pytest.raises(ValueError, match="too small"):
+        CertificationCurriculum(**payload)
+
+
+def test_a_modest_but_real_curriculum_passes():
+    """The floor sits well under what the prompt asks for, so a merely
+    modest curriculum is accepted rather than resampled forever."""
+    payload = {
+        "certification_name": "TOPCIT",
+        "curriculum": {
+            "majorCategories": [
+                _major("A", _middle("a1", lessons=3)),
+                _major("B", _middle("b1", lessons=3)),
+            ]
+        },
+    }
+    assert len(CertificationCurriculum(**payload).curriculum.majorCategories) == 2
+
+
+def test_the_breadth_floor_is_not_imposed_on_the_provider_schema():
+    """`minItems` in the tool schema would turn an under-sized sample into a
+    `tool_use_failed` 400 -- unretryable in any useful way and illegible in the
+    log. The floor has to be a local ValueError so it resamples."""
+    import json
+
+    assert "minItems" not in json.dumps(_tool_schema())
+
+
+def test_the_prompt_asks_for_more_than_the_floor_requires():
+    """If the prompt asked for exactly the minimum, every slightly-short
+    sample would fail. It should aim high and the floor should catch disasters."""
+    from app.agents.certification.curriculum_agent import SYSTEM_PROMPT
+
+    assert "3 to 6 Major Categories" in SYSTEM_PROMPT
+    assert "3 to 5 Lessons" in SYSTEM_PROMPT

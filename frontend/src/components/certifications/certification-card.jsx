@@ -38,6 +38,14 @@ import {
   AlertDialogMedia,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { InlineGenerationMonitor } from "@/components/certifications/inline-generation-monitor.jsx"
 import { Button } from "@/components/ui/button"
 
 function getErrorMessage(error, fallback = "Something went wrong.") {
@@ -71,6 +79,7 @@ function CertificationCard({ item, certification, generationRun = null }) {
   const queryClient = useQueryClient()
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [showGeneration, setShowGeneration] = useState(false)
 
   const generationStatus = generationStatusOf(generationRun)
   const isGenerating = Boolean(generationStatus)
@@ -208,8 +217,12 @@ function CertificationCard({ item, certification, generationRun = null }) {
       return
     }
 
-    // Relative, like the certification route below: both resolve under /admin.
-    navigate(`generation/${generationRun.run_id}`)
+    // Opened in place rather than navigated to. Watching a build is a glance,
+    // not a destination: sending an admin to a full page meant losing the list
+    // they were working in and having to navigate back once they had seen the
+    // progress bar move. The workspace page still exists on its own route for
+    // anyone who wants the full transcript.
+    setShowGeneration(true)
   }
 
   function handleOpenCertification() {
@@ -430,6 +443,31 @@ function CertificationCard({ item, certification, generationRun = null }) {
             </div>
           </div>
         </div>
+
+        {/* Progress is watched in place. The monitor owns its own scrolling,
+            header rule, and status bar, so it fills the body edge to edge --
+            same arrangement the create drawer uses. Closing it never stops the
+            run: generation continues in the Python consumer either way. */}
+        <Dialog open={showGeneration} onOpenChange={setShowGeneration}>
+          <DialogContent
+              className="flex h-[82vh] w-[96vw] max-w-none flex-col gap-0 overflow-hidden p-0 sm:w-[92vw] sm:max-w-none lg:w-[80vw] xl:w-[70vw]"
+              onClick={(event) => event.stopPropagation()}
+          >
+            <DialogHeader className="px-4 pt-4 pb-3 sm:px-6">
+              <DialogTitle>Generating {certificationTitle}</DialogTitle>
+              <DialogDescription>
+                Watch it build, and review each item as it is produced.
+              </DialogDescription>
+            </DialogHeader>
+
+            {showGeneration ? (
+                <InlineGenerationMonitor
+                    certificationId={certificationId}
+                    onClose={() => setShowGeneration(false)}
+                />
+            ) : null}
+          </DialogContent>
+        </Dialog>
 
         <AlertDialog open={showDeleteDialog} onOpenChange={handleDeleteDialogChange}>
           <AlertDialogContent size="sm">
