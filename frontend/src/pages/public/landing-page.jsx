@@ -1095,7 +1095,10 @@ function SolutionSection() {
   return (
     <section id="solution" className="scroll-mt-24 bg-rb-snow px-5 py-20 lg:px-8 lg:py-28">
       <div className="mx-auto grid max-w-[1280px] items-center gap-12 lg:grid-cols-2 lg:gap-16">
-        <RebyuCard raised data-landing-reveal className="lg:order-2">
+        {/* Chart left, copy right. The card already leads in source order, so
+            the columns fall this way on their own -- the order utilities that
+            used to flip them back were the only thing putting it on the right. */}
+        <RebyuCard raised data-landing-reveal>
           <p className="rb-eyebrow">Mastery per domain</p>
           <h3 className="rb-display rb-display-sm mt-2">six weeks of tracked study</h3>
           <div className="mt-5">
@@ -1107,7 +1110,7 @@ function SolutionSection() {
           </p>
         </RebyuCard>
 
-        <div data-landing-reveal className="lg:order-1">
+        <div data-landing-reveal>
           <p className="rb-eyebrow">the solution</p>
           <h2 className="rb-display rb-display-lg mt-3">
             measure what you know. study what you don't.
