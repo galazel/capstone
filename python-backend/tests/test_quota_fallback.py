@@ -11,24 +11,35 @@ ceiling is 60s over 5 attempts against a limit that needs 95 minutes -- so
 every attempt was guaranteed to fail and the generation run was lost. These
 tests pin the two halves of the fix: recognising a *daily* limit as distinct
 from a per-minute one, and switching models rather than sleeping.
+
+Since every model is reached through OpenRouter, they also pin the two failures
+that routing adds -- an account out of credit (which must NOT walk the chain,
+because every model would fail identically) and an upstream vendor outage
+(which must, because the other models sit behind different companies) -- and
+the shape of the per-task model table those chains come from.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from app.ai import quota
+from app.ai import quota, tasks
 from app.ai.retry import is_retryable
 from app.ai.router import (
     AllModelsExhausted,
+    OutOfCredits,
     RequestTooLarge,
     ainvoke_with_fallback,
     model_chain,
 )
 from app.core.config import get_settings
 
-PRIMARY = "llama-3.3-70b-versatile"
-FALLBACK = "llama-3.1-8b-instant"
+#: Chains are per task now, so the models under test are read from the
+#: configured table rather than hard-coded. `question` is used because it is
+#: the task with the longest chain, which every fallback test needs.
+TASK = tasks.QUESTION
+CHAIN = model_chain(TASK)
+PRIMARY, FALLBACK = CHAIN[0], CHAIN[1]
 
 DAILY_MESSAGE = (
     f"Rate limit reached for model `{PRIMARY}` in organization `org_01kv07` "
@@ -44,7 +55,7 @@ BURST_MESSAGE = (
 
 
 class _FakeRateLimit(Exception):
-    """Stands in for groq.RateLimitError -- the classifier reads only
+    """Stands in for the SDK's RateLimitError -- the classifier reads only
     `status_code` and the message body, so it needs nothing else."""
 
     def __init__(self, message: str, status: int = 429):
@@ -74,17 +85,17 @@ def test_per_minute_limit_is_not_treated_as_daily():
 
 
 def _real_rate_limit(message: str):
-    """A genuine groq.RateLimitError.
+    """A genuine openai.RateLimitError.
 
-    The retry predicate checks `isinstance` against the provider's exception
+    The retry predicate checks `isinstance` against the client SDK's exception
     classes, so the fake above can never be retryable regardless of the new
     guard -- pinning the guard's *effect* on the policy needs the real type.
     """
     httpx = pytest.importorskip("httpx")
-    groq = pytest.importorskip("groq")
-    request = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
+    openai = pytest.importorskip("openai")
+    request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
     response = httpx.Response(429, request=request)
-    return groq.RateLimitError(
+    return openai.RateLimitError(
         "429",
         response=response,
         body={"error": {"message": message, "code": "rate_limit_exceeded"}},
@@ -119,6 +130,45 @@ def test_parses_bare_seconds():
     assert quota.parse_retry_after(_FakeRateLimit(BURST_MESSAGE)) == pytest.approx(4.5)
 
 
+class _HeaderRateLimit(_FakeRateLimit):
+    """A 429 carrying OpenRouter's reset header instead of a prose duration."""
+
+    def __init__(self, headers: dict):
+        super().__init__("Rate limit exceeded")
+        self.response = type("_R", (), {"headers": headers})()
+
+
+def test_parses_openrouters_reset_header():
+    """OpenRouter sends no `retry-after`; it sends `x-ratelimit-reset` as a Unix
+    timestamp in MILLISECONDS. Without this the caller falls back to a guessed
+    hour instead of the real reset."""
+    import time
+
+    reset_ms = (time.time() + 1800) * 1000
+    seconds = quota.parse_retry_after(_HeaderRateLimit({"x-ratelimit-reset": str(reset_ms)}))
+    assert seconds == pytest.approx(1800, abs=5)
+
+
+def test_a_reset_header_in_the_past_is_ignored():
+    """A stale timestamp would yield a negative cooldown, which clamps to zero
+    and hot-loops against a limit that has not cleared."""
+    import time
+
+    stale = (time.time() - 600) * 1000
+    assert quota.parse_retry_after(_HeaderRateLimit({"x-ratelimit-reset": str(stale)})) is None
+
+
+def test_retry_after_wins_over_the_reset_header():
+    """When a provider sends both, the explicit duration is authoritative."""
+    import time
+
+    reset_ms = (time.time() + 9999) * 1000
+    seconds = quota.parse_retry_after(
+        _HeaderRateLimit({"retry-after": "30", "x-ratelimit-reset": str(reset_ms)})
+    )
+    assert seconds == pytest.approx(30)
+
+
 def test_returns_none_when_no_duration_present():
     """None, not 0 -- a zero cooldown would let the caller hot-loop against a
     limit that has not cleared."""
@@ -147,12 +197,74 @@ def test_a_shorter_limit_cannot_shorten_an_existing_cooldown():
 
 # --- model chain ----------------------------------------------------------
 
-def test_chain_puts_primary_first_and_deduplicates():
-    """The shipped config has ai_default_model equal to ai_generation_model, so
-    without de-duplication the chain would retry the exhausted model twice."""
-    chain = model_chain("generation")
-    assert chain[0] == get_settings().ai_generation_model
+@pytest.mark.parametrize("task", tasks.TASKS)
+def test_chain_puts_the_tasks_own_model_first_and_deduplicates(task):
+    """`ai_default_model` is appended to every chain as a backstop, and a task
+    may legitimately name it as its own model -- so without de-duplication the
+    chain would retry the exhausted model twice."""
+    chain = model_chain(task)
+    assert chain[0] == getattr(get_settings(), f"ai_{task}_model")
     assert len(chain) == len(set(chain))
+
+
+def test_every_task_has_a_fallback_to_walk_to():
+    """A one-model chain silently turns the router into a no-op: the first rate
+    limit ends the run instead of moving to another vendor."""
+    for task in tasks.TASKS:
+        assert len(model_chain(task)) >= 2, f"{task} has nowhere to fall back to"
+
+
+def test_tasks_do_not_all_share_one_model():
+    """The point of the per-task table. If a config change ever collapsed them
+    onto one model, the lessons would be written by whatever was cheap enough
+    to answer the document auditor's yes/no question."""
+    primaries = {model_chain(task)[0] for task in tasks.TASKS}
+    assert len(primaries) > 1
+
+
+def test_the_lesson_task_is_not_the_cheapest_one():
+    """Lessons are the only output a learner reads directly, and the only agent
+    that must research with a tool and then write a large structured answer.
+    Pinning this catches a well-meaning cost cut that guts lesson quality."""
+    assert model_chain(tasks.LESSON)[0] != model_chain(tasks.DOCUMENT_AUDIT)[0]
+
+
+def test_every_task_names_a_known_provider():
+    from app.ai.tasks import PROVIDERS
+
+    for task in tasks.TASKS:
+        assert tasks.profile_for(task).provider.name in PROVIDERS
+
+
+def test_a_providers_base_url_is_an_openai_compatible_endpoint():
+    """The whole per-task table rests on one client class talking to all of
+    them. Google's native generateContent API is NOT compatible -- only the
+    `/openai/` compatibility layer is, which is easy to drop when editing."""
+    from app.ai.tasks import PROVIDERS
+
+    gemini = PROVIDERS["gemini"]
+    assert gemini.base_url.rstrip("/").endswith("/openai"), gemini.base_url
+    for provider in PROVIDERS.values():
+        assert provider.base_url.startswith("https://")
+        assert provider.key_env, f"{provider.name} names no key env var"
+
+
+def test_unknown_providers_are_rejected():
+    with pytest.raises(ValueError, match="Unknown AI provider"):
+        tasks.provider_for("azure")
+
+
+def test_unknown_tasks_are_rejected_rather_than_silently_defaulted():
+    """A typo'd task name would otherwise run the whole lesson pipeline on
+    whatever the fallback happened to be -- expensive and invisible."""
+    with pytest.raises(ValueError, match="Unknown AI task"):
+        model_chain("lessons")
+
+
+@pytest.mark.parametrize("alias,expected", [("generation", tasks.QUESTION), ("classification", tasks.DOCUMENT_AUDIT)])
+def test_legacy_agent_type_names_still_resolve(alias, expected):
+    """Kept so a caller that only knows the old coarse buckets keeps working."""
+    assert model_chain(alias) == model_chain(expected)
 
 
 # --- fallback behaviour ---------------------------------------------------
@@ -201,7 +313,7 @@ async def test_exhausted_model_is_skipped_on_subsequent_calls():
 
 async def test_raises_all_models_exhausted_when_the_chain_runs_out():
     daily = _FakeRateLimit(DAILY_MESSAGE)
-    factory = _factory({model: daily for model in model_chain("generation")}, [])
+    factory = _factory({model: daily for model in CHAIN}, [])
 
     with pytest.raises(AllModelsExhausted) as excinfo:
         await ainvoke_with_fallback(factory, {"messages": []})
@@ -212,7 +324,7 @@ async def test_non_quota_errors_propagate_without_burning_the_chain():
     """A bug in the prompt or schema must not silently consume every model's
     budget looking for one that tolerates it."""
     calls: list[str] = []
-    factory = _factory({model: RuntimeError("boom") for model in model_chain()}, calls)
+    factory = _factory({model: RuntimeError("boom") for model in CHAIN}, calls)
 
     with pytest.raises(RuntimeError):
         await ainvoke_with_fallback(factory, {"messages": []})
@@ -305,7 +417,7 @@ async def test_a_request_too_large_for_every_model_says_so_plainly():
     """`AllModelsExhausted` would be actively misleading -- it reads as
     'try again later', and later is exactly what will not help."""
     calls: list[str] = []
-    errors = {model: _too_large() for model in model_chain()}
+    errors = {model: _too_large() for model in CHAIN}
 
     with pytest.raises(RequestTooLarge, match="larger than every"):
         await ainvoke_with_fallback(_factory(errors, calls), {"messages": []})
@@ -314,25 +426,189 @@ async def test_a_request_too_large_for_every_model_says_so_plainly():
 async def test_an_oversized_request_still_defers_to_a_real_exhaustion():
     """Mixed causes: the chain ran out for more than one reason, so the
     generic exhaustion error is the honest one."""
-    chain = model_chain()
-    errors = {chain[0]: _too_large()}
-    errors.update({model: _FakeRateLimit(DAILY_MESSAGE) for model in chain[1:]})
+    errors = {CHAIN[0]: _too_large()}
+    errors.update({model: _FakeRateLimit(DAILY_MESSAGE) for model in CHAIN[1:]})
 
     with pytest.raises(AllModelsExhausted):
         await ainvoke_with_fallback(_factory(errors, []), {"messages": []})
 
 
-# --- the root cause: the reservation, not the prompt ----------------------
+# --- an account with no credit --------------------------------------------
+#
+# The one failure the fallback chain must NOT walk. Credit is billed per
+# account, so the second model fails exactly as the first did -- five more
+# requests to reach a misleading "all models exhausted", which points the
+# operator at the model table instead of at the billing page.
 
-def test_classification_reserves_far_less_completion_budget_than_generation():
-    """Groq counts `max_tokens` toward a request's rate-limit estimate, so the
-    yes/no auditor asking for the full generation budget is what pushed a
-    ~300-token prompt past a 6000 TPM limit."""
+def _no_credit(status: int = 402):
+    return _FakeRateLimit("Insufficient credits. Add more credits to continue.", status=status)
+
+
+def test_no_credit_is_recognised():
+    assert quota.is_out_of_credits(_no_credit())
+
+
+def test_no_credit_is_not_mistaken_for_a_spent_daily_budget():
+    """Opposite remedies: one waits for the bucket to reset, the other needs a
+    payment. Classifying it as daily exhaustion starts a fallback walk that
+    cannot succeed."""
+    assert not quota.is_daily_quota_exhausted(_no_credit(status=429))
+
+
+async def test_no_credit_fails_immediately_instead_of_walking_the_chain():
+    calls: list[str] = []
+    factory = _factory({model: _no_credit() for model in CHAIN}, calls)
+
+    with pytest.raises(OutOfCredits, match="credit"):
+        await ainvoke_with_fallback(factory, {"messages": []})
+    assert calls == [PRIMARY], "should not spend a request per model to learn the same thing"
+
+
+# --- the free tier's account-wide daily cap --------------------------------
+#
+# Observed live. Every `:free` slug shares ONE per-account counter, so this
+# looks like per-model daily exhaustion and behaves like the credits case:
+#
+#   429 - Rate limit exceeded: free-models-per-day. Add 10 credits to unlock
+#   1000 free model requests per day
+#   X-RateLimit-Limit: 50, X-RateLimit-Remaining: 0
+#   limit_source: openrouter_free_tier_daily
+#
+# Before this was classified, the router walked the chain and spent one request
+# per model rediscovering a single account-wide fact.
+
+FREE_CAP_MESSAGE = (
+    "Rate limit exceeded: free-models-per-day. Add 10 credits to unlock "
+    "1000 free model requests per day"
+)
+
+
+class _FreeCapError(_FakeRateLimit):
+    def __init__(self):
+        super().__init__(FREE_CAP_MESSAGE)
+        self.body = {
+            "error": {
+                "message": FREE_CAP_MESSAGE,
+                "code": 429,
+                "metadata": {"limit_source": "openrouter_free_tier_daily"},
+            }
+        }
+
+
+def test_the_free_tier_daily_cap_is_recognised():
+    assert quota.is_account_daily_cap(_FreeCapError())
+
+
+def test_it_is_not_treated_as_per_model_exhaustion():
+    """That classification is what sent the router down a chain of models that
+    all share the exhausted counter."""
+    assert not quota.is_daily_quota_exhausted(_FreeCapError())
+
+
+def test_it_is_not_retryable():
+    """It resets in hours. As a RateLimitError it would otherwise consume the
+    full five-attempt budget before the router could report the reset time."""
+    assert not is_retryable(_FreeCapError())
+
+
+async def test_the_daily_cap_stops_the_run_without_walking_the_chain():
+    calls: list[str] = []
+    factory = _factory({model: _FreeCapError() for model in CHAIN}, calls)
+
+    with pytest.raises(AllModelsExhausted, match="free-model daily allowance"):
+        await ainvoke_with_fallback(factory, {"messages": []})
+
+    assert calls == [PRIMARY], "one request should establish an account-wide fact"
+
+
+async def test_the_daily_cap_marks_every_model_so_later_calls_fail_fast():
+    """A generation run makes hundreds of calls. Without this, each one pays a
+    request it does not have to learn the account is capped."""
+    factory = _factory({model: _FreeCapError() for model in CHAIN}, [])
+    with pytest.raises(AllModelsExhausted):
+        await ainvoke_with_fallback(factory, {"messages": []})
+
+    assert all(quota.is_exhausted(model) for model in CHAIN)
+
+    calls: list[str] = []
+    with pytest.raises(AllModelsExhausted):
+        await ainvoke_with_fallback(_factory({}, calls), {"messages": []})
+    assert calls == [], "no request at all should be spent while the cap holds"
+
+
+# --- an upstream vendor outage --------------------------------------------
+#
+# OpenRouter reached the vendor and the vendor failed. Gateway-shaped, but
+# really a per-model failure: the other models in the chain sit behind
+# different companies and are unaffected.
+
+def _upstream_down(status: int = 502):
+    return _FakeRateLimit("Provider returned error", status=status)
+
+
+def test_an_upstream_outage_is_recognised():
+    assert quota.is_upstream_unavailable(_upstream_down())
+
+
+def test_openrouters_own_5xx_is_not_treated_as_an_upstream_outage():
+    """A bare gateway error clears on its own and belongs to the retry policy.
+    Routing around it would strand the run on a fallback model for no reason."""
+    assert not quota.is_upstream_unavailable(_FakeRateLimit("internal error", status=500))
+
+
+async def test_an_upstream_outage_moves_to_a_different_vendors_model():
+    calls: list[str] = []
+    result = await ainvoke_with_fallback(
+        _factory({PRIMARY: _upstream_down()}, calls), {"messages": []}
+    )
+
+    assert result == {"structured_response": f"ok from {FALLBACK}"}
+    assert calls == [PRIMARY, FALLBACK]
+
+
+async def test_a_failing_vendor_is_remembered_for_the_rest_of_the_fan_out():
+    """Without this, every one of the dozens of lessons in a Send() fan-out
+    pays one failed call to rediscover the same outage."""
+    calls: list[str] = []
+    factory = _factory({PRIMARY: _upstream_down()}, calls)
+
+    await ainvoke_with_fallback(factory, {"messages": []})
+    calls.clear()
+    await ainvoke_with_fallback(factory, {"messages": []})
+
+    assert calls == [FALLBACK]
+
+
+# --- per-task completion budgets ------------------------------------------
+
+def test_each_task_reserves_a_budget_matched_to_its_output():
+    """`max_tokens` is a reservation, and on providers that bill or rate-limit
+    against it, an over-large one is a real cost. The ordering here is the
+    whole point of the per-task table: a lesson is orders of magnitude larger
+    than a yes/no audit, and one shared number cannot serve both."""
     settings = get_settings()
-    assert settings.ai_classification_max_tokens < settings.ai_max_tokens
+    assert (
+        settings.ai_document_audit_max_tokens
+        <= settings.ai_lesson_audit_max_tokens
+        < settings.ai_question_max_tokens
+        < settings.ai_lesson_max_tokens
+    )
 
 
-def test_the_auditors_reservation_fits_inside_the_smallest_model_limit():
-    """6000 TPM is the smallest limit in the configured chain; the audit
-    prompt plus its completion budget has to fit with room to spare."""
-    assert get_settings().ai_classification_max_tokens <= 2048
+def test_the_lesson_budget_can_actually_hold_the_lesson_it_asks_for():
+    """The lesson is written in ONE response, so `lesson_min_sections` blocks
+    have to fit inside `ai_lesson_max_tokens`. When they did not, lessons came
+    back truncated and were discarded as malformed -- and the fix looked like a
+    prompt problem for a long time. ~400 tokens per authored block, plus the
+    introduction, objectives, key terms and summary."""
+    settings = get_settings()
+    assert settings.ai_lesson_max_tokens >= settings.lesson_min_sections * 400
+
+
+def test_a_question_batch_fits_inside_the_question_budget():
+    """One MCQ costs ~250 completion tokens because it explains every choice.
+    Asking for more per call than the budget holds truncates the response,
+    which fails, retries, and eventually trips the Java gateway's read
+    timeout -- the exact failure `question_batch_size` exists to prevent."""
+    settings = get_settings()
+    assert settings.question_batch_size * 250 <= settings.ai_question_max_tokens

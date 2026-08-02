@@ -20,6 +20,13 @@ import TestCasesPanel from "./test-cases-panel.jsx"
 // Three-column programming environment: problem | editor | navigation + tests.
 // Run/Check hit real endpoints; the executor is stubbed server-side, so results
 // come back as "not run / unavailable" — nothing is fake-scored here.
+//
+// `runner` swaps where Run/Check go. An assessment attempt leaves it unset and
+// the attempt endpoints are used; an arena run — which has no attempt, no
+// attempt question and no learner id to send — passes its own
+// { run, check, listExecutions }. The layout is identical either way, which is
+// the point: a CodeStrike problem should not be a second, subtly different
+// coding environment from the one the learner sits an exam in.
 export default function ProgrammingQuestionLayout({
   question,
   index,
@@ -29,6 +36,7 @@ export default function ProgrammingQuestionLayout({
   attemptQuestionId,
   learnerId,
   navigator,
+  runner = null,
   editingLocked = false,
 }) {
   const [tests, setTests] = useState(question.testCases ?? [])

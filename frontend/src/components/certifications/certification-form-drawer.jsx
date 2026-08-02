@@ -10,11 +10,12 @@ import {
 import { useMutation } from "@tanstack/react-query"
 import { toast } from "sonner"
 
+import { cn } from "@/lib/utils"
+
 import {
     addCertificationWithAi,
     updateCertification,
 } from "@/services/certificationService"
-import { savePhotoCertification } from "@/services/fileService"
 import {
     getCertificationId,
     mapCertificationToModuleStructure,
@@ -50,12 +51,13 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 
-const TOTAL_STEPS = 2
-
-const STEP_LABELS = {
-    create: ["Certification details", "Source documents"],
-    edit: ["Certification details", "Categories and lessons"],
-}
+/* Creating is one page, editing is two.
+   Generation needs two short things — what the certification is, and the
+   documents to read — and splitting them across a wizard made the admin commit
+   to a title before seeing whether their files were even accepted, then walk
+   back a step to fix it. Editing keeps its second step because the category and
+   lesson tree is a screenful on its own. */
+const EDIT_STEP_LABELS = ["Certification details", "Categories and lessons"]
 
 
 const MIN_TITLE_LENGTH = 3
@@ -63,16 +65,6 @@ const MAX_TITLE_LENGTH = 150
 
 const MIN_DESCRIPTION_LENGTH = 20
 const MAX_DESCRIPTION_LENGTH = 2000
-
-const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024
-
-const ALLOWED_IMAGE_TYPES = [
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-]
-
-const ALLOWED_IMAGE_NAME_PATTERN = /\.(jpg|jpeg|png|webp)$/i
 
 const INVALID_INDUSTRY_VALUES = new Set([
     "",
@@ -95,8 +87,6 @@ function getEmptyDetails() {
         title: "",
         industry: "",
         description: "",
-        imageFile: null,
-        existingImageKey: "",
     }
 }
 
@@ -129,8 +119,6 @@ function toDetails(certification) {
         title: certification.title ?? "",
         industry: certification.industry ?? "",
         description: certification.description ?? "",
-        imageFile: null,
-        existingImageKey: certification.imageKey ?? "",
     }
 }
 
@@ -140,14 +128,6 @@ function validateCertificationDetails(details) {
     const title = normalizeText(details?.title)
     const description = normalizeText(details?.description)
     const industry = normalizeText(details?.industry)
-
-    const imageFile = details?.imageFile
-    const hasExistingImage = Boolean(
-        String(details?.existingImageKey ?? "").trim()
-    )
-
-
-
 
     if (!title) {
         errors.title = "Certification name is required."
@@ -202,35 +182,8 @@ function validateCertificationDetails(details) {
 
 
 
-    if (!imageFile && !hasExistingImage) {
-        errors.imageFile = "Please select a certification cover image."
-    }
-
-    if (imageFile) {
-        const isValidFile =
-            typeof File !== "undefined" && imageFile instanceof File
-
-        const hasAllowedExtension = ALLOWED_IMAGE_NAME_PATTERN.test(
-            imageFile?.name ?? ""
-        )
-
-        const hasAllowedType = ALLOWED_IMAGE_TYPES.includes(
-            imageFile?.type ?? ""
-        )
-
-        if (!isValidFile) {
-            errors.imageFile = "The selected image file is invalid."
-        } else if (!imageFile.name?.trim()) {
-            errors.imageFile = "The selected image has no file name."
-        } else if (imageFile.size === 0) {
-            errors.imageFile = "The selected image file is empty."
-        } else if (imageFile.size > MAX_IMAGE_SIZE_BYTES) {
-            errors.imageFile = "Image size must not exceed 5 MB."
-        } else if (!hasAllowedExtension || !hasAllowedType) {
-            errors.imageFile =
-                "Only JPG, JPEG, PNG, and WEBP images are allowed."
-        }
-    }
+    // No cover-image rule any more: the cover is drawn from the title, so
+    // there is no file to validate and nothing that can block a save.
 
     return errors
 }
@@ -394,13 +347,6 @@ export default function CertificationFormDrawer({
     })
 
     const {
-        mutateAsync: uploadCoverImage,
-        isPending: isUploadingImage,
-    } = useMutation({
-        mutationFn: savePhotoCertification,
-    })
-
-    const {
         mutateAsync: createWithAi,
         isPending: isQueueingGeneration,
     } = useMutation({
@@ -412,10 +358,10 @@ export default function CertificationFormDrawer({
             ),
     })
 
-    const isBusy =
-        isSavingCertification || isUploadingImage || isQueueingGeneration
+    const isBusy = isSavingCertification || isQueueingGeneration
+    const totalSteps = isEditing ? EDIT_STEP_LABELS.length : 1
     const isFirstStep = page === 1
-    const isLastStep = page === TOTAL_STEPS
+    const isLastStep = page === totalSteps
 
     function resetForm() {
         setPage(1)
@@ -523,23 +469,10 @@ export default function CertificationFormDrawer({
         try {
             setSubmissionError("")
 
-            let imageKey = certificationDetails.existingImageKey
-
-            if (certificationDetails.imageFile) {
-                imageKey = await uploadCoverImage(
-                    certificationDetails.imageFile
-                )
-            }
-
-            if (!imageKey) {
-                throw new Error("Certification cover image is required.")
-            }
-
             const payload = {
                 title: certificationDetails.title.trim(),
                 description: certificationDetails.description.trim(),
                 industry: certificationDetails.industry.trim(),
-                imageKey,
 
                 majorCategory: removeModuleUiFields(
                     moduleCategories,
@@ -588,7 +521,7 @@ export default function CertificationFormDrawer({
                     ? "Certification updated successfully"
                     : "Certification created successfully",
                 description: isEditing
-                    ? "Your certification details, modules, lessons, and cover image were updated."
+                    ? "Your certification details, modules, and lessons were updated."
                     : "The certification details, categories, modules, and lessons were saved successfully.",
             })
         } catch (error) {
@@ -643,21 +576,10 @@ export default function CertificationFormDrawer({
         try {
             setSubmissionError("")
 
-            let imageKey = certificationDetails.existingImageKey
-
-            if (certificationDetails.imageFile) {
-                imageKey = await uploadCoverImage(certificationDetails.imageFile)
-            }
-
-            if (!imageKey) {
-                throw new Error("Certification cover image is required.")
-            }
-
             const payload = {
                 title: certificationDetails.title.trim(),
                 description: certificationDetails.description.trim(),
                 industry: certificationDetails.industry.trim(),
-                imageKey,
                 dateCreated: formatLocalDateTime(),
             }
 
@@ -730,7 +652,19 @@ export default function CertificationFormDrawer({
                 override it -- tailwind-merge treats the two breakpoints as
                 separate utilities, so the modal stayed clamped to 512px no
                 matter what width was set. */}
-            <DialogContent className="flex h-[88vh] w-[96vw] max-w-none flex-col gap-0 overflow-hidden p-0 sm:w-[92vw] sm:max-w-none lg:w-[86vw] xl:w-[76vw] 2xl:w-[68vw]">
+            <DialogContent
+                className={cn(
+                    "flex h-[88vh] w-[96vw] flex-col gap-0 overflow-hidden p-0",
+                    // Editing holds a whole category tree and wants the room.
+                    // Creating is a form: three fields and a drop zone, read top
+                    // to bottom in one scroll. Sized to a comfortable measure
+                    // rather than a share of the screen — at 76vw the name field
+                    // was a metre of empty input.
+                    isEditing
+                        ? "max-w-none sm:w-[92vw] sm:max-w-none lg:w-[86vw] xl:w-[76vw] 2xl:w-[68vw]"
+                        : "sm:w-[92vw] sm:max-w-[680px]",
+                )}
+            >
                 {/* DialogContent renders its own close button, so the drawer's
                     back-chevron is gone -- two close affordances in one header
                     is worse than one, and a left-chevron reads as "back" in a
@@ -751,11 +685,14 @@ export default function CertificationFormDrawer({
                     {/* No subheading while generating: the step counter is
                         meaningful for the form, but a generation has no steps
                         to count and the timeline speaks for itself. */}
-                    {generatingCertificationId ? null : (
+                    {/* Only the step counter, and only where there are steps to
+                        count. A sentence restating what the form obviously is
+                        gets read once and skipped forever after. */}
+                    {!generatingCertificationId && isEditing ? (
                         <p className="text-xs text-muted-foreground">
-                            {`${STEP_LABELS[isEditing ? "edit" : "create"][page - 1]} · step ${page} of ${TOTAL_STEPS}`}
+                            {`${EDIT_STEP_LABELS[page - 1]} · step ${page} of ${totalSteps}`}
                         </p>
-                    )}
+                    ) : null}
                 </DialogHeader>
 
                 {/* The generation transcript owns its own scrolling, header rule,
@@ -780,25 +717,39 @@ export default function CertificationFormDrawer({
                 ) : (
                     <>
                         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 sm:px-6">
-                            {page === 1 ? (
+                            {!isEditing ? (
+                                /* One column, one scroll: what the
+                                   certification is, then the documents to build
+                                   it from, in the order you would say them. */
+                                <div className="space-y-8">
+                                    <CertificationDetails
+                                        value={certificationDetails}
+                                        onChange={handleDetailsChange}
+                                        errors={detailsErrors}
+                                        mode={mode}
+                                    />
+
+                                    <div className="border-t border-border pt-8">
+                                        <DocumentUploadStep
+                                            disabled={isBusy}
+                                            onFilesChange={handleDocumentsChange}
+                                        />
+                                    </div>
+                                </div>
+                            ) : page === 1 ? (
                                 <CertificationDetails
                                     value={certificationDetails}
                                     onChange={handleDetailsChange}
                                     errors={detailsErrors}
                                     mode={mode}
                                 />
-                            ) : isEditing ? (
+                            ) : (
                                 <CertificationModules
                                     certificationId={certificationId}
                                     value={moduleCategories}
                                     onChange={handleModulesChange}
                                     onCreateMiddleExam={() => {}}
                                     onGenerationStarted={setGeneratingCertificationId}
-                                />
-                            ) : (
-                                <DocumentUploadStep
-                                    disabled={isBusy}
-                                    onFilesChange={handleDocumentsChange}
                                 />
                             )}
                         </div>
@@ -856,16 +807,23 @@ export default function CertificationFormDrawer({
                             )}
 
                             <div className="flex items-center justify-between gap-3">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={handlePrevious}
-                                    disabled={isFirstStep || isBusy}
-                                    className="min-w-[118px] gap-2"
-                                >
-                                    <ArrowLeft className="h-4 w-4" />
-                                    Previous
-                                </Button>
+                                {/* Only where there is a step to go back to.
+                                    A permanently disabled Previous on a
+                                    one-page form is furniture. */}
+                                {totalSteps > 1 ? (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={handlePrevious}
+                                        disabled={isFirstStep || isBusy}
+                                        className="min-w-[118px] gap-2"
+                                    >
+                                        <ArrowLeft className="h-4 w-4" />
+                                        Previous
+                                    </Button>
+                                ) : (
+                                    <span />
+                                )}
 
                                 <Button
                                     type="button"

@@ -4,9 +4,10 @@ import os
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
+from app.ai.tasks import profile_for
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -72,34 +73,57 @@ async def close_checkpointer() -> None:
 def create_id():
     return str(uuid4())
 
-def get_llm(agent_type: str = "generation", model: str | None = None):
-    """
-    Builds the chat model for an agent. `agent_type` selects which model
-    setting to use ("generation" for curriculum/lesson/question authoring,
-    "classification" for cheap yes/no-style audit agents) so the two can be
-    pointed at different models later without touching agent code.
+def get_llm(task: str = "question", model: str | None = None):
+    """Builds the chat model for one task.
+
+    `task` names the job, not a tier -- "lesson", "curriculum", "question",
+    "tutor", "lesson_audit", "document_audit" -- and selects that task's
+    provider, model, completion budget and temperature from `app.ai.tasks`. The
+    two legacy names ("generation", "classification") still resolve, via the
+    aliases there.
 
     `model` overrides the configured choice outright. `app.ai.router` uses it to
-    rebuild an agent against a fallback model when the primary model's daily
-    token budget is spent.
+    rebuild an agent against a fallback model when the primary is rate limited
+    or its upstream provider is down.
+
+    One client class for every provider: OpenRouter, Groq and Google's
+    compatibility layer all speak the OpenAI chat-completions API, so Gemini and
+    Llama arrive through the same `ChatOpenAI` and differ only by base URL, key
+    and slug. That is the property the per-task table depends on -- moving a
+    task to a different company is a settings change, never a client change.
     """
     settings = get_settings()
-    classification = agent_type == "classification"
-    model = model or (
-        settings.ai_classification_model
-        if classification
-        else settings.ai_generation_model
-    ) or settings.ai_default_model
+    profile = profile_for(task, settings)
+    provider = profile.provider
 
-    return ChatGroq(
-        api_key=os.getenv("GROQ_API_KEY"),
-        model=model,
-        temperature=settings.ai_temperature,
-        # Sized per agent type: `max_tokens` is counted toward the request's
-        # rate-limit estimate, so giving a yes/no auditor the full generation
-        # budget made small prompts exceed a small model's TPM limit.
-        max_tokens=(
-            settings.ai_classification_max_tokens if classification else settings.ai_max_tokens
+    key = provider.api_key()
+    if not key:
+        raise RuntimeError(
+            f"The '{profile.name}' task is configured for provider "
+            f"'{provider.name}', but none of {', '.join(provider.key_env)} is "
+            f"set. Set one, or point ai_{profile.name}_provider elsewhere."
+        )
+
+    return ChatOpenAI(
+        api_key=key,
+        base_url=provider.base_url,
+        model=model or profile.model,
+        temperature=profile.temperature,
+        # Sized per task: a document auditor returning one boolean has no use
+        # for a lesson's 16k budget, and on providers that bill reserved output
+        # or count it toward a rate-limit estimate, asking for it is a real cost.
+        max_tokens=profile.max_tokens,
+        # OpenRouter's attribution headers, and only OpenRouter's -- they make a
+        # generation run identifiable on its activity dashboard when several
+        # services share one key. Sent to that provider alone, since Groq and
+        # Google have no use for them.
+        default_headers=(
+            {
+                "HTTP-Referer": settings.openrouter_site_url,
+                "X-Title": settings.openrouter_app_name,
+            }
+            if provider.name == "openrouter"
+            else None
         ),
     )
 

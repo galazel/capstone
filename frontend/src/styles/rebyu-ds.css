@@ -658,9 +658,12 @@
     display: flex;
     gap: 10px;
     /* Overhang past both edges so the skewed ends are cropped by the viewport
-       instead of leaving triangular gaps. */
-    width: calc(100% + 12rem);
-    margin-left: -6rem;
+       instead of leaving triangular gaps. Only as much as the skew actually
+       leans (~31px on a full-height blade) plus a little: every pixel of
+       overhang is a pixel the edge blades' copy has to be padded back in by,
+       and at 6rem a side the first blade's text was off the screen. */
+    width: calc(100% + 6rem);
+    margin-left: -3rem;
 }
 
 .rebyu-ds .rb-blade {

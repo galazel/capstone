@@ -3,6 +3,7 @@ from functools import lru_cache
 from app.tools.certification.lesson_tools import lesson_research_tools
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
+from app.ai import tasks
 from app.core.config import get_settings
 from app.schemas.certification.lesson_schema import GeneratedLesson
 from app.utils.helpers import get_llm
@@ -228,7 +229,12 @@ def get_lesson_generation_agent(model: str | None = None):
     resolved by `app.domain.lesson_media` after the answer comes back.
     """
     return create_agent(
-        model=get_llm("generation", model),
+        # The one agent given a genuinely capable model. It is the only one
+        # that has to research with a tool, hold the whole lesson plan, and
+        # then emit a large structured answer without losing the thread -- see
+        # `app.ai.tasks`, where `lesson` is deliberately the most expensive
+        # entry in the table.
+        model=get_llm(tasks.LESSON, model),
         tools=lesson_research_tools,
         response_format=ToolStrategy(GeneratedLesson),
         system_prompt=build_system_prompt(),

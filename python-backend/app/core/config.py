@@ -52,24 +52,152 @@ class Settings(BaseSettings):
     scheduled_retraining_hour: int = 2
     scheduled_retraining_minute: int = 0
 
-    # --- AI generation models (certification/lesson/tutor agents) -----------
-    # Per-agent-type model selection so cheap classification tasks (document
-    # validation, lesson audits) can move to a lighter/faster model later
-    # without touching agent code.
-    ai_default_model: str = "llama-3.3-70b-versatile"
-    ai_generation_model: str = "llama-3.3-70b-versatile"
-    ai_classification_model: str = "llama-3.3-70b-versatile"
-    ai_temperature: float = 0.0
-    ai_max_tokens: int = 6000
-    #: Completion budget for the classification agents (document validation,
-    #: lesson audits). They return a boolean and a sentence, so reserving the
-    #: generation budget for them was never useful -- and it was actively
-    #: harmful: Groq counts `max_tokens` toward a request's TPM estimate, so a
-    #: ~300-token audit prompt asked for 6332 tokens against `llama-3.1-8b-
-    #: instant`'s 6000 TPM limit and was rejected outright with a 413. No
-    #: amount of waiting fixes a single request that exceeds the whole
-    #: per-minute allowance.
-    ai_classification_max_tokens: int = 1024
+    # --- OpenRouter -----------------------------------------------------------
+    # Every agent talks to OpenRouter's OpenAI-compatible endpoint rather than
+    # to one vendor directly, which is what makes the per-task model table below
+    # possible: a lesson can be written by Claude and a document audit answered
+    # by Gemini Flash Lite over the same client, the same key, and the same
+    # billing account.
+    #: Base URLs live in `app.ai.tasks.PROVIDERS`, not here -- there is one per
+    #: provider now, and a per-provider value cannot be expressed as a single
+    #: setting. An `openrouter_base_url` field used to sit here and was silently
+    #: ignored after the registry took over, which is worse than not having it.
+    #:
+    #: Sent as OpenRouter's `HTTP-Referer` / `X-Title` attribution headers.
+    #: Optional to the API; they are what makes a run identifiable on the
+    #: activity dashboard when several services share one key.
+    openrouter_site_url: str = "https://rebyu.app"
+    openrouter_app_name: str = "REBYU"
+
+    # --- Per-task AI models ---------------------------------------------------
+    # One model per task, not one model per "tier". These jobs differ by more
+    # than an order of magnitude in size and in what they demand:
+    #
+    #   lesson          a whole lesson, 18+ authored content blocks, research
+    #                   tool calls, structured output -- the single hardest and
+    #                   most quality-sensitive thing this service does
+    #   curriculum      one large JSON syllabus, planned in one shot
+    #   question        many small batches, run dozens of times per generation
+    #                   -- the volume task, so unit price dominates
+    #   tutor           interactive; latency matters more than depth
+    #   lesson_audit    reads a long lesson, returns a verdict
+    #   document_audit  reads a few document samples, returns a boolean
+    #
+    # Pointing all six at one model means either wasting the biggest model on a
+    # boolean or underpowering the lessons. Each therefore gets its own model,
+    # fallback chain, completion budget and temperature, resolved in
+    # `app.ai.tasks`.
+    #
+    # EVERYTHING RUNS ON OPENROUTER, ON `:free` SLUGS -- no credit is spent.
+    # One provider for all six tasks, which keeps the table simple. Know the
+    # limits before relying on it:
+    #
+    #   * The free allowance is ~50 requests per DAY for the whole ACCOUNT --
+    #     shared across every `:free` model, so a fallback chain cannot route
+    #     around it. A full certification needs roughly 100+ calls (18 lessons
+    #     x2 round trips, ~30 question batches, 18 audits), so A COMPLETE RUN
+    #     DOES NOT FIT. Expect it to stop partway with a 429 naming
+    #     `free-models-per-day`. One or two lessons to check the pipeline is fine.
+    #     A one-off $10 purchase raises the cap to ~1000/day permanently.
+    #   * Models are chosen for MULTI-TURN tool support and output ceiling first.
+    #     `lesson` and `curriculum` call a Serper web search and then answer, and
+    #     most free slugs cannot do that round trip -- see the note on those two.
+    #   * Quality is lower than paid. Measured: a free lesson used 8 distinct
+    #     block types (the best of any free model tested); Groq's llama-3.3-70b
+    #     managed only 5. `.env.example` carries a ready paid block.
+    #
+    # `ai_default_model` is the backstop appended to every chain. Empty here on
+    # purpose: every task already names a same-provider fallback, and a global
+    # default would be the one entry able to smuggle a paid slug into a chain
+    # that is meant to stay free.
+    ai_default_model: str = ""
+
+    #: The only two agents that call a real tool (Serper web search) and then
+    #: answer, so they need MULTI-TURN tool use -- a much narrower capability
+    #: than the single-turn structured output the other four need. Tested
+    #: 2026-08-03 against the real agents, which rules out most of the catalogue:
+    #:
+    #:   PASS  openrouter nemotron-3-ultra-550b:free  (ran the real lesson agent)
+    #:   PASS  groq llama-3.3-70b-versatile / llama-3.1-8b-instant
+    #:   FAIL  gemini 3.x      -- needs a thought_signature on replayed tool calls
+    #:                            that the OpenAI-compat layer drops
+    #:   FAIL  groq gpt-oss-*  -- tool_use_failed WITH tools (fine without)
+    #:   FAIL  groq qwen3.6-27b -- 413, its TPM cannot hold a lesson request
+    #:
+    #: 550B parameters with a 1M context and 64k output ceiling: the largest free
+    #: model that exists with working tool support, and the only free one that
+    #: reached for the rich block types (tabs, image-text layouts) rather than
+    #: padding with headings and paragraphs.
+    ai_lesson_provider: str = "openrouter"
+    ai_lesson_model: str = "anthropic/claude-sonnet-4.5"
+    ai_lesson_fallbacks: str = "google/gemini-2.5-pro,openai/gpt-4.1"
+    #: 16000. Unlike Groq -- whose 12k tokens-per-minute ceiling counts
+    #: `max_tokens` and refused anything larger with a 413 -- OpenRouter imposes
+    #: no per-minute ceiling here, and this model's output limit is 64k. So the
+    #: lesson budget is a content decision again rather than a provider one.
+    ai_lesson_max_tokens: int = 24000
+    #: Slightly above zero: at 0.0 the model reaches for the same four block
+    #: types every lesson, and the prompt explicitly asks it to vary them.
+    ai_lesson_temperature: float = 0.4
+
+    #: Same multi-turn tool constraint as the lesson agent -- it searches for the
+    #: real certification's published exam objectives before planning -- so it
+    #: gets the same proven model. Its answer is plain JSON rather than a tool
+    #: call (see app/ai/json_output.py), which is what lets a sample that stops
+    #: before its closing brackets be repaired instead of rejected.
+    ai_curriculum_provider: str = "openrouter"
+    ai_curriculum_model: str = "anthropic/claude-sonnet-4.5"
+    ai_curriculum_fallbacks: str = "google/gemini-2.5-pro,openai/gpt-4.1"
+    ai_curriculum_max_tokens: int = 16000
+    #: Near-deterministic: a syllabus should be the same shape twice, and this
+    #: agent's answer is hand-parsed JSON, where creativity is only ever risk.
+    ai_curriculum_temperature: float = 0.2
+
+    #: The volume task -- ~30 calls per certification, more than every other
+    #: agent combined. On the free tier the scarce resource is the account-wide
+    #: daily REQUEST cap, not money, so this is what exhausts a run, and the
+    #: first thing to look at when generation stops partway through.
+    ai_question_provider: str = "openrouter"
+    ai_question_model: str = "google/gemini-2.5-flash"
+    ai_question_fallbacks: str = "openai/gpt-4.1-mini,anthropic/claude-haiku-4.5"
+    ai_question_max_tokens: int = 8000
+    #: Deliberately the highest of the six. Batches cannot see each other except
+    #: through an "already written" list, and at low temperature they converge on
+    #: the same stems -- which `invoke_question_agent` then discards as
+    #: duplicates, leaving the assessment short. Variance here is throughput.
+    ai_question_temperature: float = 0.6
+
+    #: Learner-facing chat: answered while someone waits, so a small fast model
+    #: beats a marginally better slow one.
+    ai_tutor_provider: str = "openrouter"
+    ai_tutor_model: str = "google/gemini-2.5-flash"
+    ai_tutor_fallbacks: str = "openai/gpt-4.1-mini"
+    ai_tutor_max_tokens: int = 2000
+    ai_tutor_temperature: float = 0.3
+
+    #: Reads a full generated lesson and judges it against the curriculum. Small
+    #: output, large input -- so this is sized by context, not by capability.
+    ai_lesson_audit_provider: str = "openrouter"
+    ai_lesson_audit_model: str = "openai/gpt-4.1-mini"
+    ai_lesson_audit_fallbacks: str = "google/gemini-2.5-flash"
+    ai_lesson_audit_max_tokens: int = 1024
+    ai_lesson_audit_temperature: float = 0.0
+
+    #: The smallest job in the system: is this document about this
+    #: certification, yes or no. Anything larger is waste -- and on a per-day
+    #: request cap, waste is measured in requests the lesson agent no longer has.
+    #:
+    #: There is a floor, though, and it is higher than "smallest model that
+    #: advertises tool support". `nvidia/nemotron-nano-9b-v2:free` answers a
+    #: one-field probe tool correctly and then degenerates on this agent's real
+    #: schema, emitting repeated `/</</<` and unparseable tool-call JSON until
+    #: the retry budget is spent. Capability has to be verified against the
+    #: actual agent, not a toy call.
+    ai_document_audit_provider: str = "openrouter"
+    ai_document_audit_model: str = "openai/gpt-4.1-mini"
+    ai_document_audit_fallbacks: str = "google/gemini-2.5-flash"
+    ai_document_audit_max_tokens: int = 512
+    ai_document_audit_temperature: float = 0.0
 
     # --- Curriculum size ------------------------------------------------------
     # What the planner is *asked* for. Lower all six to run the whole workflow
@@ -90,7 +218,13 @@ class Settings(BaseSettings):
     #: Content blocks the lesson agent is asked to write. Deliberately
     #: independent of curriculum size: a cheap test run wants *few* lessons,
     #: not thin ones, so shrinking the syllabus must not shrink the lesson.
-    lesson_min_sections: int = 10
+    #:
+    #: 18 rather than the old 10 because the constraint that set the old number
+    #: is gone: the lesson was written in one response bounded by a 6000-token
+    #: completion budget, itself bounded by a free tier's per-minute allowance.
+    #: `ai_lesson_max_tokens` is now 16000 against a model with a 64k ceiling,
+    #: so depth here is a content decision rather than a budget one.
+    lesson_min_sections: int = 22
 
     # --- Assessment size ------------------------------------------------------
     # Questions per assessment. Generation and validation read the same value,
@@ -113,12 +247,19 @@ class Settings(BaseSettings):
     question_bank_questions: int = 100
 
     #: Questions asked for in a single LLM call. Anything larger is split
-    #: across several calls and merged (`app.ai.invocation`). One MCQ now costs
-    #: roughly 250 completion tokens because it explains every choice, so ~15
-    #: fits comfortably inside `ai_max_tokens` (6000) with room for the model's
+    #: across several calls and merged (`app.ai.invocation`). One MCQ costs
+    #: roughly 250 completion tokens because it explains every choice, so 15
+    #: fits inside `ai_question_max_tokens` (4000) with room for the model's
     #: preamble; asking for 50 at once truncates the response, which fails,
     #: retries with backoff, and eventually trips the Java gateway's timeout.
-    question_batch_size: int = 15
+    #:
+    #: Raising this beyond the completion budget / 250 is the fastest way to
+    #: reintroduce that timeout, so the two settings move together -- which is
+    #: why a test pins the relationship rather than trusting these comments.
+    #: The question task runs on Groq, whose tokens-per-minute ceiling is 8k and
+    #: counts `max_tokens` toward the estimate, so the budget cannot simply be
+    #: raised to fit a bigger batch.
+    question_batch_size: int = 20
 
     #: Ceiling on the mock exam regardless of what the planner researched.
     #: The mock exam's item count normally comes from the real certification's
@@ -129,18 +270,19 @@ class Settings(BaseSettings):
     mock_exam_max_questions: int = 0
 
     # --- Model fallback on quota exhaustion -----------------------------------
-    # Groq scopes rate limits per model, so a model whose daily token budget is
-    # spent can be swapped for one with its own untouched budget instead of
-    # failing the run. Ordered most-capable first: a fallback trades output
-    # quality for availability, so it is a last resort, not a load-balancer.
+    # The per-task `*_fallbacks` lists above are walked when a model is rate
+    # limited or its upstream provider is down. They are ordered most-capable
+    # first: a fallback trades output quality for availability, so it is a last
+    # resort, not a load-balancer.
     #
-    # Comma-separated rather than list[str] because pydantic-settings expects
-    # JSON for complex types, which makes overriding this in .env awkward
-    # (AI_GENERATION_FALLBACKS='["a","b"]' vs AI_GENERATION_FALLBACKS=a,b).
-    ai_generation_fallbacks: str = "llama-3.1-8b-instant"
-    ai_classification_fallbacks: str = "llama-3.1-8b-instant"
-    #: Cooldown applied when a 429 carries no parseable reset time. Groq's daily
-    #: buckets reset on a rolling window, so an hour is a safe assumption.
+    # They are comma-separated strings rather than list[str] because
+    # pydantic-settings expects JSON for complex types, which makes overriding
+    # them in .env awkward (AI_LESSON_FALLBACKS='["a","b"]' vs =a,b).
+    #
+    #: Cooldown applied when a rate-limit response carries no parseable reset
+    #: time. OpenRouter's own free-tier buckets are daily, and an upstream
+    #: provider's limits are opaque from here, so an hour is the safe
+    #: assumption -- it is a skip-this-model hint, not a sleep.
     ai_quota_cooldown_seconds: float = 3600.0
 
     artifact_dir: Path = Path("artifacts")
@@ -219,12 +361,12 @@ class Settings(BaseSettings):
     rag_chunk_size: int = 1000
     rag_chunk_overlap: int = 150
     # Fetch wide, then narrow: fetch_k candidates are reranked down to top_k.
-    rag_fetch_k: int = 20
-    rag_top_k: int = 8
+    rag_fetch_k: int = 80
+    rag_top_k: int = 24
     rag_rerank_enabled: bool = True
     rag_rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     # Hard ceiling on assembled context handed to a generation agent.
-    rag_max_context_chars: int = 24000
+    rag_max_context_chars: int = 160000
 
     # --- RabbitMQ (Phase 6 consumers) ----------------------------------------
     # Same broker/topology the Java backend's producers publish to

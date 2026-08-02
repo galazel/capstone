@@ -9,7 +9,6 @@ import {
   ChevronDown,
   CircleHelp,
   Command,
-  Cpu,
   FileQuestion,
   Files,
   Handshake,
@@ -64,8 +63,10 @@ const adminGroups = [
     label: "Learning",
     items: [
       { label: "Certifications", href: "/admin", icon: Award },
-      { label: "Question Bank", href: "/admin/question-bank", icon: FileQuestion },
-      { label: "AI generation", href: "/admin/generation", icon: Cpu },
+      // No Question Bank entry: the bank is a tab inside each certification,
+      // next to its curriculum and assessments, because that is the only scope
+      // a question is authored in. No AI generation entry either -- a run is
+      // watched in the modal that started it.
       { label: "Challenges", href: "/admin/challenges", icon: Swords },
     ],
   },
@@ -276,10 +277,11 @@ export function PortalTopNavigation({ role, actions, organizationName, enterpris
       <header className="sticky top-0 z-40 border-b border-border/80 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/90">
         <div className="mx-auto flex h-16 w-full max-w-[1480px] items-center gap-4 px-4 sm:px-6 lg:px-8">
           <Brand role={role} organizationName={organizationName} />
-          {/* Centred rather than left-aligned against the logo: `flex-1` on both
-              the nav and the actions row lets the nav take the middle third and
-              stay centred as the brand and action clusters change width. */}
-          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-1 lg:flex" aria-label={`${role.toLowerCase()} navigation`}>
+          {/* Left-aligned against the logo. Centred, the links floated in the
+              middle of the bar and shifted horizontally whenever the brand or
+              the action cluster changed width -- next to the wordmark they have
+              a fixed edge to start from. */}
+          <nav className="hidden min-w-0 flex-1 items-center justify-start gap-1 lg:flex" aria-label={`${role.toLowerCase()} navigation`}>
             {role === "LEARNER" ? learnerNavigation.slice(0, 6).map((item) => <NavLink key={`${item.label}-${item.href}`} to={item.href} className={cn("relative px-2.5 py-2 text-sm font-medium transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", pathMatches(location.pathname, item) ? "text-primary after:absolute after:inset-x-2.5 after:-bottom-[13px] after:h-0.5 after:bg-primary" : "text-muted-foreground")}>{item.label}</NavLink>) : groups.map((group) => <GroupDropdown key={group.label} group={group} pathname={location.pathname} />)}
           </nav>
           <div className="flex flex-1 items-center justify-end gap-1.5 lg:flex-none">

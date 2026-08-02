@@ -1,14 +1,13 @@
 import { useMemo, useState } from "react"
+import { Link } from "react-router-dom"
 import {
   Building2,
   Check,
   Code2,
-  Database,
-  Flame,
   MoreVertical,
   Network,
+  Plus,
   Search,
-  Timer,
   Trash2,
   Trophy,
   Users,
@@ -57,15 +56,21 @@ const INDUSTRIES = [
   "Healthcare",
 ]
 
+/* The IT Olympics, and only the IT Olympics — the same three arenas the
+   landing page sells and the learner can actually enter. QueryRealm, Sprint
+   Challenge and Daily Ranked Exam Challenge were listed here with no route, no
+   page and no learner-facing mention anywhere: an admin could assign an
+   industry to a challenge that did not exist. */
 const INITIAL_CHALLENGES = [
   {
     challengeId: 1,
+    arenaId: "codestrike",
     title: "CodeStrike",
     description:
-        "Coding practice challenges for algorithmic and implementation skills.",
+        "Ten coding problems back to back, judged against real unit tests and scored on time complexity as well as correctness.",
     icon: Code2,
-    tag: "Practice",
-    status: "coming_soon",
+    tag: "Solo",
+    status: "active",
     assignedIndustries: [
       "Information Technology",
       "Training Center",
@@ -74,12 +79,13 @@ const INITIAL_CHALLENGES = [
   },
   {
     challengeId: 2,
-    title: "BlueprintArena",
+    arenaId: "blueprint",
+    title: "Blueprint Arena",
     description:
-        "System design prompts for architecture and diagram reasoning.",
+        "Ten UML and system design problems on a drag-and-drop canvas, checked against structural rules rather than opinion.",
     icon: Network,
-    tag: "Design",
-    status: "coming_soon",
+    tag: "Solo",
+    status: "active",
     assignedIndustries: [
       "Information Technology",
       "Education",
@@ -88,45 +94,18 @@ const INITIAL_CHALLENGES = [
   },
   {
     challengeId: 3,
-    title: "QueryRealm",
+    arenaId: "worldcup",
+    title: "World Cup",
     description:
-        "SQL and ERD practice for data modeling and querying.",
-    icon: Database,
-    tag: "Database",
-    status: "coming_soon",
-    assignedIndustries: [
-      "Information Technology",
-      "Training Center",
-      "Business Process Outsourcing",
-    ],
-  },
-  {
-    challengeId: 4,
-    title: "Sprint Challenge",
-    description:
-        "Timed short practice challenge using the existing challenge experience.",
-    icon: Timer,
-    tag: "Timed",
+        "An eight-player bracket on one certification track — quarterfinals, semis, and a timed grand final.",
+    icon: Trophy,
+    tag: "Tournament",
     status: "active",
     assignedIndustries: [
       "Information Technology",
       "Education",
       "Training Center",
       "Review Center",
-    ],
-  },
-  {
-    challengeId: 5,
-    title: "Daily Ranked Exam Challenge",
-    description:
-        "Daily assessment challenge for exam readiness and competitive ranking.",
-    icon: Flame,
-    tag: "Daily",
-    status: "coming_soon",
-    assignedIndustries: [
-      "Education",
-      "Review Center",
-      "Training Center",
     ],
   },
 ]
@@ -187,16 +166,6 @@ export default function Challenges({
       return matchesSearch && matchesStatus
     })
   }, [challenges, searchQuery, statusFilter])
-
-  const activeCount = challenges.filter(
-      (challenge) => challenge.status === "active"
-  ).length
-
-  const totalAssignments = challenges.reduce(
-      (total, challenge) =>
-          total + (challenge.assignedIndustries?.length ?? 0),
-      0
-  )
 
   function openAssignDialog(challenge) {
     setSelectedChallenge(challenge)
@@ -276,47 +245,9 @@ export default function Challenges({
 
   return (
       <section className="space-y-6">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border bg-card px-4 py-3">
-            <p className="text-xs font-medium text-muted-foreground">
-              Total challenges
-            </p>
-
-            <div className="mt-2 flex items-center gap-2">
-              <Trophy className="h-4 w-4 text-primary" />
-              <p className="text-xl font-semibold tabular-nums">
-                {challenges.length}
-              </p>
-            </div>
-          </div>
-
-          <div className="rounded-xl border bg-card px-4 py-3">
-            <p className="text-xs font-medium text-muted-foreground">
-              Active challenges
-            </p>
-
-            <div className="mt-2 flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-              <p className="text-xl font-semibold tabular-nums">
-                {activeCount}
-              </p>
-            </div>
-          </div>
-
-          <div className="rounded-xl border bg-card px-4 py-3">
-            <p className="text-xs font-medium text-muted-foreground">
-              Industry assignments
-            </p>
-
-            <div className="mt-2 flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-primary" />
-              <p className="text-xl font-semibold tabular-nums">
-                {totalAssignments}
-              </p>
-            </div>
-          </div>
-        </div>
-
+        {/* No summary tiles. Three counters over a list of three rows restated
+            what the list itself shows, and two of them ("total", "active") were
+            arithmetic on a page you can read at a glance. */}
         <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative w-full lg:max-w-sm">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -380,6 +311,15 @@ export default function Challenges({
                             </DropdownMenuTrigger>
 
                             <DropdownMenuContent align="end" className="w-52">
+                              {/* Straight into this arena's own workspace,
+                                  where its problems and its scoring live. */}
+                              <DropdownMenuItem asChild>
+                                <Link to={`/admin/arenas/${challenge.arenaId}`}>
+                                  <Plus className="mr-2 h-4 w-4" />
+                                  Manage problems
+                                </Link>
+                              </DropdownMenuItem>
+
                               <DropdownMenuItem
                                   onSelect={() => openAssignDialog(challenge)}
                               >
@@ -403,8 +343,15 @@ export default function Challenges({
 
                       <div className="mt-5">
                         <div className="flex flex-wrap items-center gap-2">
+                          {/* The title is the way in: clicking a challenge
+                              should open the challenge, not just its menu. */}
                           <h2 className="text-lg font-semibold text-foreground">
-                            {challenge.title}
+                            <Link
+                                to={`/admin/arenas/${challenge.arenaId}`}
+                                className="rounded-sm hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              {challenge.title}
+                            </Link>
                           </h2>
 
                           <Badge variant="secondary">{challenge.tag}</Badge>

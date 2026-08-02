@@ -15,7 +15,6 @@ const ForgotPasswordPage = lazy(() => import("./pages/auth/forgot-password-page.
 const SetNewPasswordPage = lazy(() => import("@/pages/auth/set-new-password-page.jsx"))
 const Certifications = lazy(() => import("./pages/admin/certifications-page.jsx"))
 const Challenges = lazy(() => import("./pages/admin/challenges-page.jsx"))
-const QuestionBank = lazy(() => import("./pages/admin/question-bank-page.jsx"))
 const Learners = lazy(() => import("./pages/admin/learners-page.jsx"))
 const Organizations = lazy(() => import("./pages/admin/organizations-page.jsx"))
 const AdminOrganizationDetail = lazy(() => import("./pages/admin/admin-organization-detail-page.jsx"))
@@ -24,7 +23,6 @@ const AdminDashboard = lazy(() => import("./pages/admin/admin-dashboard-page.jsx
 const PartnershipRequests = lazy(() => import("./pages/admin/partnership-requests-page.jsx"))
 const CommunityModeration = lazy(() => import("./pages/admin/community-moderation-page.jsx"))
 const BktDeliveryStatus = lazy(() => import("./pages/admin/bkt-delivery-status-page.jsx"))
-const GenerationWorkspace = lazy(() => import("./pages/admin/generation-workspace-page.jsx"))
 const GamificationSettings = lazy(() => import("./pages/admin/gamification-settings-page.jsx"))
 const AcceptEnterpriseInvitationPage = lazy(() => import("./pages/admin/accept-enterprise-invitation-page.jsx"))
 const LandingPage = lazy(() => import("./pages/public/landing-page.jsx"))
@@ -74,6 +72,7 @@ const CodeStrikePage = lazy(() => import("./pages/learner/challenges/codestrike-
 const BlueprintArenaPage = lazy(() => import("./pages/learner/challenges/blueprint-arena-page.jsx"))
 const WorldCupPage = lazy(() => import("./pages/learner/challenges/world-cup-page.jsx"))
 const ArenaConfig = lazy(() => import("./pages/admin/arena-config-page.jsx"))
+const ArenaDetail = lazy(() => import("./pages/admin/arena-detail-page.jsx"))
 const NotificationsPage = lazy(() => import("./pages/notifications-page.jsx"))
 const NotFoundPage = lazy(() => import("./pages/public/not-found-page.jsx"))
 const ForbiddenPage = lazy(() => import("./pages/public/forbidden-page.jsx"))
@@ -150,7 +149,14 @@ export function App() {
                     <Route path="dashboard" element={<AdminDashboard />} />
                     <Route path="challenges" element={<Challenges />} />
                     <Route path="arenas" element={<ArenaConfig />} />
-                    <Route path="question-bank" element={<QuestionBank />} />
+                    {/* Each arena authors its own problems: three builders on
+                        one page was three screens of editors in a column. */}
+                    <Route path="arenas/:arenaId" element={<ArenaDetail />} />
+                    {/* No standalone /admin/question-bank. Questions only mean
+                        something against a certification's own curriculum, and
+                        the same builder is embedded in that certification's
+                        Question Bank tab -- a global list made you pick the
+                        certification again after arriving. */}
                     <Route path="organizations" element={<Organizations />} />
                     <Route
                         path="organizations/:id"
@@ -159,10 +165,10 @@ export function App() {
                     <Route path="partnership-requests" element={<PartnershipRequests />} />
                     <Route path="community-moderation" element={<CommunityModeration />} />
                     <Route path="bkt-delivery" element={<BktDeliveryStatus />} />
-                    {/* Both forms render the workspace: without a run id it
-                        redirects to whichever run most needs attention. */}
-                    <Route path="generation" element={<GenerationWorkspace />} />
-                    <Route path="generation/:runId" element={<GenerationWorkspace />} />
+                    {/* No standalone generation workspace. A run is watched in
+                        the modal that started it -- the InlineGenerationMonitor
+                        renders the same transcript, review checkpoints and
+                        recovery panel without leaving the certification. */}
                     <Route path="gamification-settings" element={<GamificationSettings />} />
                     <Route path="learners" element={<Learners />} />
                     <Route

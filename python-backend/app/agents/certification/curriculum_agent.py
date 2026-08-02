@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from app.ai import tasks
 from app.tools.certification.curriculum_tools import curriculum_tools
 from langchain.agents import create_agent
 from app.utils.helpers import get_llm
@@ -203,7 +204,7 @@ def get_curriculum_agent(model: str | None = None):
     misplaced most often.
     """
     return create_agent(
-        model=get_llm("generation", model),
+        model=get_llm(tasks.CURRICULUM, model),
         tools=curriculum_tools,
         system_prompt=build_system_prompt(),
     )

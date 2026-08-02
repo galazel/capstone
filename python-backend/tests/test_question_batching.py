@@ -1,8 +1,8 @@
 """Large question sets are generated in batches, not one giant call.
 
 A 50-item mock exam wants roughly 12k completion tokens now that every MCQ
-explains all four choices, against an `ai_max_tokens` ceiling of 6000. The
-response was truncated, a truncated tool call is malformed, malformed output is
+explains all four choices, against the question task's `ai_question_max_tokens`
+ceiling. The response was truncated, a truncated tool call is malformed, malformed output is
 retried with backoff -- and the Java gateway's 120s read timeout fired first:
 
     io.netty.handler.timeout.ReadTimeoutException

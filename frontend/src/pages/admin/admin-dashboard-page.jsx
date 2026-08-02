@@ -267,9 +267,6 @@ export default function AdminDashboard() {
             <Link to="/admin">Manage certifications</Link>
           </Button>
           <Button asChild variant="outline" size="sm">
-            <Link to="/admin/question-bank">Question bank</Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
             <Link to="/admin/learners">Learners</Link>
           </Button>
           <Button asChild variant="outline" size="sm">

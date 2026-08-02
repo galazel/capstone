@@ -43,8 +43,6 @@ import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
 import { LearnerAnnouncements } from "@/components/learner/learner-announcements.jsx"
 import { PriorityTag } from "@/components/learner/priority-tag.jsx"
 
-import { getFileViewUrl } from "@/services/fileService.js"
-import { getCertificationFallbackImage, getCuratedCertificationCover } from "@/lib/certification-cover-images.js"
 import { getCertificationModules } from "@/services/learnerService.js"
 import { getCertificationPriorities } from "@/services/learnerAnalyticsService.js"
 
@@ -55,22 +53,6 @@ import {
   getLearnerEnrollments,
   purchaseCertification,
 } from "@/services/assessmentService.js"
-
-function getCertificationImageUrl(certification) {
-  const curatedCover = getCuratedCertificationCover(certification?.title)
-  if (curatedCover) return curatedCover
-
-  const fallbackImage = getCertificationFallbackImage(certification?.title)
-  if (!certification?.imageKey) {
-    return fallbackImage
-  }
-
-  try {
-    return getFileViewUrl(certification.imageKey) || fallbackImage
-  } catch {
-    return fallbackImage
-  }
-}
 
 function getLessonDurationMinutes(lesson) {
   const possibleValues = [
@@ -317,8 +299,6 @@ export default function LearnerCertificationDetailPage() {
       lessons.length > 0
           ? Math.round((completedLessonCount / lessons.length) * 100)
           : 0
-
-  const imageUrl = getCertificationImageUrl(certification)
 
   const moduleCount = modules.reduce(
       (total, major) => total + (major.middleCategory?.length ?? 0),

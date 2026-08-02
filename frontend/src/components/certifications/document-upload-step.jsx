@@ -1,5 +1,5 @@
 import { useEffect } from "react"
-import { AlertCircleIcon, FileSpreadsheet, FileText, Sparkles, UploadIcon, XIcon } from "@/components/icons"
+import { AlertCircleIcon, FileSpreadsheet, FileText, UploadIcon, XIcon } from "@/components/icons"
 
 import { formatBytes, useFileUpload } from "@/hooks/use-file-upload"
 import { Button } from "@/components/ui/button"
@@ -62,25 +62,10 @@ export function DocumentUploadStep({ onFilesChange, error, disabled }) {
   const problem = error || errors[0]
 
   return (
+    // No explainer panel above the drop zone: the zone says what it takes and
+    // the button says what it does, and a paragraph describing generation is
+    // read once and skipped past on every run after that.
     <section className="space-y-5">
-      <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/40 p-4">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Sparkles className="size-[18px]" />
-        </div>
-
-        <div className="min-w-0">
-          <h2 className="font-heading text-base font-semibold text-foreground">
-            Generate the certification structure
-          </h2>
-
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Upload a syllabus, curriculum, topic outline, certification guide, or CSV. REBYU reads
-            the documents and writes the major categories, middle categories, lessons, and
-            assessments — pausing for your review as it goes.
-          </p>
-        </div>
-      </div>
-
       <div
         className={cn(
           "relative flex min-h-52 flex-col items-center justify-center rounded-xl border border-dashed p-4 transition-colors has-[input:focus]:ring-2",

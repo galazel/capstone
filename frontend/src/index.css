@@ -1420,3 +1420,40 @@ body.netacad-overlay-theme {
     color: var(--color-rb-wolf);
     text-transform: none;
 }
+
+/* ---------------------------------------------------------------------------
+   MODAL SCROLLING — no visible bar.
+   ---------------------------------------------------------------------------
+   A dialog is already a bounded surface with its own edges, and a scrollbar
+   track running down the inside of one reads as a second border. Scrolling
+   itself is untouched: wheel, trackpad, touch, keyboard and the `overflow`
+   rules that make an area scrollable all behave exactly as before -- only the
+   bar is hidden.
+
+   Applied to the panel AND its descendants because the scroll container varies
+   by dialog: some scroll the panel, some an inner column, some a list inside
+   that column.
+   --------------------------------------------------------------------------- */
+[data-slot="dialog-content"],
+[data-slot="alert-dialog-content"],
+[data-slot="sheet-content"],
+[data-slot="drawer-content"],
+[data-slot="dialog-content"] *,
+[data-slot="alert-dialog-content"] *,
+[data-slot="sheet-content"] *,
+[data-slot="drawer-content"] * {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+[data-slot="dialog-content"]::-webkit-scrollbar,
+[data-slot="alert-dialog-content"]::-webkit-scrollbar,
+[data-slot="sheet-content"]::-webkit-scrollbar,
+[data-slot="drawer-content"]::-webkit-scrollbar,
+[data-slot="dialog-content"] *::-webkit-scrollbar,
+[data-slot="alert-dialog-content"] *::-webkit-scrollbar,
+[data-slot="sheet-content"] *::-webkit-scrollbar,
+[data-slot="drawer-content"] *::-webkit-scrollbar {
+    display: none;
+    -webkit-appearance: none;
+}

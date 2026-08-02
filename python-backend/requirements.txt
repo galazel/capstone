@@ -32,7 +32,12 @@ matplotlib>=3.8,<4.0
 joblib>=1.4,<2.0
 
 langgraph
-langchain-groq
+# Every agent reaches its model through OpenRouter, whose API is the OpenAI
+# chat-completions API -- so one client class covers Claude, Gemini, GPT and
+# Llama, and picking a different model per task (see app/ai/tasks.py) is a
+# settings change rather than a new dependency. This replaced langchain-groq,
+# which could only ever reach Groq's own catalogue.
+langchain-openai>=1.0,<2.0
 # langchain-core MUST stay on 1.x. It was previously unpinned and resolved to
 # 0.3.86 while langgraph-sdk/langchain were on 1.x, which broke every import
 # of app.main with:

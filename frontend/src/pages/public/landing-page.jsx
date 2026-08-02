@@ -950,25 +950,34 @@ function HeroSection() {
       />
 
       <div className="relative mx-auto w-full max-w-[1280px] px-5 py-16 lg:px-8 lg:py-20">
-        <div className="max-w-3xl">
+        {/* Centred: the hero is the one block on the site with nothing beside
+            it, and the workspace demo below it is centred too — left-aligning
+            the copy over a centred visual pulled the whole fold off axis.
+            `!text-center` because `.rb-display` sets left alignment as a system
+            rule, and an unlayered rule outranks a Tailwind utility. */}
+        {/* 4xl, not 3xl: at the display-xl size "study what you don't know."
+            is ~830px, so a 768px block broke it after "don't" and the heading
+            came out three lines. The width is set by the heading; the paragraph
+            keeps its own narrower measure. */}
+        <div className="mx-auto max-w-4xl text-center">
           <Chip tone="feather">
             <Sparkles className="size-4" />
             topcit · it passport · fe exam
           </Chip>
 
-          <h1 className="rb-display rb-display-xl mt-6">
+          <h1 className="rb-display rb-display-xl mt-6 !text-center">
             study what you don't know.
             <br />
             skip what you do.
           </h1>
 
-          <p className="rb-body-lg mt-6 max-w-xl">
+          <p className="rb-body-lg mx-auto mt-6 max-w-xl">
             Rebyu measures your mastery of every topic as you answer, then puts the weakest ones in
             front of you first. No more re-reading what you already know, and no more finding out
             what you missed on exam day.
           </p>
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
             <TactileButton asChild size="lg">
               <Link to="/register">
                 start learning
@@ -980,7 +989,7 @@ function HeroSection() {
             </TactileButton>
           </div>
 
-          <p className="mt-6 flex items-center gap-2 text-sm font-semibold text-rb-wolf">
+          <p className="mt-6 flex items-center justify-center gap-2 text-sm font-semibold text-rb-wolf">
             <span className="size-2 rounded-full bg-rb-mask" aria-hidden="true" />
             Every lesson is free. Upgrade only for mock exams and analytics.
           </p>

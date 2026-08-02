@@ -5,8 +5,7 @@ import { Award, ExternalLink } from "@/components/icons"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
-import { getFileViewUrl } from "@/services/fileService.js"
-import { getCertificationFallbackImage, getCuratedCertificationCover } from "@/lib/certification-cover-images.js"
+import CertificationCoverPanel from "@/components/certifications/certification-cover.jsx"
 
 const INITIAL_VISIBLE_COUNT = 8
 const LOAD_MORE_COUNT = 8
@@ -39,73 +38,22 @@ function getCertificationDescription(certification) {
   )
 }
 
-function getCertificationImageUrl(certification) {
-  const curatedCover = getCuratedCertificationCover(getCertificationTitle(certification))
-  if (curatedCover) return curatedCover
-
-  const fallbackImage = getCertificationFallbackImage(getCertificationTitle(certification))
-  if (!certification?.imageKey) {
-    return fallbackImage
-  }
-
-  try {
-    return getFileViewUrl(certification.imageKey) || fallbackImage
-  } catch {
-    return fallbackImage
-  }
-}
-
-function CertificationImageFallback() {
-  return (
-      <div className="absolute inset-0 overflow-hidden bg-zinc-900">
-        <div className="absolute left-8 top-9 h-px w-[62%] rotate-[8deg] bg-white/25" />
-        <div className="absolute left-14 top-[34%] h-px w-[45%] -rotate-[9deg] bg-white/15" />
-        <div className="absolute left-6 top-[54%] h-px w-[72%] rotate-[5deg] bg-white/10" />
-        <div className="absolute left-16 top-[72%] h-px w-[52%] -rotate-[7deg] bg-white/20" />
-        <div className="absolute left-10 top-[86%] h-px w-[65%] rotate-[4deg] bg-white/10" />
-
-        <div className="absolute inset-0 bg-gradient-to-br from-white/[0.06] via-transparent to-black/60" />
-      </div>
-  )
-}
-
 function CertificationCover({ certification, onOpen }) {
-  const [imageFailed, setImageFailed] = useState(false)
-
-  const imageUrl = getCertificationImageUrl(certification)
-  const canShowImage = Boolean(imageUrl) && !imageFailed
-
   return (
       <button
           type="button"
           onClick={onOpen}
           aria-label={`View ${getCertificationTitle(certification)}`}
-          className="group relative block h-48 w-full shrink-0 overflow-hidden border-b border-border bg-zinc-900 text-left sm:h-52"
+          className="group relative block h-48 w-full shrink-0 overflow-hidden border-b border-border text-left sm:h-52"
       >
-        {canShowImage ? (
-            <>
-              <img
-                  src={imageUrl}
-                  alt={getCertificationTitle(certification)}
-                  onError={() => setImageFailed(true)}
-                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-              />
+        <CertificationCoverPanel
+            title={getCertificationTitle(certification)}
+            className="h-full w-full transition-transform duration-300 group-hover:scale-105"
+        />
 
-              <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-transparent" />
-            </>
-        ) : (
-            <CertificationImageFallback />
-        )}
-
-        <span className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition group-hover:bg-white group-hover:text-zinc-900">
-        <ExternalLink className="h-4 w-4" />
-      </span>
-
-        <div className="absolute bottom-0 left-0 right-0 p-4">
-          <p className="text-sm font-medium text-white/90">
-            Certification Review
-          </p>
-        </div>
+        <span className="absolute right-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition group-hover:bg-white group-hover:text-rb-feather">
+          <ExternalLink className="h-4 w-4" />
+        </span>
       </button>
   )
 }

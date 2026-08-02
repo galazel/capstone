@@ -3,6 +3,7 @@ from functools import lru_cache
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 
+from app.ai import tasks
 from app.schemas.certification.question_schema import QuestionBatch
 from app.utils.helpers import get_llm
 
@@ -68,11 +69,17 @@ Return only the structured QuestionBatch.
 
 @lru_cache(maxsize=None)
 def get_question_generation_agent(model: str | None = None):
-    """`model` overrides the configured generation model. Cached per model name
+    """`model` overrides the configured question model. Cached per model name
     so `app.ai.router` can swap to a fallback without rebuilding on every call;
-    the key space is the length of the configured chain, so it stays bounded."""
+    the key space is the length of the configured chain, so it stays bounded.
+
+    This is the highest-volume agent in the service -- one certification runs it
+    dozens of times -- which is why `app.ai.tasks` gives `question` a cheap fast
+    model rather than the lesson agent's, and the highest temperature of the six
+    so consecutive batches stop converging on the same stems.
+    """
     return create_agent(
-        model=get_llm("generation", model),
+        model=get_llm(tasks.QUESTION, model),
         tools=[],
         response_format=ToolStrategy(QuestionBatch),
         system_prompt=SYSTEM_PROMPT,

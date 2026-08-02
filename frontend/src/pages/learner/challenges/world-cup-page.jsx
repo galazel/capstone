@@ -289,9 +289,10 @@ export default function WorldCupPage() {
 
   return (
     <div className="rebyu-ds rb-arena flex h-dvh flex-col overflow-hidden">
-      {/* Same header as every other arena run: back key, the run's name in
-          lowercase display type, run state on the right. */}
-      <header className="flex h-20 shrink-0 items-center gap-4 border-b-2 border-rb-swan bg-rb-snow px-5 lg:px-8">
+      {/* No header bar, same as the CodeStrike run: a ruled white strip framed
+          the tournament as a panel inside an app rather than the thing you came
+          here for. Back, the run's name, and its state sit on the page itself. */}
+      <div className="flex shrink-0 items-center gap-4 px-5 pt-6 lg:px-8">
         <BackButton asChild label="Back to arenas">
           <Link to="/learner/challenges" />
         </BackButton>
@@ -304,10 +305,13 @@ export default function WorldCupPage() {
 
         <div className="ml-auto flex items-center gap-3">
           {phase === "lobby" || phase === "found" ? (
-            <span className="flex items-center gap-1.5 rounded-rb-pill border-2 border-rb-swan bg-rb-polar px-3 py-1.5 text-sm font-bold tabular-nums text-rb-eel">
-              <Clock className="size-4" aria-hidden="true" />
-              {clock}
-            </span>
+            <>
+              <span className="rb-numeric text-sm text-rb-wolf">{filled} / 8 ready</span>
+              <span className="flex items-center gap-1.5 rounded-rb-pill border-2 border-rb-swan bg-rb-polar px-3 py-1.5 text-sm font-bold tabular-nums text-rb-eel">
+                <Clock className="size-4" aria-hidden="true" />
+                {clock}
+              </span>
+            </>
           ) : null}
           {track ? (
             <span
@@ -316,8 +320,28 @@ export default function WorldCupPage() {
               {track.name}
             </span>
           ) : null}
+          {phase === "bracket" ? (
+            <TactileButton size="sm" variant="ghost" onClick={() => setPhase("stats")}>
+              view results
+            </TactileButton>
+          ) : null}
+          {phase === "stats" ? (
+            <TactileButton
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setPhase("track")
+                setTrack(null)
+                setFilled(1)
+                setCountdown(3)
+                setLobbyClock(40)
+              }}
+            >
+              play again
+            </TactileButton>
+          ) : null}
         </div>
-      </header>
+      </div>
 
       {/* The body owns the rest of the viewport. Each phase fills it rather
           than sitting in a centred column — a tournament with dead space above
@@ -325,19 +349,21 @@ export default function WorldCupPage() {
       <main className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden">
         {/* ---------------------------------------------------- track select */}
         {phase === "track" ? (
-          <div className="flex min-h-0 flex-1 flex-col px-5 pt-8 lg:px-8">
-            <div>
-              <span className="rb-eyebrow">Step 1 of 3</span>
-              <h1 className="rb-display rb-display-lg mt-2">choose your track.</h1>
-              <p className="rb-body mt-2 max-w-xl">
-                Matchmaking is locked to the track you pick, so every opponent is studying the
-                same syllabus as you.
-              </p>
-            </div>
-
-            <div className="rb-blades mt-6 min-h-[560px] flex-1 pb-6 lg:min-h-0">
-              {TRACKS.map((item) => {
+          <div className="flex min-h-0 flex-1 flex-col px-5 pt-6 lg:px-8">
+            <div className="rb-blades min-h-[560px] flex-1 pb-6 lg:min-h-0">
+              {TRACKS.map((item, index) => {
                 const tone = BLADE_TONE[item.tone]
+                // The blade strip overhangs both edges of the viewport so the
+                // skewed ends are cropped rather than leaving triangular gaps.
+                // The copy has to be pushed back inside by that overhang plus
+                // the skew's own lean, or the first and last blade's text runs
+                // off the screen.
+                const edge =
+                  index === 0
+                    ? "lg:pl-[6.5rem]"
+                    : index === TRACKS.length - 1
+                      ? "lg:pr-[6.5rem]"
+                      : ""
                 return (
                   <button
                     key={item.id}
@@ -356,7 +382,9 @@ export default function WorldCupPage() {
                       className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/65 to-transparent"
                     />
 
-                    <span className="rb-blade-inner flex flex-col justify-end p-6 text-left lg:p-8">
+                    <span
+                      className={`rb-blade-inner flex flex-col justify-end p-6 text-left lg:p-8 ${edge}`}
+                    >
                       <span className="block font-rb-display text-3xl font-extrabold lowercase leading-none tracking-tight text-white drop-shadow lg:text-5xl">
                         {item.name}
                       </span>
@@ -385,27 +413,11 @@ export default function WorldCupPage() {
 
         {/* ----------------------------------------------------------- lobby */}
         {phase === "lobby" || phase === "found" ? (
-          <div className="flex min-h-0 flex-1 flex-col px-5 pt-8 lg:px-8">
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <span className="rb-eyebrow">Step 2 of 3 · {track?.name}</span>
-                <h1 className="rb-display rb-display-lg mt-2">finding challengers.</h1>
-              </div>
-              <div className="w-full max-w-xs">
-                <div className="flex items-baseline justify-between">
-                  <span className="rb-eyebrow">Lobby</span>
-                  <span className="rb-numeric text-base text-rb-wolf">{filled} / 8 ready</span>
-                </div>
-                <ProgressBar
-                  value={(filled / 8) * 100}
-                  label="Challengers ready"
-                  className="mt-2 !h-4"
-                />
-              </div>
-            </div>
+          <div className="flex min-h-0 flex-1 flex-col px-5 pt-6 lg:px-8">
+            <ProgressBar value={(filled / 8) * 100} label="Challengers ready" className="!h-4" />
 
             {/* the line-up — eight standees stretched across the whole stage */}
-            <div className="mt-6 grid min-h-0 flex-1 auto-rows-[minmax(230px,1fr)] grid-cols-2 items-stretch gap-3 pb-0 sm:grid-cols-4 lg:auto-rows-fr lg:grid-cols-8">
+            <div className="mt-5 grid min-h-0 flex-1 auto-rows-[minmax(230px,1fr)] grid-cols-2 items-stretch gap-3 pb-0 sm:grid-cols-4 lg:auto-rows-fr lg:grid-cols-8">
               {slots.map((player, index) => (
                 <Standee key={index} player={player} index={index} />
               ))}
@@ -426,17 +438,7 @@ export default function WorldCupPage() {
 
         {/* --------------------------------------------------------- bracket */}
         {phase === "bracket" ? (
-          <div className="flex min-h-0 flex-1 flex-col px-5 pt-8 lg:px-8">
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <span className="rb-eyebrow">Step 3 of 3 · {track?.name}</span>
-                <h1 className="rb-display rb-display-lg mt-2">the bracket.</h1>
-              </div>
-              <TactileButton size="sm" variant="ghost" onClick={() => setPhase("stats")}>
-                view results
-              </TactileButton>
-            </div>
-
+          <div className="flex min-h-0 flex-1 flex-col px-5 lg:px-8">
             {/* Centred in whatever is left of the viewport and scaled up on
                 large screens: the bracket is the screen on this phase. */}
             <div className="grid min-h-0 flex-1 place-items-center overflow-auto py-6">
@@ -449,28 +451,8 @@ export default function WorldCupPage() {
 
         {/* ----------------------------------------------------------- stats */}
         {phase === "stats" ? (
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pt-8 pb-8 lg:px-8">
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <span className="rb-eyebrow">{track?.name} championship</span>
-                <h1 className="rb-display rb-display-lg mt-2">tournament results.</h1>
-              </div>
-              <TactileButton
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setPhase("track")
-                  setTrack(null)
-                  setFilled(1)
-                  setCountdown(3)
-                  setLobbyClock(40)
-                }}
-              >
-                play again
-              </TactileButton>
-            </div>
-
-            <div className="mt-6 grid gap-5 lg:grid-cols-3">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pt-6 pb-8 lg:px-8">
+            <div className="grid gap-5 lg:grid-cols-3">
               {AWARDS.map((award) => (
                 <div key={award.key} className="rb-card rb-card-raised">
                   <span className={`grid size-14 place-items-center rounded-2xl ${award.tone}`}>

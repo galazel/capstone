@@ -111,7 +111,7 @@ async def test_a_persistently_unstructured_agent_still_fails(monkeypatch):
     assert agent.calls == 3, "it should exhaust the attempts rather than give up at one"
 
 
-async def _immediate_retry_fallback(build_agent, payload, *, agent_type="generation", config=None):
+async def _immediate_retry_fallback(build_agent, payload, *, task="question", config=None):
     """`ainvoke_with_fallback` with the real retry policy but no sleeping and
     no model chain -- the model chain needs live settings, the retry behaviour
     is what these tests are about."""

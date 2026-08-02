@@ -8,6 +8,7 @@ from app.schemas.certification.curriculum_schema import Curriculum
 from app.schemas.certification.lesson_audit import LessonAuditResult
 from app.schemas.certification.lesson_schema import GeneratedLesson
 from .state import CertificationState
+from app.ai import tasks
 from app.ai.invocation import (
     invoke_agent,
     invoke_json_agent,
@@ -120,7 +121,7 @@ async def _invoke_auditor(state: CertificationState, combined_samples: str):
         build_document_audit_prompt(
             state["certification_name"], state["certification_description"], combined_samples
         ),
-        agent_type="classification",
+        task=tasks.DOCUMENT_AUDIT,
     )
 
 
@@ -168,7 +169,7 @@ def route_after_validation(state: CertificationState) -> str:
 async def _invoke_curriculum_agent(state: CertificationState, context: str) -> Curriculum:
     # `invoke_json_agent`, not `invoke_agent`: the planner answers in plain
     # JSON so a sample that stops before its closing brackets is repaired here
-    # rather than rejected by Groq as `tool_use_failed`. See
+    # rather than rejected upstream as `tool_use_failed`. See
     # `app.agents.certification.curriculum_agent`.
     return await invoke_json_agent(
         get_curriculum_agent,
@@ -176,6 +177,7 @@ async def _invoke_curriculum_agent(state: CertificationState, context: str) -> C
             state["certification_name"], state["certification_description"], context
         ),
         Curriculum,
+        task=tasks.CURRICULUM,
     )
 
 
@@ -246,6 +248,7 @@ async def _invoke_lesson_agent(state: CertificationState) -> GeneratedLesson:
         build_lesson_prompt(
             state["certification_name"], state["major"], state["middle"], state["lesson"]
         ),
+        task=tasks.LESSON,
     )
 
 
@@ -255,7 +258,7 @@ async def _invoke_lesson_auditor(state: CertificationState) -> LessonAuditResult
         build_lesson_audit_prompt(
             state["certification_name"], state["curriculum"], state["lessons"]
         ),
-        agent_type="classification",
+        task=tasks.LESSON_AUDIT,
     )
 
 

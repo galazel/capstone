@@ -165,23 +165,26 @@ def json_output(build_agent, schema: type):
     return build
 
 
-async def invoke_agent(build_agent, prompt: str, *, agent_type: str = "generation"):
+async def invoke_agent(build_agent, prompt: str, *, task: str = "question"):
     """Invokes any create_agent() factory with a single user message and
     returns its structured response, retrying transient provider failures and
-    falling back to another model when one runs out of daily budget.
+    falling back to another model when one becomes unusable.
 
-    `agent_type` selects which model chain to walk, and must match the type the
-    factory passes to `get_llm` -- "classification" for the audit agents.
+    `task` selects which model chain to walk, and MUST match the task the
+    factory passes to `get_llm`. A mismatch is silent and expensive: the agent
+    would be built from the lesson model and, on the first rate limit, rebuilt
+    from the *document auditor's* fallback list -- so the rest of the run would
+    write lessons on a model chosen to answer yes/no questions.
     """
     return await ainvoke_with_fallback(
         structured(build_agent),
         {"messages": [HumanMessage(content=prompt)]},
-        agent_type=agent_type,
+        task=task,
     )
 
 
 async def invoke_json_agent(
-    build_agent, prompt: str, schema: type, *, agent_type: str = "generation"
+    build_agent, prompt: str, schema: type, *, task: str = "question"
 ):
     """Invokes an agent that answers in plain JSON and returns it as `schema`.
 
@@ -193,7 +196,7 @@ async def invoke_json_agent(
     return await ainvoke_with_fallback(
         json_output(build_agent, schema),
         {"messages": [HumanMessage(content=prompt)]},
-        agent_type=agent_type,
+        task=task,
     )
 
 
@@ -203,7 +206,7 @@ async def invoke_question_agent(
     """Generates a question batch, splitting a large ask across several calls.
 
     A whole exam cannot be written in one response. The model's completion
-    budget is `ai_max_tokens` (6000), and a single MCQ now costs roughly 250
+    budget is `ai_question_max_tokens`, and a single MCQ costs roughly 250
     tokens because it carries an explanation for every choice -- so a 50-item
     mock exam wants ~12k tokens and gets truncated at the ceiling. A truncated
     tool call is malformed, which fails, which retries with backoff, which is

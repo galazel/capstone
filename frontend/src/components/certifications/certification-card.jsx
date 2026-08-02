@@ -22,8 +22,7 @@ import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { generationStatusOf } from "@/hooks/use-active-generations"
-import { getFileViewUrl } from "@/services/fileService.js"
-import { getCertificationFallbackImage, getCuratedCertificationCover } from "@/lib/certification-cover-images.js"
+import CertificationCover from "@/components/certifications/certification-cover.jsx"
 import {
   deleteCertification,
   publishCertification,
@@ -165,11 +164,6 @@ function CertificationCard({ item, certification, generationRun = null }) {
       String(certificationStatus ?? "").toUpperCase() === "PUBLISHED" ||
       String(certificationStatus ?? "").toUpperCase() === "ACTIVE"
 
-  const imageKey = currentCertification?.imageKey ?? item?.imageKey
-  const fallbackImage = getCertificationFallbackImage(certificationTitle)
-  const curatedCover = getCuratedCertificationCover(certificationTitle)
-  const imageUrl = curatedCover ?? (imageKey ? getFileViewUrl(imageKey) : fallbackImage)
-
   const { mutate: removeCertification, isPending: isDeleting } = useMutation({
     mutationFn: async () => {
       if (!certificationId) {
@@ -304,7 +298,6 @@ function CertificationCard({ item, certification, generationRun = null }) {
     navigate(`certification/${certificationId}`, {
       state: {
         certification: currentCertification,
-        imageUrl,
       },
     })
   }
@@ -379,27 +372,17 @@ function CertificationCard({ item, certification, generationRun = null }) {
                     ? "cursor-default border-dashed"
                     : "cursor-pointer hover:-translate-y-0.5 hover:border-primary/45 hover:shadow-md",
                 // Drained of colour so an empty shell is distinguishable from a
-                // real certification at a glance across a grid. Still clickable
-                // -- the admin needs a way in to retry or delete it.
+                // real certification at a glance across a grid -- the grey
+                // cover IS the signal, alongside the stamp. Still clickable:
+                // the admin needs a way in to retry or delete it.
                 isEmpty && !isGenerating && "cursor-default bg-muted/40 grayscale hover:translate-y-0 hover:border-border hover:shadow-sm",
             )}
         >
-          <figure className="relative h-48 shrink-0 overflow-hidden border-b border-border bg-muted/40">
-            <img
-                src={imageUrl}
-                alt={certificationTitle}
-                className={cn(
-                    "h-full w-full object-cover transition-transform duration-300",
-                    isGenerating || isEmpty ? "opacity-50 grayscale" : "group-hover:scale-105",
-                )}
-                onError={(event) => {
-                  event.currentTarget.onerror = null
-                  event.currentTarget.src = fallbackImage
-                }}
-                loading="eager"
+          <figure className="relative h-48 shrink-0 overflow-hidden border-b border-border">
+            <CertificationCover
+                title={certificationTitle}
+                className="h-full w-full"
             />
-
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent" />
 
             {isEmpty && !isGenerating ? (
                 /* A wanted-poster stamp: rotated hard, outlined, and centred
@@ -412,7 +395,10 @@ function CertificationCard({ item, certification, generationRun = null }) {
                     aria-hidden="true"
                 >
                   <span
-                      className="rounded-md border-[3px] border-zinc-500/70 px-4 py-1.5 text-lg font-black uppercase tracking-[0.2em] text-zinc-600/80"
+                      // White, because the card is greyscaled around it: the
+                      // blue cover reads as mid-grey under that filter and dark
+                      // zinc type on it was close to unreadable.
+                      className="rounded-md border-[3px] border-white/80 px-4 py-1.5 text-lg font-black uppercase tracking-[0.2em] text-white"
                       style={{ transform: "rotate(160deg)" }}
                   >
                     Empty
