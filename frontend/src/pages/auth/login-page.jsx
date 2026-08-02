@@ -157,7 +157,7 @@ export default function LoginPage() {
 
   return (
       <AuthShell
-          split
+          side="left"
           title="Sign in"
           description="Enter your account details to continue your certification review."
           footer={

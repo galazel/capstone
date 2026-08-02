@@ -63,6 +63,9 @@ export default function RegisterPage() {
   return (
     <AuthShell
       compact
+      // Mirrored against sign-in: the form crosses the page when you switch
+      // between the two, so the change of screen is unmissable.
+      side="right"
       title="Create your account"
       description="Create a learner account and begin preparing with REBYU."
       footer={

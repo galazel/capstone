@@ -113,22 +113,45 @@
     }
 }
 
+/* The auth forms are shadcn primitives (Input, Button, Field) rendered inside
+   the REBYU scope. Rather than rewrite every field on five routes, the slots
+   are retargeted onto the same tokens `rb-input` and `rb-btn` use, so the
+   controls a learner meets before signing in are the controls they meet
+   after. Colour lives here; the sizing block further down owns geometry. */
 .public-auth-shell :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]) {
-    min-height: 2.75rem;
-    border-color: #cbd8e5;
-    border-radius: 0.625rem;
-    background: #ffffff;
+    border: 2px solid var(--color-rb-swan);
+    background: var(--color-rb-polar);
+    color: var(--color-rb-eel);
+    font-family: var(--font-rb-body);
 }
 
-.public-auth-shell :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]):focus-visible {
-    border-color: #5a9ddd;
-    box-shadow: 0 0 0 3px rgb(90 157 221 / 0.16);
+.public-auth-shell
+    :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"])::placeholder {
+    color: var(--color-rb-hare);
 }
 
-.public-auth-shell [data-slot="button"] {
-    min-height: 2.75rem;
-    border-radius: 0.625rem;
-    font-weight: 600;
+.public-auth-shell
+    :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]):focus-visible {
+    outline: none;
+    border-color: var(--color-rb-macaw);
+    background: var(--color-rb-snow);
+    box-shadow: none;
+}
+
+.public-auth-shell
+    :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"])[aria-invalid="true"] {
+    border-color: var(--color-rb-cardinal);
+    background: var(--color-rb-cardinal-wash);
+}
+
+.public-auth-shell [data-slot="label"],
+.public-auth-shell [data-slot="field-label"] {
+    color: var(--color-rb-eel);
+    font-weight: 700;
+}
+
+.public-auth-shell [data-slot="field-description"] {
+    color: var(--color-rb-wolf);
 }
 
 .netacad-portal,
@@ -1009,13 +1032,50 @@ body.netacad-overlay-theme {
 
 /* --- Auth shell ------------------------------------------------------------ */
 /* Overrides the compact defaults declared near the top of this file: auth is a
-   low-density, high-intent surface, so it takes the full tactile sizing. */
+   low-density, high-intent surface, so it takes the full tactile sizing —
+   the same 56px key height and tile radius the design system uses. */
 .public-auth-shell :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]) {
-    min-height: 3.25rem;
-    border-radius: 0.75rem;
+    min-height: 56px;
+    padding-inline: var(--rb-s3);
+    border-radius: var(--radius-rb-tile);
 }
+
+/* The submit key, given the lip and the travel. A flat rectangle beneath a
+   tactile form was the last thing on these screens still reading as a
+   different product. */
 .public-auth-shell [data-slot="button"] {
-    min-height: 3.25rem;
-    border-radius: 999px;
+    min-height: 56px;
+    padding-inline: var(--rb-s4);
+    border-radius: var(--radius-rb-pill);
+    background: var(--color-rb-feather);
+    color: var(--color-rb-snow);
+    box-shadow: 0 var(--rb-lip) 0 var(--color-rb-feather-lip);
+    font-family: var(--font-rb-display);
     font-weight: 800;
+    text-transform: lowercase;
+    transition:
+        transform 0.06s ease-out,
+        box-shadow 0.06s ease-out,
+        filter 0.15s ease-out;
+}
+.public-auth-shell [data-slot="button"]:hover:not(:disabled) {
+    filter: brightness(1.06);
+}
+.public-auth-shell [data-slot="button"]:active:not(:disabled) {
+    transform: translateY(var(--rb-lip));
+    box-shadow: 0 0 0 var(--color-rb-feather-lip);
+}
+.public-auth-shell [data-slot="button"]:disabled {
+    background: var(--color-rb-swan);
+    color: var(--color-rb-hare);
+    box-shadow: none;
+}
+
+/* Link-shaped buttons keep their own quiet treatment — the lip belongs to the
+   one action the page is asking for, not to "forgot password". */
+.public-auth-shell [data-slot="button"]:is([data-variant="link"], [data-variant="ghost"]) {
+    background: transparent;
+    box-shadow: none;
+    color: var(--color-rb-wolf);
+    text-transform: none;
 }
