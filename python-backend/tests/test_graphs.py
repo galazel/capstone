@@ -35,7 +35,9 @@ def _draft(text: str) -> QuestionDraft:
         question_type="MCQ",
         question=text,
         choices=["a", "b", "c", "d"],
+        choice_explanations=["Correct: this is the defined term.", "Wrong: confuses it with a sibling concept.", "Wrong: describes a later stage.", "Wrong: unrelated to this topic."],
         correct_choice_index=0,
+        explanation="Tests the defining property of the concept; the correct option states it.",
     )
 
 

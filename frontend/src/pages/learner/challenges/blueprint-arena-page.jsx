@@ -13,7 +13,7 @@ import {
   Shield,
   Trophy,
   X,
-} from "lucide-react"
+} from "@/components/icons"
 
 import { BackButton, ProgressBar, TactileButton } from "@/components/rebyu/rebyu-ui.jsx"
 import ProblemGrid, { buildProblems } from "@/components/challenges/problem-grid.jsx"

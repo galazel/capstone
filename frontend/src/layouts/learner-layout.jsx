@@ -7,7 +7,7 @@ import {
   NotebookPenIcon,
   SettingsIcon,
   UserIcon,
-} from "lucide-react"
+} from "@/components/icons"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { LearnerMobileNavigation, PortalTopNavigation } from "@/components/navigation/portal-navigation.jsx"
@@ -31,7 +31,7 @@ import { getLearnerInvitations } from "@/services/enterpriseService.js"
 import { usePortalTheme } from "@/hooks/use-portal-theme.js"
 import { useNotifications } from "@/hooks/use-notifications.js"
 import { PortalThemeToggle } from "@/components/portal-theme-toggle"
-import { CalendarDays } from "lucide-react"
+import { CalendarDays } from "@/components/icons"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useLearnerEntitlements } from "@/hooks/use-learner-entitlements.js"

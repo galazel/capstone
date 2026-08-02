@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ChevronDown, UserCheck } from "lucide-react"
+import { ChevronDown, UserCheck } from "@/components/icons"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {

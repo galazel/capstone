@@ -1,4 +1,4 @@
-import { Loader2Icon } from "lucide-react"
+import { Loader2Icon } from "@/components/icons"
 
 import { useLearnerEntitlements } from "@/hooks/use-learner-entitlements.js"
 import FeatureLockState from "./feature-lock-state.jsx"

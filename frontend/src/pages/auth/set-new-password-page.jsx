@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
-import { AlertCircle, KeyRound, Loader2 } from "lucide-react"
+import { AlertCircle, KeyRound, Loader2 } from "@/components/icons"
 import { toast } from "sonner"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"

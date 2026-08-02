@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useOutletContext } from "react-router-dom"
-import { BarChart3Icon } from "lucide-react"
+import { BarChart3Icon } from "@/components/icons"
 
 import {
   Card,

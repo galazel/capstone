@@ -1,4 +1,4 @@
-import { AlertCircle, Inbox, RefreshCw, UsersRoundIcon } from "lucide-react"
+import { AlertCircle, Inbox, RefreshCw, UsersRoundIcon } from "@/components/icons"
 import { NavLink, useLocation } from "react-router-dom"
 
 import { Badge } from "@/components/ui/badge"

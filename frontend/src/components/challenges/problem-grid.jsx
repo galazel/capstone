@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react"
-import { Check, Lock } from "lucide-react"
+import { Check, Lock } from "@/components/icons"
 
 import { ProgressBar } from "@/components/rebyu/rebyu-ui.jsx"
 

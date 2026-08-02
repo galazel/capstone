@@ -12,7 +12,7 @@ import {
   Trash2,
   Trophy,
   Users,
-} from "lucide-react"
+} from "@/components/icons"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"

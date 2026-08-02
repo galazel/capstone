@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { CalendarDays, ChevronLeft, ChevronRight, Sparkles } from "lucide-react"
+import { CalendarDays, ChevronLeft, ChevronRight, Sparkles } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"

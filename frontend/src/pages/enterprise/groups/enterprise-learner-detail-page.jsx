@@ -1,7 +1,7 @@
 import { useMemo } from "react"
 import { Link, useOutletContext, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 import {

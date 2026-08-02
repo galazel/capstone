@@ -10,7 +10,7 @@ import {
     MessageCircle,
     Target,
     Users,
-} from "lucide-react";
+} from "@/components/icons";
 
 import {
     ReadinessRadialChart,

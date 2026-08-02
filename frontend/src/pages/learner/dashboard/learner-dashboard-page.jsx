@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Zap, Coins, BookOpen, TrendingUp, CheckCircle2, Clock,
   ArrowRight, Trophy, Award, Flame
-} from 'lucide-react'
+} from "@/components/icons"
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { getLearnerPortalScoped } from '@/services/learnerService'

@@ -14,7 +14,7 @@ import {
   Trash2,
   UserPlus,
   Users,
-} from "lucide-react"
+} from "@/components/icons"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"

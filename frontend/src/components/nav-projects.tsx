@@ -1,6 +1,6 @@
 "use client"
 
-import type { LucideIcon } from "lucide-react"
+import type { LucideIcon } from "@/components/icons"
 import { NavLink, useLocation } from "react-router-dom"
 
 import {

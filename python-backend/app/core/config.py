@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -70,6 +70,63 @@ class Settings(BaseSettings):
     #: amount of waiting fixes a single request that exceeds the whole
     #: per-minute allowance.
     ai_classification_max_tokens: int = 1024
+
+    # --- Curriculum size ------------------------------------------------------
+    # What the planner is *asked* for. Lower all six to run the whole workflow
+    # end-to-end on a small AI budget: setting every min/max to 1 yields a
+    # one-major/one-middle/one-lesson certification that still exercises every
+    # node in the graph, review checkpoints and assessments included.
+    #
+    # The breadth floor that rejects an under-sized sample is derived from
+    # these rather than fixed (see `app.schemas.certification.curriculum_schema`),
+    # so a deliberately small configuration is not rejected as a bad sample.
+    curriculum_min_majors: int = 3
+    curriculum_max_majors: int = 6
+    curriculum_min_middles: int = 2
+    curriculum_max_middles: int = 4
+    curriculum_min_lessons: int = 3
+    curriculum_max_lessons: int = 5
+
+    #: Content blocks the lesson agent is asked to write. Deliberately
+    #: independent of curriculum size: a cheap test run wants *few* lessons,
+    #: not thin ones, so shrinking the syllabus must not shrink the lesson.
+    lesson_min_sections: int = 10
+
+    # --- Assessment size ------------------------------------------------------
+    # Questions per assessment. Generation and validation read the same value,
+    # so lowering one lowers the ask and the expected count together.
+    #
+    # These dominate a run's token cost: even a single-lesson curriculum still
+    # generates 10 + 20 + 50 + 40 + 60 + 100 = 280 questions at these defaults,
+    # which is far more than the syllabus itself. They are the first thing to
+    # lower when the budget, not the workflow, is the constraint.
+    lesson_quiz_questions: int = 10
+    middle_quiz_questions: int = 20
+    major_quiz_questions: int = 50
+    diagnostic_exam_questions: int = 40
+    #: Used only when the planner could not determine the real exam's item
+    #: count -- when it did, that number wins (capped by
+    #: `mock_exam_max_questions`). 50 MCQs across the whole syllabus is the
+    #: neutral fallback: long enough to cover a certification, short enough to
+    #: sit, and self-grading.
+    mock_exam_questions: int = 50
+    question_bank_questions: int = 100
+
+    #: Questions asked for in a single LLM call. Anything larger is split
+    #: across several calls and merged (`app.ai.invocation`). One MCQ now costs
+    #: roughly 250 completion tokens because it explains every choice, so ~15
+    #: fits comfortably inside `ai_max_tokens` (6000) with room for the model's
+    #: preamble; asking for 50 at once truncates the response, which fails,
+    #: retries with backoff, and eventually trips the Java gateway's timeout.
+    question_batch_size: int = 15
+
+    #: Ceiling on the mock exam regardless of what the planner researched.
+    #: The mock exam's item count normally comes from the real certification's
+    #: exam structure -- TOPCIT's 100 items, say -- because a mock exam that
+    #: ignores the paper it imitates is not a mock exam. That is the right
+    #: default and the wrong one on a small budget, so this clamps it without
+    #: discarding the rest of the researched structure. 0 means no ceiling.
+    mock_exam_max_questions: int = 0
 
     # --- Model fallback on quota exhaustion -----------------------------------
     # Groq scopes rate limits per model, so a model whose daily token budget is
@@ -191,6 +248,41 @@ class Settings(BaseSettings):
             f"amqp://{self.rabbitmq_username}:{self.rabbitmq_password}"
             f"@{self.rabbitmq_host}:{self.rabbitmq_port}/"
         )
+
+    @field_validator(
+        "curriculum_min_majors",
+        "curriculum_max_majors",
+        "curriculum_min_middles",
+        "curriculum_max_middles",
+        "curriculum_min_lessons",
+        "curriculum_max_lessons",
+        "lesson_min_sections",
+        "lesson_quiz_questions",
+        "middle_quiz_questions",
+        "major_quiz_questions",
+        "diagnostic_exam_questions",
+        "mock_exam_questions",
+        "question_bank_questions",
+    )
+    @classmethod
+    def at_least_one(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("curriculum and assessment sizes must be at least 1")
+        return value
+
+    @model_validator(mode="after")
+    def ranges_are_ordered(self) -> "Settings":
+        """A max below its min would produce a prompt asking for "3 to 1"
+        lessons -- nonsense the model resolves arbitrarily, and a silent one
+        since nothing else would ever notice."""
+        for low, high in (
+            ("curriculum_min_majors", "curriculum_max_majors"),
+            ("curriculum_min_middles", "curriculum_max_middles"),
+            ("curriculum_min_lessons", "curriculum_max_lessons"),
+        ):
+            if getattr(self, high) < getattr(self, low):
+                raise ValueError(f"{high} must be greater than or equal to {low}")
+        return self
 
     @field_validator("training_view_name")
     @classmethod

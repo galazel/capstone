@@ -254,7 +254,9 @@ def test_every_block_type_the_prompt_documents_is_one_the_renderer_handles():
     import re
     from pathlib import Path
 
-    from app.agents.certification.lesson_agent import SYSTEM_PROMPT
+    from app.agents.certification.lesson_agent import build_system_prompt
+
+    SYSTEM_PROMPT = build_system_prompt()
 
     renderer = Path(__file__).parents[2] / "frontend/src/components/certifications/lesson-content-renderer.jsx"
     if not renderer.exists():  # pragma: no cover - backend checked out alone

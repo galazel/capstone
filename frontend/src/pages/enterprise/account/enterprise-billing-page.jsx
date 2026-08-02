@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import { useOutletContext } from "react-router-dom"
-import { ReceiptTextIcon } from "lucide-react"
+import { ReceiptTextIcon } from "@/components/icons"
 
 import { Card, CardContent } from "@/components/ui/card"
 import {

@@ -40,16 +40,31 @@ def _persist_one_question(session: Session, question: dict[str, Any]) -> int:
 
     if question_type == "MCQ":
         correct_index = question.get("correct_choice_index")
-        for index, choice_text in enumerate(question.get("choices") or []):
+        per_choice = question.get("choice_explanations") or []
+        choices = question.get("choices") or []
+        aligned = len(per_choice) == len(choices)
+
+        for index, choice_text in enumerate(choices):
+            if aligned and (per_choice[index] or "").strip():
+                # Why *this* option is right or wrong -- the half a learner who
+                # picked a distractor actually needs. `QuestionDraft` requires
+                # these for every MCQ, so this is the normal path.
+                explanation = per_choice[index]
+            elif index == correct_index:
+                # Only reachable for a question that did not come from
+                # generation -- a reviewer's hand-written edit, or an artifact
+                # from a run predating per-choice explanations. Falls back to
+                # the item-level explanation on the correct choice.
+                explanation = question.get("explanation")
+            else:
+                explanation = None
+
             repo.insert_choice(
                 session,
                 question_id,
                 choice_text,
                 is_correct=(index == correct_index),
-                # The explanation belongs to the item, but Java stores it per
-                # choice; attaching it to the correct one keeps it visible
-                # without repeating it four times.
-                explanation=question.get("explanation") if index == correct_index else None,
+                explanation=explanation,
             )
 
     elif question_type in ("SHORT_ANSWER", "DESCRIPTIVE"):

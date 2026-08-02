@@ -537,13 +537,15 @@
 }
 
 /* ---------------------------------------------------------------------------
-   ARENA — the tournament broadcast surface.
+   ARENA — the tournament surface.
    ---------------------------------------------------------------------------
-   The only dark surface in the system, and the only place display type is set
-   UPPERCASE. That is deliberate: a tournament bracket is a broadcast graphic,
-   not a study screen, and the shift in voice is what separates "competing" from
-   "revising". Everything is still built from the same accent tokens — Fox for
-   outer seats, Macaw for inner, Cardinal for the final, Bee for the trophy.
+   Same voice as every other screen: lowercase display type, Snow cards on a
+   Polar canvas, tokens for every fill. The arena used to shout in uppercase
+   broadcast plates, which made a World Cup run look like it came from a
+   different product than the run you take in CodeStrike. What separates
+   "competing" from "revising" here is scale and colour — Fox for outer seats,
+   Macaw for inner, Cardinal for the final, Bee for the trophy — not a second
+   typographic voice.
    --------------------------------------------------------------------------- */
 .rb-arena {
     position: relative;
@@ -585,55 +587,42 @@
     color: var(--color-rb-wolf);
 }
 
-/* Angled broadcast banner — the chevron plate headings sit on. */
-.rb-arena .rb-plate {
-    display: inline-block;
-    padding: 0.6rem 3rem;
-    clip-path: polygon(2.2rem 0, 100% 0, calc(100% - 2.2rem) 100%, 0 100%);
-    font-family: var(--font-rb-display);
-    font-weight: 900;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: #ffffff;
-}
-
-/* Primary plate is Feather — the brand anchor, same as every other primary
-   surface in the product. Cardinal stays reserved for the final. */
-.rb-arena .rb-plate-macaw {
-    background: linear-gradient(135deg, var(--color-rb-feather), var(--color-rb-feather-lip));
-}
-.rb-arena .rb-plate-cardinal {
-    background: linear-gradient(135deg, var(--color-rb-cardinal), var(--color-rb-cardinal-lip));
-}
-
 /* Bracket seat. Outer rounds are Fox, inner are Macaw, the final is Cardinal —
-   so the round a seat belongs to is readable from colour alone at a glance. */
+   so the round a seat belongs to is readable from colour alone at a glance.
+   Sized off `--rb-seat-h` because the elbow connectors are drawn against the
+   same number in the page: change it here and the joins follow. */
+.rb-arena {
+    --rb-seat-h: 44px;
+}
+
 .rb-arena .rb-seat {
     display: flex;
     align-items: center;
-    min-height: 34px;
-    padding: 0 0.75rem;
-    border-radius: 6px;
+    min-height: var(--rb-seat-h);
+    padding: 0 0.9rem;
+    border-radius: var(--radius-rb-pill);
     font-family: var(--font-rb-body);
-    font-size: 0.75rem;
+    font-size: 0.875rem;
     font-weight: 800;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
     color: #ffffff;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    box-shadow: 0 3px 0 rgb(0 0 0 / 0.28);
 }
 
+/* Same solid lip every tactile surface in the system wears, rather than a
+   generic black drop shadow. */
 .rb-arena .rb-seat-outer {
-    background: linear-gradient(135deg, #ffb03a, #ff7a00);
+    background: var(--color-rb-fox);
+    box-shadow: 0 4px 0 var(--color-rb-fox-lip);
 }
 .rb-arena .rb-seat-inner {
-    background: linear-gradient(135deg, #4cc4ff, #1478d6);
+    background: var(--color-rb-macaw);
+    box-shadow: 0 4px 0 var(--color-rb-macaw-lip);
 }
 .rb-arena .rb-seat-final {
-    background: linear-gradient(135deg, #ff5f5f, #c62828);
+    background: var(--color-rb-cardinal);
+    box-shadow: 0 4px 0 var(--color-rb-cardinal-lip);
 }
 /* Eliminated: recedes to Polar rather than vanishing, so the bracket still
    reads as a completed path. */
@@ -642,6 +631,8 @@
     border: 2px solid var(--color-rb-swan);
     color: var(--color-rb-hare);
     box-shadow: none;
+    text-decoration: line-through;
+    text-decoration-color: var(--color-rb-hare);
 }
 
 /* Trophy halo behind the centre stage. */
@@ -720,22 +711,23 @@
     }
 }
 
-/* Ghost wordmark rotated up the blade — the "vertical" read. */
+/* Ghost wordmark rotated up the blade — the "vertical" read. Lowercase and
+   upright like every other display heading in the system; the italic uppercase
+   version was the last piece of broadcast styling left on the page. */
 .rebyu-ds .rb-blade-ghost {
     position: absolute;
-    bottom: 8rem;
+    bottom: 9rem;
     left: -1rem;
     transform: rotate(-90deg);
     transform-origin: left bottom;
     font-family: var(--font-rb-display);
-    font-weight: 900;
-    font-style: italic;
-    font-size: 4.5rem;
+    font-weight: 800;
+    font-size: clamp(4.5rem, 7vw, 7rem);
     line-height: 1;
     letter-spacing: -0.02em;
-    text-transform: uppercase;
+    text-transform: lowercase;
     white-space: nowrap;
-    color: rgb(255 255 255 / 0.16);
+    color: rgb(255 255 255 / 0.18);
     pointer-events: none;
     user-select: none;
 }
@@ -785,8 +777,11 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 1rem 0.75rem 1.75rem;
-    border-radius: 16px 16px 0 0;
+    /* Grows with the space the lobby gives it — eight of these are the whole
+       screen on a World Cup run, not a strip of cards inside one. */
+    height: 100%;
+    padding: clamp(1rem, 2.2vh, 1.75rem) 0.75rem clamp(1.75rem, 3.5vh, 2.75rem);
+    border-radius: var(--radius-rb-tile) var(--radius-rb-tile) 0 0;
     background: var(--color-rb-snow);
     border: 2px solid var(--color-rb-swan);
     border-bottom: 0;
@@ -805,18 +800,20 @@
     border-color: var(--color-rb-feather);
 }
 
-/* Tier frame around the avatar. */
+/* Tier frame around the avatar. Scales with the viewport for the same reason
+   the standee does — on a full-screen lobby a fixed 64px puck reads as a
+   thumbnail rather than a player. */
 .rb-arena .rb-frame {
     display: grid;
     place-items: center;
-    width: 64px;
-    height: 64px;
+    width: clamp(64px, 8vh, 104px);
+    height: clamp(64px, 8vh, 104px);
     border-radius: 999px;
-    border: 3px solid;
+    border: 4px solid;
     background: var(--color-rb-polar);
     font-family: var(--font-rb-display);
-    font-weight: 900;
-    font-size: 1.125rem;
+    font-weight: 800;
+    font-size: clamp(1.125rem, 2.2vh, 1.75rem);
     text-transform: lowercase;
     color: var(--color-rb-eel);
 }

@@ -1,5 +1,5 @@
 import { Outlet, useNavigate } from "react-router-dom"
-import { LogOutIcon, SettingsIcon, UserIcon } from "lucide-react"
+import { LogOutIcon, SettingsIcon, UserIcon } from "@/components/icons"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {

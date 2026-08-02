@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { ImagePlus, X } from "lucide-react"
+import { ImagePlus, X } from "@/components/icons"
 
 function FileUploadComponent({
                                value,

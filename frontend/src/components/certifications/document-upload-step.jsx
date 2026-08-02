@@ -1,5 +1,5 @@
 import { useEffect } from "react"
-import { AlertCircleIcon, FileSpreadsheet, FileText, Sparkles, UploadIcon, XIcon } from "lucide-react"
+import { AlertCircleIcon, FileSpreadsheet, FileText, Sparkles, UploadIcon, XIcon } from "@/components/icons"
 
 import { formatBytes, useFileUpload } from "@/hooks/use-file-upload"
 import { Button } from "@/components/ui/button"

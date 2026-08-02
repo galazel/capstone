@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { AlertTriangle, Ban, ChevronDown, Loader2 } from "lucide-react"
+import { AlertTriangle, Ban, ChevronDown, Loader2 } from "@/components/icons"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -65,8 +65,18 @@ export function InlineGenerationMonitor({ certificationId, onClose }) {
   }, [runId])
 
   const stream = useWorkflowStream(runId)
-  const { run, events, tasks, attempts, currentTask, connected, isTerminal, isWaitingForReview } =
-    stream
+  const {
+    run,
+    attemptEvents,
+    tasks,
+    attempts,
+    currentTask,
+    connected,
+    isTerminal,
+    isWaitingForReview,
+    isStalled,
+    silentFor,
+  } = stream
 
   const review = useQuery({
     queryKey: ["workflow-review", runId, isWaitingForReview, run?.last_seq],
@@ -153,25 +163,23 @@ export function InlineGenerationMonitor({ certificationId, onClose }) {
         {attempts > 1 ? <Badge variant="outline">Attempt {attempts}</Badge> : null}
 
         <span className="ml-auto flex items-center gap-2">
-          {/* Leaving and stopping were the same button before: the only control
-              on a live run was labelled "Cancel", so closing the workspace meant
-              clicking the thing that kills the run. They are now two buttons
-              that say what they do. */}
+          {/* Only one control here, and it is the one that does something
+              irreversible. Closing is the dialog's own X: a second "Close"
+              button beside "Stop generating" was two ways out sitting next to
+              each other, with the harmless one styled as the primary action --
+              which is a good way to get the destructive one clicked by
+              mistake. Leaving and stopping stay distinct; leaving just is not
+              this component's job. */}
           {!isTerminal ? (
-            <>
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={cancel.isPending}
-                onClick={() => cancel.mutate()}
-              >
-                <Ban className="mr-2 size-4" />
-                Stop generating
-              </Button>
-              <Button size="sm" onClick={onClose}>
-                Close
-              </Button>
-            </>
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={cancel.isPending}
+              onClick={() => cancel.mutate()}
+            >
+              <Ban className="mr-2 size-4" />
+              Stop generating
+            </Button>
           ) : (
             <Button size="sm" onClick={onClose}>
               Done
@@ -180,10 +188,22 @@ export function InlineGenerationMonitor({ certificationId, onClose }) {
         </span>
       </header>
 
-      {!isTerminal ? (
+      {/* Stalled takes precedence over the reassurance below: "closing this
+          leaves it running" is exactly the wrong thing to say about a run
+          nothing is executing. */}
+      {isStalled ? (
+        <p className="flex items-start gap-2 border-b border-border bg-amber-50 px-4 py-2 text-xs leading-relaxed text-amber-900 sm:px-6 dark:bg-amber-950/40 dark:text-amber-200">
+          <AlertTriangle aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+          <span>
+            Nothing has happened for {minutesSince(silentFor)} minutes. The generation service
+            most likely restarted while this was building. It is picked back up automatically
+            from its last checkpoint — nothing generated so far is lost.
+          </span>
+        </p>
+      ) : !isTerminal ? (
         <p className="border-b border-border bg-muted/30 px-4 py-2 text-xs leading-relaxed text-muted-foreground sm:px-6">
-          Generation runs on the server — closing this leaves it running. The certification stays
-          marked as generating until it finishes.
+          Generation runs on the server — closing this, signing out, or closing the browser all
+          leave it running. The certification stays marked as generating until it finishes.
         </p>
       ) : null}
 
@@ -222,7 +242,12 @@ export function InlineGenerationMonitor({ certificationId, onClose }) {
         </GenerationTranscript>
       </div>
 
-      <RawEventLog events={events} />
+      {/* The attempt now running, not the whole cumulative log. A run's
+          events accumulate across every restart of the same thread, so
+          reopening this modal showed a wall of steps from earlier attempts
+          with the live one buried at the bottom -- which reads as "it is
+          showing the previous certification". */}
+      <RawEventLog events={attemptEvents} />
 
       <GenerationStatusBar
         status={run?.status === "RUNNING" ? "RUNNING" : (run?.status ?? "PENDING")}
@@ -239,6 +264,10 @@ export function InlineGenerationMonitor({ certificationId, onClose }) {
       />
     </div>
   )
+}
+
+function minutesSince(milliseconds) {
+  return Math.max(1, Math.round((milliseconds ?? 0) / 60_000))
 }
 
 /** The full event log, closed by default — a debugging aid, not the main view. */

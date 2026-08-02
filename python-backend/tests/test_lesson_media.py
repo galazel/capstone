@@ -142,7 +142,9 @@ def test_malformed_blocks_are_left_for_the_schema_to_judge(searches):
 def test_the_prompt_never_asks_the_model_for_a_media_url():
     """The regression guard: reintroducing `imageKey` to the block catalogue
     would invite the inlined tool call straight back."""
-    from app.agents.certification.lesson_agent import SYSTEM_PROMPT
+    from app.agents.certification.lesson_agent import build_system_prompt
+
+    SYSTEM_PROMPT = build_system_prompt()
 
     catalogue = SYSTEM_PROMPT[SYSTEM_PROMPT.index("CONTENT BLOCKS"):]
     assert "imageKey" not in catalogue

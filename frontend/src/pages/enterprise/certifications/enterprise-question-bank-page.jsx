@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useOutletContext, useSearchParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { FileQuestionIcon, Loader2, Plus, Trash2 } from "lucide-react"
+import { FileQuestionIcon, Loader2, Plus, Trash2 } from "@/components/icons"
 import { toast } from "sonner"
 
 import {
@@ -330,43 +330,55 @@ function QuestionFormDialog({ open, onOpenChange, lessonId, editingQuestion, gro
   )
 }
 
-export default function EnterpriseQuestionBankPage() {
-  const { enterprise, enterpriseLoading, enterpriseError, refetchEnterprise } =
-    useOutletContext()
+/**
+ * The question bank itself, without the page chrome.
+ *
+ * `certificationId` locks the panel to one certification and hides the
+ * certification picker -- that is how the certification detail page embeds it,
+ * so authors never have to re-select the certification they are already in.
+ * Left null (the standalone page) the picker is shown as before.
+ */
+export function EnterpriseQuestionBankPanel({
+  certificationId = null,
+  initialCertificationId = "",
+  initialLessonId = "",
+  autoOpenAdd = false,
+  groupId,
+}) {
+  const { enterprise } = useOutletContext()
   const { user } = useAuth()
   const enterpriseId = enterprise?.enterpriseId
   const data = useEnterpriseData(enterpriseId)
-  const [searchParams] = useSearchParams()
-  const preselectedCertId = searchParams.get("certificationId")
-  const preselectedLessonId = searchParams.get("lessonId")
-  const shouldAutoOpenForm = searchParams.get("add") === "1"
-  // Opened from a group workspace: questions authored here belong to that
-  // group, and the list shows the group's own questions alongside official ones.
-  const groupId = searchParams.get("groupId") ? Number(searchParams.get("groupId")) : undefined
 
-  const [selectedCertId, setSelectedCertId] = useState(preselectedCertId ?? "")
-  const [selectedLessonId, setSelectedLessonId] = useState(preselectedLessonId ?? "")
+  const lockedCertId = certificationId ? String(certificationId) : ""
+  const isLockedToCertification = Boolean(lockedCertId)
+  const startingCertId =
+    lockedCertId || (initialCertificationId ? String(initialCertificationId) : "")
+
+  const [selectedCertId, setSelectedCertId] = useState(startingCertId)
+  const [selectedLessonId, setSelectedLessonId] = useState(
+    initialLessonId ? String(initialLessonId) : ""
+  )
   const [formOpen, setFormOpen] = useState(false)
   const [editingQuestion, setEditingQuestion] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const queryClient = useQueryClient()
 
-  // Arriving from a certification's detail page with a certification (and
-  // lesson) already chosen for us -- and the manual "Add Question" form
-  // ready to go, matching admin's one-click add-question button.
+  // Handed a certification (and lesson) by the caller -- and, for the one-click
+  // "Add question" affordance next to a lesson, the form ready to go.
   useEffect(() => {
-    if (preselectedCertId) {
-      setSelectedCertId(preselectedCertId)
+    if (startingCertId) {
+      setSelectedCertId(startingCertId)
     }
-    if (preselectedLessonId) {
-      setSelectedLessonId(preselectedLessonId)
+    if (initialLessonId) {
+      setSelectedLessonId(String(initialLessonId))
     }
-    if (shouldAutoOpenForm && preselectedLessonId) {
+    if (autoOpenAdd && initialLessonId) {
       setEditingQuestion(null)
       setFormOpen(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preselectedCertId, preselectedLessonId, shouldAutoOpenForm])
+  }, [startingCertId, initialLessonId, autoOpenAdd])
 
   const certificationsQuery = useQuery({
     queryKey: ["certifications-full"],
@@ -427,56 +439,40 @@ export default function EnterpriseQuestionBankPage() {
     },
   })
 
-  if (enterpriseLoading || (enterprise && data.isLoading)) {
-    return <EnterpriseLoadingSkeleton />
-  }
-  if (enterpriseError) {
-    return <EnterpriseErrorState onRetry={refetchEnterprise} />
-  }
-  if (!enterprise) {
-    return (
-      <EnterpriseEmptyState
-        title="No organization found"
-        description="The question bank appears here once your organization is registered."
-      />
-    )
-  }
-
   return (
     <div className="space-y-6">
-      <EnterprisePageHeader
-        title="Question Bank"
-        subtitle="Add questions to lessons within certifications your organization has access to. You can edit or delete only the questions you created."
-      />
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label>Certification</Label>
-          <Select
-            value={selectedCertId}
-            onValueChange={(value) => {
-              setSelectedCertId(value)
-              setSelectedLessonId("")
-            }}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select a certification" />
-            </SelectTrigger>
-            <SelectContent>
-              {accessibleCertifications.length === 0 ? (
-                <SelectItem value="none" disabled>
-                  No certification access yet
-                </SelectItem>
-              ) : (
-                accessibleCertifications.map((cert) => (
-                  <SelectItem key={cert.certificationId} value={String(cert.certificationId)}>
-                    {cert.title}
+      <div
+        className={`grid gap-3 ${isLockedToCertification ? "" : "sm:grid-cols-2"}`}
+      >
+        {isLockedToCertification ? null : (
+          <div className="space-y-1.5">
+            <Label>Certification</Label>
+            <Select
+              value={selectedCertId}
+              onValueChange={(value) => {
+                setSelectedCertId(value)
+                setSelectedLessonId("")
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a certification" />
+              </SelectTrigger>
+              <SelectContent>
+                {accessibleCertifications.length === 0 ? (
+                  <SelectItem value="none" disabled>
+                    No certification access yet
                   </SelectItem>
-                ))
-              )}
-            </SelectContent>
-          </Select>
-        </div>
+                ) : (
+                  accessibleCertifications.map((cert) => (
+                    <SelectItem key={cert.certificationId} value={String(cert.certificationId)}>
+                      {cert.title}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         <div className="space-y-1.5">
           <Label>Lesson</Label>
           <Select
@@ -507,7 +503,9 @@ export default function EnterpriseQuestionBankPage() {
       {!selectedLessonId ? (
         <EnterpriseEmptyState
           icon={FileQuestionIcon}
-          title="Select a certification and lesson"
+          title={
+            isLockedToCertification ? "Select a lesson" : "Select a certification and lesson"
+          }
           description="Questions are added within a specific lesson."
         />
       ) : (
@@ -642,6 +640,53 @@ export default function EnterpriseQuestionBankPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  )
+}
+
+export default function EnterpriseQuestionBankPage() {
+  const { enterprise, enterpriseLoading, enterpriseError, refetchEnterprise } =
+    useOutletContext()
+  const enterpriseData = useEnterpriseData(enterprise?.enterpriseId)
+  const [searchParams] = useSearchParams()
+
+  const preselectedCertId = searchParams.get("certificationId")
+  const preselectedLessonId = searchParams.get("lessonId")
+  const shouldAutoOpenForm = searchParams.get("add") === "1"
+  // Opened from a group workspace: questions authored here belong to that
+  // group, and the list shows the group's own questions alongside official ones.
+  const groupId = searchParams.get("groupId")
+    ? Number(searchParams.get("groupId"))
+    : undefined
+
+  if (enterpriseLoading || (enterprise && enterpriseData.isLoading)) {
+    return <EnterpriseLoadingSkeleton />
+  }
+  if (enterpriseError) {
+    return <EnterpriseErrorState onRetry={refetchEnterprise} />
+  }
+  if (!enterprise) {
+    return (
+      <EnterpriseEmptyState
+        title="No organization found"
+        description="The question bank appears here once your organization is registered."
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <EnterprisePageHeader
+        title="Question Bank"
+        subtitle="Add questions to lessons within certifications your organization has access to. You can edit or delete only the questions you created."
+      />
+
+      <EnterpriseQuestionBankPanel
+        initialCertificationId={preselectedCertId ?? ""}
+        initialLessonId={preselectedLessonId ?? ""}
+        autoOpenAdd={shouldAutoOpenForm}
+        groupId={groupId}
+      />
     </div>
   )
 }

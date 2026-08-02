@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import api from '@/services/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Building, Users, Mail, Settings } from 'lucide-react'
+import { Building, Users, Mail, Settings } from "@/components/icons"
 
 export default function OrganizationSettingsPage() {
   const { id } = useParams()

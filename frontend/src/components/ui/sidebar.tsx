@@ -25,7 +25,7 @@ import {
   type SidebarContextProps,
   useSidebar,
 } from "@/components/ui/sidebar-context"
-import { PanelLeftIcon } from "lucide-react"
+import { PanelLeftIcon } from "@/components/icons"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7

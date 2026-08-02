@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
-import { CheckCircle2, Clock, Gauge, Play, Trophy, X, Zap } from "lucide-react"
+import { CheckCircle2, Clock, Gauge, Play, Trophy, X, Zap } from "@/components/icons"
 
 import { BackButton, ProgressBar, TactileButton } from "@/components/rebyu/rebyu-ui.jsx"
 import ProblemGrid, {
@@ -45,7 +45,6 @@ const PROBLEMS = buildProblems(20, TITLES, SOLVED_COUNT)
 const TONE = {
   face: "bg-rb-macaw",
   border: "border-rb-macaw-lip",
-  plate: "rb-plate-macaw",
 }
 
 const CODE = [

@@ -10,7 +10,7 @@ import {
   Radio,
   RefreshCw,
   WifiOff,
-} from "lucide-react"
+} from "@/components/icons"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -73,8 +73,17 @@ export default function GenerationWorkspacePage() {
   const waitedTooLong = useWaitedTooLong(Boolean(awaitingCertificationId) && !runId, 20_000)
 
   const stream = useWorkflowStream(runId)
-  const { run, events, tasks, attempts, currentTask, connected, isTerminal, isWaitingForReview } =
-    stream
+  const {
+    run,
+    events,
+    tasks,
+    attempts,
+    currentTask,
+    connected,
+    isTerminal,
+    isWaitingForReview,
+    isStalled,
+  } = stream
 
   // The artifact under review lives in the LangGraph interrupt, not the event
   // log, so it is fetched when the run enters (or is found in) review — keyed
@@ -257,7 +266,13 @@ export default function GenerationWorkspacePage() {
                     )
                   ) : null}
 
-                  {run?.status === "FAILED" ? (
+                  {/* Also rendered for a run that has gone quiet, not just a
+                      failed one: a run abandoned by a restart of the Python
+                      service stays RUNNING, so the transcript keeps its last
+                      step spinning and the view is otherwise indistinguishable
+                      from a slow node. The panel checks with the server before
+                      showing itself. */}
+                  {run?.status === "FAILED" || isStalled ? (
                     <RunRecoveryPanel
                       runId={runId}
                       lastSeq={run?.last_seq}

@@ -29,7 +29,7 @@ import {
     Video,
     Workflow,
     XIcon,
-} from "lucide-react";
+} from "@/components/icons";
 
 import { Button } from "@/components/ui/button";
 import { formatBytes, useFileUpload } from "@/hooks/use-file-upload";
@@ -2483,14 +2483,21 @@ const QuestionCardWrapper = React.memo(function QuestionCardWrapper({
     );
 });
 
-function QuestionBank() {
+// `certificationId` locks the bank to a single certification: the certification
+// pickers disappear and every tab works against that one. Passed in when the
+// bank is embedded as a tab on the view-certification page.
+function QuestionBank({ certificationId = null, embedded = false }) {
+    const lockedCertificationId = certificationId ? String(certificationId) : "";
+    const isLockedToCertification = Boolean(lockedCertificationId);
+
     const [activeTab, setActiveTab] = useState("all-questions");
     // Sub-mode inside the single Question Builder tab. "" shows the centered
     // Create Manually / Generate with AI chooser; selecting one swaps the same
     // builder area in place (manual form vs AI generation interface).
     const [builderMode, setBuilderMode] = useState("");
 
-    const [filterCertificationId, setFilterCertificationId] = useState("");
+    const [filterCertificationId, setFilterCertificationId] =
+        useState(lockedCertificationId);
 
     const [filterLessonId, setFilterLessonId] = useState(ALL_FILTER_VALUE);
 
@@ -2505,7 +2512,8 @@ function QuestionBank() {
 
     const [questionPage, setQuestionPage] = useState(1);
 
-    const [selectedCertificationId, setSelectedCertificationId] = useState("");
+    const [selectedCertificationId, setSelectedCertificationId] =
+        useState(lockedCertificationId);
 
     const [selectedLesson, setSelectedLesson] = useState(null);
 
@@ -2724,6 +2732,15 @@ function QuestionBank() {
             cancelIdleWork(validationTimerRef.current);
         };
     }, [questions]);
+
+    useEffect(() => {
+        if (!isLockedToCertification) {
+            return;
+        }
+
+        setFilterCertificationId(lockedCertificationId);
+        setSelectedCertificationId(lockedCertificationId);
+    }, [isLockedToCertification, lockedCertificationId]);
 
     useEffect(() => {
         setFilterLessonId(ALL_FILTER_VALUE);
@@ -3307,7 +3324,13 @@ OUTPUT RULES:
     }
 
     return (
-        <section className="flex min-h-0 flex-col bg-muted/20 py-0 md:h-[calc(100dvh-8rem)] md:overflow-hidden">
+        <section
+            className={
+                embedded
+                    ? "flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/80 bg-muted/20 py-0 md:h-[calc(100dvh-12rem)]"
+                    : "flex min-h-0 flex-col bg-muted/20 py-0 md:h-[calc(100dvh-8rem)] md:overflow-hidden"
+            }
+        >
             <Tabs
                 value={activeTab}
                 onValueChange={setActiveTab}
@@ -3378,12 +3401,13 @@ OUTPUT RULES:
                                         </h3>
 
                                         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                            Choose a certification, then narrow the results by lesson,
-                                            question type, or difficulty.
+                                            {isLockedToCertification
+                                                ? "Narrow this certification's questions by lesson, question type, or difficulty."
+                                                : "Choose a certification, then narrow the results by lesson, question type, or difficulty."}
                                         </p>
                                     </div>
 
-                                    {selectedFilterCertification && (
+                                    {!isLockedToCertification && selectedFilterCertification && (
                                         <p className="max-w-full truncate text-xs text-muted-foreground sm:max-w-[280px]">
                                             Viewing:{" "}
                                             <span className="font-medium text-foreground">
@@ -3393,7 +3417,14 @@ OUTPUT RULES:
                                     )}
                                 </div>
 
-                                <div className="grid gap-3 rounded-xl border border-border/70 bg-muted/30 p-3 md:grid-cols-2 xl:grid-cols-[minmax(250px,1.35fr)_minmax(230px,1.2fr)_minmax(185px,0.9fr)_minmax(165px,0.8fr)]">
+                                <div
+                                    className={`grid gap-3 rounded-xl border border-border/70 bg-muted/30 p-3 md:grid-cols-2 ${
+                                        isLockedToCertification
+                                            ? "xl:grid-cols-[minmax(230px,1.2fr)_minmax(185px,0.9fr)_minmax(165px,0.8fr)]"
+                                            : "xl:grid-cols-[minmax(250px,1.35fr)_minmax(230px,1.2fr)_minmax(185px,0.9fr)_minmax(165px,0.8fr)]"
+                                    }`}
+                                >
+                                    {!isLockedToCertification && (
                                     <div className="space-y-1.5">
                                         <Label
                                             htmlFor="question-filter-certification"
@@ -3439,6 +3470,7 @@ OUTPUT RULES:
                                             </SelectContent>
                                         </Select>
                                     </div>
+                                    )}
 
                                     <div className="space-y-1.5">
                                         <Label
@@ -3636,7 +3668,9 @@ OUTPUT RULES:
                                 <Badge variant="secondary" className="w-fit rounded-md px-2.5 py-1">
                                     {selectedFilterCertification
                                         ? `${filteredQuestions.length} total`
-                                        : "Choose a certification"}
+                                        : isLockedToCertification
+                                            ? "Loading"
+                                            : "Choose a certification"}
                                 </Badge>
                             </div>
                             <div className="overflow-x-auto">
@@ -3675,7 +3709,9 @@ OUTPUT RULES:
                                                                     ? "Loading questions"
                                                                     : selectedFilterCertification
                                                                         ? "No questions found"
-                                                                        : "Select a certification"}
+                                                                        : isLockedToCertification
+                                                                            ? "Loading certification"
+                                                                            : "Select a certification"}
                                                         </h3>
 
                                                         <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
@@ -3685,7 +3721,9 @@ OUTPUT RULES:
                                                                     ? "Fetching the latest question bank records."
                                                                     : selectedFilterCertification
                                                                         ? "Try a different lesson, question type, or difficulty."
-                                                                        : "Choose a certification above to view its questions."}
+                                                                        : isLockedToCertification
+                                                                            ? "Fetching this certification's course structure."
+                                                                            : "Choose a certification above to view its questions."}
                                                         </p>
                                                     </div>
                                                 </TableCell>
@@ -3944,6 +3982,13 @@ OUTPUT RULES:
                             {builderMode === "generate" ? (
                                 <div className="flex min-h-0 flex-1 flex-col gap-3">
                                     <div className="shrink-0 space-y-2">
+                                        {isLockedToCertification ? (
+                                            <p className="text-xs text-muted-foreground">
+                                                Use “Generate Questions” to create draft questions
+                                                for this certification, then review and save them.
+                                            </p>
+                                        ) : (
+                                        <>
                                             <p className="text-sm font-medium text-foreground">
                                                 Certification
                                             </p>
@@ -3983,6 +4028,8 @@ OUTPUT RULES:
                                                 Choose a certification, then use “Generate Questions” to
                                                 create draft questions you can review and save.
                                             </p>
+                                        </>
+                                        )}
                                     </div>
 
                                     <div className="grid min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border/80 bg-background shadow-sm md:grid-cols-[minmax(0,1fr)_240px] md:overflow-hidden">
@@ -4072,6 +4119,7 @@ OUTPUT RULES:
                                         Course Structure
                                     </p>
 
+                                    {!isLockedToCertification && (
                                     <Select
                                         value={selectedCertificationId}
                                         onValueChange={handleBuilderCertificationChange}
@@ -4108,6 +4156,7 @@ OUTPUT RULES:
                                             </SelectGroup>
                                         </SelectContent>
                                     </Select>
+                                    )}
                                 </div>
 
                                 <div className="relative">
@@ -4131,8 +4180,16 @@ OUTPUT RULES:
                                 ) : !selectedCertification ? (
                                     <EmptyState
                                         size="sm"
-                                        title="No certification selected"
-                                        description="Select a certification to view its course structure."
+                                        title={
+                                            isLockedToCertification
+                                                ? "Loading course structure"
+                                                : "No certification selected"
+                                        }
+                                        description={
+                                            isLockedToCertification
+                                                ? "Fetching the lessons for this certification."
+                                                : "Select a certification to view its course structure."
+                                        }
                                     />
                                 ) : (
                                     <div className="space-y-4">
@@ -4582,5 +4639,7 @@ OUTPUT RULES:
         </section>
     );
 }
+
+export { QuestionBank };
 
 export default QuestionBank;

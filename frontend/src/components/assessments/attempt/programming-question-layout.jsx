@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { CheckCheckIcon, Loader2Icon, PlayIcon, TerminalIcon } from "lucide-react"
+import { CheckCheckIcon, Loader2Icon, PlayIcon, TerminalIcon } from "@/components/icons"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"

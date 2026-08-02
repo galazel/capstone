@@ -840,3 +840,125 @@ async def test_a_cancelled_run_is_not_relabelled_as_failed(fake_graph, captured_
 
     assert caught.value.outcome["outcome"] == registry.CANCELLED
     assert captured_outcome == {}, "must not overwrite the status with FAILED"
+
+
+# --- cancellation survives redelivery -------------------------------------
+#
+# Cancellation is cooperative: the graph notices the flag between nodes and
+# unwinds, which leaves the RabbitMQ message unacked -- so the broker
+# redelivers it. `start_run` used to force any existing run straight back to
+# RUNNING, which undid the reviewer's stop within seconds and restarted
+# generation from document validation. A live run reached "Attempt 20" that
+# way, spending real tokens on work someone had explicitly stopped.
+
+
+def test_a_cancelled_run_is_not_restarted_by_a_redelivered_message(session):
+    registry.start_run(session, thread_id="t-cancel", kind="CERTIFICATION")
+    registry.mark_cancelled(session, "t-cancel")
+
+    with pytest.raises(registry.RunAlreadyCancelled):
+        registry.start_run(session, thread_id="t-cancel", kind="CERTIFICATION")
+
+
+def test_a_refused_restart_leaves_the_run_cancelled(session):
+    """The guard must not half-apply: a run that refuses to restart has to
+    stay CANCELLED, not end up RUNNING with an exception on the way out."""
+    run = registry.start_run(session, thread_id="t-cancel-2", kind="CERTIFICATION")
+    registry.mark_cancelled(session, "t-cancel-2")
+
+    with pytest.raises(registry.RunAlreadyCancelled):
+        registry.start_run(session, thread_id="t-cancel-2", kind="CERTIFICATION")
+
+    session.expire_all()
+    assert registry.get_run_by_thread(session, "t-cancel-2").status == registry.CANCELLED
+    assert registry.attempt_number(session, run.run_id) == 1, "no new attempt was opened"
+
+
+def test_the_exception_names_the_run_so_the_consumer_can_log_it(session):
+    registry.start_run(session, thread_id="t-cancel-3", kind="CERTIFICATION")
+    registry.mark_cancelled(session, "t-cancel-3")
+
+    with pytest.raises(registry.RunAlreadyCancelled) as caught:
+        registry.start_run(session, thread_id="t-cancel-3", kind="CERTIFICATION")
+    assert caught.value.thread_id == "t-cancel-3"
+
+
+def test_a_failed_run_can_still_be_restarted(session):
+    """Only cancellation is a human decision. A failure is exactly what a
+    restart is for, so the guard must not catch it too."""
+    _failed_run(session, thread_id="t-retry-ok")
+    run = registry.start_run(session, thread_id="t-retry-ok", kind="CERTIFICATION")
+    assert run.status == registry.RUNNING
+
+
+# --- deleting a certification ---------------------------------------------
+#
+# Deleting one mid-generation used to leave the run untouched on the Python
+# side: it carried on authoring lessons and questions against rows that no
+# longer existed, and its timeline stayed in the workspace pointing at a
+# certification nobody could open.
+
+
+def test_purging_a_certification_cancels_a_run_still_generating(session):
+    registry.start_run(session, thread_id="t-del-1", kind="CERTIFICATION", certification_id=77)
+
+    summary = registry.purge_certification(session, 77)
+
+    assert summary["runs_cancelled"] == 1
+    assert summary["runs_deleted"] == 1
+
+
+def test_purging_removes_the_runs_and_their_events(session):
+    run = registry.start_run(
+        session, thread_id="t-del-2", kind="CERTIFICATION", certification_id=78
+    )
+    registry.record_event(session, run, registry.EVT_NODE_STARTED, stage="plan_curriculum")
+    session.commit()
+
+    registry.purge_certification(session, 78)
+
+    assert registry.get_run_by_thread(session, "t-del-2") is None
+    assert registry.list_runs(session, certification_id=78) == []
+
+
+def test_purging_leaves_other_certifications_alone(session):
+    registry.start_run(session, thread_id="t-keep", kind="CERTIFICATION", certification_id=99)
+    registry.start_run(session, thread_id="t-drop", kind="CERTIFICATION", certification_id=98)
+
+    registry.purge_certification(session, 98)
+
+    assert registry.get_run_by_thread(session, "t-keep") is not None
+    assert registry.get_run_by_thread(session, "t-drop") is None
+
+
+def test_purging_a_certification_that_never_generated_is_not_an_error(session):
+    """The caller cannot know whether generation was ever started, so an empty
+    purge has to succeed rather than 404."""
+    assert registry.purge_certification(session, 12345) == {
+        "runs_deleted": 0, "runs_cancelled": 0, "thread_ids": [],
+    }
+
+
+def test_an_already_finished_run_is_deleted_but_not_cancelled(session):
+    """Cancelling a completed run would record a misleading event on a
+    timeline that is about to be deleted anyway."""
+    registry.start_run(session, thread_id="t-done", kind="CERTIFICATION", certification_id=79)
+    registry.mark_completed(session, "t-done")
+
+    summary = registry.purge_certification(session, 79)
+
+    assert summary == {"runs_deleted": 1, "runs_cancelled": 0, "thread_ids": ["t-done"]}
+
+
+def test_a_purged_run_cannot_be_restarted_by_a_redelivered_message(session):
+    """The two halves have to compose: cancel-then-delete must not leave a
+    thread a queue message can revive as a brand new run."""
+    registry.start_run(session, thread_id="t-del-3", kind="CERTIFICATION", certification_id=80)
+    registry.purge_certification(session, 80)
+
+    # The row is gone, so this creates a fresh run rather than raising -- what
+    # matters is that it is not the deleted certification's run resurrected
+    # with its old event log.
+    revived = registry.start_run(session, thread_id="t-del-3", kind="CERTIFICATION")
+    assert revived.certification_id is None
+    assert registry.attempt_number(session, revived.run_id) == 1

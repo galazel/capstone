@@ -19,7 +19,7 @@ import {
     Users,
     UsersRound,
     X,
-} from "lucide-react"
+} from "@/components/icons"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"

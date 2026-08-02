@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, Layers3, Sparkles, Trophy } from "lucide-react"
+import { ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, Layers3, Sparkles, Trophy } from "@/components/icons"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"

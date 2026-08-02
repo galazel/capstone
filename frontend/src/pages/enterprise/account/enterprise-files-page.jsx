@@ -1,6 +1,6 @@
 import { useRef } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Download, FolderOpenIcon, Loader2, Trash2, Upload } from "lucide-react"
+import { Download, FolderOpenIcon, Loader2, Trash2, Upload } from "@/components/icons"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"

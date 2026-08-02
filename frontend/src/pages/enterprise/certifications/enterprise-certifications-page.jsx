@@ -1,5 +1,5 @@
 import { Link, useOutletContext } from "react-router-dom"
-import { GraduationCapIcon } from "lucide-react"
+import { GraduationCapIcon } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 import {

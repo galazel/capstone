@@ -322,6 +322,24 @@ def insert_exam_question(
     )
 
 
+def update_certification_exam_structure(
+    session: Session, certification_id: int, exam_structure: Any
+) -> None:
+    """Records the real exam's shape on the certification row.
+
+    The curriculum planner researches this ({total_items, question_types,
+    notes}) and the mock exam generator consumes it, but it used to live only
+    in the LangGraph checkpoint -- so it was discarded when the run finished,
+    leaving nothing to show an admin and nothing to regenerate a mock exam
+    from without re-planning the whole curriculum.
+    """
+    session.execute(
+        update(certifications)
+        .where(certifications.c.certification_id == certification_id)
+        .values(exam_structure=exam_structure)
+    )
+
+
 def update_lesson_content(session: Session, lesson_id: int, blocks: Any) -> None:
     """Writes a generated lesson's display blocks into the jsonb column the
     lesson editor and learner view render from."""

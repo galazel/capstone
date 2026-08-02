@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import {
   ArrowLeft,
@@ -8,7 +8,7 @@ import {
   ChevronRight,
   Layers3,
   Pencil,
-} from "lucide-react"
+} from "@/components/icons"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -18,6 +18,10 @@ import CertificationFormDrawer from "@/components/certifications/certification-f
 import AssessmentsTab from "@/components/assessments/admin/assessments-tab.jsx"
 import CertificationPublishingChecklist from "@/components/assessments/admin/certification-publishing-checklist.jsx"
 import { useQueryClient } from "@tanstack/react-query"
+
+// The question bank is a big tree; keep it out of the certification page bundle
+// and only load it when the Question Bank tab is opened.
+const QuestionBank = lazy(() => import("./question-bank-page.jsx"))
 
 function getCertification(location) {
   return (
@@ -235,6 +239,7 @@ export default function ViewCertificationAdmin() {
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="mb-6">
                 <TabsTrigger value="curriculum">Curriculum</TabsTrigger>
+                <TabsTrigger value="question-bank">Question Bank</TabsTrigger>
                 <TabsTrigger value="assessments">Assessments</TabsTrigger>
               </TabsList>
 
@@ -266,6 +271,21 @@ export default function ViewCertificationAdmin() {
                       ))}
                     </div>
                 )}
+              </TabsContent>
+
+              <TabsContent value="question-bank">
+                <Suspense
+                    fallback={
+                      <div className="rounded-2xl border border-border bg-card p-12 text-center text-sm text-muted-foreground shadow-sm">
+                        Loading question bank…
+                      </div>
+                    }
+                >
+                  <QuestionBank
+                      certificationId={certification.certificationId}
+                      embedded
+                  />
+                </Suspense>
               </TabsContent>
 
               <TabsContent value="assessments">

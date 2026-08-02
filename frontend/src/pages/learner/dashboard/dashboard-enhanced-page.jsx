@@ -3,7 +3,7 @@ import api from '@/services/api'
 import { StreakWidget } from '@/components/learner/streak-widget'
 import { MasteryIndicator } from '@/components/learner/mastery-indicator'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { BookOpen, Trophy, Zap, TrendingUp } from 'lucide-react'
+import { BookOpen, Trophy, Zap, TrendingUp } from "@/components/icons"
 
 export default function DashboardEnhancedPage() {
   const [portal, setPortal] = useState(null)

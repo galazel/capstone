@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { CheckCircle2, Loader2, Sparkles } from "lucide-react"
+import { CheckCircle2, Loader2, Sparkles } from "@/components/icons"
 
 const DEFAULT_SENTENCES = [
     "This usually takes a little while — hang tight.",

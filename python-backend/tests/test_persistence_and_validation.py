@@ -34,6 +34,12 @@ def _q(**overrides):
         "explanation": "A balanced tree structure used to speed up lookups.",
         "choices": ["A tree", "A list", "A hash", "A queue"],
         "correct_choice_index": 0,
+        "choice_explanations": [
+            "Correct: a B-tree keeps keys sorted across balanced nodes.",
+            "A plain list gives no logarithmic lookup.",
+            "A hash supports equality only, not range scans.",
+            "A queue is an ordering structure, not an index.",
+        ],
         "bloom_level": "UNDERSTAND",
         "learning_objective": "Explain indexing",
         "lesson_ref": "Database Indexing",

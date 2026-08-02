@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import api from '@/services/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts'
-import { DollarSign, Users, TrendingUp, AlertCircle } from 'lucide-react'
+import { DollarSign, Users, TrendingUp, AlertCircle } from "@/components/icons"
 
 export default function RevenueDashboardPage() {
   const [metrics, setMetrics] = useState(null)

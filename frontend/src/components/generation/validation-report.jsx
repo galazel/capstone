@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Info } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Info } from "@/components/icons"
 import { Badge } from "@/components/ui/badge"
 
 /**

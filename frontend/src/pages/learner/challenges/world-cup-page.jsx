@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
-import { Award, Crown, Gauge, Trophy, Users, Zap } from "lucide-react"
+import { Award, Clock, Crown, Gauge, Trophy, Users, Zap } from "@/components/icons"
 
-import { BackButton, TactileButton } from "@/components/rebyu/rebyu-ui.jsx"
+import { BackButton, ProgressBar, TactileButton } from "@/components/rebyu/rebyu-ui.jsx"
 
 /**
  * World Cup — 8-player synchronised tournament.
@@ -11,15 +11,18 @@ import { BackButton, TactileButton } from "@/components/rebyu/rebyu-ui.jsx"
  * on local timers and fixture data so it can be reviewed before matchmaking,
  * sockets, or scoring exist. Nothing here calls an API.
  *
- * Uses the system palette throughout — Feather for the primary plates, Fox /
- * Macaw / Cardinal for bracket rounds, Bee for the trophy. The only thing the
- * arena keeps from broadcast styling is the uppercase display voice.
+ * Same shell as CodeStrike and Blueprint Arena — h-20 header, back key, the
+ * run's name in lowercase display type — and the same full-height body: a
+ * tournament is the whole screen for as long as you are in it, not a panel in
+ * the middle of a centred page. The arena's own voice is carried by scale and
+ * colour (Fox quarters, Macaw semis, Cardinal final, Bee trophy), not by a
+ * second set of type rules.
  */
 
 const TRACKS = [
-  { id: "it-passport", name: "IT Passport", short: "Passport", tone: "bee", blurb: "Strategy, management, and core technology fundamentals.", queue: 128 },
-  { id: "topcit", name: "TOPCIT", short: "TOPCIT", tone: "macaw", blurb: "Software development, databases, networking, information systems.", queue: 214 },
-  { id: "fe-exam", name: "FE Exam", short: "FE Exam", tone: "beetle", blurb: "Computer science, algorithms, databases, networks, IT fundamentals.", queue: 176 },
+  { id: "it-passport", name: "IT Passport", short: "passport", tone: "bee", blurb: "Strategy, management, and core technology fundamentals.", queue: 128 },
+  { id: "topcit", name: "TOPCIT", short: "topcit", tone: "macaw", blurb: "Software development, databases, networking, information systems.", queue: 214 },
+  { id: "fe-exam", name: "FE Exam", short: "fe exam", tone: "beetle", blurb: "Computer science, algorithms, databases, networks, IT fundamentals.", queue: 176 },
 ]
 
 /* Blade fills stay saturated: they are the one bold moment on a light page,
@@ -31,9 +34,9 @@ const BLADE_TONE = {
 }
 
 const TRACK_TONE = {
-  bee: { face: "bg-rb-bee", lip: "shadow-[0_5px_0_var(--color-rb-bee-lip)]", wash: "bg-rb-bee-wash", ink: "text-[#8a6d00]" },
-  macaw: { face: "bg-rb-macaw", lip: "shadow-[0_5px_0_var(--color-rb-macaw-lip)]", wash: "bg-rb-macaw-wash", ink: "text-rb-macaw-lip" },
-  beetle: { face: "bg-rb-beetle", lip: "shadow-[0_5px_0_var(--color-rb-beetle-lip)]", wash: "bg-rb-beetle-wash", ink: "text-rb-beetle-lip" },
+  bee: { wash: "bg-rb-bee-wash", ink: "text-[#8a6d00]" },
+  macaw: { wash: "bg-rb-macaw-wash", ink: "text-rb-macaw-lip" },
+  beetle: { wash: "bg-rb-beetle-wash", ink: "text-rb-beetle-lip" },
 }
 
 // Tier drives the avatar frame colour, weakest to strongest.
@@ -74,16 +77,16 @@ const STANDINGS = [
 function Standee({ player, index }) {
   if (!player) {
     return (
-      <div className="rb-standee rb-standee-empty min-h-[188px] justify-center">
-        <div className="rb-pulse-slot grid size-16 place-items-center rounded-full border-2 border-dashed border-rb-swan">
-          <Users className="size-6 text-rb-hare" aria-hidden="true" />
+      <div className="rb-standee rb-standee-empty justify-center">
+        <div className="rb-pulse-slot grid size-[clamp(64px,8vh,104px)] place-items-center rounded-full border-2 border-dashed border-rb-swan">
+          <Users className="size-7 text-rb-hare" aria-hidden="true" />
         </div>
-        <p className="mt-3 text-center text-[0.625rem] font-bold uppercase leading-tight tracking-wide text-rb-hare">
+        <p className="mt-4 text-center text-xs font-bold leading-tight text-rb-hare">
           waiting for
           <br />
           challenger
         </p>
-        <span className="mt-auto pt-3 text-[0.625rem] font-bold text-rb-hare">{index + 1}</span>
+        <span className="rb-numeric mt-auto pt-3 text-sm text-rb-hare">{index + 1}</span>
       </div>
     )
   }
@@ -91,20 +94,20 @@ function Standee({ player, index }) {
   const tier = TIERS[player.tier]
 
   return (
-    <div className={`rb-standee rb-pop-in min-h-[188px] ${player.you ? "rb-standee-you" : ""}`}>
+    <div className={`rb-standee rb-pop-in ${player.you ? "rb-standee-you" : ""}`}>
       <span className={`rb-frame ${tier.frame}`} aria-hidden="true">
         {player.initials}
       </span>
 
-      <p className="mt-3 w-full truncate text-center text-sm font-extrabold text-rb-eel">
+      <p className="mt-4 w-full truncate text-center text-base font-extrabold text-rb-eel">
         {player.name}
       </p>
-      <p className="w-full truncate text-center text-[0.625rem] font-semibold text-rb-wolf">
+      <p className="w-full truncate text-center text-xs font-semibold text-rb-wolf">
         {player.title}
       </p>
 
       <span
-        className={`mt-auto rounded-full px-2.5 py-1 text-[0.625rem] font-extrabold uppercase tracking-wide text-rb-snow ${tier.badge}`}
+        className={`mt-auto rounded-rb-pill px-3 py-1 text-[0.6875rem] font-extrabold uppercase tracking-wide text-rb-snow ${tier.badge}`}
       >
         {tier.label}
       </span>
@@ -113,6 +116,19 @@ function Standee({ player, index }) {
 }
 
 /* ------------------------------------------------------------------- bracket */
+
+/* Bracket geometry, in pixels. The elbow connectors are drawn with borders
+   rather than SVG, so every one of these numbers has to agree with the seat
+   height set on `.rb-arena` in the stylesheet:
+     pair height   = 2*SEAT + PAIR_GAP        = 110
+     quarters span = 2*pair + GROUP_GAP       = 260
+     semi gap      = span - 2*SEAT - 2*(pair/2 - SEAT/2) rounded to 106
+   which lands each semifinal seat's centre on the centre of its quarter pair. */
+const SEAT_H = 44
+const PAIR_GAP = 22
+const GROUP_GAP = 40
+const SEMI_GAP = 106
+const SEAT_W = 168
 
 function Seat({ name, variant = "outer" }) {
   return <div className={`rb-seat rb-seat-${variant}`}>{name}</div>
@@ -125,19 +141,14 @@ function Elbow({ side }) {
   return (
     <div
       aria-hidden="true"
-      className={`relative w-5 shrink-0 ${
+      style={{ marginTop: SEAT_H / 2, marginBottom: SEAT_H / 2 }}
+      className={`relative w-6 shrink-0 ${
         isLeft ? "border-r-2 border-rb-swan" : "border-l-2 border-rb-swan"
-      } my-[17px]`}
+      }`}
     >
-      <span
-        className={`absolute top-0 h-0.5 w-5 bg-rb-swan ${isLeft ? "-left-5" : "-right-5"}`}
-      />
-      <span
-        className={`absolute bottom-0 h-0.5 w-5 bg-rb-swan ${isLeft ? "-left-5" : "-right-5"}`}
-      />
-      <span
-        className={`absolute top-1/2 h-0.5 w-5 bg-rb-swan ${isLeft ? "-right-5" : "-left-5"}`}
-      />
+      <span className={`absolute top-0 h-0.5 w-6 bg-rb-swan ${isLeft ? "-left-6" : "-right-6"}`} />
+      <span className={`absolute bottom-0 h-0.5 w-6 bg-rb-swan ${isLeft ? "-left-6" : "-right-6"}`} />
+      <span className={`absolute top-1/2 h-0.5 w-6 bg-rb-swan ${isLeft ? "-right-6" : "-left-6"}`} />
     </div>
   )
 }
@@ -145,7 +156,10 @@ function Elbow({ side }) {
 function QuarterPair({ pair, side }) {
   return (
     <div className={`flex items-stretch ${side === "right" ? "flex-row-reverse" : ""}`}>
-      <div className="flex w-[132px] shrink-0 flex-col gap-[18px]">
+      <div
+        className="flex shrink-0 flex-col"
+        style={{ width: SEAT_W, gap: PAIR_GAP }}
+      >
         {pair.map(([name, alive]) => (
           <Seat key={name} name={name} variant={alive ? "outer" : "out"} />
         ))}
@@ -159,7 +173,7 @@ function BranchSide({ side, quarters, semis }) {
   const reverse = side === "right"
   return (
     <div className={`flex items-center ${reverse ? "flex-row-reverse" : ""}`}>
-      <div className="flex flex-col gap-8">
+      <div className="flex flex-col" style={{ gap: GROUP_GAP }}>
         {quarters.map((pair, i) => (
           <QuarterPair key={i} pair={pair} side={side} />
         ))}
@@ -167,7 +181,7 @@ function BranchSide({ side, quarters, semis }) {
 
       {/* semifinal column, vertically centred against its two quarter pairs */}
       <div className={`flex items-stretch ${reverse ? "flex-row-reverse" : ""}`}>
-        <div className="flex w-[132px] shrink-0 flex-col gap-[92px]">
+        <div className="flex shrink-0 flex-col" style={{ width: SEAT_W, gap: SEMI_GAP }}>
           {semis.map(([name, alive]) => (
             <Seat key={name} name={name} variant={alive ? "inner" : "out"} />
           ))}
@@ -189,26 +203,29 @@ function Bracket() {
   ]
 
   return (
-    <div className="flex items-center justify-center gap-2 overflow-x-auto pb-4">
+    <div className="flex items-center justify-center gap-3">
       <BranchSide side="left" quarters={LEFT_Q} semis={[["Rina D.", true], ["Maya L.", false]]} />
 
       {/* centre stage */}
-      <div className="flex w-[220px] shrink-0 flex-col items-center px-2">
+      <div className="flex w-[260px] shrink-0 flex-col items-center px-2 lg:w-[300px]">
         <div className="rb-halo relative">
-          <Trophy className="size-24 text-rb-bee drop-shadow-[0_6px_14px_rgba(255,200,0,0.5)]" aria-hidden="true" />
+          <Trophy
+            className="size-28 text-rb-bee drop-shadow-[0_6px_14px_rgba(255,200,0,0.5)] lg:size-32"
+            aria-hidden="true"
+          />
         </div>
 
-        <div className="rb-plate rb-plate-cardinal mt-4 text-sm">Champion</div>
+        <div className="mt-5 font-rb-display text-2xl font-extrabold lowercase text-rb-eel">
+          the final
+        </div>
 
         <div className="mt-5 flex w-full items-center gap-2">
           <div className="rb-seat rb-seat-final flex-1 justify-center">Rina D.</div>
-          <span className="font-rb-display text-xl font-black italic text-rb-eel">
-            VS
-          </span>
+          <span className="font-rb-display text-lg font-extrabold lowercase text-rb-wolf">vs</span>
           <div className="rb-seat rb-seat-final flex-1 justify-center">You</div>
         </div>
 
-        <span className="mt-4 rounded-full bg-rb-polar px-3 py-1 text-[0.625rem] font-bold uppercase tracking-wide text-rb-wolf">
+        <span className="mt-5 rounded-rb-pill border-2 border-rb-swan bg-rb-polar px-3 py-1.5 text-xs font-bold text-rb-wolf">
           3:00 per round
         </span>
       </div>
@@ -260,37 +277,41 @@ export default function WorldCupPage() {
     [filled],
   )
 
-  // Every phase is the arena now — the track selector is the opening shot of
-  // the tournament, not a settings page, so it shares the same dark stage.
-  const isArena = true
   const clock = `00:${String(lobbyClock).padStart(2, "0")}`
 
+  const SUBTITLE = {
+    track: "Choose your certification track",
+    lobby: "Matchmaking · 8-player tournament",
+    found: "Matchmaking · 8-player tournament",
+    bracket: "Knockout bracket · quarter-finals to final",
+    stats: "Tournament results",
+  }
+
   return (
-    <div className="rebyu-ds rb-arena min-h-dvh overflow-x-hidden">
-      <header className={"border-b-2 border-rb-swan bg-rb-snow"}>
-        <div className="mx-auto flex h-16 max-w-[1280px] items-center gap-3 px-5 lg:px-8">
-          {/* sm: the arena header is 16 units tall, so the full-size key would
-              crowd it out. */}
-          <BackButton asChild size="sm" label="Back to challenges">
-            <Link to="/learner/challenges" />
-          </BackButton>
-          <div className="min-w-0">
-            <div
-              className={`font-rb-display text-lg font-extrabold ${
-                "uppercase tracking-wide text-rb-eel"
-              }`}
-            >
-              world cup
-            </div>
-            <div className={`text-xs font-semibold ${"text-rb-wolf"}`}>
-              {track ? `${track.name} · 8-player tournament` : "Choose your certification track"}
-            </div>
+    <div className="rebyu-ds rb-arena flex h-dvh flex-col overflow-hidden">
+      {/* Same header as every other arena run: back key, the run's name in
+          lowercase display type, run state on the right. */}
+      <header className="flex h-20 shrink-0 items-center gap-4 border-b-2 border-rb-swan bg-rb-snow px-5 lg:px-8">
+        <BackButton asChild label="Back to arenas">
+          <Link to="/learner/challenges" />
+        </BackButton>
+        <div className="min-w-0">
+          <div className="font-rb-display text-xl font-extrabold lowercase text-rb-eel">
+            world cup
           </div>
+          <div className="truncate text-xs font-semibold text-rb-wolf">{SUBTITLE[phase]}</div>
+        </div>
+
+        <div className="ml-auto flex items-center gap-3">
+          {phase === "lobby" || phase === "found" ? (
+            <span className="flex items-center gap-1.5 rounded-rb-pill border-2 border-rb-swan bg-rb-polar px-3 py-1.5 text-sm font-bold tabular-nums text-rb-eel">
+              <Clock className="size-4" aria-hidden="true" />
+              {clock}
+            </span>
+          ) : null}
           {track ? (
             <span
-              className={`ml-auto rounded-full px-3 py-1.5 text-xs font-bold ${
-                `${TRACK_TONE[track.tone].wash} ${TRACK_TONE[track.tone].ink}`
-              }`}
+              className={`rounded-rb-pill px-3 py-1.5 text-xs font-bold ${TRACK_TONE[track.tone].wash} ${TRACK_TONE[track.tone].ink}`}
             >
               {track.name}
             </span>
@@ -298,19 +319,23 @@ export default function WorldCupPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1280px] px-5 py-10 lg:px-8">
+      {/* The body owns the rest of the viewport. Each phase fills it rather
+          than sitting in a centred column — a tournament with dead space above
+          and below it reads as a widget, not an event. */}
+      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden">
         {/* ---------------------------------------------------- track select */}
         {phase === "track" ? (
-          <div>
-            <div className="flex flex-col items-center">
-              <div className="rb-plate rb-plate-macaw text-lg sm:text-2xl">Choose your track</div>
-              <p className="mt-4 max-w-md text-center text-sm text-rb-wolf">
+          <div className="flex min-h-0 flex-1 flex-col px-5 pt-8 lg:px-8">
+            <div>
+              <span className="rb-eyebrow">Step 1 of 3</span>
+              <h1 className="rb-display rb-display-lg mt-2">choose your track.</h1>
+              <p className="rb-body mt-2 max-w-xl">
                 Matchmaking is locked to the track you pick, so every opponent is studying the
                 same syllabus as you.
               </p>
             </div>
 
-            <div className="rb-blades mt-10 h-[clamp(360px,58vh,540px)] lg:h-[58vh]">
+            <div className="rb-blades mt-6 min-h-[560px] flex-1 pb-6 lg:min-h-0">
               {TRACKS.map((item) => {
                 const tone = BLADE_TONE[item.tone]
                 return (
@@ -332,20 +357,20 @@ export default function WorldCupPage() {
                     />
 
                     <span className="rb-blade-inner flex flex-col justify-end p-6 text-left lg:p-8">
-                      <span className="block font-rb-display text-2xl font-black uppercase italic leading-none text-white drop-shadow lg:text-4xl">
+                      <span className="block font-rb-display text-3xl font-extrabold lowercase leading-none tracking-tight text-white drop-shadow lg:text-5xl">
                         {item.name}
                       </span>
 
-                      <span className="rb-blade-detail mt-3 block">
-                        <span className="block max-w-xs text-sm leading-6 text-rb-eel">
+                      <span className="rb-blade-detail mt-4 block">
+                        <span className="block max-w-xs text-sm leading-6 text-white/90">
                           {item.blurb}
                         </span>
-                        <span className="mt-4 flex flex-wrap items-center gap-3">
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-rb-polar px-3 py-1.5 text-xs font-bold text-rb-eel">
+                        <span className="mt-5 flex flex-wrap items-center gap-3">
+                          <span className="inline-flex items-center gap-1.5 rounded-rb-pill bg-white/20 px-3 py-1.5 text-xs font-bold text-white">
                             <Users className="size-3.5" aria-hidden="true" />
                             {item.queue} in queue
                           </span>
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-xs font-extrabold uppercase tracking-wide text-rb-eel">
+                          <span className="inline-flex items-center rounded-rb-pill bg-white px-4 py-2 text-xs font-extrabold lowercase tracking-wide text-rb-eel">
                             enter queue
                           </span>
                         </span>
@@ -360,39 +385,39 @@ export default function WorldCupPage() {
 
         {/* ----------------------------------------------------------- lobby */}
         {phase === "lobby" || phase === "found" ? (
-          <div>
-            <div className="flex flex-col items-center">
-              <div className="rb-plate rb-plate-macaw text-lg sm:text-2xl">World Cup</div>
-              <div className="-mt-1 rb-plate rb-plate-cardinal px-8 py-1 text-[0.625rem] sm:text-xs">
-                {track?.name}
+          <div className="flex min-h-0 flex-1 flex-col px-5 pt-8 lg:px-8">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <span className="rb-eyebrow">Step 2 of 3 · {track?.name}</span>
+                <h1 className="rb-display rb-display-lg mt-2">finding challengers.</h1>
               </div>
-
-              <div className="mt-5 flex items-center gap-3 text-rb-wolf">
-                <span className="text-[0.625rem] font-bold uppercase tracking-[0.2em]">
-                  Estimated
-                </span>
-                <span className="rb-numeric text-lg text-white">{clock}</span>
+              <div className="w-full max-w-xs">
+                <div className="flex items-baseline justify-between">
+                  <span className="rb-eyebrow">Lobby</span>
+                  <span className="rb-numeric text-base text-rb-wolf">{filled} / 8 ready</span>
+                </div>
+                <ProgressBar
+                  value={(filled / 8) * 100}
+                  label="Challengers ready"
+                  className="mt-2 !h-4"
+                />
               </div>
             </div>
 
-            {/* the line-up */}
-            <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+            {/* the line-up — eight standees stretched across the whole stage */}
+            <div className="mt-6 grid min-h-0 flex-1 auto-rows-[minmax(230px,1fr)] grid-cols-2 items-stretch gap-3 pb-0 sm:grid-cols-4 lg:auto-rows-fr lg:grid-cols-8">
               {slots.map((player, index) => (
                 <Standee key={index} player={player} index={index} />
               ))}
             </div>
 
-            <p className="mt-6 text-center text-sm font-bold text-rb-wolf">
-              {filled} of 8 challengers ready
-            </p>
-
             {phase === "found" ? (
               <div className="fixed inset-0 z-50 grid place-items-center bg-rb-eel/70 px-5">
                 <div className="rb-pop-in text-center">
-                  <div className="rb-plate rb-plate-cardinal px-12 py-4 text-3xl sm:text-5xl">
-                    Match Found
+                  <div className="font-rb-display text-4xl font-extrabold lowercase text-rb-snow sm:text-6xl">
+                    match found.
                   </div>
-                  <p className="rb-numeric mt-8 text-7xl text-rb-snow">{countdown}</p>
+                  <p className="rb-numeric mt-8 text-8xl text-rb-snow">{countdown}</p>
                 </div>
               </div>
             ) : null}
@@ -401,82 +426,38 @@ export default function WorldCupPage() {
 
         {/* --------------------------------------------------------- bracket */}
         {phase === "bracket" ? (
-          <div>
-            <div className="flex flex-col items-center">
-              <div className="rb-plate rb-plate-macaw text-lg sm:text-2xl">World Tournament</div>
-              <div className="-mt-1 rb-plate rb-plate-cardinal px-8 py-1 text-[0.625rem] sm:text-xs">
-                {track?.name} Championship
+          <div className="flex min-h-0 flex-1 flex-col px-5 pt-8 lg:px-8">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <span className="rb-eyebrow">Step 3 of 3 · {track?.name}</span>
+                <h1 className="rb-display rb-display-lg mt-2">the bracket.</h1>
               </div>
-            </div>
-
-            <div className="mt-10">
-              <Bracket />
-            </div>
-
-            <div className="mt-8 flex justify-center">
-              <TactileButton variant="snow" size="sm" onClick={() => setPhase("stats")}>
-                view stats lead
+              <TactileButton size="sm" variant="ghost" onClick={() => setPhase("stats")}>
+                view results
               </TactileButton>
+            </div>
+
+            {/* Centred in whatever is left of the viewport and scaled up on
+                large screens: the bracket is the screen on this phase. */}
+            <div className="grid min-h-0 flex-1 place-items-center overflow-auto py-6">
+              <div className="origin-center xl:scale-110 2xl:scale-125">
+                <Bracket />
+              </div>
             </div>
           </div>
         ) : null}
 
         {/* ----------------------------------------------------------- stats */}
         {phase === "stats" ? (
-          <div>
-            <div className="flex flex-col items-center">
-              <div className="rb-plate rb-plate-macaw text-lg sm:text-2xl">Stats Lead</div>
-            </div>
-
-            <div className="mt-10 grid gap-5 lg:grid-cols-3">
-              {AWARDS.map((award) => (
-                <div
-                  key={award.key}
-                  className="rounded-rb-card border-2 border-rb-swan bg-rb-snow p-5 shadow-[0_4px_0_var(--color-rb-swan)]"
-                >
-                  <span className={`grid size-12 place-items-center rounded-2xl ${award.tone}`}>
-                    <award.icon className="size-6" aria-hidden="true" />
-                  </span>
-                  <div className="mt-4 font-rb-display text-base font-extrabold uppercase tracking-wide text-rb-eel">
-                    {award.label}
-                  </div>
-                  <div className="mt-1 font-bold text-rb-eel">{award.who}</div>
-                  <div className="text-sm font-semibold text-rb-wolf">{award.detail}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-5 overflow-hidden rounded-rb-card border-2 border-rb-swan bg-rb-snow">
-              <div className="flex items-center gap-2 border-b border-rb-swan px-5 py-4">
-                <Award className="size-5 text-rb-wolf" aria-hidden="true" />
-                <span className="font-rb-display text-base font-extrabold uppercase tracking-wide text-rb-eel">
-                  Final standings
-                </span>
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pt-8 pb-8 lg:px-8">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <span className="rb-eyebrow">{track?.name} championship</span>
+                <h1 className="rb-display rb-display-lg mt-2">tournament results.</h1>
               </div>
-              <ul className="divide-y divide-rb-swan">
-                {STANDINGS.map((row, index) => (
-                  <li
-                    key={row.name}
-                    className={`flex items-center gap-4 px-5 py-3.5 ${row.you ? "bg-rb-feather-wash" : ""}`}
-                  >
-                    <span className="rb-numeric w-6 text-rb-wolf">{index + 1}</span>
-                    <span className="min-w-0 flex-1 truncate font-bold text-rb-eel">{row.name}</span>
-                    <span className="rb-numeric w-12 text-right text-sm text-rb-wolf">{row.solved}</span>
-                    <span className="rb-numeric w-14 text-right text-sm text-rb-wolf">{row.accuracy}%</span>
-                    <span className="rb-numeric w-14 text-right text-sm text-rb-wolf">{row.avg}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="flex gap-4 border-t-2 border-rb-swan px-5 py-3 text-[0.625rem] font-bold uppercase tracking-wide text-rb-wolf">
-                <span className="ml-auto w-12 text-right">solved</span>
-                <span className="w-14 text-right">acc.</span>
-                <span className="w-14 text-right">avg</span>
-              </div>
-            </div>
-
-            <div className="mt-8 flex justify-center">
               <TactileButton
-                variant="snow"
+                variant="ghost"
+                size="sm"
                 onClick={() => {
                   setPhase("track")
                   setTrack(null)
@@ -487,6 +468,49 @@ export default function WorldCupPage() {
               >
                 play again
               </TactileButton>
+            </div>
+
+            <div className="mt-6 grid gap-5 lg:grid-cols-3">
+              {AWARDS.map((award) => (
+                <div key={award.key} className="rb-card rb-card-raised">
+                  <span className={`grid size-14 place-items-center rounded-2xl ${award.tone}`}>
+                    <award.icon className="size-7" aria-hidden="true" />
+                  </span>
+                  <div className="mt-4 font-rb-display text-lg font-extrabold lowercase text-rb-eel">
+                    {award.label}
+                  </div>
+                  <div className="mt-1 font-bold text-rb-eel">{award.who}</div>
+                  <div className="text-sm font-semibold text-rb-wolf">{award.detail}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="rb-card rb-card-raised mt-5 flex min-h-0 flex-1 flex-col !p-0">
+              <div className="flex shrink-0 items-center gap-2 border-b-2 border-rb-swan px-5 py-4">
+                <Award className="size-5 text-rb-wolf" aria-hidden="true" />
+                <span className="font-rb-display text-lg font-extrabold lowercase text-rb-eel">
+                  final standings
+                </span>
+                <span className="ml-auto flex gap-4 text-[0.625rem] font-bold uppercase tracking-wide text-rb-wolf">
+                  <span className="w-12 text-right">solved</span>
+                  <span className="w-14 text-right">acc.</span>
+                  <span className="w-14 text-right">avg</span>
+                </span>
+              </div>
+              <ul className="min-h-0 flex-1 divide-y divide-rb-swan overflow-y-auto">
+                {STANDINGS.map((row, index) => (
+                  <li
+                    key={row.name}
+                    className={`flex items-center gap-4 px-5 py-4 ${row.you ? "bg-rb-feather-wash" : ""}`}
+                  >
+                    <span className="rb-numeric w-6 text-rb-wolf">{index + 1}</span>
+                    <span className="min-w-0 flex-1 truncate font-bold text-rb-eel">{row.name}</span>
+                    <span className="rb-numeric w-12 text-right text-sm text-rb-wolf">{row.solved}</span>
+                    <span className="rb-numeric w-14 text-right text-sm text-rb-wolf">{row.accuracy}%</span>
+                    <span className="rb-numeric w-14 text-right text-sm text-rb-wolf">{row.avg}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         ) : null}

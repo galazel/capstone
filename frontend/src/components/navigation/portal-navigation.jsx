@@ -24,7 +24,7 @@ import {
   Users,
   UsersRound,
   X,
-} from "lucide-react"
+} from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 import { BrandLogo } from "@/components/brand-logo"
@@ -162,12 +162,35 @@ function Brand({ role, organizationName }) {
   )
 }
 
+/** Shared trigger/link styling, so a single-page group and a dropdown sit on
+ *  the same baseline and carry the same active underline. */
+const navItemClass = (active) =>
+  cn(
+    "relative inline-flex h-10 items-center gap-1 px-3 text-sm font-medium transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+    active
+      ? "text-primary after:absolute after:inset-x-3 after:-bottom-[13px] after:h-0.5 after:bg-primary"
+      : "text-muted-foreground",
+  )
+
 function GroupDropdown({ group, pathname }) {
   const active = group.items.some((item) => pathMatches(pathname, item))
+
+  // A menu holding one page is a link wearing a menu's clothes: it costs a
+  // click and a chevron promising choices that are not there. "Overview" was
+  // exactly this -- a dropdown whose only entry went to /admin/dashboard.
+  if (group.items.length === 1) {
+    const only = group.items[0]
+    return (
+      <NavLink to={only.href} className={navItemClass(active)}>
+        {group.label}
+      </NavLink>
+    )
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className={cn("relative inline-flex h-10 items-center gap-1 px-3 text-sm font-medium transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", active ? "text-primary after:absolute after:inset-x-3 after:-bottom-[13px] after:h-0.5 after:bg-primary" : "text-muted-foreground") }>
+        <button className={navItemClass(active)}>
           {group.label}<ChevronDown className="size-3.5" aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
@@ -253,10 +276,13 @@ export function PortalTopNavigation({ role, actions, organizationName, enterpris
       <header className="sticky top-0 z-40 border-b border-border/80 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/90">
         <div className="mx-auto flex h-16 w-full max-w-[1480px] items-center gap-4 px-4 sm:px-6 lg:px-8">
           <Brand role={role} organizationName={organizationName} />
-          <nav className="hidden min-w-0 flex-1 items-center gap-1 lg:flex" aria-label={`${role.toLowerCase()} navigation`}>
+          {/* Centred rather than left-aligned against the logo: `flex-1` on both
+              the nav and the actions row lets the nav take the middle third and
+              stay centred as the brand and action clusters change width. */}
+          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-1 lg:flex" aria-label={`${role.toLowerCase()} navigation`}>
             {role === "LEARNER" ? learnerNavigation.slice(0, 6).map((item) => <NavLink key={`${item.label}-${item.href}`} to={item.href} className={cn("relative px-2.5 py-2 text-sm font-medium transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", pathMatches(location.pathname, item) ? "text-primary after:absolute after:inset-x-2.5 after:-bottom-[13px] after:h-0.5 after:bg-primary" : "text-muted-foreground")}>{item.label}</NavLink>) : groups.map((group) => <GroupDropdown key={group.label} group={group} pathname={location.pathname} />)}
           </nav>
-          <div className="ml-auto flex items-center gap-1.5">
+          <div className="flex flex-1 items-center justify-end gap-1.5 lg:flex-none">
             {!isEnterpriseMember ? (
               <>
                 <Button variant="outline" className="hidden h-9 min-w-44 justify-start gap-2 text-muted-foreground md:flex" onClick={() => setCommandOpen(true)}><Search className="size-4" /><span className="flex-1 text-left">Search REBYU</span><kbd className="text-[10px]">Ctrl K</kbd></Button>

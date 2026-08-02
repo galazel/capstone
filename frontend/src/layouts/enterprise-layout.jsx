@@ -1,7 +1,7 @@
 import { useMemo } from "react"
 import { Outlet, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { FilesIcon, LogOutIcon, SettingsIcon, UserIcon } from "lucide-react"
+import { FilesIcon, LogOutIcon, SettingsIcon, UserIcon } from "@/components/icons"
 
 import { PortalTopNavigation } from "@/components/navigation/portal-navigation.jsx"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"

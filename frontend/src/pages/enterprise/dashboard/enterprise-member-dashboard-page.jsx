@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { BookOpenIcon, UsersRoundIcon } from "lucide-react"
+import { BookOpenIcon, UsersRoundIcon } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"

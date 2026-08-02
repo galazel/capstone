@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useCommunity } from '@/hooks/useCommunity'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Edit, Trash2 } from 'lucide-react'
+import { Edit, Trash2 } from "@/components/icons"
 
 export default function PostEditorPage() {
   const [searchParams] = useSearchParams()

@@ -33,7 +33,7 @@ import {
   Users,
   X,
   Zap,
-} from "lucide-react";
+} from "@/components/icons";
 
 import { BrandLogo } from "@/components/brand-logo";
 import { Chip, ProgressBar, RebyuCard, TactileButton } from "@/components/rebyu/rebyu-ui.jsx";
@@ -1290,47 +1290,66 @@ function OlympicsSection() {
         </div>
       </div>
 
-      <div
-        data-landing-reveal
-        className="rb-blades mt-12 h-[clamp(420px,60vh,560px)] lg:h-[56vh]"
-      >
-        {OLYMPICS_MODES.map((mode) => (
-          <Link key={mode.id} to={mode.to} className={`rb-blade ${BLADE_FILL[mode.tone]}`}>
-            <span className="rb-blade-ghost">{mode.name}</span>
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/70 to-transparent"
-            />
-
-            <span className="rb-blade-inner flex flex-col justify-end p-6 text-left lg:p-8">
-              <span className="inline-flex w-fit items-center gap-1.5 rounded-rb-pill bg-black/35 px-3 py-1.5 text-[0.6875rem] font-bold uppercase tracking-wide text-white">
+      {/* Cards, not the angled blades this used to be. The skew clipped its own
+          content at both edges -- "codestrike" rendered as "destrike", the
+          bullets lost their first word, and the call to action read "TER
+          ARENA". A shape that cannot hold its own text is not a stylistic
+          choice. These carry the same solid face and lip as the buttons, so
+          the section reads as part of the same system. */}
+      <div className="mx-auto mt-12 max-w-[1280px] px-5 lg:px-8">
+        <div data-landing-reveal className="grid gap-6 md:grid-cols-3">
+          {OLYMPICS_MODES.map((mode) => (
+            <Link
+              key={mode.id}
+              to={mode.to}
+              className={`group/mode flex flex-col rounded-rb-card p-6 text-left transition-transform duration-150 hover:-translate-y-1 lg:p-7 ${BLADE_FILL[mode.tone]}`}
+              style={{ boxShadow: "0 6px 0 rgba(0,0,0,0.22)" }}
+            >
+              <span
+                className="rb-eyebrow inline-flex w-fit items-center gap-1.5 rounded-rb-pill px-3 py-1.5"
+                style={{
+                  color: "#fff",
+                  background: "var(--color-rb-eel)",
+                  boxShadow: "0 2px 0 rgba(0,0,0,0.35)",
+                }}
+              >
                 <mode.icon className="size-3.5" aria-hidden="true" />
                 {mode.format}
               </span>
 
-              <span className="mt-3 block font-rb-display text-2xl font-black uppercase italic leading-none text-white drop-shadow lg:text-4xl">
+              <span
+                className="rb-display rb-display-md mt-4 block"
+                style={{ color: "#fff" }}
+              >
                 {mode.name}
               </span>
 
-              <span className="rb-blade-detail mt-3 block">
-                <span className="block max-w-sm text-sm leading-6 text-white/90">{mode.blurb}</span>
-                <span className="mt-4 flex flex-col gap-1.5">
-                  {mode.points.map((point) => (
-                    <span key={point} className="flex items-center gap-2 text-xs font-semibold text-white/85">
-                      <Check className="size-3.5 shrink-0" aria-hidden="true" />
-                      {point}
-                    </span>
-                  ))}
-                </span>
-                <span className="mt-5 inline-flex items-center gap-1.5 rounded-rb-pill bg-white px-5 py-2.5 text-xs font-extrabold uppercase tracking-wide text-rb-eel">
-                  enter arena
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </span>
+              <span className="mt-3 block text-sm leading-6 text-white/90">{mode.blurb}</span>
+
+              <span className="mt-4 flex flex-1 flex-col gap-1.5">
+                {mode.points.map((point) => (
+                  <span
+                    key={point}
+                    className="flex items-start gap-2 text-xs font-semibold text-white/85"
+                  >
+                    <Check className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                    {point}
+                  </span>
+                ))}
               </span>
-            </span>
-          </Link>
-        ))}
+
+              <span
+                className="mt-6 inline-flex w-fit items-center gap-1.5 rounded-rb-pill bg-white px-5 py-2.5 text-xs font-extrabold uppercase tracking-wide text-rb-eel transition-transform duration-150 group-hover/mode:translate-y-0.5"
+                style={{ boxShadow: "0 var(--rb-lip, 4px) 0 var(--color-rb-swan)" }}
+              >
+                enter arena
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </span>
+            </Link>
+          ))}
+        </div>
       </div>
+
     </section>
   );
 }

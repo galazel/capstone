@@ -9,12 +9,12 @@ from app.utils.helpers import get_llm
 SYSTEM_PROMPT = """
 You are an AI lesson auditor.
 
-Determine whether the generated lesson follows the provided curriculum, learning objective, and lessonGenerationInstructions.
+Determine whether the generated lesson follows the provided curriculum, its learning objective, and its key topics.
 
 Check that:
 - The lesson belongs to the correct certification, major category, and middle category.
 - The learning objective is fully covered.
-- The lesson follows the provided instructions.
+- Every key topic the curriculum lists for this lesson is covered.
 - The content is accurate, complete, and well organized.
 - No important topics are missing.
 - There is no irrelevant, duplicated, or hallucinated content.

@@ -20,7 +20,7 @@ import {
   SendHorizontal,
   Sparkles,
   X,
-} from "lucide-react"
+} from "@/components/icons"
 
 import { Bubble, BubbleContent } from "@/components/ui/bubble"
 import { Button } from "@/components/ui/button"

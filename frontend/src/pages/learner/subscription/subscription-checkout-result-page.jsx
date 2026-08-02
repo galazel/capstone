@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
-import { CheckCircle2Icon, Loader2Icon, XCircleIcon } from "lucide-react"
+import { CheckCircle2Icon, Loader2Icon, XCircleIcon } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"

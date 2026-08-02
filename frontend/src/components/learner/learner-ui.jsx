@@ -16,7 +16,7 @@ import {
   Target,
   Trophy,
   UserRound,
-} from "lucide-react"
+} from "@/components/icons"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { BrandLogo } from "@/components/brand-logo"

@@ -6,7 +6,7 @@ import {
     CircleAlert,
     Sparkles,
     X,
-} from "lucide-react"
+} from "@/components/icons"
 import { useMutation } from "@tanstack/react-query"
 import { toast } from "sonner"
 
@@ -748,11 +748,14 @@ export default function CertificationFormDrawer({
                                 : "Create Certification"}
                     </DialogTitle>
 
-                    <p className="text-xs text-muted-foreground">
-                        {generatingCertificationId
-                            ? "Watch it build, and review each item as it is produced"
-                            : `${STEP_LABELS[isEditing ? "edit" : "create"][page - 1]} · step ${page} of ${TOTAL_STEPS}`}
-                    </p>
+                    {/* No subheading while generating: the step counter is
+                        meaningful for the form, but a generation has no steps
+                        to count and the timeline speaks for itself. */}
+                    {generatingCertificationId ? null : (
+                        <p className="text-xs text-muted-foreground">
+                            {`${STEP_LABELS[isEditing ? "edit" : "create"][page - 1]} · step ${page} of ${TOTAL_STEPS}`}
+                        </p>
+                    )}
                 </DialogHeader>
 
                 {/* The generation transcript owns its own scrolling, header rule,

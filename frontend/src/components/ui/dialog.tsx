@@ -3,7 +3,7 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { XIcon } from "lucide-react"
+import { ArrowLeftIcon } from "@/components/icons"
 
 function Dialog({
   ...props
@@ -56,6 +56,37 @@ function DialogContent({
   return (
     <DialogPortal>
       <DialogOverlay />
+      {showCloseButton && (
+        // Deliberately a SIBLING of the content, not a child. 14 of the app's
+        // dialogs set their own `overflow-y-auto` for long bodies, and a child
+        // positioned outside the panel would be clipped away by that — the
+        // dialog would render with no visible way to close it. As a sibling of
+        // the content it is anchored to the viewport and can never be clipped.
+        //
+        // Same round tactile key as `.rb-btn-icon` / BackButton, rebuilt with
+        // utilities because a portal renders outside the `.rebyu-ds` scope
+        // those classes need. Snow face, not the blue one: it sits on the
+        // dimmed overlay where a filled primary key would out-shout the
+        // dialog's own call to action.
+        <DialogPrimitive.Close data-slot="dialog-close" asChild>
+          <button
+            type="button"
+            // aria-hidden + tabIndex -1: this key sits outside Radix's focus
+            // trap, so it is unreachable by keyboard. The sr-only Close inside
+            // the content below is the keyboard/screen-reader path, and Esc
+            // still dismisses. Exposing both would announce Close twice.
+            aria-hidden="true"
+            tabIndex={-1}
+            // `pointer-events-auto` is load-bearing: Radix puts
+            // `pointer-events: none` on <body> for a modal dialog and only
+            // re-enables it on the content, so a sibling inherits the block and
+            // silently becomes unclickable. z-51 puts it over the overlay.
+            className="pointer-events-auto fixed top-6 left-6 z-51 inline-flex size-14 items-center justify-center rounded-full border-2 border-border bg-card text-foreground shadow-[0_4px_0_var(--border)] transition-[transform,box-shadow,filter] duration-75 hover:brightness-[0.98] active:translate-y-1 active:shadow-none max-sm:top-4 max-sm:left-4 max-sm:size-12 motion-reduce:transition-none"
+          >
+            <ArrowLeftIcon className="size-5" />
+          </button>
+        </DialogPrimitive.Close>
+      )}
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
@@ -66,17 +97,11 @@ function DialogContent({
       >
         {children}
         {showCloseButton && (
-          <DialogPrimitive.Close data-slot="dialog-close" asChild>
-            <Button
-              variant="ghost"
-              className="absolute top-4 right-4"
-              size="icon-sm"
-            >
-              <XIcon
-              />
-              <span className="sr-only">Close</span>
-            </Button>
-          </DialogPrimitive.Close>
+          // The keyboard and screen-reader path for the key rendered above:
+          // inside the content, so it lives in Radix's focus trap and can be
+          // tabbed to, but visually hidden so the tactile key is the only thing
+          // seen. Esc dismisses either way.
+          <DialogPrimitive.Close className="sr-only">Close</DialogPrimitive.Close>
         )}
       </DialogPrimitive.Content>
     </DialogPortal>
@@ -127,7 +152,9 @@ function DialogTitle({
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("pr-8 font-heading text-xl font-semibold leading-tight tracking-tight", className)}
+      // No `pr-8` reserve any more — the close key moved outside the panel, so
+      // the title gets the full width back.
+      className={cn("font-heading text-xl font-semibold leading-tight tracking-tight", className)}
       {...props}
     />
   )

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { TrendingUp, BookOpen, Target, Zap } from 'lucide-react'
+import { TrendingUp, BookOpen, Target, Zap } from "@/components/icons"
 import { getMyMastery } from '@/services/learnerAnalyticsService'
 import { MasteryIndicator } from './mastery-indicator'
 import { LearnerLoadingSkeleton, LearnerEmptyState } from './learner-ui'

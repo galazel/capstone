@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Code2, Network, Save, Trophy } from "lucide-react"
+import { Code2, Network, Save, Trophy } from "@/components/icons"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ChevronRight } from "lucide-react"
+import { ChevronRight } from "@/components/icons"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { buildTranscript } from "@/hooks/workflow-timeline-model"

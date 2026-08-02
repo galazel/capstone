@@ -1,5 +1,6 @@
 package com.capstone.rebyu.certification.service;
 
+import com.capstone.rebyu.aigateway.client.WorkflowClient;
 import com.capstone.rebyu.certification.dto.CertificationDto;
 import com.capstone.rebyu.certification.dto.ExamSummaryDto;
 import com.capstone.rebyu.certification.dto.LessonDto;
@@ -47,6 +48,7 @@ public class CertificationService {
     private final EntityManager entityManager;
     private final ExamRepository examRepository;
     private final ExamQuestionRepository examQuestionRepository;
+    private final WorkflowClient workflowClient;
 
     /**
      * @param includeGroupId when null, only official (platform-wide) content is
@@ -235,6 +237,21 @@ public class CertificationService {
 
     public void delete(Long id) {
         Certification certification = findEntity(id);
+
+        // Before any rows go: a generation still in flight has to be stopped,
+        // or it carries on authoring lessons and questions against a
+        // certification that no longer exists -- spending tokens the whole
+        // way, and leaving a run in the workspace that opens onto nothing.
+        //
+        // Best-effort by design. The AI service being down must not block an
+        // admin's delete; the alternative is a certification that cannot be
+        // removed because a different service is unhealthy. A leaked run is
+        // recoverable, a half-deleted certification is not.
+        try {
+            workflowClient.purgeCertification(id);
+        } catch (Exception e) {
+            log.warn("Could not purge AI generation data for certification {}: {}", id, e.getMessage());
+        }
 
         deleteRelatedCertificationData(id);
         certificationRepository.delete(certification);

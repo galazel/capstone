@@ -87,6 +87,28 @@ public class WorkflowClient {
     }
 
     /**
+     * Stops and erases everything the AI service holds for a certification:
+     * its generation runs (cancelled first, then deleted with their event
+     * logs) and its indexed document vectors.
+     *
+     * <p>Called when a certification is deleted. Without it, a run in flight
+     * kept authoring lessons and questions against rows that no longer
+     * existed, and its timeline stayed in the generation workspace pointing at
+     * a certification nobody could open.
+     */
+    public Map<String, Object> purgeCertification(Long certificationId) {
+        try {
+            return webClient.delete()
+                    .uri(uri -> uri.path("/workflows/certifications/{id}").build(certificationId))
+                    .retrieve()
+                    .bodyToMono(MAP)
+                    .block();
+        } catch (Exception e) {
+            throw new AiServiceException("Purge AI data for certification " + certificationId + " failed", e);
+        }
+    }
+
+    /**
      * Re-runs the single step a failed run died on, keeping everything before
      * it. LangGraph checkpoints after every superstep, so the thread is still
      * parked with the failed node pending.

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { ClipboardListIcon, ClockIcon, TargetIcon } from "lucide-react"
+import { ClipboardListIcon, ClockIcon, TargetIcon } from "@/components/icons"
 
 import {
   AlertDialog,

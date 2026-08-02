@@ -1,4 +1,4 @@
-import { Check } from "lucide-react"
+import { Check } from "@/components/icons"
 import { Link } from "react-router-dom"
 
 import { BrandLogo } from "@/components/brand-logo"

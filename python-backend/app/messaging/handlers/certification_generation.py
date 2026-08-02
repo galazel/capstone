@@ -76,15 +76,32 @@ async def handle_certification_generation_requested(payload: dict) -> None:
     document_refs = certification_run.document_refs_from(documents)
 
     thread_id = str(generation_request_id)
+
+    # A message can be redelivered while the run it refers to is still being
+    # executed here -- RabbitMQ requeues on a dropped channel, and the broker's
+    # consumer timeout closes one out from under a run that outlasts it. Acting
+    # on that would put a second driver on the thread, duplicating every node.
+    # The message is acked and dropped instead: the run in flight owns it.
+    if certification_run.is_being_driven(thread_id):
+        logger.info("Run %s is already executing here; dropping the redelivered message", thread_id)
+        return
+
     with SessionLocal() as session:
-        registry.start_run(
-            session,
-            thread_id=thread_id,
-            kind="CERTIFICATION",
-            certification_id=certification_id,
-            generation_request_id=generation_request_id,
-            triggered_by_user_id=generation_request.get("triggered_by_user_id"),
-        )
+        try:
+            registry.start_run(
+                session,
+                thread_id=thread_id,
+                kind="CERTIFICATION",
+                certification_id=certification_id,
+                generation_request_id=generation_request_id,
+                triggered_by_user_id=generation_request.get("triggered_by_user_id"),
+            )
+        except registry.RunAlreadyCancelled:
+            # The reviewer stopped this run. Cancellation leaves the message
+            # unacked, so RabbitMQ redelivers it -- returning here acks and
+            # drops it instead of resurrecting work someone stopped on purpose.
+            logger.info("Ignoring redelivered message for cancelled run %s", thread_id)
+            return
 
     context = certification_run.RunContext(
         thread_id=thread_id,

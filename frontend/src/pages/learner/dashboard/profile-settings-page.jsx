@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useProfile } from '@/hooks/useProfile'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { User, Lock, Trash2 } from 'lucide-react'
+import { User, Lock, Trash2 } from "@/components/icons"
 
 export default function ProfileSettingsPage() {
   const { updateProfile, changePassword, deleteAccount, loading } = useProfile()

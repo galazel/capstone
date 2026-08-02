@@ -80,7 +80,10 @@ async def generate_batch_node(state: QuestionBankState):
     if is_improvement:
         base_instructions += f"\n\nAdmin feedback on the previous version of this batch — apply it: {instructions}"
 
-    batch = await invoke_question_agent(_scope_description(state), state.get("reference_context", ""), base_instructions)
+    batch = await invoke_question_agent(
+        _scope_description(state), state.get("reference_context", ""), base_instructions,
+        count=count,
+    )
     questions = questions_as_dicts(batch)
 
     return {

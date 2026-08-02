@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { RotateCcw } from "lucide-react"
+import { RotateCcw } from "@/components/icons"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"

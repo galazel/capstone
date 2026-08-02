@@ -11,7 +11,7 @@ import {
   Layers3Icon,
   MailIcon,
   UsersRoundIcon,
-} from "lucide-react"
+} from "@/components/icons"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -36,12 +36,13 @@ import { useEnterpriseData } from "@/hooks/use-enterprise-data.js"
 import { getExamTypes, getExams } from "@/services/assessmentService.js"
 import { getAllCertifications } from "@/services/certificationService.js"
 import { getEnterpriseGroups } from "@/services/enterpriseService.js"
+import { EnterpriseQuestionBankPanel } from "./enterprise-question-bank-page.jsx"
 
 function asArray(value) {
   return Array.isArray(value) ? value : []
 }
 
-function MiddleCategoryRow({ middleCategory, orgCertId }) {
+function MiddleCategoryRow({ middleCategory, onAddQuestion }) {
   const [isOpen, setIsOpen] = useState(false)
   const lessons = middleCategory.lessons ?? []
 
@@ -79,15 +80,13 @@ function MiddleCategoryRow({ middleCategory, orgCertId }) {
                 className="flex items-center justify-between gap-3 rounded-lg border bg-background px-3 py-2"
               >
                 <span className="truncate text-sm">{lesson.name}</span>
-                <Button asChild variant="ghost" size="sm">
-                  <Link
-                    to={`/enterprise/question-bank?certificationId=${
-                      middleCategory.__certificationId
-                    }&lessonId=${lesson.lessonId}&add=1`}
-                  >
-                    <FileQuestionIcon className="size-4" aria-hidden="true" />
-                    Add Question
-                  </Link>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onAddQuestion(lesson.lessonId)}
+                >
+                  <FileQuestionIcon className="size-4" aria-hidden="true" />
+                  Add Question
                 </Button>
               </div>
             ))
@@ -124,6 +123,11 @@ export default function EnterpriseCertificationDetailPage() {
     (group) => group.orgCertId === numericOrgCertId && group.status === "active"
   )
 
+  const [activeTab, setActiveTab] = useState("curriculum")
+  // Lesson handed to the Question Bank tab by the "Add Question" button next to
+  // a lesson in the curriculum -- it opens the tab with the form already up.
+  const [questionBankTarget, setQuestionBankTarget] = useState(null)
+
   const examsQuery = useQuery({
     queryKey: ["exams"],
     queryFn: () => getExams(),
@@ -146,24 +150,13 @@ export default function EnterpriseCertificationDetailPage() {
     return asArray(data.invitations).filter((inv) => groupIds.has(inv.enterpriseGroupId))
   }, [data.invitations, groups])
 
-  const certification = useMemo(() => {
-    const full = asArray(certificationsQuery.data).find(
-      (c) => c.certificationId === orgCert?.certificationId
-    )
-    if (!full) return null
-    // Stamp the certification id onto each lesson's parent chain so the
-    // "Add question" deep link doesn't need a second lookup.
-    return {
-      ...full,
-      majorCategory: (full.majorCategory ?? []).map((major) => ({
-        ...major,
-        middleCategory: (major.middleCategory ?? []).map((middle) => ({
-          ...middle,
-          __certificationId: full.certificationId,
-        })),
-      })),
-    }
-  }, [certificationsQuery.data, orgCert?.certificationId])
+  const certification = useMemo(
+    () =>
+      asArray(certificationsQuery.data).find(
+        (c) => c.certificationId === orgCert?.certificationId
+      ) ?? null,
+    [certificationsQuery.data, orgCert?.certificationId]
+  )
 
   const isLoading =
     enterpriseLoading ||
@@ -260,9 +253,10 @@ export default function EnterpriseCertificationDetailPage() {
         </Card>
       </div>
 
-      <Tabs defaultValue="curriculum">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="curriculum">Curriculum</TabsTrigger>
+          <TabsTrigger value="question-bank">Question Bank</TabsTrigger>
           <TabsTrigger value="groups">Groups ({groups.length})</TabsTrigger>
           <TabsTrigger value="invitations">Invitations</TabsTrigger>
         </TabsList>
@@ -289,7 +283,15 @@ export default function EnterpriseCertificationDetailPage() {
                       <MiddleCategoryRow
                         key={middle.middleCategoryId ?? middleIndex}
                         middleCategory={middle}
-                        orgCertId={numericOrgCertId}
+                        onAddQuestion={(lessonId) => {
+                          setQuestionBankTarget({
+                            lessonId,
+                            // A fresh key each click so re-picking the same
+                            // lesson re-opens the form.
+                            requestId: `${lessonId}-${performance.now()}`,
+                          })
+                          setActiveTab("question-bank")
+                        }}
                       />
                     ))}
                   </div>
@@ -330,6 +332,19 @@ export default function EnterpriseCertificationDetailPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="question-bank" className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Add questions to any lesson in this certification. You can edit or delete
+            only the questions you created.
+          </p>
+          <EnterpriseQuestionBankPanel
+            key={questionBankTarget?.requestId ?? "browse"}
+            certificationId={String(certification.certificationId)}
+            initialLessonId={questionBankTarget?.lessonId ?? ""}
+            autoOpenAdd={questionBankTarget != null}
+          />
         </TabsContent>
 
         <TabsContent value="groups" className="space-y-4">

@@ -13,7 +13,7 @@ import {
   UploadCloudIcon,
   UploadIcon,
   VideoIcon,
-} from "lucide-react";
+} from "@/components/icons";
 
 import {
   formatBytes,

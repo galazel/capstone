@@ -1,4 +1,4 @@
-import { FlagIcon, LayersIcon } from "lucide-react"
+import { FlagIcon, LayersIcon } from "@/components/icons"
 
 import { cn } from "@/lib/utils"
 import { deriveItemStatus, ITEM_STATUS } from "./item-status.js"

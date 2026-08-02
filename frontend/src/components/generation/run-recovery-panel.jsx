@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { AlertTriangle, Loader2, RefreshCw, RotateCcw } from "lucide-react"
+import { AlertTriangle, Loader2, RefreshCw, RotateCcw } from "@/components/icons"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -91,18 +91,31 @@ export function RunRecoveryPanel({ runId, lastSeq, errorMessage }) {
 
   const busy = retry.isPending || restart.isPending
 
+  // A run abandoned by a service restart is RUNNING, not FAILED — the process
+  // that would have recorded the failure is the one that died. The server
+  // decides when silence has gone on long enough to call that stalled, and
+  // reports it here; the panel must not re-derive it from the status alone or
+  // it hides itself over exactly the runs that most need these two buttons.
+  const stalled = Boolean(recovery?.stalled)
+
   // Declared after the hooks, not before them: an early return above would
   // make the two mutations conditional.
-  if (details.isSuccess && status !== "FAILED") return null
+  if (details.isSuccess && status !== "FAILED" && !stalled) return null
 
   return (
     <div className="mx-2.5 my-2 rounded-lg border border-amber-300/70 bg-amber-50/60 p-3 dark:border-amber-500/30 dark:bg-amber-950/20">
       <div className="flex items-start gap-2.5">
         <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-foreground">This run stopped</p>
+          <p className="text-sm font-medium text-foreground">
+            {stalled ? "This run went quiet" : "This run stopped"}
+          </p>
           <p className="mt-0.5 break-words text-xs leading-relaxed text-muted-foreground">
-            {errorMessage || "It failed partway through and is no longer running."}
+            {stalled
+              ? `Nothing has been recorded for ${Math.round((recovery.idle_seconds ?? 0) / 60)} minutes. ` +
+                "The generation service most likely restarted while it was executing. It is " +
+                "resumed automatically from its last checkpoint; these are here in case it isn't."
+              : errorMessage || "It failed partway through and is no longer running."}
           </p>
 
           {recovery?.failed_stage ? (

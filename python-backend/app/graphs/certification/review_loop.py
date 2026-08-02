@@ -77,6 +77,12 @@ class LoopPhase:
     items_of: Callable[[dict], list[Any]]
     #: Human label for one item, used in review payloads and logs.
     label_of: Callable[[Any], str]
+    #: Optional boundary test: True while the item under the cursor still
+    #: belongs to the parent currently being walked. The lesson phase uses it
+    #: to stop at the end of a middle category so that category's quiz can be
+    #: written from the lessons just authored, rather than running through
+    #: every lesson in the certification first. Absent means "walk to the end".
+    in_scope: Callable[[CertificationState], bool] | None = None
 
     @property
     def gate(self) -> str:
@@ -134,6 +140,11 @@ def make_gate_router(phase: LoopPhase):
         index = current_index(state, phase)
         if index >= len(items):
             logger.info("%s phase complete (%d item(s))", phase.scope, len(items))
+            return "exit"
+        if phase.in_scope is not None and not phase.in_scope(state):
+            logger.info(
+                "%s phase pausing at item %d: end of the current parent", phase.scope, index
+            )
             return "exit"
         return "generate"
 
@@ -269,11 +280,21 @@ def register_phase(
     exit_to: str,
     apply_edit_fn: Callable[[CertificationState, Any], dict],
     generate_chain: list[tuple[str, Any]] | None = None,
+    advance_router: Callable[[CertificationState], str] | None = None,
+    advance_targets: dict[str, str] | None = None,
 ) -> None:
     """Wires one phase's five nodes and two conditional edges.
 
     `generate_chain` lets a phase run several generation nodes in order
     (lessons generate content *then* a quiz) before validation.
+
+    `advance_router` sends the walk somewhere other than straight back to this
+    phase's own gate once the cursor moves. The certification walk is nested --
+    lessons, then their middle category's quiz, then back to the next middle's
+    lessons -- so finishing a middle category hands control back to the lesson
+    phase rather than to the next middle. Without it each phase could only run
+    to completion before the next began, which is what forced category quizzes
+    to be written before the lessons they test existed.
     """
     workflow.add_node(phase.gate, make_gate_node(phase))
     # Generation and validation are instrumented so the workspace timeline shows
@@ -312,7 +333,10 @@ def register_phase(
     # A manual edit is accepted as-is and moves on; it is not re-validated,
     # because the reviewer's judgement supersedes the automated checks.
     workflow.add_edge(edit_name, phase.advance)
-    workflow.add_edge(phase.advance, phase.gate)
+    if advance_router is not None:
+        workflow.add_conditional_edges(phase.advance, advance_router, advance_targets)
+    else:
+        workflow.add_edge(phase.advance, phase.gate)
 
 
 # --- version history -----------------------------------------------------

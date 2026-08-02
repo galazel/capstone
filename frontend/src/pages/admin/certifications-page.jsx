@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { Plus } from "lucide-react"
+import { Plus } from "@/components/icons"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import CertificationCard from "../../components/certifications/certification-card"

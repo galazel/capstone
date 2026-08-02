@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Check, CheckCheck, Pencil, RotateCw, SkipForward, Sparkles, X } from "lucide-react"
+import { Check, CheckCheck, Pencil, RotateCw, SkipForward, Sparkles, X } from "@/components/icons"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 

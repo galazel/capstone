@@ -27,11 +27,41 @@ def mcq(question="What is 2+2?", **overrides):
         choices=["3", "4", "5", "6"],
         correct_choice_index=1,
         explanation="Because two plus two equals four, by definition.",
+        choice_explanations=[
+            "Off by one: 2+2 is not 3.",
+            "Correct: two plus two equals four.",
+            "Off by one in the other direction.",
+            "This is 2x3, not 2+2.",
+        ],
         learning_objective="arithmetic",
         bloom_level="REMEMBER",
     )
     base.update(overrides)
     return QuestionDraft(**base)
+
+
+def mcq_dict(**overrides) -> dict:
+    """A question as a plain dict, bypassing `QuestionDraft`.
+
+    The advisory layer accepts dicts as well as models, and some of its checks
+    exist for content the schema now rejects outright at generation time --
+    a missing explanation, say. Those cases still reach validation from
+    elsewhere (a reviewer's manual edit, an artifact from an older run), so
+    they are still worth reporting; they just cannot be built as a draft.
+    """
+    base = dict(
+        question_type="MCQ",
+        question="What is 2+2?",
+        choices=["3", "4", "5", "6"],
+        correct_choice_index=1,
+        explanation="Because two plus two equals four, by definition.",
+        learning_objective="arithmetic",
+        bloom_level="REMEMBER",
+        difficulty="AVERAGE",
+        estimated_seconds=60,
+    )
+    base.update(overrides)
+    return base
 
 
 def codes(report) -> set[str]:
@@ -83,6 +113,7 @@ def test_programming_accepts_with_test_case():
         question_type="PROGRAMMING",
         question="Reverse a string.",
         test_cases=[ProgrammingTestCase(input_data="ab", expected_output="ba")],
+        explanation="Reversing walks the string from the end to the start.",
     )
     assert q.test_cases[0].expected_output == "ba"
 
@@ -105,7 +136,12 @@ def test_non_positive_estimated_time_is_rejected():
 def test_defaults_keep_generation_working_without_new_metadata():
     """The new pedagogical fields must not become a hard requirement on the
     model, or every existing prompt would start failing."""
-    q = QuestionDraft(question_type="SHORT_ANSWER", question="Define SQL.", correct_answer="lang")
+    q = QuestionDraft(
+        question_type="SHORT_ANSWER",
+        question="Define SQL.",
+        correct_answer="lang",
+        explanation="SQL is the query language for relational databases.",
+    )
     assert q.bloom_level == "UNDERSTAND"
     assert q.estimated_seconds > 0
     assert q.source_chunk_ids == []
@@ -183,7 +219,12 @@ def test_genuinely_blank_choice_is_flagged():
 
 
 def test_flags_missing_explanations():
-    report = validate_question_batch([mcq(explanation=""), mcq("Another?", explanation="")])
+    # Dicts, not drafts: the schema now rejects an unexplained question at
+    # generation time, so this advisory check only ever sees one that arrived
+    # from somewhere else.
+    report = validate_question_batch(
+        [mcq_dict(explanation=""), mcq_dict(question="Another?", explanation="")]
+    )
     assert "MISSING_EXPLANATION" in codes(report)
 
 
@@ -239,7 +280,7 @@ def test_partial_grounding_is_a_warning():
 
 def test_score_decreases_with_issue_severity():
     clean = validate_question_batch([mcq(source_chunk_ids=["c"])])
-    warned = validate_question_batch([mcq(explanation="", source_chunk_ids=["c"])])
+    warned = validate_question_batch([mcq_dict(explanation="", source_chunk_ids=["c"])])
     errored = validate_question_batch([mcq("Same question?"), mcq("Same question?")])
 
     assert clean.score > warned.score > errored.score

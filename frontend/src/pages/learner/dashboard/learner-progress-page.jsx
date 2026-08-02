@@ -14,7 +14,7 @@ import {
   Tooltip,
 } from "chart.js"
 import { Bar, Doughnut, Line } from "react-chartjs-2"
-import { BookOpen, Target } from "lucide-react"
+import { BookOpen, Target } from "@/components/icons"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"

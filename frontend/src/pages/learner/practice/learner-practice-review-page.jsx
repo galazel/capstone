@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { ArrowLeft, CheckCircle2, XCircle } from "lucide-react"
+import { ArrowLeft, CheckCircle2, XCircle } from "@/components/icons"
 import { useNavigate, useParams } from "react-router-dom"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"

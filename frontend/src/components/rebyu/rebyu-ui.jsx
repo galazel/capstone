@@ -6,7 +6,7 @@
  * these must sit inside a `.rebyu-ds` scope so the tokens resolve.
  */
 import { cloneElement } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "@/components/icons";
 import { Slot } from "radix-ui";
 
 import { cn } from "@/lib/utils";

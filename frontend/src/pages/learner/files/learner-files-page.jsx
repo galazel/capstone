@@ -16,7 +16,7 @@ import {
   Link,
   StickyNote,
   History,
-} from "lucide-react"
+} from "@/components/icons"
 import { useNavigate } from "react-router-dom"
 
 import { Badge } from "@/components/ui/badge"

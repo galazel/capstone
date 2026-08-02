@@ -45,6 +45,10 @@ certifications = Table(
     Column("status", SmallInteger),
     Column("date_created", DateTime),
     Column("date_updated", DateTime),
+    # Shape of the real exam, researched by the curriculum planner:
+    # {total_items, question_types[], notes}. NULL means unknown -- readers
+    # fall back to the configured mock_exam_questions. See V51.
+    Column("exam_structure", JSONB),
 )
 
 generation_requests = Table(
