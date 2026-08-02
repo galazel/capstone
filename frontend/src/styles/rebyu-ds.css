@@ -265,6 +265,22 @@
     font-size: 0.9375rem;
 }
 
+/* Icon-only: a round key. Square footprint, no side padding, but the same
+   face, lip and travel as every other button — a bare glyph on a header reads
+   as decoration, and back is the one control on these pages you must not have
+   to hunt for. */
+.rebyu-ds .rb-btn-icon {
+    width: 56px;
+    padding: 0;
+    gap: 0;
+}
+.rebyu-ds .rb-btn-icon.rb-btn-sm {
+    width: 44px;
+}
+.rebyu-ds .rb-btn-icon.rb-btn-lg {
+    width: 64px;
+}
+
 /* Variants — face + lip only, geometry is shared. */
 .rebyu-ds .rb-btn-mask {
     --rb-btn-face: var(--color-rb-mask);

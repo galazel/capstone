@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
-import { ArrowLeft, Award, Crown, Gauge, Trophy, Users, Zap } from "lucide-react"
+import { Award, Crown, Gauge, Trophy, Users, Zap } from "lucide-react"
 
-import { TactileButton } from "@/components/rebyu/rebyu-ui.jsx"
+import { BackButton, TactileButton } from "@/components/rebyu/rebyu-ui.jsx"
 
 /**
  * World Cup — 8-player synchronised tournament.
@@ -269,15 +269,11 @@ export default function WorldCupPage() {
     <div className="rebyu-ds rb-arena min-h-dvh overflow-x-hidden">
       <header className={"border-b-2 border-rb-swan bg-rb-snow"}>
         <div className="mx-auto flex h-16 max-w-[1280px] items-center gap-3 px-5 lg:px-8">
-          <Link
-            to="/learner/challenges"
-            className={`grid size-10 place-items-center rounded-xl transition-colors ${
-              "text-rb-eel hover:bg-rb-polar"
-            }`}
-            aria-label="Back to challenges"
-          >
-            <ArrowLeft className="size-5" />
-          </Link>
+          {/* sm: the arena header is 16 units tall, so the full-size key would
+              crowd it out. */}
+          <BackButton asChild size="sm" label="Back to challenges">
+            <Link to="/learner/challenges" />
+          </BackButton>
           <div className="min-w-0">
             <div
               className={`font-rb-display text-lg font-extrabold ${

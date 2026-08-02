@@ -5,6 +5,8 @@
  * components only choose variants and compose children. Anything rendering
  * these must sit inside a `.rebyu-ds` scope so the tokens resolve.
  */
+import { cloneElement } from "react";
+import { ArrowLeft } from "lucide-react";
 import { Slot } from "radix-ui";
 
 import { cn } from "@/lib/utils";
@@ -44,6 +46,43 @@ export function TactileButton({
       className={cn("rb-btn", BUTTON_VARIANTS[variant], BUTTON_SIZES[size], className)}
       {...props}
     />
+  );
+}
+
+/**
+ * Back navigation, as a key rather than a bare glyph.
+ *
+ * `label` is required reading for a screen reader — the arrow carries no text —
+ * and doubles as the tooltip. Pass a router <Link> as a self-closing child with
+ * `asChild` for link-shaped backs; the arrow is supplied here so every back
+ * control on every page is the same shape.
+ *
+ *   <BackButton asChild label="Back to arenas"><Link to="/learner/challenges" /></BackButton>
+ *   <BackButton label="Back to problem list" onClick={() => setView("grid")} />
+ */
+export function BackButton({
+  variant = "ghost",
+  size = "md",
+  asChild = false,
+  label,
+  className,
+  children,
+  ...props
+}) {
+  const icon = <ArrowLeft className="size-5" aria-hidden="true" />;
+
+  return (
+    <TactileButton
+      variant={variant}
+      size={size}
+      asChild={asChild}
+      aria-label={label}
+      title={label}
+      className={cn("rb-btn-icon", className)}
+      {...props}
+    >
+      {asChild ? cloneElement(children, undefined, icon) : icon}
+    </TactileButton>
   );
 }
 

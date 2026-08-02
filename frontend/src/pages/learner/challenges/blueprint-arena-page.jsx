@@ -1,7 +1,6 @@
 import { useState } from "react"
 import { Link } from "react-router-dom"
 import {
-  ArrowLeft,
   Box,
   CheckCircle2,
   Clock,
@@ -16,7 +15,7 @@ import {
   X,
 } from "lucide-react"
 
-import { ProgressBar, TactileButton } from "@/components/rebyu/rebyu-ui.jsx"
+import { BackButton, ProgressBar, TactileButton } from "@/components/rebyu/rebyu-ui.jsx"
 import ProblemGrid, { buildProblems } from "@/components/challenges/problem-grid.jsx"
 
 const TITLES = [
@@ -161,34 +160,23 @@ export default function BlueprintArenaPage() {
   if (view === "grid") {
     return (
       <div className="rebyu-ds min-h-dvh bg-rb-polar">
-        <header className="flex h-20 items-center gap-4 border-b-2 border-rb-swan bg-rb-snow px-5 lg:px-8">
-          <Link
-            to="/learner/challenges"
-            className="grid size-12 place-items-center rounded-2xl text-rb-eel transition-colors hover:bg-rb-polar"
-            aria-label="Back to arenas"
-          >
-            <ArrowLeft className="size-5" />
-          </Link>
+        {/* No header bar on the run's home screen: the map is the page, and a
+            ruled white strip above it framed the path as a panel inside an app
+            rather than the thing you came here for. The clock went with it --
+            nothing is being timed until you open a problem. */}
+        <div className="flex items-center gap-4 px-5 pt-6 lg:px-8">
+          <BackButton asChild label="Back to arenas">
+            <Link to="/learner/challenges" />
+          </BackButton>
           <div className="font-rb-display text-xl font-extrabold lowercase text-rb-eel">
             blueprint arena
           </div>
-          <span className="ml-auto flex items-center gap-1.5 rounded-rb-pill border-2 border-rb-swan bg-rb-polar px-3 py-1.5 text-sm font-bold tabular-nums text-rb-eel">
-            <Clock className="size-4" aria-hidden="true" />
-            04:12
-          </span>
-        </header>
+        </div>
 
         <ProblemGrid
-          arena="blueprint arena"
-          tagline="Twenty design problems. Pick a number to enter the arena."
           problems={PROBLEMS}
           onOpen={openProblem}
           tone={TONE}
-          footer={
-            <TactileButton variant="ghost" className="mt-6 w-full" onClick={() => setFinished(true)}>
-              finish run
-            </TactileButton>
-          }
         />
       </div>
     )
@@ -197,14 +185,7 @@ export default function BlueprintArenaPage() {
   return (
     <div className="rebyu-ds flex h-dvh flex-col overflow-hidden bg-rb-polar">
       <header className="flex h-20 shrink-0 items-center gap-4 border-b-2 border-rb-swan bg-rb-snow px-5 lg:px-8">
-        <button
-          type="button"
-          onClick={() => setView("grid")}
-          className="grid size-12 place-items-center rounded-2xl text-rb-eel transition-colors hover:bg-rb-polar"
-          aria-label="Back to problem list"
-        >
-          <ArrowLeft className="size-5" />
-        </button>
+        <BackButton label="Back to problem list" onClick={() => setView("grid")} />
         <div className="min-w-0">
           <div className="font-rb-display text-xl font-extrabold lowercase text-rb-eel">
             blueprint arena
