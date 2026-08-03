@@ -207,7 +207,8 @@ function icon(definition: IconDefinition, displayName: string) {
         // Cast to any to allow CSS custom properties used by FontAwesome (e.g. --fa-font-*)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         style={size === undefined ? (style as any) : ({ width: size, height: size, ...(style as any) } as any)}
-        {...props}
+        // Spread props as any to satisfy FontAwesomeIcon prop types (SVG props like 'mask' differ)
+        {...(props as any)}
       />
     )
   })
