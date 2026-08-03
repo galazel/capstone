@@ -282,13 +282,6 @@ const FEED_POSTS = [
   },
 ];
 
-const TEAM_MEMBERS = [
-  { name: "Glyzel Galagar", role: "Hacker", initials: "gg", tone: "feather" },
-  { name: "Daniel Kane Isidore Mapano", role: "Project Manager", initials: "dm", tone: "macaw" },
-  { name: "Ivan Cortes", role: "Tester", initials: "ic", tone: "fox" },
-  { name: "Joshua Inoc", role: "Hipster", initials: "ji", tone: "beetle" },
-];
-
 function BrandMark() {
   return (
     <span className="flex items-center gap-2.5">
@@ -493,9 +486,14 @@ function DescriptivePane() {
   );
 }
 
+/* The working surface only. The test rail that used to sit beside it moved to
+   the right-hand column, under item navigation, because that is where the
+   attempt page puts it -- `ProgrammingQuestionLayout` runs
+   problem | editor | navigation + tests, and the hero is a picture of that
+   screen. */
 function ProgrammingPane() {
   return (
-    <div className="flex h-full flex-col gap-4 lg:flex-row">
+    <div className="flex h-full flex-col gap-4">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-rb-tile border-2 border-rb-swan bg-rb-polar">
         <div className="flex items-center gap-2 border-b-2 border-rb-swan bg-rb-snow px-3 py-2">
           <span className="rb-chip !bg-rb-macaw-wash !px-2.5 !py-1 !text-[0.6875rem] !text-rb-macaw-lip">
@@ -527,29 +525,34 @@ function ProgrammingPane() {
           </code>
         </pre>
       </div>
+    </div>
+  );
+}
 
-      <div className="w-full shrink-0 lg:w-52">
-        <div className="rb-eyebrow">Test results</div>
-        <div className="mt-2.5 space-y-2">
-          {TEST_CASES.map((test) => (
-            <div
-              key={test.label}
-              className={
-                "flex items-start gap-2 rounded-xl px-3 py-2 text-[0.8125rem] font-medium " +
-                (test.state === "pass"
-                  ? "bg-rb-feather-wash text-[#3d6b06]"
-                  : "bg-rb-polar text-rb-wolf")
-              }
-            >
-              {test.state === "pass" ? (
-                <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-              ) : (
-                <span className="mt-1 size-3 shrink-0 animate-spin rounded-full border-2 border-rb-hare border-t-transparent" />
-              )}
-              <span className="min-w-0">{test.label}</span>
-            </div>
-          ))}
-        </div>
+/** The Tests tab of the attempt's right-hand column. */
+function TestResultsRail() {
+  return (
+    <div>
+      <div className="rb-eyebrow">Tests</div>
+      <div className="mt-2.5 space-y-2">
+        {TEST_CASES.map((test) => (
+          <div
+            key={test.label}
+            className={
+              "flex items-start gap-2 rounded-xl px-3 py-2 text-[0.8125rem] font-medium " +
+              (test.state === "pass"
+                ? "bg-rb-feather-wash text-[#3d6b06]"
+                : "bg-rb-polar text-rb-wolf")
+            }
+          >
+            {test.state === "pass" ? (
+              <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+            ) : (
+              <span className="mt-1 size-3 shrink-0 animate-spin rounded-full border-2 border-rb-hare border-t-transparent" />
+            )}
+            <span className="min-w-0">{test.label}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -557,7 +560,7 @@ function ProgrammingPane() {
 
 function DiagramPane() {
   return (
-    <div className="flex h-full flex-col gap-4 lg:flex-row">
+    <div className="flex h-full flex-col gap-4">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-rb-tile border-2 border-rb-swan bg-rb-polar">
         <div className="flex items-center gap-2 border-b-2 border-rb-swan bg-rb-snow px-3 py-2">
           <span className="rb-chip !bg-rb-beetle-wash !px-2.5 !py-1 !text-[0.6875rem] !text-rb-beetle-lip">
@@ -612,19 +615,24 @@ function DiagramPane() {
           ))}
         </svg>
       </div>
+    </div>
+  );
+}
 
-      <div className="w-full shrink-0 lg:w-52">
-        <div className="rb-eyebrow">Shapes</div>
-        <div className="mt-2.5 grid grid-cols-3 gap-2">
-          {["entity", "relation", "attribute", "weak", "derived", "multi"].map((shape) => (
-            <div
-              key={shape}
-              className="grid aspect-square place-items-center rounded-xl border-2 border-rb-swan bg-rb-polar text-[0.625rem] font-bold text-rb-wolf"
-            >
-              {shape}
-            </div>
-          ))}
-        </div>
+/** The shape palette, in the attempt's right-hand column beside navigation. */
+function ShapePaletteRail() {
+  return (
+    <div>
+      <div className="rb-eyebrow">Shapes</div>
+      <div className="mt-2.5 grid grid-cols-3 gap-2">
+        {["entity", "relation", "attribute", "weak", "derived", "multi"].map((shape) => (
+          <div
+            key={shape}
+            className="grid aspect-square place-items-center rounded-xl border-2 border-rb-swan bg-rb-polar text-[0.625rem] font-bold text-rb-wolf"
+          >
+            {shape}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -663,10 +671,10 @@ const QUESTION_TYPES = [
     number: 14,
     points: 8,
     prompt: "Explain why a table with a composite key can sit in 1NF but not 2NF.",
-    subs: [
-      { key: "a", label: "Define partial dependency", done: true },
-      { key: "b", label: "Apply it to the example", done: false },
-    ],
+    // No parts row. The attempt page renders sub-questions inside the
+    // programming and diagram problem columns; a descriptive item goes through
+    // `NormalQuestionPanel`, which has none, so showing them here advertised a
+    // screen the learner never meets.
     Pane: DescriptivePane,
   },
   {
@@ -685,7 +693,10 @@ const QUESTION_TYPES = [
       { key: "b", label: "Trial division", done: true },
       { key: "c", label: "Optimise to root n", done: false },
     ],
+    // What the learner does to answer: run the code, then check it.
+    actions: ["Run Code", "Check Code"],
     Pane: ProgrammingPane,
+    Rail: TestResultsRail,
   },
   {
     id: "diagram",
@@ -703,7 +714,9 @@ const QUESTION_TYPES = [
       { key: "b", label: "Junction entity", done: false },
       { key: "c", label: "Cardinality", done: false },
     ],
+    actions: ["Save Diagram", "Check Structure"],
     Pane: DiagramPane,
+    Rail: ShapePaletteRail,
   },
 ];
 
@@ -735,10 +748,29 @@ function SubQuestionTabs({ subs }) {
   );
 }
 
-/** Item navigation rail — always the right-hand column. */
+/** Item meta — number, worth, type. Sits at the head of whichever column
+ *  carries the problem: the left panel on the wide types, the centre column on
+ *  the written ones. Mirrors `QuestionMetaRow` on the attempt page. */
+function ItemMetaRow({ type }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-sm font-bold text-rb-wolf">Item {type.number}</span>
+      <span className="rounded-rb-pill bg-rb-polar px-2.5 py-1 text-[0.6875rem] font-bold text-rb-wolf">
+        {type.points} pts
+      </span>
+      <span
+        className={"rounded-rb-pill border-2 px-2.5 py-1 text-[0.6875rem] font-bold " + type.badge}
+      >
+        {type.label}
+      </span>
+    </div>
+  );
+}
+
+/** Item navigation grid — the top of the right-hand column. */
 function ItemNavigator({ current }) {
   return (
-    <div className="shrink-0 border-rb-swan p-5 lg:w-52 lg:border-l-2">
+    <div>
       <div className="flex items-center justify-between">
         <span className="rb-eyebrow">Item navigation</span>
         <span className="rb-numeric text-xs text-rb-wolf">40 pts</span>
@@ -785,12 +817,25 @@ function ItemNavigator({ current }) {
   );
 }
 
-/** Problem brief — the left column, only on the wide question types. */
+/**
+ * Problem column — the left of the three on programming and diagram items.
+ *
+ * Carries everything the attempt's own problem column carries, in the same
+ * order: the item meta, the prompt, the brief, the constraints, and the parts.
+ * The prompt used to sit in the centre above the working surface, under a
+ * second meta row; column one is where a learner reads what the problem is, so
+ * that is where all of it lives.
+ */
 function ProblemBrief({ type }) {
   return (
-    <div className="shrink-0 border-rb-swan p-5 lg:w-64 lg:border-r-2">
-      <div className="rb-eyebrow">Problem</div>
-      <p className="mt-2.5 text-sm leading-6 text-rb-eel">{type.brief}</p>
+    <div className="shrink-0 overflow-y-auto border-rb-swan p-5 lg:w-72 lg:border-r-2">
+      <ItemMetaRow type={type} />
+
+      <p className="mt-3 font-rb-display text-lg font-extrabold leading-snug text-rb-eel">
+        {type.prompt}
+      </p>
+
+      <p className="mt-3 text-sm leading-6 text-rb-eel">{type.brief}</p>
 
       <div className="mt-5">
         <div className="rb-eyebrow">Constraints</div>
@@ -803,6 +848,12 @@ function ProblemBrief({ type }) {
           ))}
         </ul>
       </div>
+
+      {type.subs ? (
+        <div className="mt-5">
+          <SubQuestionTabs subs={type.subs} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -810,10 +861,14 @@ function ProblemBrief({ type }) {
 /**
  * The hero visual: the assessment workspace learners actually sit exams in.
  *
- * Layout follows the real attempt page — three columns for programming and
- * diagram items (problem, working surface, navigation) and two for the written
- * types, with item navigation always on the right. It cycles all five types the
- * engine supports, because coverage is the claim being made.
+ * Layout follows the real attempt page, and follows it exactly: the item meta
+ * sits at the head of the problem column rather than in a strip of its own,
+ * the wide types (programming, diagram) run problem | working surface |
+ * navigation + rail, the written types run one centred reading column beside
+ * the navigation rail, and Previous/Next sit in a footer across the frame.
+ * It cycles all five types the engine supports, because coverage is the claim
+ * being made — and the two wide frames show an answer being given, not an
+ * empty surface: code under a passing test run, a canvas mid-diagram.
  *
  * Auto-cycling stops under reduced motion. The frame is aria-hidden with an
  * sr-only equivalent: none of it is operable.
@@ -865,54 +920,87 @@ function AssessmentWorkspace() {
           </div>
         </div>
 
+        {/* Two shapes, the same two the attempt page uses.
+
+            Wide types (programming, diagram) run three columns — problem,
+            working surface, navigation plus the type's own rail — and the
+            centre is nothing but the surface you answer on, with the actions
+            that judge it above. Written types run the attempt's other shape:
+            one centred reading column and the navigation rail. */}
         <div key={active.id} className="rb-pop-in flex min-h-[540px] flex-col lg:flex-row">
-          {active.wide ? <ProblemBrief type={active} /> : null}
+          {active.wide ? (
+            <>
+              <ProblemBrief type={active} />
 
-          <div className="flex min-w-0 flex-1 flex-col p-5 lg:p-6">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-bold text-rb-wolf">Item {active.number}</span>
-              <span className="rounded-rb-pill bg-rb-polar px-2.5 py-1 text-[0.6875rem] font-bold text-rb-wolf">
-                {active.points} pts
-              </span>
-              <span
-                className={
-                  "rounded-rb-pill border-2 px-2.5 py-1 text-[0.6875rem] font-bold " + active.badge
-                }
-              >
-                {active.label}
-              </span>
-            </div>
+              <div className="flex min-w-0 flex-1 flex-col p-5 lg:p-6">
+                {/* How you answer it: the same two actions the workspace
+                    offers, above the surface they act on. */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {active.actions.map((action, actionIndex) => (
+                    <span
+                      key={action}
+                      className={
+                        "inline-flex items-center gap-1.5 rounded-rb-pill px-3.5 py-2 text-xs font-bold " +
+                        (actionIndex === 0
+                          ? "border-2 border-rb-swan text-rb-wolf"
+                          : "bg-rb-feather text-rb-snow shadow-[0_3px_0_var(--color-rb-feather-lip)]")
+                      }
+                    >
+                      {action}
+                    </span>
+                  ))}
+                  <span className="text-[0.6875rem] font-semibold text-rb-wolf">
+                    Saved automatically with your attempt.
+                  </span>
+                </div>
 
-            <p className="mt-3 min-h-[3.5rem] font-rb-display text-xl font-extrabold leading-snug text-rb-eel">
-              {active.prompt}
-            </p>
+                <div className="mt-3 min-h-0 flex-1">
+                  <active.Pane />
+                </div>
+              </div>
 
-            {/* Slot is reserved whether or not the item has parts, so the card
-                keeps one height across all five types as it cycles. */}
-            <div className="mt-4 min-h-[74px]">
-              {active.subs ? <SubQuestionTabs subs={active.subs} /> : null}
-            </div>
+              <div className="shrink-0 space-y-5 overflow-y-auto border-rb-swan p-5 lg:w-56 lg:border-l-2">
+                <ItemNavigator current={active.number} />
+                <active.Rail />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex min-w-0 flex-1 flex-col p-5 lg:p-6">
+                <div className="mx-auto w-full max-w-2xl">
+                  <ItemMetaRow type={active} />
 
-            <div className="mt-5 h-[300px] lg:h-[316px]">
-              <active.Pane />
-            </div>
+                  <p className="mt-4 text-base leading-7 text-rb-eel">{active.prompt}</p>
 
-            <div className="mt-auto flex flex-wrap items-center gap-2.5 border-t-2 border-rb-swan pt-4">
-              <span className="inline-flex items-center gap-1.5 rounded-rb-pill border-2 border-rb-swan px-3.5 py-2 text-xs font-bold text-rb-wolf">
-                <Flag className="size-3.5" />
-                Flag
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-rb-pill border-2 border-rb-swan px-3.5 py-2 text-xs font-bold text-rb-wolf">
-                Skip
-              </span>
-              <span className="ml-auto inline-flex items-center gap-1.5 rounded-rb-pill bg-rb-feather px-5 py-2.5 text-xs font-extrabold text-rb-snow shadow-[0_3px_0_var(--color-rb-feather-lip)]">
-                Next
-                <ArrowRight className="size-4" />
-              </span>
-            </div>
-          </div>
+                  {/* Reserved so the card keeps one height as it cycles. */}
+                  <div className="mt-5 min-h-[300px]">
+                    <active.Pane />
+                  </div>
+                </div>
+              </div>
 
-          <ItemNavigator current={active.number} />
+              <div className="shrink-0 border-rb-swan p-5 lg:w-56 lg:border-l-2">
+                <ItemNavigator current={active.number} />
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Previous / Next live in the attempt's own footer, across the whole
+            frame, rather than under one column. */}
+        <div className="flex items-center justify-between gap-2 border-t-2 border-rb-swan bg-rb-polar px-4 py-3">
+          <span className="inline-flex items-center gap-1.5 rounded-rb-pill border-2 border-rb-swan px-3.5 py-2 text-xs font-bold text-rb-wolf">
+            <ArrowLeft className="size-3.5" />
+            Previous
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-rb-pill border-2 border-rb-swan px-3.5 py-2 text-xs font-bold text-rb-wolf">
+            <Flag className="size-3.5" />
+            Flag
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-rb-pill bg-rb-feather px-5 py-2.5 text-xs font-extrabold text-rb-snow shadow-[0_3px_0_var(--color-rb-feather-lip)]">
+            Next
+            <ArrowRight className="size-4" />
+          </span>
         </div>
       </div>
 
@@ -933,10 +1021,10 @@ function AssessmentWorkspace() {
       <p className="sr-only">
         A preview of the Rebyu assessment workspace, cycling through the five question types it
         supports: multiple choice, short answer, descriptive, programming with a live test runner,
-        and diagram questions on a canvas. Programming and diagram items show a problem brief on
-        the left, the working surface in the centre and item navigation on the right; written types
-        use the centre and right columns only. Programming, diagram and descriptive items are split
-        into parts.
+        and diagram questions on a canvas. Programming and diagram items show the problem, its
+        constraints and its parts in the left column, the surface you answer on in the centre with
+        Run and Check above it, and item navigation plus test results on the right. Written types
+        show the question and answer in one centred column with item navigation beside it.
       </p>
     </div>
   );
@@ -1711,54 +1799,6 @@ function CommunitySection() {
   );
 }
 
-/* ----------------------------------------------------------------------- team */
-
-function TeamSection() {
-  return (
-    <section id="team" className="scroll-mt-24 bg-rb-snow px-5 py-20 lg:px-8 lg:py-28">
-      <div className="mx-auto max-w-[1280px]">
-        <div data-landing-reveal className="max-w-2xl">
-          <p className="rb-eyebrow">team</p>
-          <h2 className="rb-display rb-display-lg mt-3">the people building rebyu.</h2>
-        </div>
-
-        <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {TEAM_MEMBERS.map((member) => {
-            const TONE = {
-              feather: "bg-rb-feather-wash text-[#3d6b06]",
-              macaw: "bg-rb-macaw-wash text-rb-macaw-lip",
-              beetle: "bg-rb-beetle-wash text-rb-beetle-lip",
-              fox: "bg-rb-fox-wash text-rb-fox-lip",
-            };
-
-            return (
-              <article
-                key={member.name}
-                data-landing-reveal
-                className="group overflow-hidden rounded-rb-card border-2 border-rb-swan bg-rb-snow shadow-[0_4px_0_var(--color-rb-swan)]"
-              >
-                {/* initials stand in for the portrait — same footprint, no stock photo */}
-                <div
-                  className={`grid aspect-[4/3] place-items-center ${TONE[member.tone]}`}
-                  aria-hidden="true"
-                >
-                  <span className="font-rb-display text-6xl font-black lowercase leading-none tracking-tight transition-transform duration-300 group-hover:scale-105">
-                    {member.initials}
-                  </span>
-                </div>
-                <div className="border-t-2 border-rb-swan p-5">
-                  <h3 className="rb-display rb-display-sm">{member.name}</h3>
-                  <p className="mt-1 text-sm font-semibold text-rb-wolf">{member.role}</p>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 /* --------------------------------------------------------------------- access */
 
 function AccessCard({ icon: Icon, title, description, points, cta, to, tone }) {
@@ -1864,7 +1904,6 @@ function Footer() {
       links: [
         ["How it works", "#how-it-works"],
         ["Community", "#community"],
-        ["Team", "#team"],
       ],
     },
     {
@@ -2004,7 +2043,6 @@ export default function LandingPage() {
         <AiTutorSection />
         <WeaknessSection />
         <CommunitySection />
-        <TeamSection />
         <AccessSection />
       </main>
       <Footer />

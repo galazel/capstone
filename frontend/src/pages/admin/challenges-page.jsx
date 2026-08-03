@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { Link } from "react-router-dom"
 import {
   Building2,
@@ -7,8 +7,6 @@ import {
   MoreVertical,
   Network,
   Plus,
-  Search,
-  Trash2,
   Trophy,
   Users,
 } from "@/components/icons"
@@ -29,21 +27,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-
-const ALL_FILTER_VALUE = "all"
 
 const INDUSTRIES = [
   "Information Technology",
@@ -60,7 +47,11 @@ const INDUSTRIES = [
    landing page sells and the learner can actually enter. QueryRealm, Sprint
    Challenge and Daily Ranked Exam Challenge were listed here with no route, no
    page and no learner-facing mention anywhere: an admin could assign an
-   industry to a challenge that did not exist. */
+   industry to a challenge that did not exist.
+
+   The three are built into the product, so there is no status to flip and
+   nothing to remove — an admin manages their problems and decides which
+   industries see them. That is the whole page. */
 const INITIAL_CHALLENGES = [
   {
     challengeId: 1,
@@ -70,7 +61,6 @@ const INITIAL_CHALLENGES = [
         "Ten coding problems back to back, judged against real unit tests and scored on time complexity as well as correctness.",
     icon: Code2,
     tag: "Solo",
-    status: "active",
     assignedIndustries: [
       "Information Technology",
       "Training Center",
@@ -85,7 +75,6 @@ const INITIAL_CHALLENGES = [
         "Ten UML and system design problems on a drag-and-drop canvas, checked against structural rules rather than opinion.",
     icon: Network,
     tag: "Solo",
-    status: "active",
     assignedIndustries: [
       "Information Technology",
       "Education",
@@ -100,7 +89,6 @@ const INITIAL_CHALLENGES = [
         "An eight-player bracket on one certification track — quarterfinals, semis, and a timed grand final.",
     icon: Trophy,
     tag: "Tournament",
-    status: "active",
     assignedIndustries: [
       "Information Technology",
       "Education",
@@ -110,72 +98,20 @@ const INITIAL_CHALLENGES = [
   },
 ]
 
-const STATUS_STYLES = {
-  active:
-      "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
-  coming_soon:
-      "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300",
-  disabled:
-      "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300",
-}
-
-function getStatusLabel(status) {
-  if (status === "active") return "Active"
-  if (status === "disabled") return "Disabled"
-  return "Coming Soon"
-}
-
-function ChallengeStatusBadge({ status }) {
-  return (
-      <Badge
-          variant="outline"
-          className={STATUS_STYLES[status] ?? STATUS_STYLES.coming_soon}
-      >
-        {getStatusLabel(status)}
-      </Badge>
-  )
-}
-
 export default function Challenges({
                                      initialChallenges = INITIAL_CHALLENGES,
                                      industries = INDUSTRIES,
                                    }) {
   const [challenges, setChallenges] = useState(initialChallenges)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState(ALL_FILTER_VALUE)
 
   const [assignDialogOpen, setAssignDialogOpen] = useState(false)
-  const [removeDialogOpen, setRemoveDialogOpen] = useState(false)
   const [selectedChallenge, setSelectedChallenge] = useState(null)
   const [selectedIndustries, setSelectedIndustries] = useState([])
-
-  const filteredChallenges = useMemo(() => {
-    const normalizedSearch = searchQuery.trim().toLowerCase()
-
-    return challenges.filter((challenge) => {
-      const matchesSearch =
-          !normalizedSearch ||
-          challenge.title.toLowerCase().includes(normalizedSearch) ||
-          challenge.description.toLowerCase().includes(normalizedSearch) ||
-          challenge.tag.toLowerCase().includes(normalizedSearch)
-
-      const matchesStatus =
-          statusFilter === ALL_FILTER_VALUE ||
-          challenge.status === statusFilter
-
-      return matchesSearch && matchesStatus
-    })
-  }, [challenges, searchQuery, statusFilter])
 
   function openAssignDialog(challenge) {
     setSelectedChallenge(challenge)
     setSelectedIndustries(challenge.assignedIndustries ?? [])
     setAssignDialogOpen(true)
-  }
-
-  function openRemoveDialog(challenge) {
-    setSelectedChallenge(challenge)
-    setRemoveDialogOpen(true)
   }
 
   function toggleIndustry(industry, checked) {
@@ -225,190 +161,127 @@ export default function Challenges({
     setSelectedChallenge(null)
   }
 
-  function removeChallenge() {
-    if (!selectedChallenge) return
-
-    setChallenges((current) =>
-        current.filter(
-            (challenge) =>
-                challenge.challengeId !== selectedChallenge.challengeId
-        )
-    )
-
-    toast.success("Challenge removed", {
-      description: `${selectedChallenge.title} was removed from the admin challenge list.`,
-    })
-
-    setRemoveDialogOpen(false)
-    setSelectedChallenge(null)
-  }
-
   return (
       <section className="space-y-6">
-        {/* No summary tiles. Three counters over a list of three rows restated
-            what the list itself shows, and two of them ("total", "active") were
-            arithmetic on a page you can read at a glance. */}
-        <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="relative w-full lg:max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-
-            <Input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search challenges..."
-                className="pl-9"
-            />
+        {/* Label and sub label only. There is no search or status filter over
+            three fixed rows, and no summary tiles counting them. */}
+        <div className="rebyu-page-header">
+          <div>
+            <h1 className="font-rb-display text-2xl font-extrabold lowercase">
+              challenges
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Manage each arena&rsquo;s problems and the industries that can enter it.
+            </p>
           </div>
-
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full lg:w-44">
-              <SelectValue placeholder="All statuses" />
-            </SelectTrigger>
-
-            <SelectContent>
-              <SelectItem value={ALL_FILTER_VALUE}>All statuses</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="coming_soon">Coming Soon</SelectItem>
-              <SelectItem value="disabled">Disabled</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
 
-        {filteredChallenges.length > 0 ? (
-            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-              {filteredChallenges.map((challenge) => {
-                const Icon = challenge.icon
-                const assignedIndustries =
-                    challenge.assignedIndustries ?? []
-                const visibleIndustries = assignedIndustries.slice(0, 2)
-                const remainingIndustryCount =
-                    assignedIndustries.length - visibleIndustries.length
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {challenges.map((challenge) => {
+            const Icon = challenge.icon
+            const assignedIndustries = challenge.assignedIndustries ?? []
+            const visibleIndustries = assignedIndustries.slice(0, 2)
+            const remainingIndustryCount =
+                assignedIndustries.length - visibleIndustries.length
 
-                return (
-                    <article
-                        key={challenge.challengeId}
-                        className="flex min-h-[290px] flex-col rounded-2xl border bg-card p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-foreground">
-                          <Icon className="h-6 w-6" />
-                        </div>
+            return (
+                <article
+                    key={challenge.challengeId}
+                    className="flex min-h-[290px] flex-col rounded-2xl border bg-card p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-foreground">
+                      <Icon className="h-6 w-6" />
+                    </div>
 
-                        <div className="flex items-center gap-2">
-                          <ChallengeStatusBadge status={challenge.status} />
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-9 w-9 rounded-lg"
+                            aria-label={`Actions for ${challenge.title}`}
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
 
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-9 w-9 rounded-lg"
-                                  aria-label={`Actions for ${challenge.title}`}
+                      <DropdownMenuContent align="end" className="w-52">
+                        {/* Straight into this arena's own workspace,
+                            where its problems and its scoring live. */}
+                        <DropdownMenuItem asChild>
+                          <Link to={`/admin/arenas/${challenge.arenaId}`}>
+                            <Plus className="mr-2 h-4 w-4" />
+                            Manage problems
+                          </Link>
+                        </DropdownMenuItem>
+
+                        <DropdownMenuItem
+                            onSelect={() => openAssignDialog(challenge)}
+                        >
+                          <Building2 className="mr-2 h-4 w-4" />
+                          Assign industries
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
+                  <div className="mt-5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* The title is the way in: clicking a challenge
+                          should open the challenge, not just its menu. */}
+                      <h2 className="text-lg font-semibold text-foreground">
+                        <Link
+                            to={`/admin/arenas/${challenge.arenaId}`}
+                            className="rounded-sm hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          {challenge.title}
+                        </Link>
+                      </h2>
+
+                      <Badge variant="secondary">{challenge.tag}</Badge>
+                    </div>
+
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                      {challenge.description}
+                    </p>
+                  </div>
+
+                  <div className="mt-auto pt-5">
+                    <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                      <Users className="h-3.5 w-3.5" />
+                      Assigned industries
+                    </div>
+
+                    {assignedIndustries.length > 0 ? (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {visibleIndustries.map((industry) => (
+                              <Badge
+                                  key={industry}
+                                  variant="outline"
+                                  className="max-w-full"
                               >
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
+                                <span className="truncate">{industry}</span>
+                              </Badge>
+                          ))}
 
-                            <DropdownMenuContent align="end" className="w-52">
-                              {/* Straight into this arena's own workspace,
-                                  where its problems and its scoring live. */}
-                              <DropdownMenuItem asChild>
-                                <Link to={`/admin/arenas/${challenge.arenaId}`}>
-                                  <Plus className="mr-2 h-4 w-4" />
-                                  Manage problems
-                                </Link>
-                              </DropdownMenuItem>
-
-                              <DropdownMenuItem
-                                  onSelect={() => openAssignDialog(challenge)}
-                              >
-                                <Building2 className="mr-2 h-4 w-4" />
-                                Assign industries
-                              </DropdownMenuItem>
-
-                              <DropdownMenuSeparator />
-
-                              <DropdownMenuItem
-                                  onSelect={() => openRemoveDialog(challenge)}
-                                  className="text-destructive focus:text-destructive"
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Remove challenge
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          {remainingIndustryCount > 0 ? (
+                              <Badge variant="outline">
+                                +{remainingIndustryCount} more
+                              </Badge>
+                          ) : null}
                         </div>
-                      </div>
-
-                      <div className="mt-5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          {/* The title is the way in: clicking a challenge
-                              should open the challenge, not just its menu. */}
-                          <h2 className="text-lg font-semibold text-foreground">
-                            <Link
-                                to={`/admin/arenas/${challenge.arenaId}`}
-                                className="rounded-sm hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                            >
-                              {challenge.title}
-                            </Link>
-                          </h2>
-
-                          <Badge variant="secondary">{challenge.tag}</Badge>
-                        </div>
-
-                        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                          {challenge.description}
+                    ) : (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Not assigned to any industry.
                         </p>
-                      </div>
-
-                      <div className="mt-auto pt-5">
-                        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                          <Users className="h-3.5 w-3.5" />
-                          Assigned industries
-                        </div>
-
-                        {assignedIndustries.length > 0 ? (
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {visibleIndustries.map((industry) => (
-                                  <Badge
-                                      key={industry}
-                                      variant="outline"
-                                      className="max-w-full"
-                                  >
-                                    <span className="truncate">{industry}</span>
-                                  </Badge>
-                              ))}
-
-                              {remainingIndustryCount > 0 ? (
-                                  <Badge variant="outline">
-                                    +{remainingIndustryCount} more
-                                  </Badge>
-                              ) : null}
-                            </div>
-                        ) : (
-                            <p className="mt-2 text-xs text-muted-foreground">
-                              Not assigned to any industry.
-                            </p>
-                        )}
-                      </div>
-                    </article>
-                )
-              })}
-            </div>
-        ) : (
-            <div className="rounded-2xl border border-dashed bg-card px-6 py-16 text-center">
-              <Trophy className="mx-auto h-7 w-7 text-muted-foreground" />
-
-              <h2 className="mt-4 text-base font-semibold">
-                No challenges found
-              </h2>
-
-              <p className="mt-1 text-sm text-muted-foreground">
-                Try changing the search or status filter.
-              </p>
-            </div>
-        )}
+                    )}
+                  </div>
+                </article>
+            )
+          })}
+        </div>
 
         <Dialog
             open={assignDialogOpen}
@@ -509,55 +382,6 @@ export default function Challenges({
                   onClick={saveIndustryAssignments}
               >
                 Save assignments
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog
-            open={removeDialogOpen}
-            onOpenChange={(open) => {
-              setRemoveDialogOpen(open)
-
-              if (!open) {
-                setSelectedChallenge(null)
-              }
-            }}
-        >
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Remove challenge?</DialogTitle>
-
-              <DialogDescription className="leading-6">
-                This will remove{" "}
-                <span className="font-medium text-foreground">
-                {selectedChallenge?.title}
-              </span>{" "}
-                from the admin challenge list. Existing learner results should
-                remain stored in the backend.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
-              This action cannot be undone from this page.
-            </div>
-
-            <DialogFooter>
-              <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setRemoveDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-
-              <Button
-                  type="button"
-                  variant="destructive"
-                  onClick={removeChallenge}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Remove challenge
               </Button>
             </DialogFooter>
           </DialogContent>

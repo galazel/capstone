@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import { Award, Clock, Crown, Gauge, Trophy, Users, Zap } from "@/components/icons"
 
 import { BackButton, ProgressBar, TactileButton } from "@/components/rebyu/rebyu-ui.jsx"
+import { getWorldCupTracks } from "@/lib/arenas.js"
+import { getLearnerPortalData } from "@/services/learnerService.js"
 
 /**
  * World Cup — 8-player synchronised tournament.
@@ -18,12 +21,6 @@ import { BackButton, ProgressBar, TactileButton } from "@/components/rebyu/rebyu
  * colour (Fox quarters, Macaw semis, Cardinal final, Bee trophy), not by a
  * second set of type rules.
  */
-
-const TRACKS = [
-  { id: "it-passport", name: "IT Passport", short: "passport", tone: "bee", blurb: "Strategy, management, and core technology fundamentals.", queue: 128 },
-  { id: "topcit", name: "TOPCIT", short: "topcit", tone: "macaw", blurb: "Software development, databases, networking, information systems.", queue: 214 },
-  { id: "fe-exam", name: "FE Exam", short: "fe exam", tone: "beetle", blurb: "Computer science, algorithms, databases, networks, IT fundamentals.", queue: 176 },
-]
 
 /* Blade fills stay saturated: they are the one bold moment on a light page,
    and white type needs the depth to stay legible over the full panel. */
@@ -244,6 +241,20 @@ export default function WorldCupPage() {
   const [countdown, setCountdown] = useState(3)
   const [lobbyClock, setLobbyClock] = useState(40)
 
+  /* The blades are this learner's enrolments, not the catalogue. Same query key
+     as the learner layout, so arriving from the challenges page reads the cache
+     rather than refetching the whole portal snapshot. */
+  const portalQuery = useQuery({
+    queryKey: ["learner-portal-data"],
+    queryFn: getLearnerPortalData,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const tracks = useMemo(
+    () => getWorldCupTracks(portalQuery.data?.enrolledCertifications ?? []),
+    [portalQuery.data],
+  )
+
   useEffect(() => {
     if (phase !== "lobby" || filled >= 8) return undefined
     const id = setTimeout(() => setFilled((n) => n + 1), 750)
@@ -348,10 +359,37 @@ export default function WorldCupPage() {
           and below it reads as a widget, not an event. */}
       <main className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden">
         {/* ---------------------------------------------------- track select */}
-        {phase === "track" ? (
+        {phase === "track" && portalQuery.isLoading ? (
+          <div className="grid flex-1 place-items-center px-5">
+            <p className="text-sm font-bold text-rb-wolf">Loading your tracks…</p>
+          </div>
+        ) : null}
+
+        {/* No enrolment, no bracket. The questions come from a certification's
+            own bank, and eight people scored against each other on a syllabus
+            one of them has never opened is not a tournament. */}
+        {phase === "track" && !portalQuery.isLoading && tracks.length === 0 ? (
+          <div className="grid flex-1 place-items-center px-5 pb-10">
+            <div className="max-w-md text-center">
+              <Trophy className="mx-auto size-12 text-rb-hare" aria-hidden="true" />
+              <div className="mt-5 font-rb-display text-2xl font-extrabold lowercase text-rb-eel">
+                no tracks yet
+              </div>
+              <p className="mt-3 text-sm leading-6 text-rb-wolf">
+                The World Cup is played on a certification you are enrolled in. Enrol in
+                one and its track appears here.
+              </p>
+              <TactileButton asChild className="mt-6">
+                <Link to="/learner/certifications">browse certifications</Link>
+              </TactileButton>
+            </div>
+          </div>
+        ) : null}
+
+        {phase === "track" && tracks.length > 0 ? (
           <div className="flex min-h-0 flex-1 flex-col px-5 pt-6 lg:px-8">
             <div className="rb-blades min-h-[560px] flex-1 pb-6 lg:min-h-0">
-              {TRACKS.map((item, index) => {
+              {tracks.map((item, index) => {
                 const tone = BLADE_TONE[item.tone]
                 // The blade strip overhangs both edges of the viewport so the
                 // skewed ends are cropped rather than leaving triangular gaps.
@@ -361,7 +399,7 @@ export default function WorldCupPage() {
                 const edge =
                   index === 0
                     ? "lg:pl-[6.5rem]"
-                    : index === TRACKS.length - 1
+                    : index === tracks.length - 1
                       ? "lg:pr-[6.5rem]"
                       : ""
                 return (
@@ -393,11 +431,10 @@ export default function WorldCupPage() {
                         <span className="block max-w-xs text-sm leading-6 text-white/90">
                           {item.blurb}
                         </span>
+                        {/* No "N in queue" chip. The tracks are real
+                            certifications now, and a made-up queue count
+                            attached to one reads as live matchmaking data. */}
                         <span className="mt-5 flex flex-wrap items-center gap-3">
-                          <span className="inline-flex items-center gap-1.5 rounded-rb-pill bg-white/20 px-3 py-1.5 text-xs font-bold text-white">
-                            <Users className="size-3.5" aria-hidden="true" />
-                            {item.queue} in queue
-                          </span>
                           <span className="inline-flex items-center rounded-rb-pill bg-white px-4 py-2 text-xs font-extrabold lowercase tracking-wide text-rb-eel">
                             enter queue
                           </span>

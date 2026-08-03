@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import ArenaProblemBuilder from "@/components/challenges/arena-problem-builder.jsx"
+import WorldCupEditions from "@/components/challenges/world-cup-editions.jsx"
 import { getArena } from "@/lib/arenas.js"
 
 /**
@@ -30,7 +31,7 @@ export default function ArenaDetailPage() {
             No arena is registered under &ldquo;{arenaId}&rdquo;.
           </p>
           <Button asChild variant="outline" className="mt-5">
-            <Link to="/admin/arenas">Back to arenas</Link>
+            <Link to="/admin/challenges">Back to challenges</Link>
           </Button>
         </div>
       </div>
@@ -41,8 +42,10 @@ export default function ArenaDetailPage() {
     <div className="rebyu-page">
       <div className="rebyu-page-header">
         <div className="flex items-start gap-3">
+          {/* Back to the challenge list, which is where "Manage problems" is
+              clicked from and the only entry in the admin nav. */}
           <Button asChild variant="ghost" size="icon" className="mt-0.5">
-            <Link to="/admin/arenas" aria-label="Back to arenas">
+            <Link to="/admin/challenges" aria-label="Back to challenges">
               <ArrowLeft className="size-4" />
             </Link>
           </Button>
@@ -79,7 +82,14 @@ export default function ArenaDetailPage() {
         {/* Problems first: the config is set once, the problem set is the work
             an admin comes back to. */}
         <TabsContent value="problems" className="mt-5">
-          <ArenaProblemBuilder arena={arena} />
+          {/* A weekly arena is authored a week at a time, not as one standing
+              set: everyone sits the same bracket at once, so last week's
+              questions are public by the time this week's lobby fills. */}
+          {arena.weekly ? (
+            <WorldCupEditions arena={arena} />
+          ) : (
+            <ArenaProblemBuilder arena={arena} />
+          )}
         </TabsContent>
 
         <TabsContent value="settings" className="mt-5">

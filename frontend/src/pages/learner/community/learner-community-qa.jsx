@@ -16,7 +16,6 @@ import {
     Send,
     Share2,
     Sparkles,
-    Users,
     UsersRound,
     X,
 } from "@/components/icons"
@@ -78,27 +77,54 @@ const FEED_TABS = [
     { value: "circle", label: "Study circles" },
 ]
 
+/* The feed follows the landing page's community section: a post is a tactile
+   card whose point is the thing attached to it — a set you can attempt, a file
+   you can open, a circle you can join. Each post type owns one accent wash so
+   the feed is scannable before a single word is read. */
 const POST_TYPE_STYLES = {
-    discussion: "border-blue-200 bg-blue-50 text-blue-700",
-    quiz: "border-blue-200 bg-blue-50 text-blue-700",
-    flashcard: "border-violet-200 bg-violet-50 text-violet-700",
-    circle: "border-cyan-200 bg-cyan-50 text-cyan-700",
+    discussion: "bg-rb-macaw-wash text-rb-macaw-lip",
+    quiz: "bg-rb-feather-wash text-rb-feather-lip",
+    flashcard: "bg-rb-beetle-wash text-rb-beetle-lip",
+    circle: "bg-rb-bee-wash text-rb-bee-lip",
+    image: "bg-rb-fox-wash text-rb-fox-lip",
+    notes: "bg-rb-fox-wash text-rb-fox-lip",
+    docx: "bg-rb-fox-wash text-rb-fox-lip",
 }
 
 const POST_TYPE_LABELS = {
-    discussion: "Discussion",
-    quiz: "Quiz",
-    flashcard: "Flashcards",
-    circle: "Study Circle",
+    discussion: "discussion",
+    quiz: "quiz",
+    flashcard: "flashcards",
+    circle: "study circle",
+    image: "photo",
+    notes: "notes",
+    docx: "document",
+}
+
+/** Avatar washes rotate per author so a busy feed still reads as many voices. */
+const AVATAR_TONES = [
+    "bg-rb-macaw-wash text-rb-macaw-lip",
+    "bg-rb-beetle-wash text-rb-beetle-lip",
+    "bg-rb-fox-wash text-rb-fox-lip",
+    "bg-rb-bee-wash text-rb-bee-lip",
+    "bg-rb-feather-wash text-rb-feather-lip",
+]
+
+function avatarTone(seed = "") {
+    let total = 0
+    for (let index = 0; index < seed.length; index += 1) total += seed.charCodeAt(index)
+    return AVATAR_TONES[total % AVATAR_TONES.length]
 }
 
 /** Post types where the composer offers an optional real file attachment. */
 const ATTACHABLE_TYPES = new Set(["image", "notes", "docx"])
 
-function CommunityAvatar({ initials, className = "" }) {
+function CommunityAvatar({ initials, tone, className = "" }) {
     return (
         <div
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary ${className}`}
+            className={`grid size-10 shrink-0 place-items-center rounded-full font-rb-display text-sm font-extrabold lowercase ${
+                tone ?? avatarTone(initials ?? "")
+            } ${className}`}
             aria-hidden="true"
         >
             {initials}
@@ -107,19 +133,47 @@ function CommunityAvatar({ initials, className = "" }) {
 }
 
 function AttachmentIcon({ type }) {
-    if (type === "QUIZ") return <BookOpen className="h-5 w-5 text-primary" />
-    if (type === "DOCX") return <FileArchive className="h-5 w-5 text-emerald-600" />
-    return <FileText className="h-5 w-5 text-blue-600" />
+    if (type === "QUIZ") return <BookOpen className="size-5" />
+    if (type === "DOCX") return <FileArchive className="size-5" />
+    return <FileText className="size-5" />
+}
+
+function attachmentTone(type) {
+    if (type === "QUIZ") return "bg-rb-feather-wash text-rb-feather-lip"
+    if (type === "DOCX") return "bg-rb-bee-wash text-rb-bee-lip"
+    return "bg-rb-cardinal-wash text-rb-cardinal-lip"
 }
 
 function PostTypeBadge({ type }) {
     return (
-        <Badge
-            variant="outline"
-            className={`h-5 rounded-full px-1.5 text-[10px] ${POST_TYPE_STYLES[type] ?? POST_TYPE_STYLES.discussion}`}
+        <span
+            className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 font-rb-display text-[0.6875rem] font-extrabold lowercase tracking-wide ${
+                POST_TYPE_STYLES[type] ?? POST_TYPE_STYLES.discussion
+            }`}
         >
-            {POST_TYPE_LABELS[type] ?? "Post"}
-        </Badge>
+            {POST_TYPE_LABELS[type] ?? "post"}
+        </span>
+    )
+}
+
+/** Sidebar and feed surfaces share one shape: 2px border, card radius, no blur. */
+function PanelCard({ className = "", children }) {
+    return (
+        <section className={`rounded-rb-card border-2 border-border bg-card ${className}`}>
+            {children}
+        </section>
+    )
+}
+
+function PanelHeading({ icon: Icon, tone = "bg-rb-macaw-wash text-rb-macaw-lip", title, children }) {
+    return (
+        <div className="flex items-center gap-2.5">
+            <span className={`grid size-8 shrink-0 place-items-center rounded-xl ${tone}`}>
+                <Icon className="size-4" aria-hidden="true" />
+            </span>
+            <h2 className="font-rb-display text-sm font-extrabold lowercase text-foreground">{title}</h2>
+            {children}
+        </div>
     )
 }
 
@@ -139,16 +193,14 @@ function CommunityPost({
         : null
 
     return (
-        <article className="overflow-hidden rounded-md border bg-background shadow-sm transition-shadow hover:shadow-md">
+        <article className="overflow-hidden rounded-rb-card border-2 border-border bg-card transition-colors hover:border-rb-macaw/60">
             <div className="p-4 sm:p-5">
                 <div className="flex items-start gap-3">
-                    <CommunityAvatar initials={post.initials} />
+                    <CommunityAvatar initials={post.initials} tone={avatarTone(post.authorName ?? "")} />
 
                     <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm font-semibold text-foreground">
-                                {post.authorName}
-                            </span>
+                            <span className="font-bold text-foreground">{post.authorName}</span>
 
                             <Badge
                                 variant="outline"
@@ -158,10 +210,12 @@ function CommunityPost({
                             </Badge>
                         </div>
 
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                            {post.createdAt} · {post.community}
+                        <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
+                            {post.community} · {post.createdAt}
                         </p>
                     </div>
+
+                    <PostTypeBadge type={post.postType} />
 
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -169,7 +223,7 @@ function CommunityPost({
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8"
+                                className="-mr-1 size-8 shrink-0"
                                 aria-label="Post actions"
                             >
                                 <MoreHorizontal className="h-4 w-4" />
@@ -212,43 +266,40 @@ function CommunityPost({
                 </div>
 
                 <div className="mt-4">
-                    <div className="mb-2">
-                        <PostTypeBadge type={post.postType} />
-                    </div>
-
-                    <h2 className="text-base font-semibold leading-6 text-foreground">
+                    <h2 className="font-rb-display text-lg font-extrabold leading-6 text-foreground">
                         {post.title}
                     </h2>
 
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    <p className="mt-2 text-[0.9375rem] leading-6 text-muted-foreground">
                         {post.description}
                     </p>
                 </div>
 
                 {post.attachment?.type === "IMAGE" && post.attachment.key ? (
-                    <figure className="mt-4 overflow-hidden rounded-md border bg-muted/30">
+                    <figure className="mt-4 overflow-hidden rounded-rb-tile border-2 border-border bg-muted/30">
                         <img src={getFileDownloadUrl(post.attachment.key)} alt={post.attachment.name || "Community post attachment"} className="max-h-[560px] w-full object-contain" loading="lazy" />
                     </figure>
                 ) : null}
 
+                {/* the attachment is the point of the post — give it a tile of its own */}
                 {post.attachment && post.attachment.type !== "IMAGE" ? (
-                    <div className="mt-4 flex items-center gap-3 rounded-lg border bg-muted/20 px-3 py-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-background">
+                    <div className="mt-4 flex items-center gap-3 rounded-rb-tile border-2 border-border bg-muted/40 p-3">
+                        <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${attachmentTone(post.attachment.type)}`}>
                             <AttachmentIcon type={post.attachment.type} />
-                        </div>
+                        </span>
 
                         <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold">
+                            <p className="truncate text-sm font-bold text-foreground">
                                 {post.attachment.name}
                             </p>
 
-                            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                            <p className="mt-0.5 truncate text-xs font-semibold text-muted-foreground">
                                 {post.attachment.key ? post.attachment.meta : "No file attached"}
                             </p>
                         </div>
 
                         {post.attachment.key ? (
-                            <Button asChild size="sm" variant="outline" className="shrink-0">
+                            <Button asChild size="sm" variant="outline" className="shrink-0 rounded-full">
                                 <a href={getFileDownloadUrl(post.attachment.key)}>
                                     <Download className="mr-2 h-4 w-4" />
                                     Download
@@ -259,17 +310,17 @@ function CommunityPost({
                 ) : null}
 
                 {linkedCircle ? (
-                    <div className="mt-4 flex flex-col gap-3 rounded-lg border bg-muted/20 px-3 py-3 sm:flex-row sm:items-center">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
+                    <div className="mt-4 flex flex-col gap-3 rounded-rb-tile border-2 border-border bg-muted/40 p-3 sm:flex-row sm:items-center">
+                        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-rb-bee-wash font-rb-display text-xs font-extrabold lowercase text-rb-bee-lip">
                             {linkedCircle.initials}
-                        </div>
+                        </span>
 
                         <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold">
+                            <p className="truncate text-sm font-bold text-foreground">
                                 {linkedCircle.name}
                             </p>
 
-                            <p className="mt-0.5 text-xs text-muted-foreground">
+                            <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
                                 {linkedCircle.members?.toLocaleString?.() ?? 0} members
                             </p>
                         </div>
@@ -278,6 +329,7 @@ function CommunityPost({
                             type="button"
                             size="sm"
                             variant={linkedCircle.joined ? "outline" : "default"}
+                            className="shrink-0 rounded-full"
                             onClick={() => onJoinCircle(linkedCircle.circleId)}
                         >
                             {linkedCircle.joined ? "Joined" : "Join circle"}
@@ -286,42 +338,38 @@ function CommunityPost({
                 ) : null}
 
                 {["quiz", "flashcard"].includes(post.postType) ? (
-                    <Button type="button" className="mt-4" onClick={() => onStartPractice(post.postId)}>
+                    <Button type="button" className="mt-4 rounded-full" onClick={() => onStartPractice(post.postId)}>
                         <BookOpen className="mr-2 h-4 w-4" />Start practice
                     </Button>
                 ) : null}
-
-                <div className="mt-4 flex items-center justify-between gap-4 text-xs text-muted-foreground">
-                    <button
-                        type="button"
-                        className="hover:text-foreground"
-                        onClick={() => onToggleLike(post.postId)}
-                    >
-                        {post.reactions + (post.liked ? 1 : 0)} reactions
-                    </button>
-
-                    <button
-                        type="button"
-                        className="hover:text-foreground"
-                        onClick={() => onOpenComments(post.postId)}
-                    >
-                        {post.comments} comments
-                    </button>
-                </div>
             </div>
 
-            <div className="grid grid-cols-3 border-t">
-                <Button type="button" variant="ghost" className="h-11 rounded-none" onClick={() => onToggleLike(post.postId)}>
-                    <Heart className={`mr-2 h-4 w-4 ${post.liked ? "fill-primary text-primary" : ""}`} />
-                    Like
-                </Button>
-                <Button type="button" variant="ghost" className="h-11 rounded-none border-x" onClick={() => onOpenComments(post.postId)}>
-                    <MessageCircle className="mr-2 h-4 w-4" />Comment
-                </Button>
-                <Button
+            {/* one quiet row, the way the landing feed shows it: counts are the action */}
+            <div className="flex items-center gap-1 border-t-2 border-border px-3 py-2 text-sm font-bold text-muted-foreground">
+                <button
                     type="button"
-                    variant="ghost"
-                    className="h-11 rounded-none"
+                    className="flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-colors hover:bg-accent hover:text-foreground"
+                    onClick={() => onToggleLike(post.postId)}
+                    aria-pressed={post.liked}
+                >
+                    <Heart className={`size-4 ${post.liked ? "fill-rb-cardinal text-rb-cardinal" : ""}`} />
+                    {post.reactions + (post.liked ? 1 : 0)}
+                    <span className="sr-only"> reactions</span>
+                </button>
+
+                <button
+                    type="button"
+                    className="flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-colors hover:bg-accent hover:text-foreground"
+                    onClick={() => onOpenComments(post.postId)}
+                >
+                    <MessageCircle className="size-4" />
+                    {post.comments}
+                    <span className="sr-only"> comments</span>
+                </button>
+
+                <button
+                    type="button"
+                    className="ml-auto flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-colors hover:bg-accent hover:text-foreground"
                     onClick={() => {
                         navigator.clipboard?.writeText(
                             `${window.location.origin}/learner/community?post=${post.postId}`
@@ -329,9 +377,21 @@ function CommunityPost({
                         toast.success("Post link copied.")
                     }}
                 >
-                    <Share2 className="mr-2 h-4 w-4" />
-                    Share
-                </Button>
+                    <Share2 className="size-4" />
+                    share
+                </button>
+
+                <button
+                    type="button"
+                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-colors hover:bg-accent hover:text-foreground ${
+                        post.saved ? "text-rb-macaw-lip" : ""
+                    }`}
+                    onClick={() => onToggleSave(post.postId)}
+                    aria-pressed={post.saved}
+                >
+                    <Bookmark className={`size-4 ${post.saved ? "fill-current" : ""}`} />
+                    {post.saved ? "saved" : "save"}
+                </button>
             </div>
         </article>
     )
@@ -625,7 +685,9 @@ export default function Community() {
 
     return (
         <div className="space-y-6">
-            <div className="sticky top-16 z-20 -mx-4 border-b bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+            {/* pb clears the 4px tactile lip under "Create a circle" — at py-3 the
+                lip landed on the strip's bottom border */}
+            <div className="sticky top-16 z-20 -mx-4 border-b-2 border-border bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
                 <div className="mx-auto flex w-full max-w-[1200px] items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                             {FEED_TABS.map((tab, index) => {
                                     const Icon = index === 0
@@ -634,7 +696,7 @@ export default function Community() {
                                         ? UsersRound
                                         : tab.value === "discussion"
                                             ? MessageCircle
-                                            : tab.value === "quizzes"
+                                            : tab.value === "quiz"
                                                 ? BookOpen
                                                 : FileText
 
@@ -643,10 +705,10 @@ export default function Community() {
                                         key={tab.value}
                                         type="button"
                                         onClick={() => selectFeedTab(tab.value)}
-                                        className={`flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition ${
+                                        className={`flex shrink-0 items-center gap-2 rounded-full border-2 px-3.5 py-2 font-rb-display text-sm font-extrabold lowercase transition-colors ${
                                             !showSavedOnly && activeTab === tab.value
-                                                ? "bg-primary text-primary-foreground"
-                                                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                                ? "border-primary bg-primary text-primary-foreground"
+                                                : "border-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                                         }`}
                                     >
                                         <Icon className="size-4" />
@@ -656,22 +718,25 @@ export default function Community() {
                             })}
                         <button
                             type="button"
-                            className={`flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-accent ${
-                                showSavedOnly ? "bg-accent" : ""
+                            className={`flex shrink-0 items-center gap-2 rounded-full border-2 px-3.5 py-2 font-rb-display text-sm font-extrabold lowercase transition-colors ${
+                                showSavedOnly
+                                    ? "border-rb-macaw bg-rb-macaw-wash text-rb-macaw-lip"
+                                    : "border-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                             }`}
                             onClick={() => {
                                 setShowSavedOnly((current) => !current)
                             }}
                         >
-                            <Bookmark className="size-4 text-primary" />
-                            Saved posts ({savedCount})
+                            <Bookmark className={`size-4 ${showSavedOnly ? "fill-current" : ""}`} />
+                            Saved ({savedCount})
                         </button>
                         <Button
                             type="button"
                             size="sm"
-                            className="ml-auto shrink-0"
+                            className="ml-auto shrink-0 rounded-full"
                             onClick={() => setCreateCircleOpen(true)}
                         >
+                            <UsersRound className="mr-2 size-4" />
                             Create a circle
                         </Button>
                 </div>
@@ -680,25 +745,25 @@ export default function Community() {
             <div className="mx-auto grid w-full max-w-[1200px] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
 
                 <main className="min-w-0 space-y-4">
-                    <section className="rounded-md border bg-background p-4 shadow-sm">
+                    <PanelCard className="p-4">
                         <button type="button" className="flex w-full items-center gap-3" onClick={() => openComposer("discussion")}>
                             <CommunityAvatar initials="GG" />
-                            <div className="flex h-10 min-w-0 flex-1 items-center rounded-full border bg-muted/40 px-4 text-left text-sm text-muted-foreground transition hover:bg-muted">
+                            <div className="flex h-11 min-w-0 flex-1 items-center rounded-full border-2 border-border bg-muted/40 px-4 text-left text-sm font-semibold text-muted-foreground transition-colors hover:border-rb-macaw/60 hover:bg-muted">
                                 Start a discussion or share a review resource...
                             </div>
                         </button>
-                        <div className="mt-4 grid gap-1 border-t pt-3 sm:grid-cols-3">
-                            <Button type="button" variant="ghost" size="sm" onClick={() => openComposer("discussion")}><MessageCircle className="mr-2 size-4 text-blue-600" />Discussion</Button>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => openComposer("quiz")}><BookOpen className="mr-2 size-4 text-blue-600" />Share quiz</Button>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => openComposer("flashcard")}><Sparkles className="mr-2 size-4 text-violet-600" />Share flashcards</Button>
+                        <div className="mt-4 grid gap-1 border-t-2 border-border pt-3 sm:grid-cols-3">
+                            <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => openComposer("discussion")}><MessageCircle className="mr-2 size-4 text-rb-macaw-lip" />Discussion</Button>
+                            <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => openComposer("quiz")}><BookOpen className="mr-2 size-4 text-rb-feather-lip" />Share quiz</Button>
+                            <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => openComposer("flashcard")}><Sparkles className="mr-2 size-4 text-rb-beetle-lip" />Share flashcards</Button>
                         </div>
-                    </section>
+                    </PanelCard>
 
                     {composerOpen ? (
-                        <section className="rounded-lg border border-primary/30 bg-card p-4 sm:p-5">
-                            <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-4">
+                        <section className="rounded-rb-card border-2 border-rb-macaw bg-card p-4 sm:p-5">
+                            <div className="flex items-center justify-between gap-3 border-b-2 border-border pb-4">
                                 <div>
-                                    <h2 className="text-sm font-semibold">Create a post</h2>
+                                    <h2 className="font-rb-display text-sm font-extrabold lowercase">Create a post</h2>
                                     <p className="mt-0.5 text-xs text-muted-foreground">Share a question, resource, quiz, photo, or screenshot.</p>
                                 </div>
                                 <Button type="button" variant="ghost" size="icon-sm" onClick={() => { setComposerOpen(false); setAttachedFile(null) }} aria-label="Close post editor"><X /></Button>
@@ -711,7 +776,7 @@ export default function Community() {
                                     { value: "flashcard", label: "Flashcards", icon: Sparkles },
                                 ].map((type) => {
                                     const Icon = type.icon
-                                    return <Button key={type.value} type="button" variant={shareType === type.value ? "secondary" : "ghost"} size="sm" className="shrink-0" onClick={() => { setShareType(type.value); setAttachedFile(null) }}><Icon className="mr-1.5 size-4" />{type.label}</Button>
+                                    return <Button key={type.value} type="button" variant={shareType === type.value ? "secondary" : "ghost"} size="sm" className="shrink-0 rounded-full" onClick={() => { setShareType(type.value); setAttachedFile(null) }}><Icon className="mr-1.5 size-4" />{type.label}</Button>
                                 })}
                             </div>
 
@@ -730,7 +795,7 @@ export default function Community() {
                                 {ATTACHABLE_TYPES.has(shareType) ? (
                                     <div>
                                         <input ref={fileInputRef} type="file" accept={shareType === "image" ? "image/png,image/jpeg,image/webp,image/gif" : shareType === "docx" ? ".docx" : ".pdf"} className="hidden" onChange={handleAttachmentSelected} />
-                                        <button type="button" disabled={isUploadingAttachment} onClick={() => fileInputRef.current?.click()} className="flex w-full items-center gap-3 border border-dashed border-border px-4 py-3 text-left hover:border-primary/50 disabled:opacity-60">
+                                        <button type="button" disabled={isUploadingAttachment} onClick={() => fileInputRef.current?.click()} className="flex w-full items-center gap-3 rounded-rb-tile border-2 border-dashed border-border px-4 py-3 text-left hover:border-rb-macaw disabled:opacity-60">
                                             {isUploadingAttachment ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : shareType === "image" ? <ImageIcon className="size-5 text-primary" /> : <FileText className="size-5 text-primary" />}
                                             <span className="min-w-0 flex-1 truncate text-sm">{attachedFile?.name ?? `Add ${shareType === "image" ? "a photo or screenshot" : shareType === "docx" ? "a DOCX file" : "a PDF file"}`}</span>
                                             {attachedFile ? <span className="text-xs font-medium text-primary">Change</span> : null}
@@ -739,15 +804,15 @@ export default function Community() {
                                 ) : null}
                             </div>
 
-                            <div className="mt-4 flex justify-end gap-2 border-t border-border/70 pt-4">
-                                <Button type="button" variant="ghost" onClick={() => { setComposerOpen(false); setAttachedFile(null) }}>Cancel</Button>
-                                <Button type="button" onClick={publishPost} disabled={isUploadingAttachment || (["quiz", "flashcard"].includes(shareType) ? !selectedStudyItemId : !shareTitle.trim() || !shareDescription.trim())}><Send className="mr-2 size-4" />Post</Button>
+                            <div className="mt-4 flex justify-end gap-2 border-t-2 border-border pt-4">
+                                <Button type="button" variant="ghost" className="rounded-full" onClick={() => { setComposerOpen(false); setAttachedFile(null) }}>Cancel</Button>
+                                <Button type="button" className="rounded-full" onClick={publishPost} disabled={isUploadingAttachment || (["quiz", "flashcard"].includes(shareType) ? !selectedStudyItemId : !shareTitle.trim() || !shareDescription.trim())}><Send className="mr-2 size-4" />Post</Button>
                             </div>
                         </section>
                     ) : null}
 
-                    <div className="flex flex-col gap-3 border-b pb-3 xl:hidden sm:flex-row sm:items-center sm:justify-between">
-                        <h2 className="text-sm font-semibold">
+                    <div className="flex flex-col gap-3 border-b-2 border-border pb-3 xl:hidden sm:flex-row sm:items-center sm:justify-between">
+                        <h2 className="font-rb-display text-sm font-extrabold lowercase">
                             {showSavedOnly ? "Saved posts" : "Community news feed"}
                         </h2>
 
@@ -759,7 +824,7 @@ export default function Community() {
                                     variant={!showSavedOnly && activeTab === tab.value ? "secondary" : "ghost"}
                                     size="sm"
                                     onClick={() => selectFeedTab(tab.value)}
-                                    className="shrink-0"
+                                    className="shrink-0 rounded-full"
                                 >
                                     {tab.label}
                                 </Button>
@@ -768,9 +833,9 @@ export default function Community() {
                     </div>
 
                     {showSavedOnly ? (
-                        <div className="hidden items-center justify-between border-b pb-3 xl:flex">
-                            <h2 className="text-sm font-semibold">Saved posts</h2>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => setShowSavedOnly(false)}>
+                        <div className="hidden items-center justify-between border-b-2 border-border pb-3 xl:flex">
+                            <h2 className="font-rb-display text-sm font-extrabold lowercase">Saved posts</h2>
+                            <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => setShowSavedOnly(false)}>
                                 <X className="mr-2 h-4 w-4" />
                                 Back to feed
                             </Button>
@@ -795,9 +860,11 @@ export default function Community() {
                             ))}
                         </div>
                     ) : (
-                        <div className="border-y py-16 text-center">
-                            <MessageCircle className="mx-auto h-6 w-6 text-muted-foreground" />
-                            <p className="mt-3 text-sm font-semibold">
+                        <div className="rounded-rb-card border-2 border-dashed border-border py-16 text-center">
+                            <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-rb-macaw-wash text-rb-macaw-lip">
+                                <MessageCircle className="size-6" />
+                            </span>
+                            <p className="mt-3 font-rb-display text-sm font-extrabold lowercase">
                                 {showSavedOnly ? "No saved posts yet" : "No community posts found"}
                             </p>
                             <p className="mt-1 text-xs text-muted-foreground">
@@ -810,28 +877,24 @@ export default function Community() {
                 </main>
 
                 <aside className="sticky top-24 hidden space-y-4 lg:block">
-                    <section className="rounded-md border bg-background p-4 shadow-sm">
-                        <div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-amber-500" /><h2 className="text-sm font-semibold">Community ranking</h2></div>
-                        <p className="mt-1 text-xs text-muted-foreground">XP earned from shared quiz practice.</p>
-                        <div className="mt-3 space-y-2">
-                            {communityLeaderboard.map((entry) => <div key={entry.learnerId} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs ${entry.currentLearner ? "bg-primary/10 font-semibold" : ""}`}><span className="w-5 text-center font-bold text-muted-foreground">{entry.rank}</span><span className="min-w-0 flex-1 truncate">{entry.learnerName}</span><span className="font-semibold">{Number(entry.xp).toLocaleString()} XP</span></div>)}
+                    <PanelCard className="p-4">
+                        <PanelHeading icon={Sparkles} tone="bg-rb-fox-wash text-rb-fox-lip" title="Community ranking" />
+                        <p className="mt-2 text-xs text-muted-foreground">XP earned from shared quiz practice.</p>
+                        <div className="mt-3 space-y-1.5">
+                            {communityLeaderboard.map((entry) => <div key={entry.learnerId} className={`flex items-center gap-2 rounded-rb-tile px-2.5 py-2 text-xs ${entry.currentLearner ? "border-2 border-rb-macaw bg-rb-macaw-wash font-bold text-rb-macaw-lip" : "border-2 border-transparent"}`}><span className="grid size-5 shrink-0 place-items-center rounded-full bg-muted font-rb-display text-[0.625rem] font-extrabold text-muted-foreground">{entry.rank}</span><span className="min-w-0 flex-1 truncate font-semibold">{entry.learnerName}</span><span className="shrink-0 font-bold">{Number(entry.xp).toLocaleString()} XP</span></div>)}
                             {communityLeaderboard.length === 0 ? <p className="py-2 text-xs text-muted-foreground">Complete a shared quiz to begin the ranking.</p> : null}
                         </div>
-                    </section>
-                    <section className="rounded-md border bg-background p-4 shadow-sm">
+                    </PanelCard>
+
+                    <PanelCard className="p-4">
                         <div className="flex items-center justify-between gap-3">
-                            <div>
-                                <h2 className="text-sm font-semibold">Study circles</h2>
-                                <p className="mt-0.5 text-xs text-muted-foreground">
-                                    Join or create focused review groups.
-                                </p>
-                            </div>
+                            <PanelHeading icon={UsersRound} tone="bg-rb-bee-wash text-rb-bee-lip" title="Study circles" />
 
                             <Button
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8"
+                                className="size-8 shrink-0 rounded-full"
                                 onClick={() => setCreateCircleOpen(true)}
                                 aria-label="Create study circle"
                             >
@@ -839,19 +902,23 @@ export default function Community() {
                             </Button>
                         </div>
 
-                        <div className="mt-3 divide-y">
+                        <p className="mt-2 text-xs text-muted-foreground">
+                            Join or create focused review groups.
+                        </p>
+
+                        <div className="mt-3 space-y-2">
                             {circles.map((circle) => (
-                                <div key={circle.circleId} className="py-3">
+                                <div key={circle.circleId} className="rounded-rb-tile border-2 border-border bg-muted/30 p-3">
                                     <div className="flex items-start gap-3">
-                                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
+                                        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-rb-bee-wash font-rb-display text-xs font-extrabold lowercase text-rb-bee-lip">
                                             {circle.initials}
-                                        </div>
+                                        </span>
 
                                         <div className="min-w-0 flex-1">
-                                            <p className="truncate text-sm font-medium">{circle.name}</p>
-                                            <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                            <p className="truncate text-sm font-bold text-foreground">{circle.name}</p>
+                                            <p className="mt-0.5 text-[11px] font-semibold text-muted-foreground">
                                                 {circle.members?.toLocaleString?.() ?? 0} members
-                                                {circle.owner ? " · You own this circle" : ""}
+                                                {circle.owner ? " · you own this" : ""}
                                             </p>
                                         </div>
                                     </div>
@@ -860,7 +927,7 @@ export default function Community() {
                                         type="button"
                                         size="sm"
                                         variant={circle.joined ? "outline" : "default"}
-                                        className="mt-2 w-full"
+                                        className="mt-2.5 w-full rounded-full"
                                         onClick={() => toggleJoinCircle(circle.circleId)}
                                         disabled={circle.owner}
                                     >
@@ -875,165 +942,19 @@ export default function Community() {
                                 </p>
                             ) : null}
                         </div>
-                    </section>
+                    </PanelCard>
 
-                    <section className="rounded-md border bg-background p-4 shadow-sm">
-                        <div className="flex items-center gap-2">
-                            <Sparkles className="h-4 w-4 text-primary" />
-                            <h2 className="text-sm font-semibold">Community reminder</h2>
-                        </div>
+                    <PanelCard className="border-rb-fox/40 bg-rb-fox-wash p-4">
+                        <PanelHeading icon={Sparkles} tone="bg-rb-snow text-rb-fox-lip" title="Community reminder" />
 
-                        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                        <p className="mt-2 text-xs leading-5 text-rb-wolf">
                             Be respectful during discussions. Do not share active exam
                             answers, copied reviewer courses, or files you are not allowed to
                             distribute.
                         </p>
-                    </section>
+                    </PanelCard>
                 </aside>
             </div>
-
-            <Dialog
-                open={false}
-                onOpenChange={(open) => {
-                    setComposerOpen(open)
-                    if (!open) setAttachedFile(null)
-                }}
-            >
-                <DialogContent className="sm:max-w-xl">
-                    <DialogHeader>
-                        <DialogTitle>Create community post</DialogTitle>
-                        <DialogDescription>
-                            Start a discussion or share a study resource with a study circle.
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="grid gap-4">
-                        <div className="grid gap-2 sm:grid-cols-4">
-                            {[
-                                { value: "discussion", label: "Discussion", icon: MessageCircle },
-                                { value: "quizzes", label: "Quiz", icon: BookOpen },
-                                { value: "notes", label: "PDF / Notes", icon: FileText },
-                                { value: "docx", label: "DOCX", icon: FileArchive },
-                            ].map((type) => {
-                                const Icon = type.icon
-
-                                return (
-                                    <Button
-                                        key={type.value}
-                                        type="button"
-                                        variant={shareType === type.value ? "default" : "outline"}
-                                        onClick={() => {
-                                            setShareType(type.value)
-                                            setAttachedFile(null)
-                                        }}
-                                    >
-                                        <Icon className="mr-2 h-4 w-4" />
-                                        {type.label}
-                                    </Button>
-                                )
-                            })}
-                        </div>
-
-                        <Select value={shareCommunity} onValueChange={setShareCommunity}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select a study circle (optional)" />
-                            </SelectTrigger>
-
-                            <SelectContent>
-                                {circles
-                                    .filter((circle) => circle.joined || circle.owner)
-                                    .map((circle) => (
-                                        <SelectItem key={circle.circleId} value={String(circle.circleId)}>
-                                            {circle.name}
-                                        </SelectItem>
-                                    ))}
-                            </SelectContent>
-                        </Select>
-
-                        <Input
-                            value={shareTitle}
-                            onChange={(event) => setShareTitle(event.target.value)}
-                            placeholder={shareType === "discussion" ? "Discussion title or question" : "Resource title"}
-                        />
-
-                        <Textarea
-                            value={shareDescription}
-                            onChange={(event) => setShareDescription(event.target.value)}
-                            placeholder={
-                                shareType === "discussion"
-                                    ? "Write your question, opinion, or discussion..."
-                                    : "Add a short description of what this resource covers..."
-                            }
-                            className="min-h-28"
-                        />
-
-                        {ATTACHABLE_TYPES.has(shareType) ? (
-                            <div>
-                                <input
-                                    ref={fileInputRef}
-                                    type="file"
-                                    accept={shareType === "image" ? "image/png,image/jpeg,image/webp,image/gif" : shareType === "docx" ? ".docx" : ".pdf"}
-                                    className="hidden"
-                                    onChange={handleAttachmentSelected}
-                                />
-
-                                {attachedFile ? (
-                                    <div className="flex items-center gap-3 rounded-xl border px-4 py-3">
-                                        {shareType === "image" ? <ImageIcon className="h-5 w-5 shrink-0 text-primary" /> : <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />}
-                                        <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                                            {attachedFile.name}
-                                        </span>
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7 shrink-0"
-                                            onClick={() => setAttachedFile(null)}
-                                            aria-label="Remove attachment"
-                                        >
-                                            <X className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <button
-                                        type="button"
-                                        disabled={isUploadingAttachment}
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className="flex min-h-28 w-full flex-col items-center justify-center rounded-xl border border-dashed px-4 text-center disabled:opacity-60"
-                                    >
-                                        {isUploadingAttachment ? (
-                                            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                                        ) : (
-                                            shareType === "image"
-                                                ? <ImageIcon className="h-5 w-5 text-primary" />
-                                                : <FileText className="h-5 w-5 text-muted-foreground" />
-                                        )}
-                                        <span className="mt-2 text-sm font-medium">
-                                            {isUploadingAttachment
-                                                ? "Uploading..."
-                                                : `Choose a ${shareType === "image" ? "photo or screenshot" : shareType === "docx" ? "DOCX" : "PDF"} file (optional)`}
-                                        </span>
-                                        <span className="mt-1 text-xs text-muted-foreground">
-                                            Select a file you created or have permission to share.
-                                        </span>
-                                    </button>
-                                )}
-                            </div>
-                        ) : null}
-                    </div>
-
-                    <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => setComposerOpen(false)}>
-                            Cancel
-                        </Button>
-
-                        <Button type="button" onClick={publishPost} disabled={isUploadingAttachment}>
-                            <Send className="mr-2 h-4 w-4" />
-                            {shareType === "discussion" ? "Post discussion" : "Share resource"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
 
             <Dialog open={createCircleOpen} onOpenChange={setCreateCircleOpen}>
                 <DialogContent className="sm:max-w-lg">
@@ -1115,10 +1036,10 @@ export default function Community() {
                     <div className="max-h-[360px] space-y-3 overflow-y-auto pr-1">
                         {comments.length ? (
                             comments.map((comment) => (
-                                <div key={comment.commentId} className="flex gap-3 rounded-lg border p-3">
-                                    <CommunityAvatar initials={comment.initials} className="h-8 w-8" />
+                                <div key={comment.commentId} className="flex gap-3 rounded-rb-tile border-2 border-border p-3">
+                                    <CommunityAvatar initials={comment.initials} tone={avatarTone(comment.authorName ?? "")} className="!size-8 !text-xs" />
                                     <div className="min-w-0">
-                                        <p className="text-sm font-semibold">{comment.authorName}</p>
+                                        <p className="text-sm font-bold">{comment.authorName}</p>
                                         <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
                                             {comment.body}
                                         </p>

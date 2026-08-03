@@ -6,12 +6,6 @@ export const LANDING_IMAGES = {
   assessmentOverview: pexelsImage(7129007),
   community: pexelsImage(8457292),
   institution: pexelsImage(7693733),
-  team: {
-    founder: pexelsImage(31980272),
-    frontend: pexelsImage(15093004),
-    design: pexelsImage(7972760),
-    academic: pexelsImage(20985244),
-  },
   roadmap: {
     diagnostic: pexelsImage(6683580),
     plan: pexelsImage(4497732),
