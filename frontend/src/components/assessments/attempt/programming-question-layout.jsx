@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { CheckCheckIcon, Loader2Icon, PlayIcon, TerminalIcon } from "lucide-react"
+import { CheckCheckIcon, Loader2Icon, PlayIcon, TerminalIcon } from "@/components/icons"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
@@ -20,6 +20,13 @@ import TestCasesPanel from "./test-cases-panel.jsx"
 // Three-column programming environment: problem | editor | navigation + tests.
 // Run/Check hit real endpoints; the executor is stubbed server-side, so results
 // come back as "not run / unavailable" — nothing is fake-scored here.
+//
+// `runner` swaps where Run/Check go. An assessment attempt leaves it unset and
+// the attempt endpoints are used; an arena run — which has no attempt, no
+// attempt question and no learner id to send — passes its own
+// { run, check, listExecutions }. The layout is identical either way, which is
+// the point: a CodeStrike problem should not be a second, subtly different
+// coding environment from the one the learner sits an exam in.
 export default function ProgrammingQuestionLayout({
   question,
   index,
@@ -29,6 +36,7 @@ export default function ProgrammingQuestionLayout({
   attemptQuestionId,
   learnerId,
   navigator,
+  runner = null,
   editingLocked = false,
 }) {
   const [tests, setTests] = useState(question.testCases ?? [])
@@ -57,11 +65,15 @@ export default function ProgrammingQuestionLayout({
 
   const refreshExecutions = useCallback(() => {
     setExecutionsLoading(true)
-    getAttemptExecutions(attemptId, attemptQuestionId, learnerId)
+    const load = runner
+      ? Promise.resolve(runner.listExecutions?.() ?? [])
+      : getAttemptExecutions(attemptId, attemptQuestionId, learnerId)
+
+    load
       .then((rows) => setExecutions(Array.isArray(rows) ? rows : []))
       .catch(() => {})
       .finally(() => setExecutionsLoading(false))
-  }, [attemptId, attemptQuestionId, learnerId])
+  }, [runner, attemptId, attemptQuestionId, learnerId])
 
   useEffect(() => {
     refreshExecutions()
@@ -71,14 +83,15 @@ export default function ProgrammingQuestionLayout({
     const setBusy = mode === "run" ? setRunning : setChecking
     setBusy(true)
     try {
-      const runner = mode === "run" ? runAttemptProgramming : checkAttemptProgramming
-      const result = await runner(
-        attemptId,
-        attemptQuestionId,
-        learnerId,
-        code,
-        language
-      )
+      const result = runner
+        ? await (mode === "run" ? runner.run : runner.check)(code, language)
+        : await (mode === "run" ? runAttemptProgramming : checkAttemptProgramming)(
+            attemptId,
+            attemptQuestionId,
+            learnerId,
+            code,
+            language
+          )
       setTests(result.tests ?? [])
       setNotice(result.message ?? null)
       setOutput(result.message ?? null)
@@ -98,10 +111,24 @@ export default function ProgrammingQuestionLayout({
       {/* Left — problem statement */}
       <ScrollArea className="max-h-full rounded-xl border bg-card">
         <div className="space-y-4 p-4">
+          {/* Title and difficulty live here, at the head of the problem
+              statement. An arena run used to carry them in a strip across the
+              top of the workspace, which is a second header for one column's
+              worth of information. Both are optional: an exam item has neither,
+              and nothing renders when they are absent. */}
+          {question.title ? (
+            <h2 className="text-base font-bold leading-6">{question.title}</h2>
+          ) : null}
+
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-semibold text-muted-foreground">
               Item {index + 1}
             </span>
+            {question.difficultyLevel ? (
+              <Badge variant="outline" className="capitalize">
+                {question.difficultyLevel}
+              </Badge>
+            ) : null}
             {question.points != null ? (
               <Badge variant="secondary">{Number(question.points)} pt(s)</Badge>
             ) : null}

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useOutletContext, useSearchParams } from "react-router-dom"
-import { ArrowLeftIcon } from "lucide-react"
+import { ArrowLeftIcon } from "@/components/icons"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Loader2, Mail, Plus, Trash2, UserCog, UserPlus, Users2, UsersRound } from "lucide-react"
+import { Loader2, Mail, Plus, Trash2, UserCog, UserPlus, Users2, UsersRound } from "@/components/icons"
 import { toast } from "sonner"
 
 import {

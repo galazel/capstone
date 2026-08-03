@@ -3,6 +3,7 @@ from functools import lru_cache
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 
+from app.ai import tasks
 from app.utils.helpers import get_llm
 from app.schemas.tutor.generation_schemas import QuestionFormat
 from app.schemas.tutor.query import AIResponse
@@ -45,8 +46,11 @@ QUERY_SYSTEM_PROMPT = """
 
 @lru_cache(maxsize=None)
 def get_generation_agent(model: str | None = None):
+    """The `tutor` task, not `question`, despite the name: this agent *retrieves*
+    stored questions for a learner rather than authoring new ones, so it is
+    answering someone who is waiting. Latency is the constraint."""
     return create_agent(
-        model=get_llm("generation", model),
+        model=get_llm(tasks.TUTOR, model),
         tools=generation_tools,
         system_prompt=GENERATION_SYSTEM_PROMPT,
         response_format=ToolStrategy(QuestionFormat),
@@ -56,7 +60,7 @@ def get_generation_agent(model: str | None = None):
 @lru_cache(maxsize=None)
 def get_query_agent(model: str | None = None):
     return create_agent(
-        model=get_llm("generation", model),
+        model=get_llm(tasks.TUTOR, model),
         system_prompt=QUERY_SYSTEM_PROMPT,
         response_format=ToolStrategy(AIResponse),
     )

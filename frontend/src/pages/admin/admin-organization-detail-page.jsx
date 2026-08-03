@@ -1,7 +1,7 @@
 import { useMemo } from "react"
 import { Link, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { ArrowLeftIcon, AwardIcon, Building2Icon, UsersIcon } from "lucide-react"
+import { ArrowLeftIcon, AwardIcon, Building2Icon, UsersIcon } from "@/components/icons"
 
 import {
   Card,

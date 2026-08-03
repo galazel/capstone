@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { CheckCheckIcon, Loader2Icon } from "lucide-react"
+import { CheckCheckIcon, Loader2Icon } from "@/components/icons"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
@@ -9,12 +9,17 @@ import { cn } from "@/lib/utils"
 import { getFileViewUrl } from "@/services/fileService.js"
 import { checkAttemptDiagram } from "@/services/assessmentService.js"
 import DiagramArea from "@/components/challenges/diagram-area.jsx"
+import { getDiagramTypeLabel } from "@/components/questions/question-editors.jsx"
 import RubricPanel from "./rubric-panel.jsx"
 import SubQuestionTabs from "./sub-question-tabs.jsx"
 
 // Three-column diagram environment: problem | diagram editor | navigation +
 // rubric. Check Diagram hits a real endpoint; evaluation is stubbed server-side
 // (returns the rubric as pending), so nothing is fake-scored here.
+//
+// `checker` swaps where Check Diagram goes, for the same reason the programming
+// layout takes a `runner`: an arena run has no attempt to check against, but
+// should be the same canvas the learner meets in an exam.
 export default function DiagramQuestionLayout({
   question,
   index,
@@ -24,6 +29,7 @@ export default function DiagramQuestionLayout({
   attemptQuestionId,
   learnerId,
   navigator,
+  checker = null,
   editingLocked = false,
 }) {
   const [rubric, setRubric] = useState(question.rubric ?? [])
@@ -41,13 +47,16 @@ export default function DiagramQuestionLayout({
   const handleCheck = async () => {
     setChecking(true)
     try {
-      const result = await checkAttemptDiagram(
-        attemptId,
-        attemptQuestionId,
-        learnerId,
-        answer?.diagramSubmissionData ?? "",
-        diagramType
-      )
+      const submission = answer?.diagramSubmissionData ?? ""
+      const result = checker
+        ? await checker(submission, diagramType)
+        : await checkAttemptDiagram(
+            attemptId,
+            attemptQuestionId,
+            learnerId,
+            submission,
+            diagramType
+          )
       setRubric(result.rubric ?? [])
       setNotice(result.message ?? null)
     } catch (error) {
@@ -64,14 +73,30 @@ export default function DiagramQuestionLayout({
       {/* Left — problem statement */}
       <ScrollArea className="max-h-full rounded-xl border bg-card">
         <div className="space-y-4 p-4">
+          {/* Title and difficulty live here, at the head of the problem
+              statement. An arena run used to carry them in a strip across the
+              top of the workspace, which is a second header for one column's
+              worth of information. Both are optional: an exam item has neither,
+              and nothing renders when they are absent. */}
+          {question.title ? (
+            <h2 className="text-base font-bold leading-6">{question.title}</h2>
+          ) : null}
+
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-semibold text-muted-foreground">
               Item {index + 1}
             </span>
+            {question.difficultyLevel ? (
+              <Badge variant="outline" className="capitalize">
+                {question.difficultyLevel}
+              </Badge>
+            ) : null}
             {question.points != null ? (
               <Badge variant="secondary">{Number(question.points)} pt(s)</Badge>
             ) : null}
-            <Badge variant="outline">Diagram · {diagramType}</Badge>
+            {/* The label, not the raw enum: this badge was showing learners
+                "SEQUENCE_DIAGRAM" mid-exam. */}
+            <Badge variant="outline">Diagram · {getDiagramTypeLabel(diagramType)}</Badge>
           </div>
 
           <p className="whitespace-pre-wrap text-sm leading-7">

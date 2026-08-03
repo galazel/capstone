@@ -1,5 +1,5 @@
 import { useGamification } from '@/hooks/useGamification'
-import { Trophy, Medal } from 'lucide-react'
+import { Trophy, Medal } from "@/components/icons"
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export default function LeaderboardPage() {

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { AlertCircle, ArrowLeftIcon, ListChecks, Loader2 } from "lucide-react"
+import { AlertCircle, ArrowLeftIcon, ListChecks, Loader2 } from "@/components/icons"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"

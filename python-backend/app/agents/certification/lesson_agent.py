@@ -3,10 +3,12 @@ from functools import lru_cache
 from app.tools.certification.lesson_tools import lesson_research_tools
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
+from app.ai import tasks
+from app.core.config import get_settings
 from app.schemas.certification.lesson_schema import GeneratedLesson
 from app.utils.helpers import get_llm
 
-SYSTEM_PROMPT = """
+_PROMPT_TEMPLATE = """
     You are REBYU Lesson Generation Agent.
 
     Your responsibility is to generate one complete lesson from the certification curriculum.
@@ -29,46 +31,27 @@ SYSTEM_PROMPT = """
     - Middle Category
     - Lesson Name
     - Learning Objective
-    - lessonGenerationInstructions
+    - Key Topics
 
-    The lessonGenerationInstructions define the lesson plan.
+    The Key Topics are the curriculum's plan for this lesson. Cover every one
+    of them. Never ignore them, and never wander outside the lesson's scope to
+    cover a topic that belongs to a different lesson.
 
-    Never ignore them.
+    Beyond those topics, a complete lesson works through:
 
-    Generate the lesson according to:
+    • prerequisites the learner needs first
+    • the main concepts, explained from beginner to advanced
+    • the technical detail behind them
+    • diagrams or visuals where they clarify something
+    • worked examples and real-world applications
+    • comparisons, whenever two similar concepts or technologies could be confused
+    • the mistakes learners commonly make
+    • best practices
+    • how the concepts relate to one another
+    • what matters for the certification exam
 
-    • introduction
-    • concepts
-    • learning_progression
-    • technical_topics
-    • visual_recommendations
-    • real_world_applications
-    • comparisons
-    • common_mistakes
-    • best_practices
-    • relationships
-    • certification_focus
-    • expected_learner_outcome
-
-    Use the learning progression to organize the lesson from beginner to advanced.
-
-    Cover every concept listed.
-
-    Explain every technical topic.
-
-    Use the real-world applications as examples.
-
-    Use the comparisons section whenever comparing similar technologies or concepts.
-
-    Explain common mistakes learners make.
-
-    Include best practices.
-
-    Explain how concepts relate to one another.
-
-    Emphasize topics important for the certification exam.
-
-    The expected learner outcome should be reflected in the completed lesson.
+    Organize the lesson so it progresses from beginner to advanced, and make
+    sure the Learning Objective is fully met by the finished lesson.
 
     --------------------------------------------------
     TOOLS
@@ -158,8 +141,13 @@ SYSTEM_PROMPT = """
     SEPARATE STRUCTURED FIELDS (see FINAL ANSWER) -- do not build them as
     blocks.
 
-    The blocks in `sections` are the MAIN INSTRUCTIONAL CONTENT, and should
-    generally cover:
+    The blocks in `sections` are the MAIN INSTRUCTIONAL CONTENT. Write at
+    least {min_sections} of them. This is the substance of the lesson, so
+    depth here matters more than anywhere else in your answer -- a handful of
+    blocks is an outline, not a lesson. Vary the block types; do not emit a
+    long run of plain descriptions.
+
+    They should generally cover:
 
     1. Prerequisites
     2. Main Concepts
@@ -204,7 +192,7 @@ SYSTEM_PROMPT = """
     - learning_objectives: 2-5 concrete, measurable objectives.
     - estimated_minutes: realistic study time, typically 10-45.
     - sections: the MAIN INSTRUCTIONAL CONTENT as content blocks, in the
-      shapes listed above, in reading order.
+      shapes listed above, in reading order. At least {min_sections} blocks.
     - key_terms: the important terms, each with a short definition.
     - summary: 2-4 sentences closing the lesson. At least 40 characters.
 
@@ -212,6 +200,15 @@ SYSTEM_PROMPT = """
     `sections` — they are separate fields, rendered around the main content
     automatically.
     """
+
+
+def build_system_prompt() -> str:
+    """`.replace`, not `.format`: the prompt is a catalogue of literal JSON
+    block shapes, and every brace would have to be doubled to survive
+    formatting."""
+    return _PROMPT_TEMPLATE.replace(
+        "{min_sections}", str(get_settings().lesson_min_sections)
+    )
 
 
 @lru_cache(maxsize=None)
@@ -232,8 +229,13 @@ def get_lesson_generation_agent(model: str | None = None):
     resolved by `app.domain.lesson_media` after the answer comes back.
     """
     return create_agent(
-        model=get_llm("generation", model),
+        # The one agent given a genuinely capable model. It is the only one
+        # that has to research with a tool, hold the whole lesson plan, and
+        # then emit a large structured answer without losing the thread -- see
+        # `app.ai.tasks`, where `lesson` is deliberately the most expensive
+        # entry in the table.
+        model=get_llm(tasks.LESSON, model),
         tools=lesson_research_tools,
         response_format=ToolStrategy(GeneratedLesson),
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=build_system_prompt(),
     )

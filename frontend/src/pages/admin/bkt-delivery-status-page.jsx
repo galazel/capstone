@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { RefreshCw, Send, ServerCog } from "lucide-react"
+import { RefreshCw, Send, ServerCog } from "@/components/icons"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"

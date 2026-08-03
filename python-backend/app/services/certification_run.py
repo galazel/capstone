@@ -32,6 +32,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.db.session import SessionLocal
+from app.graphs.cancellation import RunCancelled
 from app.graphs.certification.workflow import get_certification_graph
 from app.repositories import java_backend as repo
 from app.services import workflow_registry as registry
@@ -81,6 +82,13 @@ def _notify(context: RunContext, title: str, body: str) -> None:
 
 def _persist_curriculum(certification_id: int, curriculum: dict) -> None:
     with SessionLocal() as session:
+        # Written even when the planner returned nothing useful, so a rerun
+        # that *does* find the exam's shape overwrites a stale value rather
+        # than leaving the old one in place.
+        structure = curriculum.get("exam_structure")
+        if structure and (structure.get("total_items") or structure.get("question_types")):
+            repo.update_certification_exam_structure(session, certification_id, structure)
+
         for major in curriculum.get("majorCategories") or []:
             major_id = repo.insert_major_category(session, certification_id, major["name"])
             for middle in major.get("middleCategories") or []:
@@ -102,6 +110,27 @@ def fail(context: RunContext, error: str) -> dict[str, Any]:
         f"Curriculum generation for {context.certification_title} failed: {error}",
     )
     return {"outcome": registry.FAILED, "error": error}
+
+
+def _stranded_output(summary: dict[str, Any]) -> list[str]:
+    """Artifacts the run generated that reached the database as nothing.
+
+    A *total* loss for a kind is what counts. A partial one already surfaces
+    as a per-item warning and usually means a single unmatched name, whereas
+    "produced seven, saved zero" is systemic -- an unseeded exam type, a
+    missing table, a failed commit -- and must not be reported as success.
+    """
+    expected = summary.get("expected") or {}
+    stranded = []
+
+    if expected.get("exams") and not summary.get("exams"):
+        stranded.append(f"{expected['exams']} assessment(s) generated, none stored")
+    if expected.get("bank_questions") and not summary.get("bank_questions"):
+        stranded.append(f"{expected['bank_questions']} question(s) generated, none stored")
+    if expected.get("lessons") and not summary.get("lessons_written"):
+        stranded.append(f"{expected['lessons']} lesson bod(y/ies) generated, none stored")
+
+    return stranded
 
 
 def finalize(context: RunContext, result: dict) -> dict[str, Any]:
@@ -155,6 +184,19 @@ def finalize(context: RunContext, result: dict) -> dict[str, Any]:
     for warning in summary["warnings"]:
         logger.warning("Assessment persistence: %s", warning)
 
+    stranded = _stranded_output(summary)
+    if stranded:
+        # The run did the work and the storage layer dropped it. Reporting
+        # COMPLETED here is how a certification came to show two lessons and
+        # no assessments while the log said success -- the drops were only
+        # ever warnings, and warnings scroll past.
+        return fail(
+            context,
+            "Generation succeeded but its output was not saved: "
+            + "; ".join(stranded)
+            + ". The run can be retried once the cause is fixed.",
+        )
+
     with SessionLocal() as session:
         repo.mark_generation_request_done(session, context.generation_request_id)
         registry.mark_completed(
@@ -178,6 +220,25 @@ def finalize(context: RunContext, result: dict) -> dict[str, Any]:
         "exams": len(summary["exams"]),
         "bank_questions": summary["bank_questions"],
     }
+
+
+#: Threads this process is executing right now.
+#:
+#: `updated_at` says when a run last recorded something, which is enough to
+#: spot an abandoned run but not enough to protect a live one: a run that has
+#: just started, or one on a genuinely long step, is quiet without being dead.
+#: This is the direct answer for the only process that can know it -- the one
+#: holding the asyncio task -- and it is what stops recovery, or a redelivered
+#: queue message, from putting a second driver on a thread already being driven.
+#:
+#: Deliberately in-memory: its whole purpose is to be empty after a restart,
+#: because a restart is precisely when nothing is being driven any more.
+_DRIVEN_THREADS: set[str] = set()
+
+
+def is_being_driven(thread_id: str) -> bool:
+    """Whether this process is currently executing that thread."""
+    return thread_id in _DRIVEN_THREADS
 
 
 class RunFailed(RuntimeError):
@@ -211,11 +272,24 @@ async def advance(context: RunContext, graph_input: Any) -> tuple[dict[str, Any]
     mistake a failure for a result.
     """
     graph = await get_certification_graph()
+    _DRIVEN_THREADS.add(context.thread_id)
     try:
         result = await graph.ainvoke(graph_input, config=_thread_config(context.thread_id))
+    except RunCancelled as cancelled:
+        # Already CANCELLED in the registry -- the graph is unwinding on
+        # purpose. Marking it FAILED here would report a reviewer's own
+        # decision as a generator bug, and offer to retry the work they just
+        # stopped.
+        logger.info("Certification run %s stopped: %s", context.thread_id, cancelled)
+        raise RunFailed({"outcome": registry.CANCELLED, "error": str(cancelled)}) from cancelled
     except Exception as error:
         logger.exception("Certification run %s failed", context.thread_id)
         raise RunFailed(fail(context, str(error))) from error
+    finally:
+        # Released as soon as the graph returns or raises. Finalisation below
+        # is database work measured in milliseconds, and holding the claim
+        # across it would only delay a legitimate recovery.
+        _DRIVEN_THREADS.discard(context.thread_id)
 
     return result, finalize(context, result)
 
@@ -237,10 +311,7 @@ async def execute(context: RunContext, graph_input: Any) -> dict[str, Any]:
 
 # --- recovery -------------------------------------------------------------
 
-#: Statuses a run can be retried or restarted from. A run that is RUNNING is
-#: either genuinely executing or was orphaned by a process restart, and the
-#: registry cannot tell those apart -- so it is excluded rather than risk two
-#: workers driving one thread.
+#: Statuses a run can always be retried or restarted from.
 RECOVERABLE_STATUSES = {registry.FAILED}
 
 
@@ -249,6 +320,24 @@ RECOVERABLE_STATUSES = {registry.FAILED}
 #: including a rate-limit backoff, which routinely idles a healthy run for
 #: tens of seconds without emitting anything.
 RECONCILE_AFTER_IDLE_SECONDS = 180.0
+
+
+#: How long a RUNNING run must emit nothing before it is treated as abandoned
+#: rather than busy.
+#:
+#: A run is driven by an in-process asyncio task, so *nothing* survives the
+#: process it was started in. Kill the service mid-generation and the registry
+#: row is left claiming RUNNING forever with no one executing it -- and because
+#: only FAILED runs were recoverable, that run was a permanent dead end: no
+#: retry, no restart, and a certification stuck on "Generating…" for good.
+#:
+#: Every node boundary records an event, which bumps `updated_at`. Silence for
+#: this long therefore means no node has started or finished in that window,
+#: which no healthy run does -- the longest single step (deep lesson authoring)
+#: is minutes, not this. Set well above the reconcile threshold because being
+#: late to adopt an orphan costs a wait, while adopting a live run would put two
+#: drivers on one thread.
+STALLED_AFTER_IDLE_SECONDS = 900.0
 
 
 def _seconds_since(moment) -> float:
@@ -263,6 +352,41 @@ def _seconds_since(moment) -> float:
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=timezone.utc)
     return (datetime.now(timezone.utc) - moment).total_seconds()
+
+
+def idle_seconds(run) -> float:
+    """How long since this run last recorded anything."""
+    return _seconds_since(run.updated_at)
+
+
+def is_stalled(run) -> bool:
+    """Whether a RUNNING run has gone silent long enough to be abandoned.
+
+    See `STALLED_AFTER_IDLE_SECONDS`. Only meaningful for RUNNING: a paused or
+    terminal run is *supposed* to be quiet.
+    """
+    return (
+        run.status == registry.RUNNING
+        and _seconds_since(run.updated_at) >= STALLED_AFTER_IDLE_SECONDS
+    )
+
+
+def is_recoverable(run) -> bool:
+    """Whether Retry/Restart may be offered for this run.
+
+    A failed run always qualifies. A stalled one does too, which is the escape
+    hatch for a run orphaned by a service restart: the startup sweep adopts
+    those automatically, but a run orphaned while the sweep's grace period had
+    already elapsed -- or one the sweep could not finish -- would otherwise stay
+    unreachable until someone edited the database.
+    """
+    if run.kind != "CERTIFICATION":
+        return False
+    if is_being_driven(run.thread_id):
+        # Whatever the row says, this process is executing it. Offering Retry
+        # here would start a second driver on a thread that is very much alive.
+        return False
+    return run.status in RECOVERABLE_STATUSES or is_stalled(run)
 
 
 def _has_pending_interrupt(snapshot) -> bool:
@@ -345,6 +469,83 @@ async def reconcile(run) -> dict[str, Any]:
     return {"reconciled": True, "outcome": finalize(context, dict(snapshot.values))}
 
 
+async def adopt_orphan(run) -> dict[str, Any]:
+    """Takes over a RUNNING run that nothing is executing, and finishes it.
+
+    The counterpart to `reconcile` for the other way a run is stranded. A
+    certification run is driven by an asyncio task inside this process, so a
+    restart -- a crash, a deploy, a reload -- abandons every run mid-flight
+    while the registry row still says RUNNING.
+
+    RabbitMQ recovers the common case on its own: the message for a run started
+    from the queue is still unacked, so the broker redelivers it and the
+    consumer opens a fresh attempt. But that only covers runs whose queue
+    message is outstanding. A run resumed from a review over HTTP, or one being
+    retried or restarted from the workspace, has no message behind it at all --
+    those simply died, and stayed RUNNING forever.
+
+    What the checkpoint holds decides the outcome, exactly as in `reconcile`:
+    a pending interrupt means it reached a review and the status write was
+    lost; pending work means a step never finished, so re-run it from the
+    checkpoint taken before it; nothing pending means the graph finished and
+    only the handoff was lost.
+
+    Idempotent in practice: the caller only passes runs that have been silent
+    past `STALLED_AFTER_IDLE_SECONDS`, and the first thing every branch does is
+    move the run off RUNNING.
+    """
+    context = context_for(run)
+    graph = await get_certification_graph()
+    snapshot = await graph.aget_state(_thread_config(run.thread_id))
+
+    if snapshot is None or not snapshot.values:
+        # Nothing to resume from. Failing it is what makes Restart available,
+        # which re-reads the certification's documents and begins again.
+        logger.warning("Orphaned run %s has no checkpoint to resume from", run.run_id)
+        return {
+            "action": "failed",
+            "outcome": fail(
+                context,
+                "The service restarted while this run was executing, and it has no "
+                "checkpoint to resume from. Restart it.",
+            ),
+        }
+
+    interrupts = [
+        interrupt
+        for task in (getattr(snapshot, "tasks", None) or ())
+        for interrupt in (getattr(task, "interrupts", None) or ())
+    ]
+    if interrupts:
+        stage = (interrupts[0].value or {}).get("stage", "UNKNOWN")
+        logger.info(
+            "Orphaned run %s had already paused for review at %s; recording the pause",
+            run.run_id, stage,
+        )
+        with SessionLocal() as session:
+            registry.mark_waiting_for_review(
+                session, run.thread_id, stage=stage,
+                payload={"validation_report": (interrupts[0].value or {}).get("validation_report")},
+            )
+        return {"action": "waiting_for_review", "stage": stage}
+
+    if snapshot.next:
+        stage = snapshot.next[0]
+        logger.info(
+            "Adopting orphaned run %s: re-running %s from its last checkpoint",
+            run.run_id, stage,
+        )
+        with SessionLocal() as session:
+            attempt = registry.attempt_number(session, run.run_id)
+            registry.mark_retrying(session, run.thread_id, stage=stage, attempt=attempt)
+        # `None` resumes the pending step rather than starting over, so the
+        # minutes of ingestion and generation already paid for are kept.
+        return {"action": "resumed", "stage": stage, "outcome": await execute(context, None)}
+
+    logger.info("Orphaned run %s had finished; applying the outcome it never reported", run.run_id)
+    return {"action": "finalized", "outcome": finalize(context, dict(snapshot.values))}
+
+
 def _load_java_context(run) -> tuple[dict | None, dict | None]:
     """The generation request and certification rows behind a run, if any."""
     if run.generation_request_id is None or run.certification_id is None:
@@ -376,9 +577,22 @@ def _guard(run, action: str) -> None:
         raise RecoveryError(f"Run {run.run_id} is a {run.kind} run, not a certification run.")
     if run.status == registry.CANCELLED:
         raise RecoveryError(f"Run {run.run_id} was cancelled and cannot be {action}.")
-    if run.status not in RECOVERABLE_STATUSES:
+    if is_being_driven(run.thread_id):
         raise RecoveryError(
-            f"Only failed runs can be {action}; run {run.run_id} is {run.status}."
+            f"Run {run.run_id} is executing right now and cannot be {action}. "
+            "Stop it first if you want it to stop."
+        )
+    if not is_recoverable(run):
+        if run.status == registry.RUNNING:
+            # Distinct from the generic refusal: this run *will* become
+            # recoverable on its own if it really is dead, and saying so stops
+            # an admin hammering the button.
+            raise RecoveryError(
+                f"Run {run.run_id} is still executing. It becomes recoverable "
+                f"after {int(STALLED_AFTER_IDLE_SECONDS / 60)} minutes of silence."
+            )
+        raise RecoveryError(
+            f"Only failed or stalled runs can be {action}; run {run.run_id} is {run.status}."
         )
 
 

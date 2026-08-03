@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useOutletContext } from "react-router-dom"
-import { BarChart3Icon } from "lucide-react"
+import { BarChart3Icon } from "@/components/icons"
 
 import {
   Card,
@@ -9,7 +9,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
 import {
   Select,
   SelectContent,
@@ -24,6 +23,16 @@ import {
   EnterprisePageHeader,
   EnterpriseStatCard,
 } from "@/components/enterprise/enterprise-ui.jsx"
+import {
+  BarBreakdownChart,
+  ChartPanel,
+  DonutChart,
+  TrendAreaChart,
+} from "@/components/charts/rebyu-charts.jsx"
+import {
+  ENTERPRISE_ACTIVITY_TREND,
+  ENTERPRISE_GROUP_PROGRESS,
+} from "@/components/charts/sample-data.js"
 import {
   getLearnerDisplayName,
   useEnterpriseData,
@@ -144,10 +153,12 @@ export default function EnterpriseAnalyticsPage() {
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <EnterpriseStatCard
+              tone="macaw"
               label="Learners"
               value={scoped.assignments.length}
             />
             <EnterpriseStatCard
+              tone="feather"
               label="Average progress"
               value={
                 scoped.average != null
@@ -156,10 +167,12 @@ export default function EnterpriseAnalyticsPage() {
               }
             />
             <EnterpriseStatCard
+              tone="bee"
               label="Completed"
               value={scoped.completed.length}
             />
             <EnterpriseStatCard
+              tone="fox"
               label="Needing support"
               value={scoped.needingSupport.length}
               hint="Active learners below 30% progress"
@@ -167,34 +180,21 @@ export default function EnterpriseAnalyticsPage() {
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Completion distribution</CardTitle>
-                <CardDescription>
-                  How learner progress is distributed across the cohort.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {scoped.buckets.map((bucket) => (
-                  <div key={bucket.label} className="space-y-1.5">
-                    <div className="flex items-center justify-between text-sm">
-                      <span>{bucket.label}</span>
-                      <span className="text-muted-foreground">
-                        {bucket.count} learner(s)
-                      </span>
-                    </div>
-                    <Progress
-                      value={
-                        scoped.assignments.length > 0
-                          ? (bucket.count / scoped.assignments.length) * 100
-                          : 0
-                      }
-                      aria-label={`${bucket.label} share`}
-                    />
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+            {/* Real cohort data — the buckets were already computed, they were
+                just drawn as four unrelated progress bars. */}
+            <ChartPanel
+              title="Completion distribution"
+              subtitle="How learner progress is spread across the cohort"
+            >
+              <DonutChart
+                data={scoped.buckets.map((bucket) => ({
+                  name: bucket.label,
+                  value: bucket.count,
+                }))}
+                centerValue={scoped.assignments.length}
+                centerLabel="learners"
+              />
+            </ChartPanel>
 
             <Card>
               <CardHeader>
@@ -236,6 +236,45 @@ export default function EnterpriseAnalyticsPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Trend surfaces the current endpoints cannot answer yet — shown on
+              placeholder series so the layout can be judged now. */}
+          <section className="space-y-4">
+            <div>
+              <h2 className="font-rb-display text-xl font-extrabold lowercase">
+                trends over time
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Layout preview — the assignment endpoint returns a snapshot, so these
+                plots run on placeholder numbers until history is exposed.
+              </p>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <ChartPanel title="Weekly activity" subtitle="Completed items per week" sample>
+                <TrendAreaChart
+                  data={ENTERPRISE_ACTIVITY_TREND}
+                  xKey="week"
+                  series={[
+                    { key: "lessons", name: "Lessons" },
+                    { key: "practice", name: "Practice" },
+                    { key: "assessments", name: "Assessments" },
+                  ]}
+                  legendNote="Latest week"
+                />
+              </ChartPanel>
+
+              <ChartPanel title="Completion by group" subtitle="Share of assigned work done" sample>
+                <BarBreakdownChart
+                  data={ENTERPRISE_GROUP_PROGRESS}
+                  categoryKey="group"
+                  valueKey="completion"
+                  unit="%"
+                  target={60}
+                />
+              </ChartPanel>
+            </div>
+          </section>
         </>
       )}
     </div>

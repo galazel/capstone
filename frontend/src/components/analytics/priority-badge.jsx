@@ -6,7 +6,7 @@ import {
   RotateCcwIcon,
   ShieldCheckIcon,
   TrendingUpIcon,
-} from "lucide-react"
+} from "@/components/icons"
 
 import { cn } from "@/lib/utils"
 import { PRIORITY_META } from "@/services/learnerAnalyticsService.js"

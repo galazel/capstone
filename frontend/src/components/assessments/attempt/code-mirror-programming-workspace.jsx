@@ -4,7 +4,7 @@ import { javascript } from "@codemirror/lang-javascript"
 import { java } from "@codemirror/lang-java"
 import { python } from "@codemirror/lang-python"
 import { sql } from "@codemirror/lang-sql"
-import { Maximize2Icon, Minimize2Icon, RotateCcwIcon } from "lucide-react"
+import { Maximize2Icon, Minimize2Icon, RotateCcwIcon } from "@/components/icons"
 
 import {
   AlertDialog,

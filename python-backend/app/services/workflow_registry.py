@@ -15,7 +15,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.db.models import WorkflowEvent, WorkflowRun
@@ -31,6 +31,19 @@ FAILED = "FAILED"
 CANCELLED = "CANCELLED"
 
 TERMINAL_STATUSES = {COMPLETED, FAILED, CANCELLED}
+
+
+class RunAlreadyCancelled(Exception):
+    """A cancelled run was asked to start again.
+
+    Not an error condition: the reviewer stopped this run on purpose, and the
+    caller (a redelivered queue message, or a restart request) must ack and
+    drop the work rather than retry it.
+    """
+
+    def __init__(self, thread_id: str) -> None:
+        super().__init__(f"Run {thread_id} was cancelled; not restarting it.")
+        self.thread_id = thread_id
 
 # --- event types (the workspace timeline renders these) -------------------
 EVT_WORKFLOW_STARTED = "workflow.started"
@@ -136,10 +149,26 @@ def start_run(
     the workspace timeline show the attempt now running rather than every
     attempt this thread has ever made stacked end to end -- which is how a
     fresh generation came to open showing a dozen tasks from hours earlier.
+
+    Raises `RunAlreadyCancelled` rather than restarting a cancelled run --
+    see the guard below.
     """
     run = session.execute(
         select(WorkflowRun).where(WorkflowRun.thread_id == thread_id)
     ).scalar_one_or_none()
+
+    if run is not None and run.status == CANCELLED:
+        # Cancellation is cooperative: the graph notices the flag between
+        # nodes and unwinds, which leaves the queue message unacked -- so
+        # RabbitMQ redelivers it, and this function used to force the run
+        # straight back to RUNNING. The reviewer's stop was undone within
+        # seconds and generation restarted from document validation, over and
+        # over: a live run reached "Attempt 20" that way, and every attempt
+        # spent real tokens on work someone had explicitly stopped.
+        #
+        # A cancel is a human decision and a redelivered message is not
+        # evidence against it. The caller must ack and drop.
+        raise RunAlreadyCancelled(thread_id)
 
     if run is not None:
         run.status = RUNNING
@@ -413,6 +442,44 @@ def list_runs(
         query = query.where(WorkflowRun.certification_id == certification_id)
     query = query.order_by(WorkflowRun.started_at.desc()).limit(limit).offset(offset)
     return list(session.execute(query).scalars())
+
+
+def purge_certification(session: Session, certification_id: int) -> dict[str, Any]:
+    """Cancels and erases every run belonging to a deleted certification.
+
+    Deleting a certification mid-generation used to leave the run untouched:
+    it carried on writing lessons and questions against rows that no longer
+    existed, spending tokens the whole way, and its timeline stayed in the
+    workspace pointing at a certification nobody could open. The registry is
+    the only place that knows which threads belong to a certification, so the
+    cleanup has to start here.
+
+    Returns what it removed, so the caller can report it rather than guess.
+    """
+    runs = list_runs(session, certification_id=certification_id, limit=1000)
+
+    cancelled = 0
+    for run in runs:
+        if run.status not in TERMINAL_STATUSES:
+            # Cancel before deleting: an in-flight graph checks this flag
+            # between nodes, and `start_run` refuses to reopen a cancelled run,
+            # so a redelivered queue message cannot resurrect it after the
+            # rows are gone.
+            mark_cancelled(session, run.thread_id)
+            cancelled += 1
+
+    run_ids = [run.run_id for run in runs]
+    thread_ids = [run.thread_id for run in runs]
+    if run_ids:
+        session.execute(delete(WorkflowEvent).where(WorkflowEvent.run_id.in_(run_ids)))
+        session.execute(delete(WorkflowRun).where(WorkflowRun.run_id.in_(run_ids)))
+    session.commit()
+
+    logger.info(
+        "Purged certification %s: %d run(s), %d cancelled first",
+        certification_id, len(run_ids), cancelled,
+    )
+    return {"runs_deleted": len(run_ids), "runs_cancelled": cancelled, "thread_ids": thread_ids}
 
 
 def list_awaiting_review(session: Session, limit: int = 50) -> list[WorkflowRun]:

@@ -48,6 +48,12 @@ def run_summary(run) -> dict[str, Any]:
         "progress_pct": run.progress_pct,
         "error_message": run.error_message,
         "last_seq": run.last_seq,
+        # When the run last recorded anything. A client that attaches to a run
+        # started hours ago -- reopened from the certifications list, or after
+        # the admin signed back in -- cannot tell a busy run from an abandoned
+        # one by watching its own connection, because both look like a live
+        # stream with nothing arriving. This is the only evidence of that.
+        "updated_at": run.updated_at.isoformat() if run.updated_at else None,
     }
 
 

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { AlertCircle, BookOpen, Zap } from 'lucide-react'
+import { AlertCircle, BookOpen, Zap } from "@/components/icons"
 import { getCertificationPriorities } from '@/services/learnerAnalyticsService'
 import { PriorityTag } from './priority-tag'
 import { Button } from '@/components/ui/button'

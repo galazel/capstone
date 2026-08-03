@@ -34,13 +34,28 @@ Generate the curriculum now.
 """.strip()
 
 
+def _key_topics(lesson: dict[str, Any]) -> str:
+    """The planner's topic list for a lesson, as prompt text.
+
+    Falls back to the old `lessonGenerationInstructions` object so a run whose
+    curriculum was checkpointed before the planner was slimmed down still
+    carries its guidance into the lesson prompt -- those runs resume from
+    Postgres and would otherwise lose it silently. See
+    `app.schemas.certification.curriculum_schema`.
+    """
+    topics = lesson.get("key_topics")
+    if isinstance(topics, (list, tuple)):
+        return "\n".join(f"- {topic}" for topic in topics if topic)
+    return str(topics or lesson.get("lessonGenerationInstructions") or "")
+
+
 def build_lesson_prompt(
     certification_name: str,
     major: dict[str, Any],
     middle: dict[str, Any],
     lesson: dict[str, Any],
 ) -> str:
-    return f"""
+    prompt = f"""
 Generate a complete lesson.
 
 Certification:
@@ -58,9 +73,19 @@ Lesson:
 Learning Objective:
 {lesson.get("learning_objective", "")}
 
-Lesson Instructions:
-{lesson.get("lessonGenerationInstructions", "")}
+Key Topics to cover:
+{_key_topics(lesson)}
 """.strip()
+
+    # Carried as its own field rather than appended to the topic list, so
+    # reviewer prose can never be mistaken for a topic the lesson must cover.
+    feedback = lesson.get("review_feedback")
+    if feedback:
+        prompt += (
+            "\n\nReviewer feedback on the previous version of this lesson "
+            f"-- apply it:\n{feedback}"
+        )
+    return prompt
 
 
 def build_lesson_audit_prompt(certification_name: str, curriculum: Any, lessons: Any) -> str:
@@ -77,5 +102,5 @@ Generated Lessons:
 {lessons}
 
 Determine whether every generated lesson follows the curriculum,
-learning objectives, and lessonGenerationInstructions.
+its learning objective, and its key topics.
 """.strip()

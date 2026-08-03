@@ -2,7 +2,7 @@ import { useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
-import { CheckCircle2, CircleAlert, Loader2, Mail, ShieldCheck } from "lucide-react"
+import { CheckCircle2, CircleAlert, Loader2, Mail, ShieldCheck } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 import { base } from "@/services/base"

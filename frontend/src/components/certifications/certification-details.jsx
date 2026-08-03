@@ -10,8 +10,6 @@ import {
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 
-import FileUploadComponent from "./file-upload.jsx"
-
 import {
   Select,
   SelectContent,
@@ -21,7 +19,6 @@ import {
 } from "@/components/ui/select"
 
 import { industries } from "@/constants/industries.js"
-import { getFileViewUrl } from "@/services/fileService.js"
 
 const MIN_TITLE_LENGTH = 3
 const MAX_TITLE_LENGTH = 150
@@ -159,32 +156,9 @@ function CertificationDetails({ value, onChange, errors = {} }) {
             )}
           </Field>
 
-          {}
-          <Field>
-            <FieldLabel>Certification Cover Image</FieldLabel>
-
-            <FileUploadComponent
-                value={value.imageFile}
-                error={errors.imageFile}
-                imageUrl={
-                  value.existingImageKey
-                      ? getFileViewUrl(value.existingImageKey)
-                      : ""
-                }
-                onChange={(file) => {
-                  updateField("imageFile", file)
-                }}
-            />
-
-            <FieldDescription>
-              Upload a JPG, JPEG, PNG, or WEBP image. Maximum file size: 5 MB.
-            </FieldDescription>
-
-            {}
-            {errors.imageFile && (
-                <FieldError>{errors.imageFile}</FieldError>
-            )}
-          </Field>
+          {/* No cover field at all. The cover is the certification's name on
+              blue, drawn on the cards — there is nothing to upload and nothing
+              to decide, so the form does not mention it. */}
         </FieldGroup>
       </FieldSet>
   )

@@ -7,7 +7,7 @@ import {
   NotebookPenIcon,
   SettingsIcon,
   UserIcon,
-} from "lucide-react"
+} from "@/components/icons"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { LearnerMobileNavigation, PortalTopNavigation } from "@/components/navigation/portal-navigation.jsx"
@@ -24,15 +24,14 @@ import {
   LearnerLoadingSkeleton,
   getLearnerDisplayName,
 } from "@/components/learner/learner-ui.jsx"
+import { LearnerStatusStrip } from "@/components/learner/learner-status-strip.jsx"
 import { getLearnerPortalData } from "@/services/learnerAnalyticsService.js"
 import { useAuth } from "@/context/auth-context.jsx"
 import { NotificationBell } from "@/components/notification-bell.jsx"
 import { getLearnerInvitations } from "@/services/enterpriseService.js"
 import { usePortalTheme } from "@/hooks/use-portal-theme.js"
 import { useNotifications } from "@/hooks/use-notifications.js"
-import { PortalThemeToggle } from "@/components/portal-theme-toggle"
-import { CalendarDays } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { PortalThemeMenuItem } from "@/components/portal-theme-toggle"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useLearnerEntitlements } from "@/hooks/use-learner-entitlements.js"
 import { getCommunityNotifications } from "@/services/communityService.js"
@@ -158,12 +157,10 @@ export default function LearnerLayout() {
   return (
     <div className={`netacad-portal learner-portal flex min-h-screen flex-col ${isChallengesPage ? "!bg-[#f1f7fc] dark:!bg-[#111b26]" : "bg-background"}`}>
       <PortalTopNavigation role="LEARNER" actions={<>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" onClick={() => navigate("/learner/plan")} aria-label="Open study plan calendar"><CalendarDays /></Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Study plan calendar</TooltipContent>
-            </Tooltip>
+            {/* Ahead of the action icons: these are what the learner is
+                playing for, and they read as state rather than controls. */}
+            <LearnerStatusStrip portalData={query.data} />
+
             <NotificationBell
               items={notifications}
               unreadCount={inbox.unreadCount}
@@ -173,8 +170,6 @@ export default function LearnerLayout() {
               onMarkAllRead={inbox.markAllRead}
               onDelete={inbox.remove}
             />
-
-            <PortalThemeToggle />
 
             <DropdownMenu>
               <Tooltip>
@@ -229,6 +224,8 @@ export default function LearnerLayout() {
                   <SettingsIcon />
                   Plan and billing
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <PortalThemeMenuItem />
                 <DropdownMenuSeparator />
                 <DropdownMenuItem variant="destructive" onClick={logout}>
                   <LogOutIcon />

@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { ArrowLeftIcon, Bell, CheckCheck, ChevronRight, Loader2, Trash2 } from "lucide-react"
+import { ArrowLeftIcon, Bell, CheckCheck, ChevronRight, Loader2, Trash2 } from "@/components/icons"
 
 import {
   AlertDialog,

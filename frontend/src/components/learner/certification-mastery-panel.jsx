@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Award, TrendingUp, BookOpen, Target } from 'lucide-react'
+import { Award, TrendingUp, BookOpen, Target } from "@/components/icons"
 import { getMyConfidence, getMyPriorities } from '@/services/learnerAnalyticsService'
 import { MasteryIndicator } from './mastery-indicator'
 import { PriorityTag } from './priority-tag'

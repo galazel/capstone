@@ -29,7 +29,7 @@
     --popover: #ffffff;
     --popover-foreground: #4b4b4b;
 
-    --primary: #58cc02; /* Feather Green */
+    --primary: #1b6ef3; /* Azure — brand anchor (token name kept, see rebyu-ds.css) */
     --primary-foreground: #ffffff;
 
     --secondary: #f7f7f7; /* Polar */
@@ -38,7 +38,7 @@
     --muted: #f7f7f7;
     --muted-foreground: #777777; /* Wolf */
 
-    --accent: #eefce3; /* Feather wash */
+    --accent: #e8f1fe; /* Feather wash */
     --accent-foreground: #3d6b06;
 
     --destructive: #ff4b4b; /* Cardinal */
@@ -48,9 +48,9 @@
     --input: #e5e5e5;
     --ring: #1cb0f6; /* Macaw — focus is always Macaw */
 
-    --chart-1: #58cc02;
+    --chart-1: #1b6ef3;
     --chart-2: #1cb0f6;
-    --chart-3: #ffc800;
+    --chart-3: #1e3a8a;
     --chart-4: #ce82ff;
     --chart-5: #ff9600;
 
@@ -61,16 +61,16 @@
     --brand-navy: #4b4b4b;
     --brand-navy-soft: #5f5f5f;
 
-    --brand-blue: #58cc02;
-    --brand-blue-dark: #46a302;
-    --brand-blue-soft: #eefce3;
+    --brand-blue: #1b6ef3;
+    --brand-blue-dark: #1553c4;
+    --brand-blue-soft: #e8f1fe;
 
     --brand-sky: #1cb0f6;
     --brand-sky-soft: #e3f5fe;
 
-    --brand-yellow: #ffc800;
+    --brand-yellow: #00b8d4;
     --brand-yellow-foreground: #4b4b4b;
-    --brand-yellow-soft: #fff7de;
+    --brand-yellow-soft: #e0f9fd;
 
     --brand-lilac: #f6ecff;
     --brand-lilac-foreground: #b061e6;
@@ -78,10 +78,10 @@
     --sidebar: #ffffff;
     --sidebar-foreground: #4b4b4b;
 
-    --sidebar-primary: #58cc02;
+    --sidebar-primary: #1b6ef3;
     --sidebar-primary-foreground: #ffffff;
 
-    --sidebar-accent: #eefce3;
+    --sidebar-accent: #e8f1fe;
     --sidebar-accent-foreground: #3d6b06;
 
     --sidebar-border: #e5e5e5;
@@ -113,22 +113,45 @@
     }
 }
 
+/* The auth forms are shadcn primitives (Input, Button, Field) rendered inside
+   the REBYU scope. Rather than rewrite every field on five routes, the slots
+   are retargeted onto the same tokens `rb-input` and `rb-btn` use, so the
+   controls a learner meets before signing in are the controls they meet
+   after. Colour lives here; the sizing block further down owns geometry. */
 .public-auth-shell :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]) {
-    min-height: 2.75rem;
-    border-color: #cbd8e5;
-    border-radius: 0.625rem;
-    background: #ffffff;
+    border: 2px solid var(--color-rb-swan);
+    background: var(--color-rb-polar);
+    color: var(--color-rb-eel);
+    font-family: var(--font-rb-body);
 }
 
-.public-auth-shell :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]):focus-visible {
-    border-color: #5a9ddd;
-    box-shadow: 0 0 0 3px rgb(90 157 221 / 0.16);
+.public-auth-shell
+    :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"])::placeholder {
+    color: var(--color-rb-hare);
 }
 
-.public-auth-shell [data-slot="button"] {
-    min-height: 2.75rem;
-    border-radius: 0.625rem;
-    font-weight: 600;
+.public-auth-shell
+    :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]):focus-visible {
+    outline: none;
+    border-color: var(--color-rb-macaw);
+    background: var(--color-rb-snow);
+    box-shadow: none;
+}
+
+.public-auth-shell
+    :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"])[aria-invalid="true"] {
+    border-color: var(--color-rb-cardinal);
+    background: var(--color-rb-cardinal-wash);
+}
+
+.public-auth-shell [data-slot="label"],
+.public-auth-shell [data-slot="field-label"] {
+    color: var(--color-rb-eel);
+    font-weight: 700;
+}
+
+.public-auth-shell [data-slot="field-description"] {
+    color: var(--color-rb-wolf);
 }
 
 .netacad-portal,
@@ -218,6 +241,24 @@ body.netacad-overlay-theme {
     border-color: color-mix(in srgb, var(--border) 75%, transparent);
 }
 
+/* Route entrance. Applied to the wrapper around every page, keyed on pathname
+   so it replays on navigation. Kept in CSS rather than JS on purpose — see
+   RouteTransition in App.jsx. The reduced-motion block below neuters it. */
+@keyframes rb-route-enter {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.rb-route-enter {
+    animation: rb-route-enter 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -229,7 +270,7 @@ body.netacad-overlay-theme {
     }
 }
 
-/* Portal system: Snow surfaces with a Feather Green interaction language.
+/* Portal system: Snow surfaces with an Azure interaction language.
    Shared by the admin, enterprise, and learner layouts. */
 .netacad-portal,
 body.netacad-overlay-theme {
@@ -239,28 +280,28 @@ body.netacad-overlay-theme {
     --card-foreground: #4b4b4b;
     --popover: #ffffff;
     --popover-foreground: #4b4b4b;
-    --primary: #58cc02;
+    --primary: #1b6ef3;
     --primary-foreground: #ffffff;
     --secondary: #f7f7f7;
     --secondary-foreground: #4b4b4b;
     --muted: #f7f7f7;
     --muted-foreground: #777777;
-    --accent: #eefce3;
+    --accent: #e8f1fe;
     --accent-foreground: #3d6b06;
     --border: #e5e5e5;
     --input: #e5e5e5;
     --ring: #1cb0f6;
     --radius: 1rem;
-    --chart-1: #58cc02;
+    --chart-1: #1b6ef3;
     --chart-2: #1cb0f6;
-    --chart-3: #ffc800;
+    --chart-3: #1e3a8a;
     --chart-4: #ce82ff;
     --chart-5: #ff9600;
     --sidebar: #ffffff;
     --sidebar-foreground: #4b4b4b;
-    --sidebar-primary: #58cc02;
+    --sidebar-primary: #1b6ef3;
     --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #eefce3;
+    --sidebar-accent: #e8f1fe;
     --sidebar-accent-foreground: #3d6b06;
     --sidebar-border: #e5e5e5;
     --sidebar-ring: #1cb0f6;
@@ -268,7 +309,7 @@ body.netacad-overlay-theme {
 }
 
 /* Dark portal: neutral charcoals derived from Eel rather than a blue-grey, so
-   Feather Green stays the only saturated colour in the interface. */
+   Azure stays the only saturated colour in the interface. */
 .dark .netacad-portal,
 .dark body.netacad-overlay-theme {
     --background: #1a1a1a;
@@ -277,7 +318,7 @@ body.netacad-overlay-theme {
     --card-foreground: #f2f2f2;
     --popover: #242424;
     --popover-foreground: #f2f2f2;
-    --primary: #58cc02;
+    --primary: #1b6ef3;
     --primary-foreground: #10240a;
     --secondary: #2e2e2e;
     --secondary-foreground: #f2f2f2;
@@ -288,14 +329,14 @@ body.netacad-overlay-theme {
     --border: #3a3a3a;
     --input: #3a3a3a;
     --ring: #1cb0f6;
-    --chart-1: #58cc02;
+    --chart-1: #1b6ef3;
     --chart-2: #1cb0f6;
-    --chart-3: #ffc800;
+    --chart-3: #1e3a8a;
     --chart-4: #ce82ff;
     --chart-5: #ff9600;
     --sidebar: #1f1f1f;
     --sidebar-foreground: #f2f2f2;
-    --sidebar-primary: #58cc02;
+    --sidebar-primary: #1b6ef3;
     --sidebar-primary-foreground: #10240a;
     --sidebar-accent: #2a3d1c;
     --sidebar-accent-foreground: #b7f08a;
@@ -406,7 +447,7 @@ body.netacad-overlay-theme {
 :is(.netacad-portal, .netacad-overlay-theme) [data-slot="button"][data-variant="default"] {
     background: var(--primary);
     border: 0;
-    box-shadow: 0 4px 0 #46a302;
+    box-shadow: 0 4px 0 #1553c4;
 }
 
 :is(.netacad-portal, .netacad-overlay-theme) [data-slot="button"][data-variant="default"]:hover {
@@ -592,33 +633,44 @@ body.netacad-overlay-theme {
     font-family: var(--font-sans);
 }
 
-[data-sonner-toast].netacad-toast {
+/* The toast is built like a key: 2px edge, tile radius, and the same solid
+   offset lip the buttons carry instead of a blurred drop shadow. Nothing else
+   in the system casts a soft shadow, and the toast was the last surface that
+   looked like it was floating rather than sitting on the page.
+
+   Specificity: sonner injects its stylesheet into <head> at runtime, so it
+   lands after this file and styles its internals as `[data-sonner-toast]
+   [data-title]` — (0,2,0). Every rule in this block therefore leads with
+   `:root` and keeps the toast in the selector, putting it at (0,3,0). Drop
+   either half and sonner silently wins back border, weight and radius. */
+:root [data-sonner-toast].netacad-toast {
     min-height: 0;
     align-items: center;
     gap: 10px;
     overflow: hidden;
-    border: 1px solid var(--border);
-    border-radius: 0.75rem;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-rb-tile);
     background: var(--popover);
     color: var(--foreground);
     padding: 14px 46px 14px 14px;
-    box-shadow: 0 12px 32px rgb(15 23 42 / 0.12);
+    box-shadow: 0 var(--rb-lip) 0 var(--border);
 }
 
-.netacad-toast-content {
+:root [data-sonner-toast][data-styled="true"] .netacad-toast-content {
     min-width: 0;
     flex: 1;
     padding-top: 0;
 }
 
-.netacad-toast-title {
+:root [data-sonner-toast][data-styled="true"] .netacad-toast-title {
     color: var(--foreground);
+    font-family: var(--font-heading);
     font-size: 1rem;
-    font-weight: 600;
+    font-weight: 800;
     line-height: 1.3;
 }
 
-.netacad-toast-description {
+:root [data-sonner-toast][data-styled="true"] .netacad-toast-description {
     margin-top: 3px;
     color: var(--muted-foreground);
     font-size: 0.9rem;
@@ -626,7 +678,7 @@ body.netacad-overlay-theme {
     overflow-wrap: anywhere;
 }
 
-.netacad-toast-icon {
+:root [data-sonner-toast][data-styled="true"] .netacad-toast-icon {
     display: flex;
     width: 20px;
     height: 20px;
@@ -636,29 +688,61 @@ body.netacad-overlay-theme {
     margin-top: 0;
 }
 
-.netacad-toast-action,
-.netacad-toast-cancel {
+/* The toast's own buttons are the real thing, not flat chips: same pill, same
+   lip, same 2px travel on press as `[data-slot="button"]`. Sized down to 32px
+   because a 44px key would out-weigh the message it sits next to. */
+:root [data-sonner-toast][data-styled="true"] .netacad-toast-action,
+:root [data-sonner-toast][data-styled="true"] .netacad-toast-cancel {
     align-self: center;
     flex-shrink: 0;
-    height: 30px;
-    border-radius: 0.375rem;
-    padding-inline: 10px;
-    font-size: 0.75rem;
+    height: 32px;
+    border-radius: var(--radius-rb-pill);
+    padding-inline: 14px;
+    font-size: 0.8125rem;
     font-weight: 700;
+    letter-spacing: 0.01em;
+    transition:
+        transform var(--rb-press),
+        box-shadow var(--rb-press),
+        filter 0.15s ease-out;
 }
 
-.netacad-toast-action {
+:root [data-sonner-toast][data-styled="true"] .netacad-toast-action {
+    border: 0;
     background: var(--primary);
     color: var(--primary-foreground);
+    box-shadow: 0 var(--rb-lip-sm) 0 var(--rb-primary-lip);
 }
 
-.netacad-toast-cancel {
-    border: 1px solid var(--border);
+:root [data-sonner-toast][data-styled="true"] .netacad-toast-cancel {
+    border: 2px solid var(--border);
     background: var(--secondary);
     color: var(--secondary-foreground);
+    box-shadow: 0 var(--rb-lip-sm) 0 var(--border);
 }
 
-.netacad-toast-close {
+:root [data-sonner-toast][data-styled="true"] .netacad-toast-action:hover {
+    filter: brightness(1.05);
+}
+
+:root [data-sonner-toast][data-styled="true"] .netacad-toast-action:active,
+:root [data-sonner-toast][data-styled="true"] .netacad-toast-cancel:active {
+    transform: translateY(var(--rb-lip-sm));
+    box-shadow: none;
+}
+
+/* Sonner rings its buttons with a black 2px box-shadow on focus; this replaces
+   it with the Macaw outline every other control in the system uses. */
+:root [data-sonner-toast][data-styled="true"] .netacad-toast-action:focus-visible,
+:root [data-sonner-toast][data-styled="true"] .netacad-toast-cancel:focus-visible {
+    outline: 3px solid var(--rb-focus);
+    outline-offset: 2px;
+    box-shadow: none;
+}
+
+/* The close affordance stays quiet — it is not one of the toast's actions, so
+   it gets the circle and the hover but no lip. */
+:root [data-sonner-toast][data-styled="true"] .netacad-toast-close {
     position: absolute !important;
     top: 50% !important;
     right: 12px !important;
@@ -667,9 +751,16 @@ body.netacad-overlay-theme {
     height: 24px !important;
     transform: translateY(-50%) !important;
     border: 0;
+    border-radius: var(--radius-rb-pill);
     background: transparent;
-    color: #5d6b7a;
+    color: var(--muted-foreground);
     box-shadow: none;
+    transition: background-color 0.15s ease-out;
+}
+
+:root [data-sonner-toast][data-styled="true"] .netacad-toast-close:hover {
+    background: var(--muted);
+    color: var(--foreground);
 }
 
 .dark {
@@ -703,7 +794,7 @@ body.netacad-overlay-theme {
 
     --chart-1: #78b7e8;
     --chart-2: #5aa4e6;
-    --chart-3: #e4bd54;
+    --chart-3: #22d3ee;
     --chart-4: #a7d6f4;
     --chart-5: #4f87b5;
 
@@ -717,7 +808,7 @@ body.netacad-overlay-theme {
     --brand-sky: oklch(0.74 0.1 235);
     --brand-sky-soft: oklch(0.28 0.04 235);
 
-    --brand-yellow: oklch(0.84 0.15 94);
+    --brand-yellow: #22d3ee;
     --brand-yellow-foreground: oklch(0.16 0.025 265);
     --brand-yellow-soft: oklch(0.31 0.05 94);
 
@@ -871,6 +962,22 @@ body.netacad-overlay-theme {
     h3 {
         font-weight: 800;
     }
+
+    /* FontAwesome, minus its stylesheet.
+       `config.autoAddCss = false` in components/icons.tsx stops FA injecting its
+       own CSS at runtime — that CSS is unlayered, so its `height: 1em` would
+       outrank every Tailwind `size-4` on an icon no matter the specificity.
+       These are the only rules the inline SVGs actually need, and living in
+       @layer base means a utility class still wins. Width is intentionally
+       unset: with height alone the viewBox keeps each glyph's own aspect
+       ratio, so wide icons aren't squashed into a square. */
+    .svg-inline--fa {
+        display: inline-block;
+        height: 1em;
+        overflow: visible;
+        vertical-align: -0.125em;
+        box-sizing: content-box;
+    }
 }
 
 /* Shared component scale: readable, study-friendly, and consistent across
@@ -917,38 +1024,105 @@ body.netacad-overlay-theme {
    opt-in via the `.rebyu-ds` component classes.
    =========================================================================== */
 
+/* Specificity note: the portal-scoped rules earlier in this file are written as
+   `:is(.netacad-portal, …) [data-slot="x"]` — (0,2,0). A bare `[data-slot="x"]`
+   here would lose to them. Every rule below is therefore prefixed with `:root`,
+   which ties that specificity and wins on source order. Keep the prefix when
+   adding rules; raising specificity further starts an arms race. */
+
+/* --- Shared tactile tokens ------------------------------------------------- */
+/* `.rebyu-ds` declares these for the marketing surface. Hoisting them to the
+   root gives the app shell the same press depth and spacing scale — and fixes
+   the auth-shell rules at the foot of this file, which already referenced
+   `--rb-s3` / `--rb-lip` from outside `.rebyu-ds`, where they resolved to
+   nothing and were dropped. */
+:root {
+    --rb-lip: 4px;
+    --rb-lip-sm: 2px;
+    --rb-lip-lg: 6px;
+
+    --rb-s1: 8px;
+    --rb-s2: 16px;
+    --rb-s3: 24px;
+    --rb-s4: 32px;
+    --rb-s5: 40px;
+    --rb-s6: 48px;
+
+    /* The shade under a filled primary key. Per-theme, because the lip has to
+       be a darker version of whatever `--primary` currently is. */
+    --rb-primary-lip: #1553c4;
+    /* Focus is always Macaw — one focus colour for the whole product. */
+    --rb-focus: #1cb0f6;
+    --rb-press: 0.06s ease-out;
+}
+
+.dark {
+    --rb-primary-lip: #3d87e0;
+}
+
+.netacad-portal,
+body.netacad-overlay-theme {
+    --rb-primary-lip: #235f9f;
+}
+
 /* --- Buttons --------------------------------------------------------------- */
-[data-slot="button"] {
-    border-radius: 999px;
+:root [data-slot="button"] {
+    border-radius: var(--radius-rb-pill);
     font-weight: 700;
+    letter-spacing: 0.01em;
     transition:
-        transform 0.06s ease-out,
-        box-shadow 0.06s ease-out,
+        transform var(--rb-press),
+        box-shadow var(--rb-press),
+        filter 0.15s ease-out,
         background-color 0.15s ease-out;
 }
 
-/* The lip only goes on solid-filled buttons; ghost and link variants would
-   read as floating boxes with a shadow under them. */
-[data-slot="button"].bg-primary {
-    box-shadow: 0 4px 0 #46a302;
+/* The filled key gets the full lip. Outline/secondary get a shallower one so a
+   toolbar of them doesn't read as a row of piano keys, and ghost/link get none
+   at all — they'd look like floating boxes with a shadow underneath. */
+:root [data-slot="button"][data-variant="default"] {
+    box-shadow: 0 var(--rb-lip) 0 var(--rb-primary-lip);
 }
-[data-slot="button"].bg-destructive {
-    box-shadow: 0 4px 0 #e03d3d;
+:root [data-slot="button"]:is([data-variant="outline"], [data-variant="secondary"]) {
+    border-width: 2px;
+    box-shadow: 0 var(--rb-lip-sm) 0 var(--border);
 }
-[data-slot="button"]:is(.bg-primary, .bg-destructive):active:not([disabled]) {
-    transform: translateY(4px);
-    box-shadow: none;
-}
-[data-slot="button"]:not(.bg-primary, .bg-destructive):active:not([disabled]) {
-    transform: translateY(2px);
-}
-[data-slot="button"][disabled] {
-    box-shadow: none;
+:root [data-slot="button"][data-variant="destructive"] {
+    border-width: 2px;
+    border-color: color-mix(in srgb, var(--destructive) 35%, transparent);
+    box-shadow: 0 var(--rb-lip-sm) 0 color-mix(in srgb, var(--destructive) 30%, transparent);
 }
 
-[data-slot="button"]:focus-visible {
-    outline: 3px solid #1cb0f6;
+:root [data-slot="button"][data-variant="default"]:hover:not(:disabled) {
+    filter: brightness(1.05);
+}
+
+:root [data-slot="button"][data-variant="default"]:active:not(:disabled) {
+    transform: translateY(var(--rb-lip));
+    box-shadow: none;
+}
+:root
+    [data-slot="button"]:is([data-variant="outline"], [data-variant="secondary"], [data-variant="destructive"]):active:not(:disabled) {
+    transform: translateY(var(--rb-lip-sm));
+    box-shadow: none;
+}
+:root [data-slot="button"]:is([data-variant="ghost"], [data-variant="link"]):active:not(:disabled) {
+    transform: translateY(1px);
+}
+:root [data-slot="button"]:disabled {
+    box-shadow: none;
+    transform: none;
+}
+
+:root [data-slot="button"]:focus-visible {
+    outline: 3px solid var(--rb-focus);
     outline-offset: 2px;
+}
+
+/* Buttons packed into a group keep square-ish ends so they sit flush against
+   each other — the pill radius above would leave gaps between segments. */
+:root [data-slot="button-group"] [data-slot="button"] {
+    border-radius: var(--radius-md);
 }
 
 /* --- Surfaces -------------------------------------------------------------- */
@@ -972,50 +1146,339 @@ body.netacad-overlay-theme {
 }
 
 /* --- Inputs ---------------------------------------------------------------- */
-:is(.netacad-portal, .public-auth-shell)
-    :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]) {
+/* Was scoped to the portal and auth shells; now global, so a field on a public
+   page and a field in an admin drawer are the same object. Heights stay on the
+   component so dense admin forms keep their density. */
+:root :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]) {
     border-width: 2px;
     border-color: var(--border);
     border-radius: 0.75rem;
     background: var(--card);
+    transition:
+        border-color 0.15s ease-out,
+        background-color 0.15s ease-out;
 }
-:is(.netacad-portal, .public-auth-shell)
-    :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]):focus-visible {
-    border-color: #1cb0f6;
+:root :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]):hover:not(:disabled, [aria-invalid="true"]) {
+    border-color: var(--color-rb-hare);
+}
+:root :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]):focus-visible {
+    border-color: var(--rb-focus);
     box-shadow: none;
     outline: 3px solid rgb(28 176 246 / 0.25);
     outline-offset: 0;
 }
-:is(.netacad-portal, .public-auth-shell)
-    :is([data-slot="input"], [data-slot="textarea"])[aria-invalid="true"] {
-    border-color: #ff4b4b;
+:root :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"])[aria-invalid="true"] {
+    border-color: var(--color-rb-cardinal);
+}
+:root :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]):disabled {
+    background: var(--muted);
+    border-color: var(--border);
 }
 
-/* --- Badges & chips -------------------------------------------------------- */
-[data-slot="badge"] {
-    border-radius: 999px;
+/* Field labels carry weight — in a tactile system the label is part of the
+   control, not caption text floating above it. */
+:root :is([data-slot="label"], [data-slot="field-label"]) {
     font-weight: 700;
 }
 
+/* --- Choice controls ------------------------------------------------------- */
+/* Checkbox, radio and switch share one press behaviour so a settings panel of
+   mixed controls feels like one surface. Geometry lives on the components. */
+:root :is([data-slot="checkbox"], [data-slot="radio-group-item"], [data-slot="switch"]) {
+    transition:
+        transform var(--rb-press),
+        box-shadow var(--rb-press),
+        background-color 0.12s ease-out,
+        border-color 0.12s ease-out;
+}
+:root :is([data-slot="checkbox"], [data-slot="radio-group-item"], [data-slot="switch"]):active:not(:disabled) {
+    transform: translateY(var(--rb-lip-sm));
+    box-shadow: none;
+}
+:root :is([data-slot="checkbox"], [data-slot="radio-group-item"], [data-slot="switch"]):focus-visible {
+    outline: 3px solid var(--rb-focus);
+    outline-offset: 2px;
+    box-shadow: none;
+}
+
+/* --- Menus, selects and popovers ------------------------------------------- */
+:root :is(
+    [data-slot="dropdown-menu-content"],
+    [data-slot="select-content"],
+    [data-slot="popover-content"],
+    [data-slot="command"]
+) {
+    border-width: 2px;
+    border-color: var(--border);
+    border-radius: var(--radius-rb-tile);
+    box-shadow: 0 var(--rb-lip) 0 var(--border);
+    padding: 6px;
+}
+
+:root :is([data-slot="dropdown-menu-item"], [data-slot="select-item"], [data-slot="command-item"]) {
+    min-height: 2.5rem;
+    border-radius: 10px;
+    font-weight: 500;
+}
+:root :is([data-slot="dropdown-menu-item"], [data-slot="select-item"], [data-slot="command-item"]):is(
+    :hover,
+    [data-highlighted],
+    [data-state="checked"]
+) {
+    background: var(--accent);
+    color: var(--accent-foreground);
+    font-weight: 700;
+}
+
+/* --- Tabs ------------------------------------------------------------------ */
+/* A segmented pill rather than an underline: the active tab is a physical
+   piece that moved, which is the same metaphor the buttons use. */
+:root [data-slot="tabs-list"]:not([data-variant="line"]) {
+    height: auto;
+    gap: 4px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-rb-pill);
+    background: var(--muted);
+    padding: 4px;
+}
+:root [data-slot="tabs-list"]:not([data-variant="line"]) [data-slot="tabs-trigger"] {
+    border: 0;
+    border-radius: var(--radius-rb-pill);
+    padding-inline: 16px;
+    font-weight: 700;
+    color: var(--muted-foreground);
+    transition:
+        background-color 0.15s ease-out,
+        color 0.15s ease-out,
+        box-shadow var(--rb-press);
+}
+:root
+    [data-slot="tabs-list"]:not([data-variant="line"])
+    [data-slot="tabs-trigger"]:is([data-active], [data-state="active"]) {
+    background: var(--card);
+    color: var(--primary);
+    box-shadow: 0 var(--rb-lip-sm) 0 var(--border);
+}
+/* The trigger ships its own `after:` underline for the line variant; inside a
+   pill it would draw a rule across the moving piece. */
+:root [data-slot="tabs-list"]:not([data-variant="line"]) [data-slot="tabs-trigger"]::after {
+    display: none;
+}
+
+/* The `line` variant stays an underline, but a chunky one. */
+:root [data-slot="tabs-list"][data-variant="line"] [data-slot="tabs-trigger"] {
+    font-weight: 700;
+}
+:root [data-slot="tabs-list"][data-variant="line"] [data-slot="tabs-trigger"]::after {
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+}
+
+/* --- Tables ---------------------------------------------------------------- */
+:root [data-slot="table-container"] {
+    border-radius: var(--radius-rb-tile);
+    border: 2px solid var(--border);
+}
+:root [data-slot="table-header"] {
+    background: var(--muted);
+}
+:root [data-slot="table-head"] {
+    font-weight: 700;
+    color: var(--foreground);
+}
+:root [data-slot="table-row"] {
+    border-bottom-color: var(--border);
+    transition: background-color 0.12s ease-out;
+}
+:root [data-slot="table-body"] [data-slot="table-row"]:hover {
+    background: var(--accent);
+}
+
+/* --- Alerts ---------------------------------------------------------------- */
+/* Full 2px outline and a tile radius instead of the thin left rule — an alert
+   is a card that is saying something, not a quoted paragraph. */
+:root [data-slot="alert"] {
+    border-width: 2px;
+    border-color: var(--border);
+    border-radius: var(--radius-rb-tile);
+    padding: var(--rb-s2);
+}
+/* Destructive alerts are outlined in Cardinal rather than tinted — the border
+   carries the severity so the body copy stays readable. */
+:root [data-slot="alert"][data-variant="destructive"] {
+    border-color: color-mix(in srgb, var(--destructive) 45%, transparent);
+}
+:root [data-slot="alert-title"] {
+    font-family: var(--font-heading);
+    font-weight: 800;
+}
+
+/* --- Dialogs, sheets and drawers ------------------------------------------- */
+:root :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"]) {
+    border-width: 2px;
+    border-color: var(--border);
+    border-radius: var(--radius-rb-card);
+    box-shadow: 0 var(--rb-lip-lg) 0 rgb(0 0 0 / 0.08);
+}
+:root :is([data-slot="sheet-content"], [data-slot="drawer-content"]) {
+    border-width: 2px;
+    border-color: var(--border);
+}
+:root :is([data-slot="dialog-title"], [data-slot="alert-dialog-title"], [data-slot="sheet-title"], [data-slot="drawer-title"]) {
+    font-family: var(--font-heading);
+    font-weight: 800;
+}
+:root :is([data-slot="dialog-overlay"], [data-slot="alert-dialog-overlay"], [data-slot="sheet-overlay"]) {
+    background: rgb(75 75 75 / 0.45); /* Eel, never pure black */
+}
+
+/* --- Accordion ------------------------------------------------------------- */
+:root [data-slot="accordion-item"] {
+    border-bottom-width: 2px;
+    border-color: var(--border);
+}
+:root [data-slot="accordion-trigger"] {
+    font-weight: 700;
+    border-radius: 10px;
+}
+:root [data-slot="accordion-trigger"]:focus-visible {
+    outline: 3px solid var(--rb-focus);
+    outline-offset: 2px;
+}
+
+/* --- Tooltip --------------------------------------------------------------- */
+:root [data-slot="tooltip-content"] {
+    border-radius: 10px;
+    font-weight: 600;
+    padding: 6px 10px;
+}
+
+/* --- Badges & chips -------------------------------------------------------- */
+:root [data-slot="badge"] {
+    border-radius: var(--radius-rb-pill);
+    font-weight: 700;
+    padding-inline: 10px;
+}
+:root [data-slot="badge"][data-variant="outline"] {
+    border-width: 2px;
+}
+
 /* --- Progress -------------------------------------------------------------- */
-[data-slot="progress"] {
-    border-radius: 999px;
+/* The inner top highlight is what makes the fill read as a filled tube rather
+   than a painted rectangle. Height stays on the component so a caller passing
+   `h-1.5` still gets a thin bar. */
+:root [data-slot="progress"] {
+    border-radius: var(--radius-rb-pill);
     background: var(--border);
 }
-[data-slot="progress-indicator"] {
-    border-radius: 999px;
-    background: #89e219;
+:root [data-slot="progress-indicator"] {
+    border-radius: var(--radius-rb-pill);
+    background: var(--primary);
+    box-shadow: inset 0 3px 0 rgb(255 255 255 / 0.3);
+}
+
+/* --- Avatars, separators, skeletons ---------------------------------------- */
+:root [data-slot="avatar"] {
+    border: 2px solid var(--border);
+}
+:root [data-slot="separator"] {
+    background: var(--border);
+}
+:root [data-slot="skeleton"] {
+    border-radius: 10px;
+    background: var(--muted);
 }
 
 /* --- Auth shell ------------------------------------------------------------ */
 /* Overrides the compact defaults declared near the top of this file: auth is a
-   low-density, high-intent surface, so it takes the full tactile sizing. */
+   low-density, high-intent surface, so it takes the full tactile sizing —
+   the same 56px key height and tile radius the design system uses. */
 .public-auth-shell :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]) {
-    min-height: 3.25rem;
-    border-radius: 0.75rem;
+    min-height: 56px;
+    padding-inline: var(--rb-s3);
+    border-radius: var(--radius-rb-tile);
+    /* Colour normally lives in the block near the top of this file, but the
+       global input rule matches with equal specificity and lands after it, so
+       a field here inherits `--card` — white. That was fine while the form
+       side sat on the macaw wash; on the plain white shell it left a white
+       field on a white page held apart by one hairline. Polar puts the field
+       back on its own tone, and focus still lifts it to snow. */
+    background: var(--color-rb-polar);
 }
+
+/* The submit key, given the lip and the travel. A flat rectangle beneath a
+   tactile form was the last thing on these screens still reading as a
+   different product. */
 .public-auth-shell [data-slot="button"] {
-    min-height: 3.25rem;
-    border-radius: 999px;
+    min-height: 56px;
+    padding-inline: var(--rb-s4);
+    border-radius: var(--radius-rb-pill);
+    background: var(--color-rb-feather);
+    color: var(--color-rb-snow);
+    box-shadow: 0 var(--rb-lip) 0 var(--color-rb-feather-lip);
+    font-family: var(--font-rb-display);
     font-weight: 800;
+    text-transform: lowercase;
+    transition:
+        transform 0.06s ease-out,
+        box-shadow 0.06s ease-out,
+        filter 0.15s ease-out;
+}
+.public-auth-shell [data-slot="button"]:hover:not(:disabled) {
+    filter: brightness(1.06);
+}
+.public-auth-shell [data-slot="button"]:active:not(:disabled) {
+    transform: translateY(var(--rb-lip));
+    box-shadow: 0 0 0 var(--color-rb-feather-lip);
+}
+.public-auth-shell [data-slot="button"]:disabled {
+    background: var(--color-rb-swan);
+    color: var(--color-rb-hare);
+    box-shadow: none;
+}
+
+/* Link-shaped buttons keep their own quiet treatment — the lip belongs to the
+   one action the page is asking for, not to "forgot password". */
+.public-auth-shell [data-slot="button"]:is([data-variant="link"], [data-variant="ghost"]) {
+    background: transparent;
+    box-shadow: none;
+    color: var(--color-rb-wolf);
+    text-transform: none;
+}
+
+/* ---------------------------------------------------------------------------
+   MODAL SCROLLING — no visible bar.
+   ---------------------------------------------------------------------------
+   A dialog is already a bounded surface with its own edges, and a scrollbar
+   track running down the inside of one reads as a second border. Scrolling
+   itself is untouched: wheel, trackpad, touch, keyboard and the `overflow`
+   rules that make an area scrollable all behave exactly as before -- only the
+   bar is hidden.
+
+   Applied to the panel AND its descendants because the scroll container varies
+   by dialog: some scroll the panel, some an inner column, some a list inside
+   that column.
+   --------------------------------------------------------------------------- */
+[data-slot="dialog-content"],
+[data-slot="alert-dialog-content"],
+[data-slot="sheet-content"],
+[data-slot="drawer-content"],
+[data-slot="dialog-content"] *,
+[data-slot="alert-dialog-content"] *,
+[data-slot="sheet-content"] *,
+[data-slot="drawer-content"] * {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+[data-slot="dialog-content"]::-webkit-scrollbar,
+[data-slot="alert-dialog-content"]::-webkit-scrollbar,
+[data-slot="sheet-content"]::-webkit-scrollbar,
+[data-slot="drawer-content"]::-webkit-scrollbar,
+[data-slot="dialog-content"] *::-webkit-scrollbar,
+[data-slot="alert-dialog-content"] *::-webkit-scrollbar,
+[data-slot="sheet-content"] *::-webkit-scrollbar,
+[data-slot="drawer-content"] *::-webkit-scrollbar {
+    display: none;
+    -webkit-appearance: none;
 }

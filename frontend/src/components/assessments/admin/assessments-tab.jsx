@@ -5,7 +5,7 @@ import {
   Search,
   Trash2Icon,
   EyeIcon,
-} from "lucide-react"
+} from "@/components/icons"
 import { toast } from "sonner"
 
 import {

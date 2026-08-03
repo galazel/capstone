@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import {
   ArrowLeft,
@@ -8,16 +8,19 @@ import {
   ChevronRight,
   Layers3,
   Pencil,
-} from "lucide-react"
+} from "@/components/icons"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getFileViewUrl } from "@/services/fileService.js"
 import CertificationFormDrawer from "@/components/certifications/certification-form-drawer"
 import AssessmentsTab from "@/components/assessments/admin/assessments-tab.jsx"
 import CertificationPublishingChecklist from "@/components/assessments/admin/certification-publishing-checklist.jsx"
 import { useQueryClient } from "@tanstack/react-query"
+
+// The question bank is a big tree; keep it out of the certification page bundle
+// and only load it when the Question Bank tab is opened.
+const QuestionBank = lazy(() => import("./question-bank-page.jsx"))
 
 function getCertification(location) {
   return (
@@ -132,30 +135,14 @@ export default function ViewCertificationAdmin() {
       0
   )
 
-  const coverImageUrl = certification.imageKey
-      ? getFileViewUrl(certification.imageKey)
-      : null
-
   return (
       <section
           ref={pageRef}
           className="min-h-full overflow-y-auto bg-muted/30 font-sans"
       >
-        <header className="relative isolate overflow-hidden border-b border-border bg-muted px-6 py-12 sm:px-10 lg:px-20 lg:py-16">
-          {coverImageUrl && (
-              <img
-                  src={coverImageUrl}
-                  alt=""
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-0 h-full w-full scale-105 object-cover blur-sm brightness-[0.6]"
-              />
-          )}
-
-          <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 bg-background/10"
-          />
-
+        {/* Feather blue, the same default cover the certification wears on every
+            card — there is no uploaded image to blur behind this header now. */}
+        <header className="relative isolate overflow-hidden border-b border-border bg-rb-feather px-6 py-12 sm:px-10 lg:px-20 lg:py-16">
           <div className="relative z-10 mx-auto max-w-6xl">
             <Badge
                 variant="secondary"
@@ -235,6 +222,7 @@ export default function ViewCertificationAdmin() {
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="mb-6">
                 <TabsTrigger value="curriculum">Curriculum</TabsTrigger>
+                <TabsTrigger value="question-bank">Question Bank</TabsTrigger>
                 <TabsTrigger value="assessments">Assessments</TabsTrigger>
               </TabsList>
 
@@ -266,6 +254,21 @@ export default function ViewCertificationAdmin() {
                       ))}
                     </div>
                 )}
+              </TabsContent>
+
+              <TabsContent value="question-bank">
+                <Suspense
+                    fallback={
+                      <div className="rounded-2xl border border-border bg-card p-12 text-center text-sm text-muted-foreground shadow-sm">
+                        Loading question bank…
+                      </div>
+                    }
+                >
+                  <QuestionBank
+                      certificationId={certification.certificationId}
+                      embedded
+                  />
+                </Suspense>
               </TabsContent>
 
               <TabsContent value="assessments">

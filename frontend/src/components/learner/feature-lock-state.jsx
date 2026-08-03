@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { LockIcon } from "lucide-react"
+import { LockIcon } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 // Reusable lock card shown above a blurred premium-content preview.

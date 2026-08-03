@@ -1,13 +1,14 @@
 import { useState } from "react"
 import {
   ActivityIcon,
+  AlertTriangle,
   Loader2,
   MoreVertical,
   SendIcon,
   Trash2Icon,
   TrashIcon,
   UploadCloudIcon
-} from "lucide-react"
+} from "@/components/icons"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,8 +22,7 @@ import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { generationStatusOf } from "@/hooks/use-active-generations"
-import { getFileViewUrl } from "@/services/fileService.js"
-import { getCertificationFallbackImage, getCuratedCertificationCover } from "@/lib/certification-cover-images.js"
+import CertificationCover from "@/components/certifications/certification-cover.jsx"
 import {
   deleteCertification,
   publishCertification,
@@ -38,6 +38,14 @@ import {
   AlertDialogMedia,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { InlineGenerationMonitor } from "@/components/certifications/inline-generation-monitor.jsx"
 import { Button } from "@/components/ui/button"
 
 function getErrorMessage(error, fallback = "Something went wrong.") {
@@ -66,16 +74,48 @@ function getErrorMessage(error, fallback = "Something went wrong.") {
  * generation in progress would be the modal that started it, and closing that
  * would lose sight of it until it finished.
  */
+/** The graph's node name as something an admin can read.
+ *
+ * `current_stage` is a LangGraph node id ("plan_curriculum", "lesson_content"),
+ * which is precise and means nothing to the person watching. Unknown stages
+ * return null so the caller falls back to a generic label rather than showing
+ * a raw identifier.
+ */
+function stageLabel(stage) {
+  if (!stage) return null
+  const labels = {
+    validate_documents: "Checking documents",
+    ingest_documents: "Reading documents",
+    plan_curriculum: "Planning the curriculum",
+    lesson_content: "Writing a lesson",
+    lesson_quiz_generate: "Building a lesson quiz",
+    lesson_validate: "Checking a lesson",
+    middle_generate: "Building a category quiz",
+    major_generate: "Building a major exam",
+    generate_mock_exam: "Building the mock exam",
+    generate_diagnostic_exam: "Building the diagnostic exam",
+    generate_question_bank: "Building the question bank",
+  }
+  return labels[stage] ?? null
+}
+
 function CertificationCard({ item, certification, generationRun = null }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [showGeneration, setShowGeneration] = useState(false)
 
   const generationStatus = generationStatusOf(generationRun)
   const isGenerating = Boolean(generationStatus)
-  const generationLabel =
-      generationStatus === "AWAITING_REVIEW" ? "Waiting for review" : "Generating…"
+  const awaitingReview = generationStatus === "AWAITING_REVIEW"
+
+  // "Generating…" for four minutes tells an admin nothing about whether it is
+  // progressing or wedged. The run already reports the node it is on, so show
+  // that instead and fall back only when the stage is not known yet.
+  const generationLabel = awaitingReview
+      ? "Needs your review"
+      : stageLabel(generationRun?.current_stage) ?? "Generating…"
 
   const currentCertification = certification ?? item
 
@@ -93,6 +133,20 @@ function CertificationCard({ item, certification, generationRun = null }) {
       item?.description ??
       "No description available."
 
+  // A certification with no categories has no lessons and no assessments --
+  // opening it shows a blank page. That happens when generation never reached
+  // the end: persistence runs once, after the final review, so a run that
+  // failed or was restarted into oblivion leaves the row created and empty.
+  //
+  // Only claimed once something is actually known about the tree: an absent
+  // `majorCategory` means the list endpoint did not include it, which is not
+  // the same as an empty one, and stamping a healthy certification EMPTY is
+  // worse than missing an empty one.
+  const majorCategories =
+      currentCertification?.majorCategory ?? item?.majorCategory ?? null
+  const isEmpty =
+      !isGenerating && Array.isArray(majorCategories) && majorCategories.length === 0
+
   const certificationIndustry =
       currentCertification?.industry ?? item?.industry ?? "Certification"
 
@@ -109,11 +163,6 @@ function CertificationCard({ item, certification, generationRun = null }) {
       currentCertification?.isPublished === true ||
       String(certificationStatus ?? "").toUpperCase() === "PUBLISHED" ||
       String(certificationStatus ?? "").toUpperCase() === "ACTIVE"
-
-  const imageKey = currentCertification?.imageKey ?? item?.imageKey
-  const fallbackImage = getCertificationFallbackImage(certificationTitle)
-  const curatedCover = getCuratedCertificationCover(certificationTitle)
-  const imageUrl = curatedCover ?? (imageKey ? getFileViewUrl(imageKey) : fallbackImage)
 
   const { mutate: removeCertification, isPending: isDeleting } = useMutation({
     mutationFn: async () => {
@@ -208,14 +257,31 @@ function CertificationCard({ item, certification, generationRun = null }) {
       return
     }
 
-    // Relative, like the certification route below: both resolve under /admin.
-    navigate(`generation/${generationRun.run_id}`)
+    // Opened in place rather than navigated to. Watching a build is a glance,
+    // not a destination: sending an admin to a full page meant losing the list
+    // they were working in and having to navigate back once they had seen the
+    // progress bar move. The workspace page still exists on its own route for
+    // anyone who wants the full transcript.
+    setShowGeneration(true)
   }
 
   function handleOpenCertification() {
     if (isGenerating) {
       toast.info("Still generating", {
         description: `"${certificationTitle}" is being built. Open the progress view to watch it.`,
+      })
+
+      return
+    }
+
+    // There is nothing on the other side of this click: no categories means no
+    // lessons and no assessments, so the detail page renders a blank shell.
+    // Saying why here beats navigating to an empty page and leaving the admin
+    // to work out whether it is broken or still loading.
+    if (isEmpty) {
+      toast.error("Nothing to open", {
+        description:
+            `"${certificationTitle}" has no content — generation did not finish. Delete it and generate again.`,
       })
 
       return
@@ -232,7 +298,6 @@ function CertificationCard({ item, certification, generationRun = null }) {
     navigate(`certification/${certificationId}`, {
       state: {
         certification: currentCertification,
-        imageUrl,
       },
     })
   }
@@ -250,6 +315,18 @@ function CertificationCard({ item, certification, generationRun = null }) {
     if (isGenerating) {
       toast.info("Still generating", {
         description: "Wait for generation to finish before publishing.",
+      })
+      return
+    }
+
+    // An empty certification has no categories, so no lessons and no
+    // assessments. Publishing it ships a learner an empty course -- the one
+    // outcome worse than a failed generation, because it looks like it worked.
+    // Deleting stays available: removing the shell is the whole point.
+    if (isEmpty) {
+      toast.error("Nothing to publish", {
+        description:
+            `"${certificationTitle}" has no categories or lessons. Generation did not finish — delete it and try again.`,
       })
       return
     }
@@ -294,28 +371,59 @@ function CertificationCard({ item, certification, generationRun = null }) {
                     // card stops inviting a click it would only refuse.
                     ? "cursor-default border-dashed"
                     : "cursor-pointer hover:-translate-y-0.5 hover:border-primary/45 hover:shadow-md",
+                // Drained of colour so an empty shell is distinguishable from a
+                // real certification at a glance across a grid -- the grey
+                // cover IS the signal, alongside the stamp. Still clickable:
+                // the admin needs a way in to retry or delete it.
+                isEmpty && !isGenerating && "cursor-default bg-muted/40 grayscale hover:translate-y-0 hover:border-border hover:shadow-sm",
             )}
         >
-          <figure className="relative h-48 shrink-0 overflow-hidden border-b border-border bg-muted/40">
-            <img
-                src={imageUrl}
-                alt={certificationTitle}
-                className={cn(
-                    "h-full w-full object-cover transition-transform duration-300",
-                    isGenerating ? "opacity-60 grayscale" : "group-hover:scale-105",
-                )}
-                onError={(event) => {
-                  event.currentTarget.onerror = null
-                  event.currentTarget.src = fallbackImage
-                }}
-                loading="eager"
+          <figure className="relative h-48 shrink-0 overflow-hidden border-b border-border">
+            <CertificationCover
+                title={certificationTitle}
+                className="h-full w-full"
             />
 
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent" />
+            {isEmpty && !isGenerating ? (
+                /* A wanted-poster stamp: rotated hard, outlined, and centred
+                   over the cover so it reads as struck onto the card rather
+                   than as another status pill in the corner. 160deg is
+                   near-inverted, which is what makes it look stamped by hand
+                   rather than laid out. */
+                <span
+                    className="pointer-events-none absolute inset-0 flex items-center justify-center"
+                    aria-hidden="true"
+                >
+                  <span
+                      // White, because the card is greyscaled around it: the
+                      // blue cover reads as mid-grey under that filter and dark
+                      // zinc type on it was close to unreadable.
+                      className="rounded-md border-[3px] border-white/80 px-4 py-1.5 text-lg font-black uppercase tracking-[0.2em] text-white"
+                      style={{ transform: "rotate(160deg)" }}
+                  >
+                    Empty
+                  </span>
+                </span>
+            ) : null}
 
             {isGenerating ? (
-                <span className="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-background/95 px-2.5 py-1 text-[11px] font-medium text-foreground shadow-sm">
-                  <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                <span
+                  className={cn(
+                    "absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium shadow-sm",
+                    // Amber, and not spinning: a run waiting for review is not
+                    // working, it is blocked on a person. Painting it the same
+                    // as "Generating…" is how a certification sat untouched
+                    // for hours with nobody realising it was waiting on them.
+                    awaitingReview
+                      ? "bg-amber-100 text-amber-900 ring-1 ring-amber-400/60 dark:bg-amber-950 dark:text-amber-100"
+                      : "bg-background/95 text-foreground",
+                  )}
+                >
+                  {awaitingReview ? (
+                    <AlertTriangle className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                  ) : (
+                    <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                  )}
                   {generationLabel}
                 </span>
             ) : null}
@@ -376,17 +484,21 @@ function CertificationCard({ item, certification, generationRun = null }) {
                     ) : null}
 
                     <DropdownMenuItem
-                        disabled={isPublishing || isDeleting || isPublished || isGenerating}
+                        disabled={
+                          isPublishing || isDeleting || isPublished || isGenerating || isEmpty
+                        }
                         onSelect={handlePublishCertification}
                     >
                       <SendIcon className="mr-2 h-4 w-4" />
                       {isGenerating
                           ? "Generating…"
-                          : isPublishing
-                              ? "Publishing..."
-                              : isPublished
-                                  ? "Published"
-                                  : "Publish"}
+                          : isEmpty
+                              ? "Nothing to publish"
+                              : isPublishing
+                                  ? "Publishing..."
+                                  : isPublished
+                                      ? "Published"
+                                      : "Publish"}
                     </DropdownMenuItem>
 
                     <DropdownMenuItem
@@ -430,6 +542,35 @@ function CertificationCard({ item, certification, generationRun = null }) {
             </div>
           </div>
         </div>
+
+        {/* Progress is watched in place. The monitor owns its own scrolling,
+            header rule, and status bar, so it fills the body edge to edge --
+            same arrangement the create drawer uses. Closing it never stops the
+            run: generation continues in the Python consumer either way. */}
+        <Dialog open={showGeneration} onOpenChange={setShowGeneration}>
+          <DialogContent
+              className="flex h-[82vh] w-[96vw] max-w-none flex-col gap-0 overflow-hidden p-0 sm:w-[92vw] sm:max-w-none lg:w-[80vw] xl:w-[70vw]"
+              onClick={(event) => event.stopPropagation()}
+          >
+            <DialogHeader className="px-4 pt-4 pb-3 sm:px-6">
+              <DialogTitle>Generating {certificationTitle}</DialogTitle>
+              {/* Kept for screen readers, hidden visually: the timeline below
+                  already says what is happening, so a line explaining that it
+                  is a timeline is noise above it. Removing the element
+                  outright would drop the dialog's accessible description. */}
+              <DialogDescription className="sr-only">
+                Live progress for this certification's generation.
+              </DialogDescription>
+            </DialogHeader>
+
+            {showGeneration ? (
+                <InlineGenerationMonitor
+                    certificationId={certificationId}
+                    onClose={() => setShowGeneration(false)}
+                />
+            ) : null}
+          </DialogContent>
+        </Dialog>
 
         <AlertDialog open={showDeleteDialog} onOpenChange={handleDeleteDialogChange}>
           <AlertDialogContent size="sm">

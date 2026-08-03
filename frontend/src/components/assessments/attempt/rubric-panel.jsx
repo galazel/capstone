@@ -1,4 +1,4 @@
-import { ClipboardCheckIcon, HourglassIcon } from "lucide-react"
+import { ClipboardCheckIcon, HourglassIcon } from "@/components/icons"
 
 import { Badge } from "@/components/ui/badge"
 

@@ -10,7 +10,7 @@ import {
     FileQuestion,
     LockKeyhole,
     ShieldCheck,
-} from "lucide-react"
+} from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 import {

@@ -1,5 +1,5 @@
 import { useGamification } from '@/hooks/useGamification'
-import { Flame } from 'lucide-react'
+import { Flame } from "@/components/icons"
 import { Card } from '@/components/ui/card'
 
 export function StreakWidget() {

@@ -26,7 +26,10 @@ from app.domain.validation.report import Severity, ValidationIssue, ValidationRe
 # different questions on the same topic score well below 0.6.
 DUPLICATE_SIMILARITY_THRESHOLD = 0.75
 
-MIN_EXPLANATION_CHARS = 20
+# Single source of truth: `QuestionDraft` now *rejects* a generated question
+# below this floor, while this layer still reports it for questions that never
+# went through generation (a reviewer's manual edit, an older run's artifact).
+from app.schemas.certification.question_schema import MIN_EXPLANATION_CHARS  # noqa: E402
 # Beyond this, a "question" is usually a passage the model forgot to trim.
 MAX_QUESTION_CHARS = 2000
 

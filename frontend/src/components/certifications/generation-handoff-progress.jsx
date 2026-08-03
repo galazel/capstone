@@ -1,4 +1,4 @@
-import { CheckCircle2, Loader2, Sparkles } from "lucide-react"
+import { CheckCircle2, Loader2, Sparkles } from "@/components/icons"
 import { cn } from "@/lib/utils"
 
 /**

@@ -1,6 +1,6 @@
 import { useNotificationPreferences } from '@/hooks/useNotificationPreferences'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Bell } from 'lucide-react'
+import { Bell } from "@/components/icons"
 
 export default function NotificationPreferencesPage() {
   const { prefs, loading, updatePreferences } = useNotificationPreferences()

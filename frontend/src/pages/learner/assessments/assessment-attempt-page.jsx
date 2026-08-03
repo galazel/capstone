@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAssessment } from '@/hooks/useAssessment'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Clock, CheckCircle, AlertCircle } from 'lucide-react'
+import { Clock, CheckCircle, AlertCircle } from "@/components/icons"
 
 export default function AssessmentAttemptPage() {
   const [searchParams] = useSearchParams()

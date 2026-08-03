@@ -695,6 +695,77 @@ async def test_resuming_leaves_waiting_for_review_before_the_work_starts(
     )
 
 
+async def test_resuming_answers_before_the_graph_runs(session, session_factory, monkeypatch):
+    """Resuming used to drive the graph inside the HTTP request, which meant
+    the reviewer's browser held a connection open for the several minutes it
+    takes to author the next lesson, its quiz, and an LLM validation pass.
+    Java's gateway gives up after 120s, so an approval that was merely slow
+    came back as "could not submit that decision" -- while Python carried on
+    generating in the background, invisible and uncancellable from that error.
+
+    The decision is recorded synchronously (so a double-click still 409s) and
+    the graph is driven afterwards, exactly as retry and restart already were.
+    """
+    from app.api.routes import certification as cert_routes
+
+    monkeypatch.setattr(cert_routes, "SessionLocal", session_factory)
+    monkeypatch.setattr(
+        cert_routes.certification_run, "context_for",
+        lambda run: certification_run.RunContext(thread_id=run.thread_id, certification_title="T"),
+    )
+
+    queued = []
+
+    class _Background:
+        def add_task(self, func, *args, **kwargs):
+            queued.append((func, args, kwargs))
+
+    registry.start_run(session, thread_id="t-async", kind="CERTIFICATION")
+    registry.mark_waiting_for_review(session, "t-async", stage="LESSON")
+
+    response = await cert_routes.resume_certification(
+        "t-async", cert_routes.ResumeRequest(action="approve"), _Background()
+    )
+
+    assert response["status"] == "RESUMING"
+    assert len(queued) == 1, "the graph must be driven after the response, not during it"
+    assert queued[0][0] is certification_run.execute, (
+        "execute, not advance: nothing is left to catch a RunFailed once the "
+        "response has gone out, so the failure has to be recorded rather than raised"
+    )
+
+    with session_factory() as s:
+        assert registry.get_run_by_thread(s, "t-async").status == registry.RUNNING, (
+            "the pause must be claimed before responding, or a second click "
+            "gets a 202 and puts a second driver on the thread"
+        )
+
+
+async def test_resuming_a_run_already_resumed_is_refused(session, session_factory, monkeypatch):
+    """The 409 has to survive the move to a background task -- it is the only
+    thing standing between a double-click and two drivers on one thread."""
+    from fastapi import HTTPException
+
+    from app.api.routes import certification as cert_routes
+
+    monkeypatch.setattr(cert_routes, "SessionLocal", session_factory)
+
+    class _Background:
+        def add_task(self, func, *args, **kwargs):
+            raise AssertionError("a refused resume must not queue any work")
+
+    registry.start_run(session, thread_id="t-twice", kind="CERTIFICATION")
+    registry.mark_waiting_for_review(session, "t-twice", stage="LESSON")
+    registry.mark_review_submitted(session, "t-twice", stage="LESSON", decision="approve")
+
+    with pytest.raises(HTTPException) as refused:
+        await cert_routes.resume_certification(
+            "t-twice", cert_routes.ResumeRequest(action="approve"), _Background()
+        )
+
+    assert refused.value.status_code == 409
+
+
 async def test_a_run_that_is_executing_is_never_reconciled_as_stranded(
     fake_graph, captured_outcome
 ):
@@ -734,3 +805,231 @@ async def test_a_long_idle_run_is_still_repaired(fake_graph, captured_outcome):
 
     assert result["reconciled"] is True
     assert captured_outcome["status"] == registry.FAILED
+
+
+# --- a run that saved nothing is not a success ----------------------------
+
+def test_generated_but_unstored_output_fails_the_run():
+    """The live case: seven assessments generated, `exam_types` unseeded, zero
+    stored -- and the run logged "completed". Warnings scroll past; a status
+    does not."""
+    stranded = certification_run._stranded_output({
+        "exams": [], "bank_questions": 40, "lessons_written": 2,
+        "expected": {"exams": 7, "bank_questions": 40, "lessons": 2},
+    })
+    assert stranded == ["7 assessment(s) generated, none stored"]
+
+
+def test_a_partial_loss_is_left_to_the_per_item_warnings():
+    """One unmatched lesson name is not a systemic failure, and failing the
+    whole run over it would throw away everything that did save."""
+    assert certification_run._stranded_output({
+        "exams": [1, 2], "bank_questions": 38, "lessons_written": 2,
+        "expected": {"exams": 3, "bank_questions": 40, "lessons": 2},
+    }) == []
+
+
+def test_generating_nothing_of_a_kind_is_not_a_loss():
+    """A curriculum with no mock exam simply has none to store."""
+    assert certification_run._stranded_output({
+        "exams": [], "bank_questions": 0, "lessons_written": 0,
+        "expected": {"exams": 0, "bank_questions": 0, "lessons": 0},
+    }) == []
+
+
+def test_every_kind_is_reported_not_just_the_first():
+    stranded = certification_run._stranded_output({
+        "exams": [], "bank_questions": 0, "lessons_written": 0,
+        "expected": {"exams": 7, "bank_questions": 40, "lessons": 2},
+    })
+    assert len(stranded) == 3
+
+
+# --- cancellation reaches every node --------------------------------------
+
+def _instrumented(stage, calls):
+    from app.graphs.instrumentation import instrument
+
+    async def node(state):
+        calls.append(stage)
+        return {}
+
+    return instrument(node, stage)
+
+
+async def test_cancelling_during_an_early_node_actually_stops_the_run(monkeypatch):
+    """The live gap: the gate lived only in the review-loop nodes, so
+    cancelling during `validate_documents` did nothing and the run carried on
+    through ingestion and curriculum planning before parking at a review."""
+    from app.graphs import cancellation, instrumentation
+
+    monkeypatch.setattr(cancellation, "is_cancel_requested", lambda thread_id: True)
+    monkeypatch.setattr(instrumentation, "_emit", lambda *a, **kw: None)
+
+    calls: list[str] = []
+    with pytest.raises(cancellation.RunCancelled):
+        await _instrumented("validate_documents", calls)({"thread_id": "t1"})
+
+    assert calls == [], "the node must not run at all once cancelled"
+
+
+async def test_an_uncancelled_run_is_untouched(monkeypatch):
+    from app.graphs import cancellation, instrumentation
+
+    monkeypatch.setattr(cancellation, "is_cancel_requested", lambda thread_id: False)
+    monkeypatch.setattr(instrumentation, "_emit", lambda *a, **kw: None)
+
+    calls: list[str] = []
+    await _instrumented("plan_curriculum", calls)({"thread_id": "t1"})
+    assert calls == ["plan_curriculum"]
+
+
+async def test_a_cancelled_run_is_not_relabelled_as_failed(fake_graph, captured_outcome):
+    """A reviewer's own decision must not be reported back to them as a
+    generator bug -- that invites retrying the work they just stopped."""
+    from app.graphs.cancellation import RunCancelled
+
+    class _CancellingGraph(_FakeGraph):
+        async def ainvoke(self, graph_input, config=None):
+            raise RunCancelled("write_lesson")
+
+    graph = _CancellingGraph(_Snapshot({}, ()))
+
+    async def _get():
+        return graph
+
+    import app.services.certification_run as cr
+
+    original = cr.get_certification_graph
+    cr.get_certification_graph = _get
+    try:
+        context = cr.RunContext(thread_id="t1", certification_title="T")
+        with pytest.raises(cr.RunFailed) as caught:
+            await cr.advance(context, None)
+    finally:
+        cr.get_certification_graph = original
+
+    assert caught.value.outcome["outcome"] == registry.CANCELLED
+    assert captured_outcome == {}, "must not overwrite the status with FAILED"
+
+
+# --- cancellation survives redelivery -------------------------------------
+#
+# Cancellation is cooperative: the graph notices the flag between nodes and
+# unwinds, which leaves the RabbitMQ message unacked -- so the broker
+# redelivers it. `start_run` used to force any existing run straight back to
+# RUNNING, which undid the reviewer's stop within seconds and restarted
+# generation from document validation. A live run reached "Attempt 20" that
+# way, spending real tokens on work someone had explicitly stopped.
+
+
+def test_a_cancelled_run_is_not_restarted_by_a_redelivered_message(session):
+    registry.start_run(session, thread_id="t-cancel", kind="CERTIFICATION")
+    registry.mark_cancelled(session, "t-cancel")
+
+    with pytest.raises(registry.RunAlreadyCancelled):
+        registry.start_run(session, thread_id="t-cancel", kind="CERTIFICATION")
+
+
+def test_a_refused_restart_leaves_the_run_cancelled(session):
+    """The guard must not half-apply: a run that refuses to restart has to
+    stay CANCELLED, not end up RUNNING with an exception on the way out."""
+    run = registry.start_run(session, thread_id="t-cancel-2", kind="CERTIFICATION")
+    registry.mark_cancelled(session, "t-cancel-2")
+
+    with pytest.raises(registry.RunAlreadyCancelled):
+        registry.start_run(session, thread_id="t-cancel-2", kind="CERTIFICATION")
+
+    session.expire_all()
+    assert registry.get_run_by_thread(session, "t-cancel-2").status == registry.CANCELLED
+    assert registry.attempt_number(session, run.run_id) == 1, "no new attempt was opened"
+
+
+def test_the_exception_names_the_run_so_the_consumer_can_log_it(session):
+    registry.start_run(session, thread_id="t-cancel-3", kind="CERTIFICATION")
+    registry.mark_cancelled(session, "t-cancel-3")
+
+    with pytest.raises(registry.RunAlreadyCancelled) as caught:
+        registry.start_run(session, thread_id="t-cancel-3", kind="CERTIFICATION")
+    assert caught.value.thread_id == "t-cancel-3"
+
+
+def test_a_failed_run_can_still_be_restarted(session):
+    """Only cancellation is a human decision. A failure is exactly what a
+    restart is for, so the guard must not catch it too."""
+    _failed_run(session, thread_id="t-retry-ok")
+    run = registry.start_run(session, thread_id="t-retry-ok", kind="CERTIFICATION")
+    assert run.status == registry.RUNNING
+
+
+# --- deleting a certification ---------------------------------------------
+#
+# Deleting one mid-generation used to leave the run untouched on the Python
+# side: it carried on authoring lessons and questions against rows that no
+# longer existed, and its timeline stayed in the workspace pointing at a
+# certification nobody could open.
+
+
+def test_purging_a_certification_cancels_a_run_still_generating(session):
+    registry.start_run(session, thread_id="t-del-1", kind="CERTIFICATION", certification_id=77)
+
+    summary = registry.purge_certification(session, 77)
+
+    assert summary["runs_cancelled"] == 1
+    assert summary["runs_deleted"] == 1
+
+
+def test_purging_removes_the_runs_and_their_events(session):
+    run = registry.start_run(
+        session, thread_id="t-del-2", kind="CERTIFICATION", certification_id=78
+    )
+    registry.record_event(session, run, registry.EVT_NODE_STARTED, stage="plan_curriculum")
+    session.commit()
+
+    registry.purge_certification(session, 78)
+
+    assert registry.get_run_by_thread(session, "t-del-2") is None
+    assert registry.list_runs(session, certification_id=78) == []
+
+
+def test_purging_leaves_other_certifications_alone(session):
+    registry.start_run(session, thread_id="t-keep", kind="CERTIFICATION", certification_id=99)
+    registry.start_run(session, thread_id="t-drop", kind="CERTIFICATION", certification_id=98)
+
+    registry.purge_certification(session, 98)
+
+    assert registry.get_run_by_thread(session, "t-keep") is not None
+    assert registry.get_run_by_thread(session, "t-drop") is None
+
+
+def test_purging_a_certification_that_never_generated_is_not_an_error(session):
+    """The caller cannot know whether generation was ever started, so an empty
+    purge has to succeed rather than 404."""
+    assert registry.purge_certification(session, 12345) == {
+        "runs_deleted": 0, "runs_cancelled": 0, "thread_ids": [],
+    }
+
+
+def test_an_already_finished_run_is_deleted_but_not_cancelled(session):
+    """Cancelling a completed run would record a misleading event on a
+    timeline that is about to be deleted anyway."""
+    registry.start_run(session, thread_id="t-done", kind="CERTIFICATION", certification_id=79)
+    registry.mark_completed(session, "t-done")
+
+    summary = registry.purge_certification(session, 79)
+
+    assert summary == {"runs_deleted": 1, "runs_cancelled": 0, "thread_ids": ["t-done"]}
+
+
+def test_a_purged_run_cannot_be_restarted_by_a_redelivered_message(session):
+    """The two halves have to compose: cancel-then-delete must not leave a
+    thread a queue message can revive as a brand new run."""
+    registry.start_run(session, thread_id="t-del-3", kind="CERTIFICATION", certification_id=80)
+    registry.purge_certification(session, 80)
+
+    # The row is gone, so this creates a fresh run rather than raising -- what
+    # matters is that it is not the deleted certification's run resurrected
+    # with its old event log.
+    revived = registry.start_run(session, thread_id="t-del-3", kind="CERTIFICATION")
+    assert revived.certification_id is None
+    assert registry.attempt_number(session, revived.run_id) == 1

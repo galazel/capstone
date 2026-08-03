@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Loader2, Save, Sparkles } from "lucide-react"
+import { Loader2, Save, Sparkles } from "@/components/icons"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"

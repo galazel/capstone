@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { Link, useOutletContext } from "react-router-dom"
-import { Search, UsersIcon } from "lucide-react"
+import { Search, UsersIcon } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"

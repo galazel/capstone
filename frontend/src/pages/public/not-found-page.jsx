@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { CompassIcon, HomeIcon } from "lucide-react"
+import { CompassIcon, HomeIcon } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 import { roleHomePath, useAuth } from "@/context/auth-context.jsx"

@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
-import { AlertCircle, Loader2, UserPlus } from "lucide-react"
+import { AlertCircle, Loader2, UserPlus } from "@/components/icons"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -63,6 +63,9 @@ export default function RegisterPage() {
   return (
     <AuthShell
       compact
+      // Mirrored against sign-in: the form crosses the page when you switch
+      // between the two, so the change of screen is unmissable.
+      side="right"
       title="Create your account"
       description="Create a learner account and begin preparing with REBYU."
       footer={

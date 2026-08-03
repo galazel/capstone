@@ -35,13 +35,21 @@ def _recovery_state(db: Session, run: WorkflowRun) -> dict[str, Any]:
     Sent with every run so the workspace can render the two recovery actions
     without a second round trip, and can label the retry with the step it
     would re-run rather than a bare "Retry".
+
+    `stalled` is reported separately from the statuses, because a run that is
+    RUNNING but has emitted nothing for a long time is not failed -- it was
+    abandoned by a service restart, and the workspace has to say so rather than
+    keep drawing a progress spinner for a run nobody is executing.
     """
-    recoverable = (
-        run.kind == "CERTIFICATION" and run.status in certification_run.RECOVERABLE_STATUSES
-    )
+    recoverable = certification_run.is_recoverable(run)
+    # Only for the kind that has recovery actions: reporting a stalled question
+    # bank run would surface a panel whose buttons cannot do anything.
+    stalled = run.kind == "CERTIFICATION" and certification_run.is_stalled(run)
     return {
         "can_retry": recoverable,
         "can_restart": recoverable,
+        "stalled": stalled,
+        "idle_seconds": int(certification_run.idle_seconds(run)) if stalled else None,
         "failed_stage": registry.last_failed_stage(db, run.run_id),
         "attempt": registry.attempt_number(db, run.run_id),
     }
@@ -317,3 +325,43 @@ def cancel_workflow_run(run_id: str, db: Session = Depends(get_db)) -> dict[str,
 
     updated = registry.mark_cancelled(db, run.thread_id)
     return {**_run_to_dict(updated or run), "cancelled": True}
+
+
+@router.delete("/certifications/{certification_id}")
+def purge_certification(certification_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Stops and erases everything this service holds for a certification.
+
+    Called by the Java backend when an admin deletes a certification. Deleting
+    one mid-generation used to leave the run untouched on this side: it carried
+    on authoring lessons and questions against rows that no longer existed,
+    spending tokens the whole way, and its timeline stayed in the workspace
+    pointing at a certification nobody could open.
+
+    Three things have to go, and cancelling has to come first -- a run stopped
+    only *after* its rows are deleted would keep writing into the gap:
+
+    1. the runs themselves, cancelled then deleted with their event log;
+    2. the indexed document vectors, which are scoped per certification
+       (`namespace_for`) and are otherwise orphaned in Qdrant forever;
+    3. nothing else -- the certification's own rows belong to Java, which
+       deletes them itself.
+
+    Idempotent: purging a certification with no runs is a success, not a 404,
+    because the caller cannot know whether generation was ever started.
+    """
+    from app.rag.store import delete_index, namespace_for
+
+    summary = registry.purge_certification(db, certification_id)
+
+    # Best-effort: losing the vectors is a storage leak, while failing here
+    # would abort a deletion the admin has already committed to on the Java
+    # side, leaving the two databases disagreeing about what exists.
+    namespace = namespace_for(certification_id=certification_id)
+    try:
+        summary["vectors_deleted"] = delete_index(namespace)
+    except Exception:
+        logger.exception("Failed to delete vector index '%s'", namespace)
+        summary["vectors_deleted"] = False
+
+    logger.info("Purged certification %s: %s", certification_id, summary)
+    return {"certification_id": certification_id, **summary}

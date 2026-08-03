@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { LoaderCircle } from "lucide-react"
+import { LoaderCircle } from "@/components/icons"
 import { DrawIoEmbed } from "react-drawio"
 
 const EMPTY_GRID_DIAGRAM = `

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react"
 import { useOutletContext } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { HandshakeIcon, PlusIcon, Trash2Icon } from "lucide-react"
+import { HandshakeIcon, PlusIcon, Trash2Icon } from "@/components/icons"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"

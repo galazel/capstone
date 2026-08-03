@@ -1,6 +1,6 @@
 import { useOutletContext } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { AlertTriangleIcon, CheckIcon, SparklesIcon } from "lucide-react"
+import { AlertTriangleIcon, CheckIcon, SparklesIcon } from "@/components/icons"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"

@@ -1,4 +1,4 @@
-import { TrendingUp } from 'lucide-react'
+import { TrendingUp } from "@/components/icons"
 
 const MASTERY_LEVELS = [
   { level: 0, label: 'Not Started', color: 'bg-gray-300', textColor: 'text-gray-700' },

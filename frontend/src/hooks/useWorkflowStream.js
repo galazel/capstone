@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer } from "react"
+import { useEffect, useMemo, useReducer, useState } from "react"
 import { streamWorkflow } from "@/services/aiWorkflowService"
 import {
   TERMINAL_STATUSES,
@@ -74,6 +74,34 @@ function reducer(state, action) {
   }
 }
 
+/**
+ * How long a non-terminal run may record nothing before it is presented as
+ * stalled rather than busy.
+ *
+ * A run is driven by an asyncio task inside the Python service, so a restart
+ * there abandons it mid-step while its status stays RUNNING. The stream itself
+ * gives no hint of that — it stays connected, waiting for events that will
+ * never come, which renders identically to a run that is simply on a slow step.
+ * Matches STALLED_AFTER_IDLE_SECONDS in app/services/certification_run.py, so
+ * the moment this says "stalled" is the moment the server's sweep is entitled
+ * to adopt it.
+ */
+const STALLED_AFTER_MS = 15 * 60 * 1000
+
+/** Ticks often enough that "silent for N minutes" stays roughly honest. */
+const STALL_CHECK_MS = 30_000
+
+function lastActivityAt(state) {
+  // The newest event's server timestamp, not the client's clock: attaching to
+  // a run that went silent an hour ago must report an hour, not zero.
+  for (let i = state.events.length - 1; i >= 0; i -= 1) {
+    const at = state.events[i]?.created_at
+    if (at) return Date.parse(at)
+  }
+  const fallback = state.run?.updated_at
+  return fallback ? Date.parse(fallback) : null
+}
+
 export function useWorkflowStream(runId) {
   const [state, dispatch] = useReducer(reducer, initialState)
 
@@ -122,12 +150,42 @@ export function useWorkflowStream(runId) {
   const tasks = useMemo(() => buildTasks(attemptEvents), [attemptEvents])
   const currentTask = useMemo(() => findCurrentTask(tasks), [tasks])
 
+  const isTerminal = TERMINAL_STATUSES.has(state.run?.status)
+
+  // Silence has to be re-evaluated on a timer, because nothing arrives to
+  // trigger a render — being told nothing is exactly the condition.
+  const [, tick] = useState(0)
+  useEffect(() => {
+    if (!runId || isTerminal) return undefined
+    const timer = setInterval(() => tick((n) => n + 1), STALL_CHECK_MS)
+    return () => clearInterval(timer)
+  }, [runId, isTerminal])
+
+  const silentFor = (() => {
+    const at = lastActivityAt(state)
+    return at ? Date.now() - at : null
+  })()
+
   return {
     ...state,
     tasks,
     currentTask,
     attempts,
-    isTerminal: TERMINAL_STATUSES.has(state.run?.status),
+    silentFor,
+    // RUNNING, connected, and yet nothing has happened for a long time:
+    // whatever was executing this run is gone. The server's recovery sweep
+    // resumes it from its last checkpoint, so this is a status to report, not
+    // an error to act on.
+    //
+    // RUNNING specifically, not merely non-terminal: a run parked at a review
+    // is *supposed* to sit silent for as long as it takes a human to look at
+    // it, and calling that stalled would flag every pause after ten minutes.
+    isStalled:
+      state.run?.status === "RUNNING" && silentFor != null && silentFor > STALLED_AFTER_MS,
+    // The current attempt's events, for anything showing "what is happening
+    // now". `events` remains the full cumulative log for audit views.
+    attemptEvents,
+    isTerminal,
     isWaitingForReview: state.run?.status === "WAITING_FOR_REVIEW",
   }
 }

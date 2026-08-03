@@ -7,6 +7,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -52,6 +54,19 @@ public class Certification {
 
     @Column(name = "status")
     private CertificationStatus status = CertificationStatus.DRAFT;
+
+    /**
+     * Shape of the REAL certification exam, as researched by the AI curriculum
+     * planner: {@code {total_items, question_types[], notes}}.
+     *
+     * <p>Written by the Python generation service, not by this application.
+     * Null means the planner could not determine it (or the certification
+     * predates the column) -- readers must treat null as unknown rather than
+     * as an empty exam.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "exam_structure")
+    private String examStructure;
 
     public enum CertificationStatus{
         PUBLISHED, DRAFT

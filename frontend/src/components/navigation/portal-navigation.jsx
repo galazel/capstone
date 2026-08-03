@@ -2,14 +2,12 @@ import { useEffect, useMemo, useState } from "react"
 import { NavLink, useLocation, useNavigate } from "react-router-dom"
 import {
   Award,
-  Crown,
   BarChart3,
   BookOpenCheck,
   Building2,
   ChevronDown,
   CircleHelp,
   Command,
-  Cpu,
   FileQuestion,
   Files,
   Handshake,
@@ -24,7 +22,7 @@ import {
   Users,
   UsersRound,
   X,
-} from "lucide-react"
+} from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 import { BrandLogo } from "@/components/brand-logo"
@@ -49,28 +47,35 @@ const learnerNavigation = [
   { label: "Certifications", href: "/learner/certifications", icon: Award },
   { label: "My Learning", href: "/learner/learning", match: ["/learner/learning", "/learner/lessons"], icon: BookOpenCheck },
   { label: "Challenges", href: "/learner/challenges", icon: Swords },
+  // No Rankings entry: the XP leaderboard is a panel on Challenges now, beside
+  // the challenge-points board. Two standings on two pages meant knowing which
+  // board you wanted before you could find it.
   { label: "Community", href: "/learner/community", icon: UsersRound },
-  { label: "Rankings", href: "/learner/rankings", icon: Crown },
 ]
 
 const adminGroups = [
   {
     label: "Overview",
+    icon: LayoutDashboard,
     items: [
       { label: "Platform overview", href: "/admin/dashboard", icon: LayoutDashboard },
     ],
   },
   {
     label: "Learning",
+    icon: BookOpenCheck,
     items: [
       { label: "Certifications", href: "/admin", icon: Award },
-      { label: "Question Bank", href: "/admin/question-bank", icon: FileQuestion },
-      { label: "AI generation", href: "/admin/generation", icon: Cpu },
+      // No Question Bank entry: the bank is a tab inside each certification,
+      // next to its curriculum and assessments, because that is the only scope
+      // a question is authored in. No AI generation entry either -- a run is
+      // watched in the modal that started it.
       { label: "Challenges", href: "/admin/challenges", icon: Swords },
     ],
   },
   {
     label: "Management",
+    icon: ServerCog,
     items: [
       { label: "Institutions", href: "/admin/organizations", icon: Building2 },
       { label: "Partnership requests", href: "/admin/partnership-requests", icon: Handshake },
@@ -89,6 +94,7 @@ const adminGroups = [
 const enterpriseGroups = [
   {
     label: "Overview",
+    icon: LayoutDashboard,
     items: [
       { label: "Organization overview", href: "/enterprise/dashboard", icon: LayoutDashboard },
       { label: "Analytics", href: "/enterprise/analytics", icon: BarChart3 },
@@ -96,6 +102,7 @@ const enterpriseGroups = [
   },
   {
     label: "Learning",
+    icon: BookOpenCheck,
     items: [
       { label: "Certifications", href: "/enterprise/certifications", icon: Award },
       { label: "Learners", href: "/enterprise/learners", icon: Users },
@@ -105,6 +112,7 @@ const enterpriseGroups = [
   },
   {
     label: "Organization",
+    icon: Building2,
     ownerOnly: true,
     items: [
       { label: "Partnership", href: "/enterprise/partnership", icon: Handshake },
@@ -162,13 +170,42 @@ function Brand({ role, organizationName }) {
   )
 }
 
+/** Shared trigger/link styling, so a single-page group and a dropdown sit on
+ *  the same baseline and carry the same active underline. */
+const navItemClass = (active) =>
+  cn(
+    "relative inline-flex h-10 items-center gap-1.5 px-3 text-sm font-medium transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+    active
+      ? "text-primary after:absolute after:inset-x-3 after:-bottom-[13px] after:h-0.5 after:bg-primary"
+      : "text-muted-foreground",
+  )
+
 function GroupDropdown({ group, pathname }) {
   const active = group.items.some((item) => pathMatches(pathname, item))
+  // A one-page group has no identity of its own, so it borrows the icon of the
+  // page it opens rather than carrying a second, vaguer one.
+  const Icon = group.icon ?? group.items[0]?.icon
+
+  // A menu holding one page is a link wearing a menu's clothes: it costs a
+  // click and a chevron promising choices that are not there. "Overview" was
+  // exactly this -- a dropdown whose only entry went to /admin/dashboard.
+  if (group.items.length === 1) {
+    const only = group.items[0]
+    return (
+      <NavLink to={only.href} className={navItemClass(active)}>
+        {Icon ? <Icon className="size-4 shrink-0" aria-hidden="true" /> : null}
+        {group.label}
+      </NavLink>
+    )
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className={cn("relative inline-flex h-10 items-center gap-1 px-3 text-sm font-medium transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", active ? "text-primary after:absolute after:inset-x-3 after:-bottom-[13px] after:h-0.5 after:bg-primary" : "text-muted-foreground") }>
-          {group.label}<ChevronDown className="size-3.5" aria-hidden="true" />
+        <button className={navItemClass(active)}>
+          {Icon ? <Icon className="size-4 shrink-0" aria-hidden="true" /> : null}
+          {group.label}
+          <ChevronDown className="size-3.5" aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-60 p-2">
@@ -253,16 +290,40 @@ export function PortalTopNavigation({ role, actions, organizationName, enterpris
       <header className="sticky top-0 z-40 border-b border-border/80 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/90">
         <div className="mx-auto flex h-16 w-full max-w-[1480px] items-center gap-4 px-4 sm:px-6 lg:px-8">
           <Brand role={role} organizationName={organizationName} />
-          <nav className="hidden min-w-0 flex-1 items-center gap-1 lg:flex" aria-label={`${role.toLowerCase()} navigation`}>
-            {role === "LEARNER" ? learnerNavigation.slice(0, 6).map((item) => <NavLink key={`${item.label}-${item.href}`} to={item.href} className={cn("relative px-2.5 py-2 text-sm font-medium transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", pathMatches(location.pathname, item) ? "text-primary after:absolute after:inset-x-2.5 after:-bottom-[13px] after:h-0.5 after:bg-primary" : "text-muted-foreground")}>{item.label}</NavLink>) : groups.map((group) => <GroupDropdown key={group.label} group={group} pathname={location.pathname} />)}
+          {/* Left-aligned against the logo. Centred, the links floated in the
+              middle of the bar and shifted horizontally whenever the brand or
+              the action cluster changed width -- next to the wordmark they have
+              a fixed edge to start from. */}
+          <nav className="hidden min-w-0 flex-1 items-center justify-start gap-1 lg:flex" aria-label={`${role.toLowerCase()} navigation`}>
+            {role === "LEARNER"
+              ? learnerNavigation.slice(0, 6).map((item) => {
+                  const Icon = item.icon
+                  const active = pathMatches(location.pathname, item)
+                  return (
+                    <NavLink
+                      key={`${item.label}-${item.href}`}
+                      to={item.href}
+                      className={cn(
+                        "relative inline-flex items-center gap-1.5 px-2.5 py-2 text-sm font-medium transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        active
+                          ? "text-primary after:absolute after:inset-x-2.5 after:-bottom-[13px] after:h-0.5 after:bg-primary"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      {Icon ? <Icon className="size-4 shrink-0" aria-hidden="true" /> : null}
+                      {item.label}
+                    </NavLink>
+                  )
+                })
+              : groups.map((group) => (
+                  <GroupDropdown key={group.label} group={group} pathname={location.pathname} />
+                ))}
           </nav>
-          <div className="ml-auto flex items-center gap-1.5">
-            {!isEnterpriseMember ? (
-              <>
-                <Button variant="outline" className="hidden h-9 min-w-44 justify-start gap-2 text-muted-foreground md:flex" onClick={() => setCommandOpen(true)}><Search className="size-4" /><span className="flex-1 text-left">Search REBYU</span><kbd className="text-[10px]">Ctrl K</kbd></Button>
-                <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setCommandOpen(true)} aria-label="Search REBYU"><Search /></Button>
-              </>
-            ) : null}
+          <div className="flex flex-1 items-center justify-end gap-1.5 lg:flex-none">
+            {/* No search control in the bar. It occupied the widest slot in the
+                header to search a nav tree of at most a dozen destinations that
+                are already on screen. The Ctrl-K palette below still opens on
+                the shortcut for anyone who reaches for it. */}
             {groups.length > 0 || role === "LEARNER" ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open navigation"><Menu /></Button></DropdownMenuTrigger>

@@ -1,5 +1,4 @@
 import { useMemo } from "react"
-import { Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import {
   AwardIcon,
@@ -7,25 +6,29 @@ import {
   ClipboardListIcon,
   HandshakeIcon,
   UsersIcon,
-} from "lucide-react"
+} from "@/components/icons"
 
-import { Button } from "@/components/ui/button"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
-  EnterpriseEmptyState,
   EnterpriseErrorState,
   EnterpriseLoadingSkeleton,
   EnterprisePageHeader,
-  EnterpriseStatCard,
   EnterpriseStatusBadge,
   formatDateTime,
 } from "@/components/enterprise/enterprise-ui.jsx"
+import { BentoGrid, BentoHeading, BentoStat, BentoTile } from "@/components/commons/bento.jsx"
+import {
+  BarBreakdownChart,
+  DonutChart,
+  SampleChip,
+  TrendAreaChart,
+  TrendLineChart,
+} from "@/components/charts/rebyu-charts.jsx"
+import {
+  ADMIN_ATTEMPT_VOLUME,
+  ADMIN_ENROLLMENT_MIX,
+  ADMIN_GROWTH_TREND,
+  ADMIN_PASS_RATE_BY_CERT,
+} from "@/components/charts/sample-data.js"
 import { base } from "@/services/base"
 
 function useList(key, endpoint) {
@@ -133,76 +136,136 @@ export default function AdminDashboard() {
         subtitle="Platform overview across learners, organizations, and certifications."
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <EnterpriseStatCard
+      {/* Bento: tile size carries importance, and the counters are colour-blocked
+          so the eye lands on them first. Composed in bands of six columns —
+          2+4, then 4+[1+1]+2, then 2+4, then 2+2+2, then a full-width 6 — so no
+          band leaves a hole and the widths alternate down the page. Chart panels
+          are fed from components/charts/sample-data.js and chipped "sample
+          data" — swap each for its named endpoint. */}
+      <BentoGrid>
+        {/* Band 1 — 2 + 4 */}
+        <BentoStat
+          tone="macaw"
+          col={2}
+          row={2}
           icon={UsersIcon}
           label="Total learners"
-          value={learnersQuery.isError ? "—" : stats.learners}
+          value={learnersQuery.isError ? "—" : stats.learners.toLocaleString()}
+          hint={`${stats.enrollments.toLocaleString()} active enrollments`}
         />
-        <EnterpriseStatCard
+
+        <BentoTile col={4} row={2}>
+          <BentoHeading
+            title="Platform growth"
+            hint="Registered learners per month"
+            chip={<SampleChip />}
+          />
+          <TrendLineChart
+            data={ADMIN_GROWTH_TREND}
+            xKey="month"
+            series={[{ key: "learners", name: "Learners" }]}
+            domain={[0, 2000]}
+            height={168}
+            legendNote="Latest month"
+          />
+        </BentoTile>
+
+        {/* Band 2 — a wide chart beside a stack of counters: 4 + [1 + 1] + 2 */}
+        <BentoTile col={4} row={2}>
+          <BentoHeading
+            title="Attempt volume"
+            hint="Practice runs and assessments per month"
+            chip={<SampleChip />}
+          />
+          <TrendAreaChart
+            data={ADMIN_ATTEMPT_VOLUME}
+            xKey="month"
+            series={[
+              { key: "practice", name: "Practice" },
+              { key: "assessments", name: "Assessments" },
+            ]}
+            height={160}
+            legendNote="Latest month"
+          />
+        </BentoTile>
+
+        <BentoStat
+          tone="bee"
+          col={1}
+          row={1}
           icon={Building2Icon}
-          label="Organizations"
+          label="Orgs"
           value={enterprisesQuery.isError ? "—" : stats.enterprises}
         />
-        <EnterpriseStatCard
+        <BentoStat
+          tone="feather"
+          col={1}
+          row={1}
           icon={AwardIcon}
-          label="Certifications"
+          label="Certs"
           value={certificationsQuery.isError ? "—" : stats.certifications}
         />
-        <EnterpriseStatCard
+        <BentoStat
+          tone="fox"
+          col={2}
+          row={1}
           icon={HandshakeIcon}
           label="Pending partnerships"
           value={partnershipsQuery.isError ? "—" : stats.pendingPartnerships}
+          hint="Awaiting review or a meeting"
         />
-      </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <EnterpriseStatCard
-          label="Active enrollments"
-          value={enrollmentsQuery.isError ? "—" : stats.enrollments}
-          hint="Learner certification enrollments with active status"
-        />
-        <EnterpriseStatCard
-          icon={ClipboardListIcon}
-          label="Assessment attempts"
-          value={resultsQuery.isError ? "—" : stats.attempts}
-          hint="Total recorded exam results"
-        />
-        <EnterpriseStatCard
-          label="Average score"
-          value={
-            resultsQuery.isError || stats.avgScore == null
-              ? "—"
-              : `${stats.avgScore}%`
-          }
-          hint="Average score across recorded assessment results"
-        />
-      </div>
+        {/* Band 3 — 2 + 4, mirrored against band 1 */}
+        <BentoTile col={2} row={2}>
+          <BentoHeading
+            title="Enrollment mix"
+            hint="Active enrollments by track"
+            chip={<SampleChip />}
+          />
+          <DonutChart
+            data={ADMIN_ENROLLMENT_MIX}
+            height={168}
+            centerValue="1,516"
+            centerLabel="enrollments"
+          />
+        </BentoTile>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent partnership requests</CardTitle>
-            <CardDescription>
-              Latest requests from organizations.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+        <BentoTile col={4} row={2}>
+          <BentoHeading
+            title="Pass rate by certification"
+            hint="Share of attempts that cleared the cut score"
+            chip={<SampleChip />}
+          />
+          <BarBreakdownChart
+            data={ADMIN_PASS_RATE_BY_CERT}
+            categoryKey="certification"
+            valueKey="passRate"
+            unit="%"
+            target={60}
+            height={180}
+            categoryWidth={110}
+          />
+        </BentoTile>
+
+        {/* Band 4 — three equal thirds: a feed, a chart, and a counter */}
+        <BentoTile col={2} row={2} className="!p-0">
+          <div className="flex min-h-0 flex-1 flex-col p-5 sm:p-6">
+            <BentoHeading
+              title="Recent partnership requests"
+              hint="Latest requests from organizations."
+            />
+
             {stats.recentPartnerships.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                No partnership requests yet.
-              </p>
+              <p className="text-sm text-muted-foreground">No partnership requests yet.</p>
             ) : (
-              <ul className="divide-y">
+              <ul className="-mr-2 min-h-0 flex-1 divide-y-2 divide-border overflow-y-auto pr-2">
                 {stats.recentPartnerships.map((request) => (
                   <li
                     key={request.requestId}
-                    className="flex items-center justify-between gap-2 py-2.5 text-sm"
+                    className="flex items-center justify-between gap-2 py-3 text-sm first:pt-0"
                   >
-                    <div>
-                      <p className="font-medium">
-                        Request #{request.requestId}
-                      </p>
+                    <div className="min-w-0">
+                      <p className="truncate font-bold">Request #{request.requestId}</p>
                       <p className="text-xs text-muted-foreground">
                         {formatDateTime(request.submittedAt)}
                       </p>
@@ -212,40 +275,73 @@ export default function AdminDashboard() {
                 ))}
               </ul>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </BentoTile>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent assessment activity</CardTitle>
-            <CardDescription>Latest recorded exam results.</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <BentoTile col={2} row={2}>
+          <BentoHeading
+            title="Organizations onboarded"
+            hint="Partner institutions per month"
+            chip={<SampleChip />}
+          />
+          <TrendLineChart
+            data={ADMIN_GROWTH_TREND}
+            xKey="month"
+            series={[{ key: "enterprises", name: "Organizations" }]}
+            domain={[0, 30]}
+            height={150}
+            legendNote="Latest month"
+          />
+        </BentoTile>
+
+        <BentoStat
+          tone="beetle"
+          col={2}
+          row={2}
+          icon={ClipboardListIcon}
+          label="Assessment attempts"
+          value={resultsQuery.isError ? "—" : stats.attempts.toLocaleString()}
+          hint={
+            resultsQuery.isError || stats.avgScore == null
+              ? "No scores recorded"
+              : `Average score ${stats.avgScore}%`
+          }
+        />
+
+        {/* Band 5 — full width closes the page */}
+        <BentoTile col={6} row={2} className="!p-0">
+          <div className="flex min-h-0 flex-1 flex-col p-5 sm:p-6">
+            <BentoHeading
+              title="Recent assessment activity"
+              hint="Latest recorded exam results."
+            />
+
             {stats.recentResults.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 No assessment attempts recorded yet.
               </p>
             ) : (
-              <ul className="divide-y">
+              /* Full width would strand a single column of rows in white space,
+                 so the feed splits into two tracks once there is room. */
+              <ul className="-mr-2 grid min-h-0 flex-1 grid-cols-1 content-start gap-x-6 overflow-y-auto pr-2 lg:grid-cols-2">
                 {stats.recentResults.map((result) => (
                   <li
                     key={`${result.learnerId}-${result.examId}-${result.attemptNo}`}
-                    className="flex items-center justify-between gap-2 py-2.5 text-sm"
+                    className="flex items-center justify-between gap-2 border-b-2 border-border py-3 text-sm"
                   >
-                    <div>
-                      <p className="font-medium">
+                    <div className="min-w-0">
+                      <p className="truncate font-bold">
                         Learner #{result.learnerId} · Exam #{result.examId}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Attempt {result.attemptNo} ·{" "}
-                        {formatDateTime(result.takenAt)}
+                        Attempt {result.attemptNo} · {formatDateTime(result.takenAt)}
                       </p>
                     </div>
                     <span
                       className={
                         result.isPassed
-                          ? "font-medium tabular-nums text-primary"
-                          : "font-medium tabular-nums text-destructive"
+                          ? "font-bold tabular-nums text-primary"
+                          : "font-bold tabular-nums text-destructive"
                       }
                     >
                       {Number(result.score ?? 0).toFixed(0)}%
@@ -254,29 +350,9 @@ export default function AdminDashboard() {
                 ))}
               </ul>
             )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick actions</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link to="/admin">Manage certifications</Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/admin/question-bank">Question bank</Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/admin/learners">Learners</Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/admin/organizations">Organizations</Link>
-          </Button>
-        </CardContent>
-      </Card>
+          </div>
+        </BentoTile>
+      </BentoGrid>
     </div>
   )
 }

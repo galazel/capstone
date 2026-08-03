@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { ImagePlus, Plus, Trash2, Video as VideoIcon } from "lucide-react"
+import { ImagePlus, Plus, Trash2, Video as VideoIcon } from "@/components/icons"
 import { useDropzone } from "react-dropzone"
 
 import {

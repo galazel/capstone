@@ -4,7 +4,7 @@ import {
   CircleDotIcon,
   FlagIcon,
   SkipForwardIcon,
-} from "lucide-react"
+} from "@/components/icons"
 
 // Single source of truth for item states so the navigator cards, the legend,
 // and screen-reader labels never drift. States are conveyed with icon + border

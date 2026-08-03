@@ -12,7 +12,7 @@ import {
   ListIcon,
   Loader2Icon,
   SkipForwardIcon,
-} from "lucide-react"
+} from "@/components/icons"
 import { toast } from "sonner"
 
 import {
@@ -874,14 +874,10 @@ export default function LearnerAssessmentAttemptPage() {
                       editingLocked && "pointer-events-none opacity-70"
                   )}
               >
-                <div className="mb-3 shrink-0 rounded-2xl border-2 border-rb-swan bg-rb-snow px-4 py-3">
-                  <QuestionMetaRow
-                      question={currentQuestion}
-                      index={currentIndex}
-                      itemLabel="Item"
-                  />
-                </div>
-
+                {/* No meta strip above the workspace. `ProgrammingQuestionLayout`
+                    carries the item number, difficulty, points and type at the
+                    head of its own problem column -- a second full-width header
+                    restated column one and pushed the editor down. */}
                 <div className="min-h-0 flex-1 overflow-hidden">
                   <ProgrammingQuestionLayout
                       key={currentQuestion.attemptQuestionId}
@@ -901,14 +897,8 @@ export default function LearnerAssessmentAttemptPage() {
               </div>
           ) : isDiagram && currentQuestion ? (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                <div className="mb-3 shrink-0 rounded-2xl border-2 border-rb-swan bg-rb-snow px-4 py-3">
-                  <QuestionMetaRow
-                      question={currentQuestion}
-                      index={currentIndex}
-                      itemLabel="Item"
-                  />
-                </div>
-
+                {/* Same as programming: the meta belongs at the head of the
+                    problem column, not in a header above the canvas. */}
                 <div className="min-h-0 flex-1 overflow-hidden">
                   <DiagramQuestionLayout
                       key={currentQuestion.attemptQuestionId}

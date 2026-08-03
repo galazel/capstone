@@ -11,7 +11,7 @@ import {
   LockKeyhole,
   Search,
   Trophy,
-} from "lucide-react"
+} from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,7 +20,7 @@ import {
   LearnerEmptyState,
   ProgressBar,
 } from "@/components/learner/learner-ui.jsx"
-import { getCertificationFallbackImage, getCuratedCertificationCover } from "@/lib/certification-cover-images.js"
+import CertificationCoverPanel from "@/components/certifications/certification-cover.jsx"
 
 function getCertificationTitle(certification) {
   return certification?.title ?? "Untitled Certification"
@@ -30,16 +30,6 @@ function getCertificationDescription(certification) {
   return (
       certification?.description ??
       "Continue learning and prepare for your certification assessment."
-  )
-}
-
-function getCertificationImage(certification) {
-  return (
-      getCuratedCertificationCover(getCertificationTitle(certification)) ??
-      certification?.imageUrl ??
-      certification?.thumbnailUrl ??
-      certification?.coverUrl ??
-      getCertificationFallbackImage(getCertificationTitle(certification))
   )
 }
 
@@ -241,29 +231,18 @@ function CourseCard({ course, onOpen }) {
     diagnosticAssessment,
   } = course
 
-  const imageUrl = getCertificationImage(certification)
   const status = getCourseStatus(progress, completedLessons)
   const needsDiagnostic = !diagnosticCompleted
 
   return (
       <article className="group overflow-hidden border border-border bg-card transition hover:border-primary/40 hover:shadow-md">
-        <div className="relative h-40 overflow-hidden bg-muted">
-          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-primary/15 via-primary/5 to-muted">
-            <BookOpen className="size-12 text-primary/45" />
-          </div>
+        <div className="relative h-40 overflow-hidden">
+          <CertificationCoverPanel
+              title={getCertificationTitle(certification)}
+              className="h-full w-full"
+          />
 
-          {imageUrl ? (
-              <img
-                  src={imageUrl}
-                  alt={getCertificationTitle(certification)}
-                  className="absolute inset-0 h-full w-full object-cover"
-                  onError={(event) => {
-                    event.currentTarget.style.display = "none"
-                  }}
-              />
-          ) : null}
-
-          <span className="absolute left-3 top-3 rounded-sm bg-primary px-2 py-1 text-[10px] font-semibold tracking-wide text-primary-foreground">
+          <span className="absolute left-3 top-3 z-10 rounded-sm bg-white/20 px-2 py-1 text-[10px] font-semibold tracking-wide text-white backdrop-blur-sm">
           {needsDiagnostic ? "DIAGNOSTIC REQUIRED" : status}
         </span>
 
@@ -464,27 +443,20 @@ export default function LearnerLearningPage() {
     })
   }, [courses, query, selectedIndustry, selectedStatus])
 
+  /**
+   * Opening a certification goes to its curriculum, always — including when
+   * the diagnostic is still outstanding.
+   *
+   * It used to fork three ways from here: to the diagnostic, or straight into
+   * whichever lesson came next, or to the certification detail page. That meant
+   * clicking a certification could drop you into a lesson without ever showing
+   * you the certification, and the diagnostic redirect took over the whole
+   * click with no way to look at what you had enrolled in. The curriculum owns
+   * the gate now — every unit carries the lock and offers the diagnostic — so
+   * this is one destination.
+   */
   function openCertification(course) {
-    const certificationId = getCertificationId(course.certification)
-
-    if (!course.diagnosticCompleted) {
-      navigate(`/learner/learning/${certificationId}/diagnostic`, {
-        state: {
-          certification: course.certification,
-          lessons: course.lessons,
-          diagnosticAssessment: course.diagnosticAssessment,
-          nextLesson: course.nextLesson,
-        },
-      })
-      return
-    }
-
-    if (course.nextLesson?.lessonId) {
-      navigate(`/learner/lessons/${course.nextLesson.lessonId}`)
-      return
-    }
-
-    navigate(`/learner/certifications/${certificationId}`)
+    navigate(`/learner/learning/${getCertificationId(course.certification)}`)
   }
 
   return (

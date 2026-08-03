@@ -8,7 +8,7 @@ import {
     Plus,
     Sparkles,
     Trash2,
-} from "lucide-react"
+} from "@/components/icons"
 
 import { toast } from "sonner"
 

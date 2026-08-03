@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,6 +16,7 @@ from app.api.ws import workflows as workflow_ws
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.messaging.registry import build_consumer_manager
+from app.services import run_recovery
 from app.utils.helpers import close_checkpointer
 
 settings = get_settings()
@@ -35,7 +37,17 @@ async def lifespan(_: FastAPI):
         # failing the request/startup path.
         logger.exception("Failed to start RabbitMQ consumers; API will run without them")
 
+    # Generation runs are asyncio tasks in this process, so every run in flight
+    # when the previous one stopped was abandoned mid-step with its registry row
+    # still reading RUNNING. This picks those back up -- after a grace period,
+    # so RabbitMQ's own redelivery gets first refusal on the runs it owns.
+    recovery = asyncio.create_task(run_recovery.run_forever(), name="run-recovery")
+
     yield
+
+    recovery.cancel()
+    with suppress(asyncio.CancelledError):
+        await recovery
 
     await consumer_manager.stop()
     # Releases the LangGraph checkpointer's Postgres connection. The previous

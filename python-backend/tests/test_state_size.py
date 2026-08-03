@@ -130,7 +130,9 @@ async def _run_question_bank(monkeypatch, initial_state, thread_id):
     batch = QuestionBatch(
         scope="s",
         questions=[QuestionDraft(question_type="MCQ", question="Q", choices=list("abcd"),
-                                 correct_choice_index=0)],
+                              choice_explanations=["Correct: this is the defined term.", "Wrong: confuses it with a sibling concept.", "Wrong: describes a later stage.", "Wrong: unrelated to this topic."],
+                                 correct_choice_index=0,
+                                 explanation="Tests the defining property of the concept.")],
     )
 
     class _Stub:

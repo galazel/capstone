@@ -1,4 +1,4 @@
-import { AlertCircle, TrendingUp, Zap, BookOpen, CheckCircle, Clock } from 'lucide-react'
+import { AlertCircle, TrendingUp, Zap, BookOpen, CheckCircle, Clock } from "@/components/icons"
 
 // Priority tags remapped onto the design system palette. Labels, icons and
 // descriptions are unchanged — only the colours move onto the Rebyu ramp

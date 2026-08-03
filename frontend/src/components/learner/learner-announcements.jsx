@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { MegaphoneIcon, PinIcon } from "lucide-react"
+import { MegaphoneIcon, PinIcon } from "@/components/icons"
 
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"

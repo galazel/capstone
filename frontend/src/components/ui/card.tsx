@@ -12,7 +12,16 @@ function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-lg border border-border/70 bg-card py-(--card-spacing) text-base text-card-foreground [--card-spacing:--spacing(6)] has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(4)] *:[img:first-child]:rounded-t-lg *:[img:last-child]:rounded-b-lg",
+        // Shape comes from the design system rather than shadcn's defaults, so
+        // a shadcn Card and a `.rb-card` read as the same object: the softer
+        // radius, the 2px border that gives the edge weight, and a one-step
+        // "lip" underneath.
+        //
+        // The lip is deliberately shallower than the buttons' (2px against
+        // their 4px). The buttons are meant to look pressable and the cards
+        // are not -- matching their travel exactly made every surface on the
+        // page look like a key. See `.rb-card-raised` in rebyu-ds.css.
+        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-[var(--radius-rb-tile)] border-2 border-border/70 bg-card py-(--card-spacing) text-base text-card-foreground shadow-[0_2px_0_var(--color-rb-swan,var(--border))] [--card-spacing:--spacing(6)] has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(4)] *:[img:first-child]:rounded-t-[var(--radius-rb-tile)] *:[img:last-child]:rounded-b-[var(--radius-rb-tile)]",
         className
       )}
       {...props}

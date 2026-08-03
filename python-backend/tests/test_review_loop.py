@@ -40,15 +40,22 @@ CURRICULUM = {
         {
             "name": "Major A",
             "description": "first",
+            # Two lessons under one middle category, so "advance to the next
+            # item" is still exercised within a phase now that the walk
+            # interleaves phases instead of running each to completion.
             "middleCategories": [
-                {"name": "Middle A1", "description": "m", "lessons": [{"name": "Lesson 1"}]}
+                {
+                    "name": "Middle A1",
+                    "description": "m",
+                    "lessons": [{"name": "Lesson 1"}, {"name": "Lesson 2"}],
+                }
             ],
         },
         {
             "name": "Major B",
             "description": "second",
             "middleCategories": [
-                {"name": "Middle B1", "description": "m", "lessons": [{"name": "Lesson 2"}]}
+                {"name": "Middle B1", "description": "m", "lessons": [{"name": "Lesson 3"}]}
             ],
         },
     ]
@@ -73,11 +80,11 @@ def test_middle_phase_flattens_across_majors():
 
 def test_lesson_phase_flattens_across_the_whole_tree():
     names = [l["name"] for l in cert_nodes.LESSON_PHASE.items_of(CURRICULUM)]
-    assert names == ["Lesson 1", "Lesson 2"]
+    assert names == ["Lesson 1", "Lesson 2", "Lesson 3"]
 
 
 def test_lesson_parents_resolve_by_position():
-    major, middle = cert_nodes._lesson_parents(CURRICULUM, 1)
+    major, middle = cert_nodes._lesson_parents(CURRICULUM, 2)
     assert major["name"] == "Major B"
     assert middle["name"] == "Middle B1"
 
@@ -98,6 +105,7 @@ def test_current_item_past_the_end_is_none():
 def _question(text: str = "Q?") -> QuestionDraft:
     return QuestionDraft(
         question_type="MCQ", question=text, choices=["a", "b", "c", "d"],
+        choice_explanations=["Correct: this is the defined term.", "Wrong: confuses it with a sibling concept.", "Wrong: describes a later stage.", "Wrong: unrelated to this topic."],
         correct_choice_index=0, lesson_ref="Lesson 1",
         explanation="A sufficiently detailed explanation of the answer.",
     )
@@ -190,18 +198,23 @@ async def _start(graph, thread: str):
 
 
 async def test_loop_pauses_on_the_first_item_not_after_all_of_them(graph_env):
-    """The core behaviour change: review happens per item."""
+    """The core behaviour change: review happens per item.
+
+    The walk now starts at the deepest level -- lessons are written before the
+    quizzes that test them -- so the first artifact a reviewer sees is a lesson.
+    """
     graph, _ = graph_env
     result = await _start(graph, "loop-1")
 
     assert "__interrupt__" in result
     value = result["__interrupt__"][0].value
-    assert value["stage"] == "MAJOR"
+    assert value["stage"] == "LESSON"
     assert value["item_index"] == 0
-    assert value["item_label"] == "Major A"
-    assert value["item_total"] == 2
-    # Only the first major has been generated so far.
-    assert len(result.get("major_quizzes") or []) == 1
+    assert value["item_label"] == "Lesson 1"
+    assert value["item_total"] == 3
+    # Only the first lesson has been generated so far.
+    assert len(result.get("lessons") or []) == 1
+    assert not result.get("major_quizzes"), "no category quiz before its lessons exist"
 
 
 async def test_review_payload_offers_every_action(graph_env):
@@ -221,9 +234,9 @@ async def test_approve_advances_to_the_next_item(graph_env):
     result = await _resume(graph, "loop-2", APPROVE)
 
     value = result["__interrupt__"][0].value
-    assert value["stage"] == "MAJOR"
+    assert value["stage"] == "LESSON"
     assert value["item_index"] == 1
-    assert value["item_label"] == "Major B"
+    assert value["item_label"] == "Lesson 2"
 
 
 async def test_regenerate_reruns_the_same_item(graph_env):
@@ -245,7 +258,7 @@ async def test_reject_records_the_item_and_moves_on(graph_env):
 
     assert result["__interrupt__"][0].value["item_index"] == 1
     rejected = result.get("rejected_items") or []
-    assert rejected and rejected[0]["scope"] == "MAJOR" and rejected[0]["label"] == "Major A"
+    assert rejected and rejected[0]["scope"] == "LESSON" and rejected[0]["label"] == "Lesson 1"
 
 
 async def test_approve_remaining_drains_the_rest_of_the_phase(graph_env):
@@ -256,10 +269,11 @@ async def test_approve_remaining_drains_the_rest_of_the_phase(graph_env):
     result = await _resume(graph, "loop-5", APPROVE_REMAINING)
 
     value = result["__interrupt__"][0].value
-    # Major B was auto-approved, so the next pause is the MIDDLE phase.
+    # Lesson 2 was auto-approved, finishing Middle A1's lessons, so the next
+    # pause is that middle category's own quiz.
     assert value["stage"] == "MIDDLE"
-    assert "MAJOR" in (result.get("auto_approve_scopes") or [])
-    assert len(result.get("major_quizzes") or []) == 2
+    assert "LESSON" in (result.get("auto_approve_scopes") or [])
+    assert len(result.get("lessons") or []) == 2
 
 
 async def test_approve_remaining_does_not_leak_into_later_phases(graph_env):
@@ -271,7 +285,9 @@ async def test_approve_remaining_does_not_leak_into_later_phases(graph_env):
     assert "MIDDLE" not in (result.get("auto_approve_scopes") or [])
 
 
-async def test_phases_run_in_order_major_then_middle_then_lesson(graph_env):
+async def test_phases_run_bottom_up_lesson_then_middle_then_major(graph_env):
+    """Each quiz is generated from the content it tests, so its lessons come
+    first. Approving-remaining at each pause walks the nesting outward."""
     graph, _ = graph_env
     await _start(graph, "loop-7")
 
@@ -282,14 +298,12 @@ async def test_phases_run_in_order_major_then_middle_then_lesson(graph_env):
             break
         stages.append(result["__interrupt__"][0].value["stage"])
 
-    assert stages[:3] == ["MIDDLE", "LESSON", "DIAGNOSTIC_EXAM"], stages
+    assert stages[:3] == ["MIDDLE", "MAJOR", "MOCK_EXAM"], stages
 
 
 async def test_lesson_review_shows_both_the_lesson_and_its_quiz(graph_env):
     graph, _ = graph_env
-    await _start(graph, "loop-8")
-    await _resume(graph, "loop-8", APPROVE_REMAINING)   # drain majors
-    result = await _resume(graph, "loop-8", APPROVE_REMAINING)  # drain middles
+    result = await _start(graph, "loop-8")
 
     value = result["__interrupt__"][0].value
     assert value["stage"] == "LESSON"
@@ -342,24 +356,23 @@ async def test_edit_replaces_the_artifact_with_the_admins_version(graph_env):
     await _start(graph, "edit-1")
 
     edited = [{"question_type": "MCQ", "question": "Admin wrote this"}]
-    result = await _resume(graph, "edit-1", {"action": EDIT, "payload": edited})
+    result = await _resume(graph, "edit-1", {"action": EDIT, "payload": {"quiz": edited}})
 
     # Advances like an approval.
     assert result["__interrupt__"][0].value["item_index"] == 1
-    saved = result["major_quizzes"][0]
-    assert saved["questions"] == edited
+    assert result["lesson_quizzes"][0]["questions"] == edited
 
 
 async def test_edit_is_recorded_as_a_manual_version(graph_env):
     graph, _ = graph_env
     await _start(graph, "edit-2")
     result = await _resume(
-        graph, "edit-2", {"action": EDIT, "payload": [{"question": "mine"}]}
+        graph, "edit-2", {"action": EDIT, "payload": {"quiz": [{"question": "mine"}]}}
     )
 
     history = result.get("version_refs") or []
-    major_versions = [v for v in history if v["key"] == "MAJOR:0"]
-    assert [v["source"] for v in major_versions] == [SOURCE_AI_GENERATED, SOURCE_MANUAL_EDIT]
+    lesson_versions = [v for v in history if v["key"] == "LESSON:0"]
+    assert [v["source"] for v in lesson_versions] == [SOURCE_AI_GENERATED, SOURCE_MANUAL_EDIT]
 
 
 async def test_edit_without_a_payload_keeps_the_generated_version(graph_env):
@@ -368,19 +381,19 @@ async def test_edit_without_a_payload_keeps_the_generated_version(graph_env):
     await _start(graph, "edit-3")
     result = await _resume(graph, "edit-3", {"action": EDIT})
 
-    assert result["major_quizzes"][0]["questions"], "artifact was wiped by an empty edit"
+    assert result["lesson_quizzes"][0]["questions"], "artifact was wiped by an empty edit"
 
 
 async def test_versions_are_scoped_per_item(graph_env):
     graph, _ = graph_env
     await _start(graph, "ver-1")
-    await _resume(graph, "ver-1", APPROVE)          # advance to Major B
+    await _resume(graph, "ver-1", APPROVE)          # advance to Lesson 2
     result = await _resume(graph, "ver-1", REGENERATE)
 
-    # Major B has two versions; Major A still has one.
+    # Lesson 2 has two versions; Lesson 1 still has one.
     history = result.get("version_refs") or []
-    assert len([v for v in history if v["key"] == "MAJOR:0"]) == 1
-    assert len([v for v in history if v["key"] == "MAJOR:1"]) == 2
+    assert len([v for v in history if v["key"] == "LESSON:0"]) == 1
+    assert len([v for v in history if v["key"] == "LESSON:1"]) == 2
 
 
 async def test_advancing_clears_the_previous_items_instructions(graph_env):

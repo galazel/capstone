@@ -1,4 +1,4 @@
-import { HistoryIcon, Loader2Icon } from "lucide-react"
+import { HistoryIcon, Loader2Icon } from "@/components/icons"
 
 import { Badge } from "@/components/ui/badge"
 

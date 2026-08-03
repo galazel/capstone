@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircleIcon, ImageIcon, UploadIcon, XIcon } from "lucide-react";
+import { AlertCircleIcon, ImageIcon, UploadIcon, XIcon } from "@/components/icons";
 
 import {
   formatBytes,

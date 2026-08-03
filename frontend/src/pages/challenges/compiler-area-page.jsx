@@ -13,7 +13,7 @@ import {
     RotateCcw,
     Terminal,
     Trash2,
-} from "lucide-react"
+} from "@/components/icons"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -301,17 +301,17 @@ export default function CompilerArea({
     return (
         <div
             ref={containerRef}
-            className={`flex h-full min-h-[620px] w-full flex-col overflow-hidden rounded-2xl border border-sky-200 bg-white shadow-sm ${className}`}
+            className={`flex h-full min-h-[620px] w-full flex-col overflow-hidden rounded-rb-card border-2 border-border bg-card ${className}`}
         >
-            <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-sky-100 bg-white px-3">
+            <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b-2 border-border bg-card px-3">
                 <div className="flex min-w-0 items-center gap-2">
-                    <div className="rounded-md bg-sky-50 px-2 py-1 text-[11px] font-semibold text-slate-700">
+                    <div className="rounded-full bg-muted px-2 py-1 text-[11px] font-bold text-foreground">
                         {getFileName(language)}
                     </div>
 
                     <Badge
                         variant="outline"
-                        className="hidden rounded-full border-sky-200 bg-sky-50 text-[11px] text-sky-600 sm:inline-flex"
+                        className="hidden rounded-full border-border bg-rb-macaw-wash text-[11px] text-rb-macaw-lip sm:inline-flex"
                     >
                         <Code2 className="mr-1 size-3" />
                         {selectedLanguageLabel}
@@ -324,7 +324,7 @@ export default function CompilerArea({
                         variant="ghost"
                         size="icon"
                         onClick={copyCode}
-                        className="size-8 text-slate-500"
+                        className="size-8 text-muted-foreground"
                         aria-label="Copy code"
                     >
                         {copied ? <CheckCircle2 className="size-4" /> : <Copy className="size-4" />}
@@ -336,7 +336,7 @@ export default function CompilerArea({
                         size="icon"
                         onClick={resetStarterCode}
                         disabled={readOnly || isRunning}
-                        className="size-8 text-slate-500"
+                        className="size-8 text-muted-foreground"
                         aria-label="Reset code"
                     >
                         <RotateCcw className="size-4" />
@@ -347,7 +347,7 @@ export default function CompilerArea({
                         onValueChange={handleLanguageChange}
                         disabled={readOnly || isRunning}
                     >
-                        <SelectTrigger className="h-8 w-[116px] rounded-md border-sky-100 bg-sky-50 px-2 text-xs">
+                        <SelectTrigger className="h-8 w-[116px] rounded-md border-border bg-muted px-2 text-xs">
                             <SelectValue placeholder="Language" />
                         </SelectTrigger>
 
@@ -364,7 +364,7 @@ export default function CompilerArea({
                         type="button"
                         onClick={handleRunCode}
                         disabled={readOnly || isRunning}
-                        className="h-8 rounded-md bg-sky-500 px-3 text-xs font-semibold hover:bg-sky-600"
+                        className="h-8 rounded-md bg-primary px-3 text-xs font-bold"
                     >
                         {isRunning ? (
                             <LoaderCircle className="mr-1.5 size-3.5 animate-spin" />
@@ -393,7 +393,7 @@ export default function CompilerArea({
                         closeBrackets: true,
                     }}
                     onChange={(value) => updateCompilerState({ code: value })}
-                    className="h-full text-sm [&_.cm-activeLine]:bg-sky-50 [&_.cm-editor]:h-full [&_.cm-focused]:outline-none [&_.cm-gutters]:border-sky-100 [&_.cm-gutters]:bg-sky-50/50"
+                    className="h-full text-sm [&_.cm-activeLine]:bg-muted/50 [&_.cm-editor]:h-full [&_.cm-focused]:outline-none [&_.cm-gutters]:border-border [&_.cm-gutters]:bg-muted/40"
                 />
             </section>
 
@@ -402,24 +402,24 @@ export default function CompilerArea({
                 aria-orientation="horizontal"
                 aria-label="Resize program result panel"
                 onMouseDown={() => setIsResizing(true)}
-                className="group flex h-3 shrink-0 cursor-row-resize items-center justify-center border-y border-sky-100 bg-sky-50/70 transition hover:bg-sky-100"
+                className="group flex h-3 shrink-0 cursor-row-resize items-center justify-center border-y-2 border-border bg-muted/60 transition hover:bg-muted"
             >
-                <GripHorizontal className="size-4 text-sky-300 transition group-hover:text-sky-500" />
+                <GripHorizontal className="size-4 text-muted-foreground transition group-hover:text-rb-macaw" />
             </div>
 
             <aside
-                className="shrink-0 bg-[#eef9fd]"
+                className="shrink-0 bg-muted/40"
                 style={{ height: `${outputHeight}px` }}
             >
                 <div className="flex h-full min-h-0 flex-col">
-                    <div className="flex h-10 shrink-0 items-center justify-between gap-3 border-b border-sky-100 bg-white px-3">
+                    <div className="flex h-10 shrink-0 items-center justify-between gap-3 border-b-2 border-border bg-card px-3">
                         <div className="flex min-w-0 items-center gap-2">
-                            <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-500">
+                            <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-rb-macaw-wash text-rb-macaw-lip">
                                 <Terminal className="size-3.5" />
                             </div>
 
                             <div className="min-w-0">
-                                <h3 className="truncate text-xs font-bold text-slate-700">
+                                <h3 className="truncate text-xs font-bold text-foreground">
                                     Program Result
                                 </h3>
                             </div>
@@ -429,7 +429,7 @@ export default function CompilerArea({
                             {runResult?.exitCode !== null && runResult?.exitCode !== undefined ? (
                                 <Badge
                                     variant="outline"
-                                    className="rounded-full border-sky-100 bg-sky-50 text-[10px] text-sky-600"
+                                    className="rounded-full border-border bg-rb-macaw-wash text-[10px] text-rb-macaw-lip"
                                 >
                                     Exit: {runResult.exitCode}
                                 </Badge>
@@ -438,7 +438,7 @@ export default function CompilerArea({
                             {runResult?.time ? (
                                 <Badge
                                     variant="outline"
-                                    className="rounded-full border-sky-100 bg-sky-50 text-[10px] text-sky-600"
+                                    className="rounded-full border-border bg-rb-macaw-wash text-[10px] text-rb-macaw-lip"
                                 >
                                     Time: {runResult.time}
                                 </Badge>
@@ -447,7 +447,7 @@ export default function CompilerArea({
                             {runResult?.memory ? (
                                 <Badge
                                     variant="outline"
-                                    className="rounded-full border-sky-100 bg-sky-50 text-[10px] text-sky-600"
+                                    className="rounded-full border-border bg-rb-macaw-wash text-[10px] text-rb-macaw-lip"
                                 >
                                     Memory: {runResult.memory}
                                 </Badge>
@@ -459,7 +459,7 @@ export default function CompilerArea({
                                 size="sm"
                                 onClick={clearOutput}
                                 disabled={!runResult}
-                                className="h-7 px-2 text-[11px] text-slate-400"
+                                className="h-7 px-2 text-[11px] text-muted-foreground"
                             >
                                 <Trash2 className="mr-1 size-3" />
                                 Clear

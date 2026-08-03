@@ -40,16 +40,31 @@ def _persist_one_question(session: Session, question: dict[str, Any]) -> int:
 
     if question_type == "MCQ":
         correct_index = question.get("correct_choice_index")
-        for index, choice_text in enumerate(question.get("choices") or []):
+        per_choice = question.get("choice_explanations") or []
+        choices = question.get("choices") or []
+        aligned = len(per_choice) == len(choices)
+
+        for index, choice_text in enumerate(choices):
+            if aligned and (per_choice[index] or "").strip():
+                # Why *this* option is right or wrong -- the half a learner who
+                # picked a distractor actually needs. `QuestionDraft` requires
+                # these for every MCQ, so this is the normal path.
+                explanation = per_choice[index]
+            elif index == correct_index:
+                # Only reachable for a question that did not come from
+                # generation -- a reviewer's hand-written edit, or an artifact
+                # from a run predating per-choice explanations. Falls back to
+                # the item-level explanation on the correct choice.
+                explanation = question.get("explanation")
+            else:
+                explanation = None
+
             repo.insert_choice(
                 session,
                 question_id,
                 choice_text,
                 is_correct=(index == correct_index),
-                # The explanation belongs to the item, but Java stores it per
-                # choice; attaching it to the correct one keeps it visible
-                # without repeating it four times.
-                explanation=question.get("explanation") if index == correct_index else None,
+                explanation=explanation,
             )
 
     elif question_type in ("SHORT_ANSWER", "DESCRIPTIVE"):
@@ -266,13 +281,35 @@ def persist_generated_assessments(
 
     session.commit()
 
+    # What the run *produced*, against what actually landed. Every drop above
+    # is a warning, and warnings scroll past: a live run generated seven
+    # assessments, saved none of them because `exam_types` was unseeded, and
+    # still reported "completed". Counting both sides is what lets `finalize`
+    # tell a successful run from an empty one.
+    expected = {
+        "exams": (
+            len(result.get("lesson_quizzes") or [])
+            + len(result.get("middle_quizzes") or [])
+            + len(result.get("major_quizzes") or [])
+            + (1 if diagnostic.get("questions") else 0)
+            + (1 if mock.get("questions") else 0)
+        ),
+        "bank_questions": len(bank),
+        "lessons": len(result.get("lessons") or []),
+    }
+
     logger.info(
-        "Persisted %d exam(s) and %d question-bank item(s) for certification %s",
-        len(created), len(bank_ids), certification_id,
+        "Persisted %d/%d exam(s), %d/%d bank item(s), %d/%d lesson bod(y/ies) "
+        "for certification %s",
+        len(created), expected["exams"],
+        len(bank_ids), expected["bank_questions"],
+        lessons_written, expected["lessons"],
+        certification_id,
     )
     return {
         "exams": created,
         "bank_questions": len(bank_ids),
         "lessons_written": lessons_written,
+        "expected": expected,
         "warnings": warnings,
     }

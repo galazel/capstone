@@ -28,7 +28,7 @@ import {
   Type,
   UploadCloud,
   UploadIcon,
-} from "lucide-react"
+} from "@/components/icons"
 
 import {
   Dialog,

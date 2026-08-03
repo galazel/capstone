@@ -96,14 +96,20 @@ async def handle_question_generation_requested(payload: dict) -> None:
 
     thread_id = str(generation_request_id)
     with SessionLocal() as session:
-        registry.start_run(
-            session,
-            thread_id=thread_id,
-            kind="QUESTION_BANK",
-            certification_id=certification_id,
-            generation_request_id=generation_request_id,
-            triggered_by_user_id=generation_request.get("triggered_by_user_id"),
-        )
+        try:
+            registry.start_run(
+                session,
+                thread_id=thread_id,
+                kind="QUESTION_BANK",
+                certification_id=certification_id,
+                generation_request_id=generation_request_id,
+                triggered_by_user_id=generation_request.get("triggered_by_user_id"),
+            )
+        except registry.RunAlreadyCancelled:
+            # See the certification handler: a cancelled run leaves its queue
+            # message unacked, and redelivery must not restart it.
+            logger.info("Ignoring redelivered message for cancelled run %s", thread_id)
+            return
 
     try:
         graph = await get_question_bank_graph()

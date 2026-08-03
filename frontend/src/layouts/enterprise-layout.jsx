@@ -1,7 +1,7 @@
 import { useMemo } from "react"
 import { Outlet, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { FilesIcon, LogOutIcon, SettingsIcon, UserIcon } from "lucide-react"
+import { FilesIcon, LogOutIcon, SettingsIcon, UserIcon } from "@/components/icons"
 
 import { PortalTopNavigation } from "@/components/navigation/portal-navigation.jsx"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -18,7 +18,7 @@ import { useAuth } from "@/context/auth-context.jsx"
 import { useNotifications } from "@/hooks/use-notifications.js"
 import { NotificationBell } from "@/components/notification-bell.jsx"
 import { usePortalTheme } from "@/hooks/use-portal-theme.js"
-import { PortalThemeToggle } from "@/components/portal-theme-toggle"
+import { PortalThemeMenuItem } from "@/components/portal-theme-toggle"
 
 function getInitials(name = "") {
   return (
@@ -97,7 +97,6 @@ export default function EnterpriseLayout() {
               onDelete={notifications.remove}
             />
 
-            <PortalThemeToggle />
 
            <DropdownMenu>
              <DropdownMenuTrigger asChild>
@@ -137,6 +136,8 @@ export default function EnterpriseLayout() {
                    Files
                  </DropdownMenuItem>
                ) : null}
+               <DropdownMenuSeparator />
+               <PortalThemeMenuItem />
                <DropdownMenuSeparator />
                <DropdownMenuItem variant="destructive" onClick={logout}>
                  <LogOutIcon />

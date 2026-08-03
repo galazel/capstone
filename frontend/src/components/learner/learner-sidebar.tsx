@@ -6,7 +6,7 @@ import {
   CrownIcon,
   MessagesSquareIcon,
   SwordsIcon,
-} from "lucide-react"
+} from "@/components/icons"
 
 import { NavProjects } from "@/components/nav-projects"
 import { BrandLogo } from "@/components/brand-logo"

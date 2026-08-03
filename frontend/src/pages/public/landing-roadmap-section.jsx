@@ -7,7 +7,7 @@ import {
     Clock3,
     Target,
     TrendingUp,
-} from "lucide-react";
+} from "@/components/icons";
 
 import { LANDING_IMAGES } from "./landing-images.js";
 

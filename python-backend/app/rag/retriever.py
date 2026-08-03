@@ -79,7 +79,7 @@ def retrieve(
 
     index = load_index(namespace, embeddings)
     if index is None:
-        logger.info("No FAISS index for namespace '%s'; returning no context", namespace)
+        logger.info("Nothing indexed for namespace '%s'; returning no context", namespace)
         return []
 
     # No metadata filter needed: the index itself is scoped to one

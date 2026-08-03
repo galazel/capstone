@@ -1,5 +1,5 @@
-import { lazy, Suspense } from "react"
-import { Navigate, Routes, Route } from "react-router-dom"
+import { lazy, Suspense, useEffect, useRef } from "react"
+import { Navigate, Routes, Route, useLocation } from "react-router-dom"
 import ProtectedRoute from "./components/ProtectedRoute"
 import { LoadingScreen } from "./components/loading-screen.jsx"
 import { roleHomePath, useAuth } from "./context/auth-context.jsx"
@@ -15,7 +15,6 @@ const ForgotPasswordPage = lazy(() => import("./pages/auth/forgot-password-page.
 const SetNewPasswordPage = lazy(() => import("@/pages/auth/set-new-password-page.jsx"))
 const Certifications = lazy(() => import("./pages/admin/certifications-page.jsx"))
 const Challenges = lazy(() => import("./pages/admin/challenges-page.jsx"))
-const QuestionBank = lazy(() => import("./pages/admin/question-bank-page.jsx"))
 const Learners = lazy(() => import("./pages/admin/learners-page.jsx"))
 const Organizations = lazy(() => import("./pages/admin/organizations-page.jsx"))
 const AdminOrganizationDetail = lazy(() => import("./pages/admin/admin-organization-detail-page.jsx"))
@@ -24,7 +23,6 @@ const AdminDashboard = lazy(() => import("./pages/admin/admin-dashboard-page.jsx
 const PartnershipRequests = lazy(() => import("./pages/admin/partnership-requests-page.jsx"))
 const CommunityModeration = lazy(() => import("./pages/admin/community-moderation-page.jsx"))
 const BktDeliveryStatus = lazy(() => import("./pages/admin/bkt-delivery-status-page.jsx"))
-const GenerationWorkspace = lazy(() => import("./pages/admin/generation-workspace-page.jsx"))
 const GamificationSettings = lazy(() => import("./pages/admin/gamification-settings-page.jsx"))
 const AcceptEnterpriseInvitationPage = lazy(() => import("./pages/admin/accept-enterprise-invitation-page.jsx"))
 const LandingPage = lazy(() => import("./pages/public/landing-page.jsx"))
@@ -42,12 +40,15 @@ const LearnerChallengesPage = lazy(() => import("./pages/learner/learning/learne
 const LearnerFilesPage = lazy(() => import("./pages/learner/files/learner-files-page.jsx"))
 const LearnerAccountPage = lazy(() => import("./pages/learner/dashboard/learner-account-page.jsx"))
 const LearnerAssessmentAttemptPage = lazy(() => import("./pages/learner/assessments/learner-assessment-attempt-page.jsx"))
+// Dev-only screenshot harness for the landing hero. Never routed in a
+// production build (see the guarded <Route> below), so this chunk is only ever
+// requested by a developer opening the preview URL.
+const AttemptPreviewPage = lazy(() => import("./pages/dev/attempt-preview-page.jsx"))
 const LearnerAssessmentResultPage = lazy(() => import("./pages/learner/assessments/learner-assessment-result-page.jsx"))
 const LearnerAssessmentHistoryPage = lazy(() => import("./pages/learner/assessments/learner-assessment-history-page.jsx"))
 const LearnerPracticeAttemptPage = lazy(() => import("./pages/learner/practice/learner-practice-attempt-page.jsx"))
 const LearnerPracticeHistoryPage = lazy(() => import("./pages/learner/practice/learner-practice-history-page.jsx"))
 const LearnerPracticeReviewPage = lazy(() => import("./pages/learner/practice/learner-practice-review-page.jsx"))
-const LearnerRankingsPage = lazy(() => import("./pages/learner/practice/learner-rankings-page.jsx"))
 const MistakesBank = lazy(() => import("./pages/learner/practice/learner-mistakes-bank.jsx"))
 const Community = lazy(() => import("./pages/learner/community/learner-community-qa.jsx"))
 const EnterpriseDashboardPage = lazy(() => import("./pages/enterprise/dashboard/enterprise-dashboard-page.jsx"))
@@ -73,7 +74,12 @@ const CompilerArea = lazy(() => import("./pages/challenges/compiler-area-page.js
 const CodeStrikePage = lazy(() => import("./pages/learner/challenges/codestrike-page.jsx"))
 const BlueprintArenaPage = lazy(() => import("./pages/learner/challenges/blueprint-arena-page.jsx"))
 const WorldCupPage = lazy(() => import("./pages/learner/challenges/world-cup-page.jsx"))
+const LearnerCertificationCurriculumPage = lazy(() =>
+    import("./pages/learner/learning/learner-certification-curriculum-page.jsx")
+)
+const LearnerTopicPage = lazy(() => import("./pages/learner/learning/learner-topic-page.jsx"))
 const ArenaConfig = lazy(() => import("./pages/admin/arena-config-page.jsx"))
+const ArenaDetail = lazy(() => import("./pages/admin/arena-detail-page.jsx"))
 const NotificationsPage = lazy(() => import("./pages/notifications-page.jsx"))
 const NotFoundPage = lazy(() => import("./pages/public/not-found-page.jsx"))
 const ForbiddenPage = lazy(() => import("./pages/public/forbidden-page.jsx"))
@@ -108,9 +114,55 @@ function EnterpriseDashboardEntry() {
         : <EnterpriseMemberDashboardPage />
 }
 
+/**
+ * Route transition.
+ *
+ * A CSS animation, not a motion component, even though the rest of the app
+ * animates with framer. This element wraps *every page*, and a JS-driven
+ * entrance means the whole app sits at `opacity: 0` until an animation frame
+ * runs. Anything that stops frames arriving — a throttled background tab, a
+ * paused renderer, framer failing to start — leaves a blank window rather than
+ * an unanimated one. A CSS keyframe cannot fail that way: it either runs or the
+ * declaration is ignored and the page is simply visible.
+ *
+ * Deliberately enter-only: exiting means holding the old page mounted while the
+ * new one loads, which fights `Suspense` on lazily-loaded routes and delays
+ * every navigation by the length of the exit.
+ *
+ * Keyed on `pathname` only, not `search` — restarting the animation when a
+ * query param changes would flash the page on every filter change.
+ */
+function RouteTransition({ children }) {
+    const { pathname } = useLocation()
+    const ref = useRef(null)
+
+    // Restart the animation by removing and re-adding the class, rather than by
+    // keying this element on `pathname`. A changing key would remount the whole
+    // subtree on every navigation — including the shared portal layouts, which
+    // hold search state, open sheets, and the portal data query — so moving
+    // between two pages of the same layout would tear down and rebuild the
+    // layout around them. Reading `offsetWidth` between the two is what forces
+    // the reflow that makes the browser treat it as a new animation.
+    useEffect(() => {
+        const node = ref.current
+        if (!node) return
+
+        node.classList.remove("rb-route-enter")
+        void node.offsetWidth
+        node.classList.add("rb-route-enter")
+    }, [pathname])
+
+    return (
+        <div ref={ref} className="rb-route-enter">
+            {children}
+        </div>
+    )
+}
+
 export function App() {
     return (
       <Suspense fallback={<LoadingScreen />}>
+        <RouteTransition>
         <Routes>
             <Route path="/" element={<GuestOnlyRoute><LandingPage /></GuestOnlyRoute>} />
             <Route path="/welcome" element={<Navigate to="/" replace />} />
@@ -144,13 +196,34 @@ export function App() {
             <Route path="/learner/challenges/blueprint-arena" element={<BlueprintArenaPage />} />
             <Route path="/learner/challenges/world-cup" element={<WorldCupPage />} />
 
+            {/* Dev-only: renders the real attempt page against fixture data so
+                the landing hero can be re-shot from the actual product. Stripped
+                from production builds. */}
+            {import.meta.env.DEV ? (
+                <Route path="/__preview/attempt/:examId" element={<AttemptPreviewPage />} />
+            ) : null}
+
+            {/* Dev-only: the boot screen, held on screen. It normally shows for
+                a few hundred milliseconds during Suspense, which is not long
+                enough to review it. Stripped from production builds. */}
+            {import.meta.env.DEV ? (
+                <Route path="/__preview/loading" element={<LoadingScreen />} />
+            ) : null}
+
             <Route element={<ProtectedRoute allowedRoles={["ADMIN"]} />}>
                 <Route path="/admin" element={<DashboardLayout />}>
                     <Route index element={<Certifications />} />
                     <Route path="dashboard" element={<AdminDashboard />} />
                     <Route path="challenges" element={<Challenges />} />
                     <Route path="arenas" element={<ArenaConfig />} />
-                    <Route path="question-bank" element={<QuestionBank />} />
+                    {/* Each arena authors its own problems: three builders on
+                        one page was three screens of editors in a column. */}
+                    <Route path="arenas/:arenaId" element={<ArenaDetail />} />
+                    {/* No standalone /admin/question-bank. Questions only mean
+                        something against a certification's own curriculum, and
+                        the same builder is embedded in that certification's
+                        Question Bank tab -- a global list made you pick the
+                        certification again after arriving. */}
                     <Route path="organizations" element={<Organizations />} />
                     <Route
                         path="organizations/:id"
@@ -159,10 +232,10 @@ export function App() {
                     <Route path="partnership-requests" element={<PartnershipRequests />} />
                     <Route path="community-moderation" element={<CommunityModeration />} />
                     <Route path="bkt-delivery" element={<BktDeliveryStatus />} />
-                    {/* Both forms render the workspace: without a run id it
-                        redirects to whichever run most needs attention. */}
-                    <Route path="generation" element={<GenerationWorkspace />} />
-                    <Route path="generation/:runId" element={<GenerationWorkspace />} />
+                    {/* No standalone generation workspace. A run is watched in
+                        the modal that started it -- the InlineGenerationMonitor
+                        renders the same transcript, review checkpoints and
+                        recovery panel without leaving the certification. */}
                     <Route path="gamification-settings" element={<GamificationSettings />} />
                     <Route path="learners" element={<Learners />} />
                     <Route
@@ -187,9 +260,21 @@ export function App() {
                         element={<LearnerDiagnosticGatePage />}
                     />
 
+                    {/* Opening an enrolled certification from My Learning lands
+                        on its curriculum: units as bands, opening to topics,
+                        opening to the lessons/quizzes/assessments inside them.
+                        This path used to render the My Learning *list* again,
+                        so clicking a certification showed the same page back. */}
                     <Route
                         path="learning/:certificationId"
-                        element={<LearnerLearningPage />}
+                        element={<LearnerCertificationCurriculumPage />}
+                    />
+
+                    {/* One middle category, start to finish: outline, lesson
+                        content, AI tutor. */}
+                    <Route
+                        path="learning/:certificationId/topics/:middleCategoryId"
+                        element={<LearnerTopicPage />}
                     />
                     <Route path="lessons/:lessonId" element={<LearnerLessonPage />} />
                     <Route path="plan" element={<LearnerStudyPlanCalendarPage />} />
@@ -206,7 +291,6 @@ export function App() {
                     <Route path="library" element={<LearnerFilesPage />} />
                     <Route path="mistakes" element={<MistakesBank />} />
                     <Route path="community" element={<Community />} />
-                    <Route path="rankings" element={<LearnerRankingsPage />} />
                     <Route path="account" element={<LearnerAccountPage />} />
                 </Route>
 
@@ -316,6 +400,7 @@ export function App() {
             <Route path="/403" element={<ForbiddenPage />} />
             <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        </RouteTransition>
       </Suspense>
     )
 }
