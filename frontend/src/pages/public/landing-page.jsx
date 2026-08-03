@@ -10,13 +10,10 @@ import {
   Briefcase,
   Building2,
   Check,
-  CheckCircle2,
-  Clock,
   Code2,
   Cpu,
   FileText,
   Gift,
-  Flag,
   Gauge,
   GraduationCap,
   Heart,
@@ -25,7 +22,6 @@ import {
   Menu,
   MessageCircle,
   Network,
-  RotateCw,
   Sparkles,
   Star,
   Target,
@@ -51,42 +47,6 @@ const NAV_ITEMS = [
   { label: "arenas", href: "#roadmap" },
   { label: "ai tutor", href: "#ai-tutor" },
   { label: "community", href: "#community" },
-];
-
-/* Hero workspace demo — the two assessment types that need a real desktop
-   surface. Code is tokenised by hand rather than run through a highlighter:
-   it is a fixed marketing sample, so shipping a parser for it would be waste. */
-const CODE_LINES = [
-  [["def ", "kw"], ["is_prime", "fn"], ["(n):", "pl"]],
-  [["    if ", "kw"], ["n ", "pl"], ["< ", "op"], ["2", "num"], [":", "pl"]],
-  [["        return ", "kw"], ["False", "num"]],
-  [["    for ", "kw"], ["i ", "pl"], ["in ", "kw"], ["range", "fn"], ["(", "pl"], ["2", "num"], [", ", "pl"], ["int", "fn"], ["(n ", "pl"], ["** ", "op"], ["0.5", "num"], [") ", "pl"], ["+ ", "op"], ["1", "num"], ["):", "pl"]],
-  [["        if ", "kw"], ["n ", "pl"], ["% ", "op"], ["i ", "pl"], ["== ", "op"], ["0", "num"], [":", "pl"]],
-  [["            return ", "kw"], ["False", "num"]],
-  [["    return ", "kw"], ["True", "num"]],
-];
-
-const CODE_TOKEN_CLASS = {
-  kw: "text-rb-beetle-lip",
-  fn: "text-rb-macaw-lip",
-  num: "text-rb-fox-lip",
-  op: "text-rb-cardinal-lip",
-  pl: "text-rb-eel",
-};
-
-const TEST_CASES = [
-  { label: "rejects n < 2", state: "pass" },
-  { label: "detects 7, 13, 97", state: "pass" },
-  { label: "rejects even numbers", state: "pass" },
-  { label: "handles n = 1000003", state: "running" },
-];
-
-/* Entity-relationship canvas. Positions are authored against a 520x260 viewBox
-   so the SVG scales cleanly inside the editor pane at every breakpoint. */
-const ER_ENTITIES = [
-  { id: "student", label: "STUDENT", x: 16, y: 40, fields: ["student_id  PK", "name"] },
-  { id: "enrollment", label: "ENROLLMENT", x: 196, y: 110, fields: ["student_id  FK", "course_id   FK"], selected: true },
-  { id: "course", label: "COURSE", x: 376, y: 40, fields: ["course_id   PK", "title"] },
 ];
 
 const HOW_IT_WORKS = [
@@ -418,631 +378,129 @@ function LandingNavbar() {
   );
 }
 
-/* ------------------------------------------------------- hero signature card */
+/* --------------------------------------------------- hero assessment gallery */
 
-/** Fixed-width exam clock. Counts down so the workspace reads as live. */
-/** Fixed-width exam clock. Counts down so the workspace reads as live. */
-function ExamClock({ running }) {
-  const [seconds, setSeconds] = useState(4364);
-
-  useEffect(() => {
-    if (!running) return undefined;
-    const timer = window.setInterval(() => setSeconds((value) => Math.max(0, value - 1)), 1000);
-    return () => window.clearInterval(timer);
-  }, [running]);
-
-  const pad = (value) => String(value).padStart(2, "0");
-  const clock = pad(Math.floor(seconds / 3600)) + ":" + pad(Math.floor((seconds % 3600) / 60)) + ":" + pad(seconds % 60);
-
-  return <span className="rb-numeric text-sm tracking-wide text-rb-eel">{clock}</span>;
-}
-
-/* ---------------------------------------------------------------- answer panes */
-
-function McqPane() {
-  const OPTIONS = [
-    "It removes transitive dependencies",
-    "It removes partial dependencies on a composite key",
-    "It requires every determinant to be a candidate key",
-    "It eliminates repeating groups",
-  ];
-
-  return (
-    <div className="space-y-2.5">
-      {OPTIONS.map((option, index) => (
-        <div key={option} data-state={index === 1 ? "selected" : "idle"} className="rb-answer">
-          <span className="rb-answer-key">{"abcd"[index]}</span>
-          <span className="min-w-0 flex-1">{option}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ShortAnswerPane() {
-  return (
-    <div>
-      <label className="rb-eyebrow" htmlFor="hero-short">
-        Your answer
-      </label>
-      <div className="mt-2 flex items-center gap-2 rounded-rb-tile border-2 border-rb-macaw bg-rb-snow px-4 py-3.5">
-        <span id="hero-short" className="font-mono text-[0.9375rem] font-semibold text-rb-eel">
-          Second Normal Form
-        </span>
-        <span className="inline-block h-5 w-[2px] animate-pulse bg-rb-macaw" aria-hidden="true" />
-      </div>
-      <p className="mt-2 text-xs font-semibold text-rb-wolf">
-        Accepts known variations — "2NF", "second normal form".
-      </p>
-    </div>
-  );
-}
-
-function DescriptivePane() {
-  return (
-    <div>
-      <label className="rb-eyebrow" htmlFor="hero-desc">
-        Your answer
-      </label>
-      <div
-        id="hero-desc"
-        className="mt-2 min-h-[196px] rounded-rb-tile border-2 border-rb-bee bg-rb-snow p-4 text-[0.9375rem] leading-6 text-rb-eel"
-      >
-        A composite key means the primary key spans two columns. If a non-key column depends on
-        only one of them, that is a partial dependency — so the table is in 1NF but not 2NF.
-        <span className="ml-0.5 inline-block h-5 w-[2px] translate-y-1 animate-pulse bg-rb-bee" aria-hidden="true" />
-      </div>
-      <div className="mt-2 flex items-center justify-between text-xs font-semibold text-rb-wolf">
-        <span>Marked against a rubric</span>
-        <span className="tabular-nums">248 / 600 characters</span>
-      </div>
-    </div>
-  );
-}
-
-/* The working surface only. The test rail that used to sit beside it moved to
-   the right-hand column, under item navigation, because that is where the
-   attempt page puts it -- `ProgrammingQuestionLayout` runs
-   problem | editor | navigation + tests, and the hero is a picture of that
-   screen. */
-function ProgrammingPane() {
-  return (
-    <div className="flex h-full flex-col gap-4">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-rb-tile border-2 border-rb-swan bg-rb-polar">
-        <div className="flex items-center gap-2 border-b-2 border-rb-swan bg-rb-snow px-3 py-2">
-          <span className="rb-chip !bg-rb-macaw-wash !px-2.5 !py-1 !text-[0.6875rem] !text-rb-macaw-lip">
-            solution.py
-          </span>
-          <span className="text-[0.6875rem] font-bold text-rb-hare">python 3.11</span>
-        </div>
-
-        <pre className="min-h-0 flex-1 overflow-auto p-3 font-mono text-[0.8125rem] leading-6">
-          <code>
-            {CODE_LINES.map((line, lineIndex) => (
-              <div key={lineIndex} className="flex gap-3 whitespace-pre">
-                <span className="w-4 shrink-0 select-none text-right text-rb-hare">
-                  {lineIndex + 1}
-                </span>
-                <span>
-                  {line.map(([text, token], tokenIndex) => (
-                    <span key={tokenIndex} className={CODE_TOKEN_CLASS[token]}>
-                      {text}
-                    </span>
-                  ))}
-                </span>
-              </div>
-            ))}
-            <div className="flex gap-3">
-              <span className="w-4 shrink-0 select-none text-right text-rb-hare">8</span>
-              <span className="inline-block h-4 w-[2px] animate-pulse bg-rb-macaw" />
-            </div>
-          </code>
-        </pre>
-      </div>
-    </div>
-  );
-}
-
-/** The Tests tab of the attempt's right-hand column. */
-function TestResultsRail() {
-  return (
-    <div>
-      <div className="rb-eyebrow">Tests</div>
-      <div className="mt-2.5 space-y-2">
-        {TEST_CASES.map((test) => (
-          <div
-            key={test.label}
-            className={
-              "flex items-start gap-2 rounded-xl px-3 py-2 text-[0.8125rem] font-medium " +
-              (test.state === "pass"
-                ? "bg-rb-feather-wash text-[#3d6b06]"
-                : "bg-rb-polar text-rb-wolf")
-            }
-          >
-            {test.state === "pass" ? (
-              <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-            ) : (
-              <span className="mt-1 size-3 shrink-0 animate-spin rounded-full border-2 border-rb-hare border-t-transparent" />
-            )}
-            <span className="min-w-0">{test.label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function DiagramPane() {
-  return (
-    <div className="flex h-full flex-col gap-4">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-rb-tile border-2 border-rb-swan bg-rb-polar">
-        <div className="flex items-center gap-2 border-b-2 border-rb-swan bg-rb-snow px-3 py-2">
-          <span className="rb-chip !bg-rb-beetle-wash !px-2.5 !py-1 !text-[0.6875rem] !text-rb-beetle-lip">
-            er-diagram
-          </span>
-          <span className="text-[0.6875rem] font-bold text-rb-hare">crow's foot</span>
-        </div>
-
-        <svg viewBox="0 0 520 260" preserveAspectRatio="xMidYMid meet" className="h-full w-full" role="img" aria-label="Entity relationship diagram">
-          <path d="M126 78 L240 128" stroke="var(--color-rb-hare)" strokeWidth="2" fill="none" />
-          <path d="M356 128 L470 78" stroke="var(--color-rb-hare)" strokeWidth="2" fill="none" />
-
-          {ER_ENTITIES.map((entity) => (
-            <g key={entity.id}>
-              <rect
-                x={entity.x}
-                y={entity.y}
-                width={128}
-                height={76}
-                rx={12}
-                fill="var(--color-rb-snow)"
-                stroke={entity.selected ? "var(--color-rb-beetle)" : "var(--color-rb-swan)"}
-                strokeWidth={entity.selected ? 3 : 2}
-              />
-              <rect
-                x={entity.x}
-                y={entity.y}
-                width={128}
-                height={24}
-                rx={12}
-                fill={entity.selected ? "var(--color-rb-beetle-wash)" : "var(--color-rb-polar)"}
-              />
-              <text x={entity.x + 10} y={entity.y + 16} className="font-mono" fontSize="10" fontWeight="700" fill="var(--color-rb-eel)">
-                {entity.label}
-              </text>
-              {entity.fields.map((field, fieldIndex) => (
-                <text key={field} x={entity.x + 10} y={entity.y + 40 + fieldIndex * 15} className="font-mono" fontSize="9" fill="var(--color-rb-wolf)">
-                  {field}
-                </text>
-              ))}
-              {entity.selected
-                ? [
-                    [entity.x, entity.y],
-                    [entity.x + 128, entity.y],
-                    [entity.x, entity.y + 76],
-                    [entity.x + 128, entity.y + 76],
-                  ].map(([hx, hy]) => (
-                    <rect key={hx + "-" + hy} x={hx - 4} y={hy - 4} width={8} height={8} fill="var(--color-rb-beetle)" />
-                  ))
-                : null}
-            </g>
-          ))}
-        </svg>
-      </div>
-    </div>
-  );
-}
-
-/** The shape palette, in the attempt's right-hand column beside navigation. */
-function ShapePaletteRail() {
-  return (
-    <div>
-      <div className="rb-eyebrow">Shapes</div>
-      <div className="mt-2.5 grid grid-cols-3 gap-2">
-        {["entity", "relation", "attribute", "weak", "derived", "multi"].map((shape) => (
-          <div
-            key={shape}
-            className="grid aspect-square place-items-center rounded-xl border-2 border-rb-swan bg-rb-polar text-[0.625rem] font-bold text-rb-wolf"
-          >
-            {shape}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* The five question types a learner actually meets in an attempt. Types, badge
-/* The five question types a learner meets in an attempt.
-   `wide` types (programming, diagram) get the three-column layout: problem on
-   the left, working surface in the centre, item navigation on the right. The
-   rest run two columns — question and answer centre, navigation right.
-   `subs` are the sub-questions the attempt engine supports on programming,
-   diagram and descriptive items. */
-const QUESTION_TYPES = [
+/**
+ * The hero visual: photographs of the assessment workspace.
+ *
+ * These are screenshots of the real attempt page, not a drawing of it — shot
+ * from `/__preview/attempt` by `scripts/shoot-attempt-screenshots.mjs`, which
+ * renders the genuine `LearnerAssessmentAttemptPage` against fixture answers.
+ * The hero is the one block on the site that claims what sitting an exam looks
+ * like, so it should not be able to drift from the product. Re-run that script
+ * rather than editing anything here when the attempt page changes.
+ *
+ * No type label is drawn over the frame. Every shot has real UI in every corner
+ * — the exam header, the navigator, the problem column — so any overlay covers
+ * something the screenshot exists to show, and each shot already names its own
+ * type in the item's own badge. `label` survives for the dot controls' accessible
+ * names.
+ */
+const WORKSPACE_SHOTS = [
   {
     id: "mcq",
     label: "Multiple Choice",
-    badge: "border-rb-macaw bg-rb-macaw-wash text-rb-macaw-lip",
-    number: 12,
-    points: 2,
-    prompt: "Which statement describes Second Normal Form?",
-    Pane: McqPane,
+    src: "/screenshots/attempt-multiple-choice.png",
+    alt: "The Rebyu attempt page on a multiple choice item: the question and four tactile options in the centre, item navigation on the right showing which items are answered and flagged, and the exam clock in the header.",
   },
   {
-    id: "short",
+    id: "short-answer",
     label: "Short Answer",
-    badge: "border-rb-macaw bg-rb-macaw-wash text-rb-macaw-lip",
-    number: 13,
-    points: 3,
-    prompt: "Name the normal form that removes partial dependencies.",
-    Pane: ShortAnswerPane,
+    src: "/screenshots/attempt-short-answer.png",
+    alt: "The attempt page on a short answer item: a single typed answer field beneath the question, with the same item navigation and clock.",
   },
   {
     id: "descriptive",
     label: "Descriptive",
-    badge: "border-rb-bee bg-rb-bee-wash text-[#8a6d00]",
-    number: 14,
-    points: 8,
-    prompt: "Explain why a table with a composite key can sit in 1NF but not 2NF.",
-    // No parts row. The attempt page renders sub-questions inside the
-    // programming and diagram problem columns; a descriptive item goes through
-    // `NormalQuestionPanel`, which has none, so showing them here advertised a
-    // screen the learner never meets.
-    Pane: DescriptivePane,
+    src: "/screenshots/attempt-descriptive.png",
+    alt: "The attempt page on a descriptive item: a long written answer in progress with a live character count, marked against a rubric.",
   },
   {
     id: "programming",
     label: "Programming",
-    badge: "border-rb-macaw bg-rb-macaw-wash text-rb-macaw-lip",
-    number: 15,
-    points: 12,
-    wide: true,
-    brief:
-      "A number is prime when it has exactly two distinct divisors: 1 and itself. Your function is called once per test case and must handle inputs up to one million within the time limit.",
-    constraints: ["2 <= n <= 1,000,003", "Time limit 1s", "Return a boolean"],
-    prompt: "Implement is_prime(n) so it returns True only for prime numbers.",
-    subs: [
-      { key: "a", label: "Handle n < 2", done: true },
-      { key: "b", label: "Trial division", done: true },
-      { key: "c", label: "Optimise to root n", done: false },
-    ],
-    // What the learner does to answer: run the code, then check it.
-    actions: ["Run Code", "Check Code"],
-    Pane: ProgrammingPane,
-    Rail: TestResultsRail,
+    src: "/screenshots/attempt-programming.png",
+    alt: "The attempt page on a programming item: three columns — the problem, its constraints and its parts on the left, a syntax-highlighted code editor with Run and Check in the centre, and item navigation over the test cases on the right.",
   },
   {
     id: "diagram",
     label: "Diagram",
-    badge: "border-rb-beetle bg-rb-beetle-wash text-rb-beetle-lip",
-    number: 16,
-    points: 10,
-    wide: true,
-    brief:
-      "A student enrols in many courses, and a course holds many students. Model this without a many-to-many edge directly between the two entities.",
-    constraints: ["Crow's foot notation", "Mark primary keys", "Resolve the M:N"],
-    prompt: "Model the many-to-many relationship between students and courses.",
-    subs: [
-      { key: "a", label: "Entities and attributes", done: true },
-      { key: "b", label: "Junction entity", done: false },
-      { key: "c", label: "Cardinality", done: false },
-    ],
-    actions: ["Save Diagram", "Check Structure"],
-    Pane: DiagramPane,
-    Rail: ShapePaletteRail,
+    src: "/screenshots/attempt-diagram.png",
+    alt: "The attempt page on a diagram item: an entity relationship diagram part-built on the canvas, with the problem on the left and the scoring rubric beside item navigation on the right.",
   },
-];
+]
 
-/** Sub-question tabs. Completion is shown per part, as in the attempt engine. */
-function SubQuestionTabs({ subs }) {
-  const activeIndex = subs.findIndex((s) => !s.done);
+/* 16:10, the aspect the screenshots are shot at. Reserved with `aspect-*` so
+   the fold does not jump as each image decodes. */
+function AssessmentGallery() {
+  const [index, setIndex] = useState(0)
+  const [reducedMotion, setReducedMotion] = useState(false)
+
+  useEffect(() => {
+    setReducedMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+  }, [])
+
+  useEffect(() => {
+    if (reducedMotion) return undefined
+    const timer = window.setTimeout(
+      () => setIndex((n) => (n + 1) % WORKSPACE_SHOTS.length),
+      5600
+    )
+    return () => window.clearTimeout(timer)
+  }, [index, reducedMotion])
+
   return (
-    <div>
-      <div className="rb-eyebrow">Parts</div>
-      <div className="mt-2.5 flex flex-wrap gap-2">
-        {subs.map((sub, index) => (
-          <span
-            key={sub.key}
-            className={
-              "flex items-center gap-1.5 rounded-rb-pill border-2 px-3 py-1.5 text-xs font-bold " +
-              (index === activeIndex
-                ? "border-rb-eel bg-rb-snow text-rb-eel"
-                : sub.done
-                  ? "border-rb-feather bg-rb-feather-wash text-[#3d6b06]"
-                  : "border-rb-swan bg-rb-polar text-rb-wolf")
-            }
-          >
-            {sub.done ? <Check className="size-3.5" /> : null}
-            {sub.key}. {sub.label}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/** Item meta — number, worth, type. Sits at the head of whichever column
- *  carries the problem: the left panel on the wide types, the centre column on
- *  the written ones. Mirrors `QuestionMetaRow` on the attempt page. */
-function ItemMetaRow({ type }) {
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-sm font-bold text-rb-wolf">Item {type.number}</span>
-      <span className="rounded-rb-pill bg-rb-polar px-2.5 py-1 text-[0.6875rem] font-bold text-rb-wolf">
-        {type.points} pts
-      </span>
-      <span
-        className={"rounded-rb-pill border-2 px-2.5 py-1 text-[0.6875rem] font-bold " + type.badge}
-      >
-        {type.label}
-      </span>
-    </div>
-  );
-}
-
-/** Item navigation grid — the top of the right-hand column. */
-function ItemNavigator({ current }) {
-  return (
-    <div>
-      <div className="flex items-center justify-between">
-        <span className="rb-eyebrow">Item navigation</span>
-        <span className="rb-numeric text-xs text-rb-wolf">40 pts</span>
-      </div>
-
-      <div className="mt-3 grid grid-cols-8 gap-1.5 lg:grid-cols-5">
-        {Array.from({ length: 20 }, (_, cell) => {
-          const number = cell + 1;
-          const isCurrent = number === current;
-          const answered = number < current;
-          const flagged = number === 9;
-          return (
-            <span
-              key={number}
+    <figure className="relative mx-auto w-full">
+      <div className="relative overflow-hidden rounded-rb-card border-2 border-rb-swan bg-rb-snow shadow-[0_6px_0_var(--color-rb-swan)]">
+        <div className="relative aspect-[16/10] w-full">
+          {/* All five stay mounted and cross-fade: swapping one <img> src
+              flashes the frame empty for a beat on every cycle. */}
+          {WORKSPACE_SHOTS.map((shot, shotIndex) => (
+            <img
+              key={shot.id}
+              src={shot.src}
+              alt={shot.alt}
+              width={2880}
+              height={1800}
+              loading={shotIndex === 0 ? "eager" : "lazy"}
+              decoding="async"
               className={
-                "grid aspect-square place-items-center rounded-lg border-2 text-[0.6875rem] font-bold " +
-                (isCurrent
-                  ? "border-rb-eel bg-rb-snow text-rb-eel"
-                  : flagged
-                    ? "border-rb-bee bg-rb-bee-wash text-[#8a6d00]"
-                    : answered
-                      ? "border-rb-macaw bg-rb-macaw text-rb-snow"
-                      : "border-rb-swan bg-rb-polar text-rb-hare")
+                "absolute inset-0 size-full object-cover object-top transition-opacity duration-500 " +
+                (shotIndex === index ? "opacity-100" : "opacity-0")
               }
-            >
-              {number}
-            </span>
-          );
-        })}
-      </div>
-
-      <div className="mt-4 hidden gap-2 text-[0.6875rem] font-semibold text-rb-wolf lg:grid">
-        <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded bg-rb-macaw" /> answered
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded bg-rb-bee" /> flagged
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded border-2 border-rb-eel bg-rb-snow" /> current
-        </span>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Problem column — the left of the three on programming and diagram items.
- *
- * Carries everything the attempt's own problem column carries, in the same
- * order: the item meta, the prompt, the brief, the constraints, and the parts.
- * The prompt used to sit in the centre above the working surface, under a
- * second meta row; column one is where a learner reads what the problem is, so
- * that is where all of it lives.
- */
-function ProblemBrief({ type }) {
-  return (
-    <div className="shrink-0 overflow-y-auto border-rb-swan p-5 lg:w-72 lg:border-r-2">
-      <ItemMetaRow type={type} />
-
-      <p className="mt-3 font-rb-display text-lg font-extrabold leading-snug text-rb-eel">
-        {type.prompt}
-      </p>
-
-      <p className="mt-3 text-sm leading-6 text-rb-eel">{type.brief}</p>
-
-      <div className="mt-5">
-        <div className="rb-eyebrow">Constraints</div>
-        <ul className="mt-2.5 space-y-1.5">
-          {type.constraints.map((constraint) => (
-            <li key={constraint} className="flex gap-2 font-mono text-xs leading-5 text-rb-wolf">
-              <span className="text-rb-hare">-</span>
-              {constraint}
-            </li>
+            />
           ))}
-        </ul>
+        </div>
+
       </div>
 
-      {type.subs ? (
-        <div className="mt-5">
-          <SubQuestionTabs subs={type.subs} />
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-/**
- * The hero visual: the assessment workspace learners actually sit exams in.
- *
- * Layout follows the real attempt page, and follows it exactly: the item meta
- * sits at the head of the problem column rather than in a strip of its own,
- * the wide types (programming, diagram) run problem | working surface |
- * navigation + rail, the written types run one centred reading column beside
- * the navigation rail, and Previous/Next sit in a footer across the frame.
- * It cycles all five types the engine supports, because coverage is the claim
- * being made — and the two wide frames show an answer being given, not an
- * empty surface: code under a passing test run, a canvas mid-diagram.
- *
- * Auto-cycling stops under reduced motion. The frame is aria-hidden with an
- * sr-only equivalent: none of it is operable.
- */
-function AssessmentWorkspace() {
-  const [index, setIndex] = useState(0);
-  const [reducedMotion, setReducedMotion] = useState(false);
-
-  useEffect(() => {
-    setReducedMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-  }, []);
-
-  useEffect(() => {
-    if (reducedMotion) return undefined;
-    const timer = window.setTimeout(() => setIndex((n) => (n + 1) % QUESTION_TYPES.length), 5600);
-    return () => window.clearTimeout(timer);
-  }, [index, reducedMotion]);
-
-  const active = QUESTION_TYPES[index];
-
-  return (
-    <div className="relative">
-      <div
-        aria-hidden="true"
-        className="overflow-hidden rounded-rb-card border-2 border-rb-swan bg-rb-snow shadow-[0_6px_0_var(--color-rb-swan)]"
-      >
-        <div className="flex flex-wrap items-center gap-3 border-b-2 border-rb-swan bg-rb-polar px-4 py-3">
-          <span className="grid size-9 place-items-center rounded-xl text-rb-eel">
-            <ArrowLeft className="size-5" />
-          </span>
-          <div className="min-w-0">
-            <div className="font-rb-display text-base font-extrabold lowercase text-rb-eel">
-              topcit mock exam
-            </div>
-            <div className="text-xs font-semibold text-rb-wolf">
-              Question {active.number} of 40 · Attempt 2
-            </div>
-          </div>
-
-          <div className="ml-auto flex items-center gap-2.5">
-            <span className="hidden items-center gap-1.5 text-xs font-semibold text-rb-wolf sm:flex">
-              <Check className="size-3.5" />
-              Saved
-            </span>
-            <span className="flex items-center gap-1.5 rounded-rb-pill border-2 border-rb-swan bg-rb-snow px-3 py-1.5">
-              <Clock className="size-3.5 text-rb-wolf" />
-              <ExamClock running={!reducedMotion} />
-            </span>
-          </div>
-        </div>
-
-        {/* Two shapes, the same two the attempt page uses.
-
-            Wide types (programming, diagram) run three columns — problem,
-            working surface, navigation plus the type's own rail — and the
-            centre is nothing but the surface you answer on, with the actions
-            that judge it above. Written types run the attempt's other shape:
-            one centred reading column and the navigation rail. */}
-        <div key={active.id} className="rb-pop-in flex min-h-[540px] flex-col lg:flex-row">
-          {active.wide ? (
-            <>
-              <ProblemBrief type={active} />
-
-              <div className="flex min-w-0 flex-1 flex-col p-5 lg:p-6">
-                {/* How you answer it: the same two actions the workspace
-                    offers, above the surface they act on. */}
-                <div className="flex flex-wrap items-center gap-2">
-                  {active.actions.map((action, actionIndex) => (
-                    <span
-                      key={action}
-                      className={
-                        "inline-flex items-center gap-1.5 rounded-rb-pill px-3.5 py-2 text-xs font-bold " +
-                        (actionIndex === 0
-                          ? "border-2 border-rb-swan text-rb-wolf"
-                          : "bg-rb-feather text-rb-snow shadow-[0_3px_0_var(--color-rb-feather-lip)]")
-                      }
-                    >
-                      {action}
-                    </span>
-                  ))}
-                  <span className="text-[0.6875rem] font-semibold text-rb-wolf">
-                    Saved automatically with your attempt.
-                  </span>
-                </div>
-
-                <div className="mt-3 min-h-0 flex-1">
-                  <active.Pane />
-                </div>
-              </div>
-
-              <div className="shrink-0 space-y-5 overflow-y-auto border-rb-swan p-5 lg:w-56 lg:border-l-2">
-                <ItemNavigator current={active.number} />
-                <active.Rail />
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="flex min-w-0 flex-1 flex-col p-5 lg:p-6">
-                <div className="mx-auto w-full max-w-2xl">
-                  <ItemMetaRow type={active} />
-
-                  <p className="mt-4 text-base leading-7 text-rb-eel">{active.prompt}</p>
-
-                  {/* Reserved so the card keeps one height as it cycles. */}
-                  <div className="mt-5 min-h-[300px]">
-                    <active.Pane />
-                  </div>
-                </div>
-              </div>
-
-              <div className="shrink-0 border-rb-swan p-5 lg:w-56 lg:border-l-2">
-                <ItemNavigator current={active.number} />
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Previous / Next live in the attempt's own footer, across the whole
-            frame, rather than under one column. */}
-        <div className="flex items-center justify-between gap-2 border-t-2 border-rb-swan bg-rb-polar px-4 py-3">
-          <span className="inline-flex items-center gap-1.5 rounded-rb-pill border-2 border-rb-swan px-3.5 py-2 text-xs font-bold text-rb-wolf">
-            <ArrowLeft className="size-3.5" />
-            Previous
-          </span>
-          <span className="inline-flex items-center gap-1.5 rounded-rb-pill border-2 border-rb-swan px-3.5 py-2 text-xs font-bold text-rb-wolf">
-            <Flag className="size-3.5" />
-            Flag
-          </span>
-          <span className="inline-flex items-center gap-1.5 rounded-rb-pill bg-rb-feather px-5 py-2.5 text-xs font-extrabold text-rb-snow shadow-[0_3px_0_var(--color-rb-feather-lip)]">
-            Next
-            <ArrowRight className="size-4" />
-          </span>
-        </div>
-      </div>
-
-      <div aria-hidden="true" className="mt-4 flex flex-wrap justify-center gap-2">
-        {QUESTION_TYPES.map((type, typeIndex) => (
-          <span
-            key={type.id}
+      {/* Position sits under the frame, where a carousel's controls are looked
+          for. The type itself is not named — each shot says what it is. */}
+      <div className="mt-5 flex justify-center gap-2">
+        {WORKSPACE_SHOTS.map((shot, shotIndex) => (
+          <button
+            key={shot.id}
+            type="button"
+            onClick={() => setIndex(shotIndex)}
+            aria-label={`Show the ${shot.label} question type`}
+            aria-current={shotIndex === index ? "true" : undefined}
             className={
-              "rounded-rb-pill px-3 py-1.5 text-xs font-bold transition-colors " +
-              (typeIndex === index ? "bg-rb-eel text-rb-snow" : "bg-rb-polar text-rb-wolf")
+              "h-2.5 rounded-rb-pill transition-all " +
+              (shotIndex === index
+                ? "w-8 bg-rb-eel"
+                : "w-2.5 bg-rb-swan hover:bg-rb-hare")
             }
-          >
-            {type.label}
-          </span>
+          />
         ))}
       </div>
 
-      <p className="sr-only">
-        A preview of the Rebyu assessment workspace, cycling through the five question types it
-        supports: multiple choice, short answer, descriptive, programming with a live test runner,
-        and diagram questions on a canvas. Programming and diagram items show the problem, its
-        constraints and its parts in the left column, the surface you answer on in the centre with
-        Run and Check above it, and item navigation plus test results on the right. Written types
-        show the question and answer in one centred column with item navigation beside it.
-      </p>
-    </div>
-  );
+      <figcaption className="mt-4 text-center text-sm font-semibold text-rb-wolf">
+        One workspace, five question types — multiple choice through code and
+        diagrams. These are screenshots of the real thing.
+      </figcaption>
+    </figure>
+  )
 }
+
 function HeroSection() {
   return (
     <section className="relative overflow-hidden bg-rb-snow">
@@ -1051,7 +509,7 @@ function HeroSection() {
         className="pointer-events-none absolute -right-40 -top-52 hidden size-[720px] rounded-full bg-rb-feather-wash lg:block"
       />
 
-      <div className="relative mx-auto w-full max-w-[1280px] px-5 py-16 lg:px-8 lg:py-20">
+      <div className="relative mx-auto w-full max-w-[1280px] px-5 pb-12 pt-16 lg:px-8 lg:pb-14 lg:pt-20">
         {/* Centred: the hero is the one block on the site with nothing beside
             it, and the workspace demo below it is centred too — left-aligning
             the copy over a centred visual pulled the whole fold off axis.
@@ -1097,9 +555,13 @@ function HeroSection() {
           </p>
         </div>
 
-        <div className="mt-12 lg:mt-14">
-          <AssessmentWorkspace />
-        </div>
+      </div>
+
+      {/* Wider than the copy above it, and outside that container to get there:
+          the screenshots are dense product UI, and at the text column's measure
+          the code editor and the item navigator stop being legible. */}
+      <div className="relative mx-auto w-full max-w-[1560px] px-5 pb-16 lg:px-8 lg:pb-20">
+        <AssessmentGallery />
       </div>
     </section>
   );
@@ -1554,6 +1016,286 @@ function OlympicsSection() {
 
 /* --------------------------------------------------------------------- ai lab */
 
+/**
+ * The scripted exchange the tutor preview plays.
+ *
+ * Deliberately inside one lesson: the tutor is scope-limited to the lesson the
+ * learner is on, so a preview where it answers anything at all would advertise
+ * a product that does not exist. `parts` exists so the reply can be typed out
+ * character by character and still carry emphasis — the typewriter reveals a
+ * character count across the segments rather than a plain string.
+ */
+const TUTOR_CHAT = [
+  {
+    from: "learner",
+    parts: [{ text: "What's the difference between 2NF and 3NF?" }],
+  },
+  {
+    from: "tutor",
+    parts: [
+      { text: "2NF removes " },
+      { text: "partial", strong: true },
+      { text: " dependencies on a composite key. 3NF goes further and removes " },
+      { text: "transitive", strong: true },
+      { text: " ones — where a non-key column depends on another non-key column." },
+    ],
+    footer: "Want to practise this before moving on?",
+    chips: ["make a quiz", "make flashcards"],
+  },
+  {
+    from: "learner",
+    parts: [{ text: "make a quiz" }],
+  },
+  {
+    from: "tutor",
+    parts: [
+      { text: "Built you a five-question quiz on normalization, drawn from this lesson." },
+    ],
+    // The tutor hands back a quiz to open, not questions in the chat — asking
+    // them inline here would show a flow the product does not have.
+    action: { label: "take the quiz", icon: Zap },
+  },
+  {
+    from: "learner",
+    parts: [{ text: "make flashcards too" }],
+  },
+  {
+    from: "tutor",
+    parts: [
+      { text: "24 cards, same lesson — the terms you have missed most come up first." },
+    ],
+    action: { label: "open the deck", icon: Layers },
+  },
+]
+
+const CHAT_TIMING = {
+  afterLearner: 800,
+  typingIndicator: 1200,
+  perCharacter: 16,
+  afterTutor: 1800,
+  beforeReplay: 3200,
+}
+
+function messageLength(message) {
+  return message.parts.reduce((total, part) => total + part.text.length, 0)
+}
+
+/** Renders `parts` truncated to `revealed` characters, keeping the emphasis. */
+function TypedParts({ parts, revealed }) {
+  let consumed = 0
+  return (
+    <>
+      {parts.map((part, partIndex) => {
+        const start = consumed
+        consumed += part.text.length
+        const slice = part.text.slice(0, Math.max(0, revealed - start))
+        if (!slice) return null
+        return part.strong ? (
+          <strong key={partIndex}>{slice}</strong>
+        ) : (
+          <span key={partIndex}>{slice}</span>
+        )
+      })}
+    </>
+  )
+}
+
+/** Three dots, while the tutor is composing. */
+function TypingIndicator() {
+  return (
+    <div className="flex w-fit items-center gap-1.5 rounded-rb-tile rounded-bl-md bg-rb-beetle-wash px-4 py-3.5">
+      {[0, 1, 2].map((dot) => (
+        <span
+          key={dot}
+          className="size-2 animate-bounce rounded-full bg-rb-beetle"
+          style={{ animationDelay: `${dot * 0.16}s` }}
+        />
+      ))}
+    </div>
+  )
+}
+
+function ChatBubble({ message, revealed, showChips }) {
+  const isLearner = message.from === "learner"
+
+  return (
+    <div
+      className={
+        "rb-pop-in " +
+        (isLearner
+          ? "ml-auto max-w-[85%] rounded-rb-tile rounded-br-md bg-rb-polar px-4 py-3 text-[0.9375rem] text-rb-eel"
+          : "max-w-[92%] rounded-rb-tile rounded-bl-md bg-rb-beetle-wash px-4 py-3 text-[0.9375rem] text-rb-eel")
+      }
+    >
+      <p>
+        <TypedParts parts={message.parts} revealed={revealed} />
+        {revealed < messageLength(message) ? (
+          <span
+            aria-hidden="true"
+            className="ml-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-pulse bg-rb-beetle"
+          />
+        ) : null}
+      </p>
+
+      {message.footer && showChips ? (
+        <p className="mt-2 text-sm text-rb-wolf">{message.footer}</p>
+      ) : null}
+
+      {message.chips && showChips ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {message.chips.map((chip) => (
+            <Chip key={chip} tone="beetle">
+              {chip}
+            </Chip>
+          ))}
+        </div>
+      ) : null}
+
+      {/* What the tutor actually returns once it has generated something: a way
+          into the quiz or the deck, not the questions themselves. */}
+      {message.action && showChips ? (
+        <span className="rb-pop-in mt-3 inline-flex items-center gap-2 rounded-rb-pill bg-rb-beetle px-4 py-2.5 font-rb-display text-sm font-extrabold lowercase text-rb-snow shadow-[0_3px_0_var(--color-rb-beetle-lip)]">
+          <message.action.icon className="size-4" aria-hidden="true" />
+          {message.action.label}
+          <ArrowRight className="size-4" aria-hidden="true" />
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * The tutor preview, played rather than posed.
+ *
+ * A static transcript showed the shape of a conversation but not the thing that
+ * makes a tutor feel like one — that it answers you while you wait. So the
+ * exchange runs: the learner's message lands, the tutor thinks, types its reply
+ * out, offers the quiz, and the learner takes it. Then it replays.
+ *
+ * Under `prefers-reduced-motion` the whole transcript is shown at once, with no
+ * timers running at all.
+ */
+function TutorConversation() {
+  const [reducedMotion, setReducedMotion] = useState(false)
+  // How many messages are finished, and how far through the next one we are.
+  const [done, setDone] = useState(0)
+  const [revealed, setRevealed] = useState(0)
+  const [thinking, setThinking] = useState(false)
+
+  useEffect(() => {
+    setReducedMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+  }, [])
+
+  useEffect(() => {
+    if (reducedMotion) return undefined
+
+    const current = TUTOR_CHAT[done]
+
+    // Past the last message: hold the finished transcript, then replay.
+    if (!current) {
+      const replay = window.setTimeout(() => {
+        setDone(0)
+        setRevealed(0)
+      }, CHAT_TIMING.beforeReplay)
+      return () => window.clearTimeout(replay)
+    }
+
+    if (current.from === "learner") {
+      setThinking(false)
+      setRevealed(messageLength(current))
+      const next = window.setTimeout(
+        () => setDone((n) => n + 1),
+        CHAT_TIMING.afterLearner
+      )
+      return () => window.clearTimeout(next)
+    }
+
+    // Tutor: think first, then type. Advancing to the next message is left to
+    // the effect below rather than done from inside the state updater — React
+    // may call an updater more than once, and a timer scheduled in there gets
+    // scheduled twice with it.
+    setThinking(true)
+    setRevealed(0)
+    const total = messageLength(current)
+    let typer = null
+
+    const startTyping = window.setTimeout(() => {
+      setThinking(false)
+      typer = window.setInterval(() => {
+        setRevealed((count) => (count >= total ? count : count + 1))
+      }, CHAT_TIMING.perCharacter)
+    }, CHAT_TIMING.typingIndicator)
+
+    return () => {
+      window.clearTimeout(startTyping)
+      if (typer) window.clearInterval(typer)
+    }
+  }, [done, reducedMotion])
+
+  // A tutor message that has finished typing holds, then hands over.
+  useEffect(() => {
+    if (reducedMotion) return undefined
+    const current = TUTOR_CHAT[done]
+    if (!current || current.from !== "tutor") return undefined
+    if (thinking || revealed < messageLength(current)) return undefined
+
+    const next = window.setTimeout(
+      () => setDone((n) => n + 1),
+      CHAT_TIMING.afterTutor
+    )
+    return () => window.clearTimeout(next)
+  }, [done, revealed, thinking, reducedMotion])
+
+  const visible = reducedMotion ? TUTOR_CHAT : TUTOR_CHAT.slice(0, done + 1)
+
+  return (
+    <RebyuCard raised data-landing-reveal className="!p-0">
+      <div className="flex items-center gap-3 border-b-2 border-rb-swan px-5 py-4">
+        <span className="grid size-10 place-items-center rounded-full bg-rb-beetle text-rb-snow">
+          <Sparkles className="size-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <div className="font-rb-display text-base font-extrabold lowercase text-rb-eel">
+            rebyu tutor
+          </div>
+          <div className="text-xs font-semibold text-rb-hare">Databases · Normalization</div>
+        </div>
+
+        {/* Scoped, and says so: the tutor answers inside the lesson you are on. */}
+        <span className="ml-auto flex shrink-0 items-center gap-1.5 rounded-rb-pill bg-rb-feather-wash px-2.5 py-1 text-[0.6875rem] font-bold text-[#3d6b06]">
+          <span className="size-1.5 animate-pulse rounded-full bg-rb-feather" aria-hidden="true" />
+          in this lesson
+        </span>
+      </div>
+
+      {/* Bottom-anchored at a fixed height: the transcript grows upward as a
+          real one does, the card never changes size mid-conversation, and the
+          earliest turns clip off the top the way a scrolled thread would. */}
+      <div
+        className="flex h-[392px] flex-col justify-end gap-4 overflow-hidden p-5"
+        aria-live="polite"
+        aria-atomic="false"
+      >
+        {visible.map((message, messageIndex) => {
+          const isLast = messageIndex === visible.length - 1
+          const settled = reducedMotion || !isLast
+          if (!settled && thinking && message.from === "tutor") {
+            return <TypingIndicator key={messageIndex} />
+          }
+          return (
+            <ChatBubble
+              key={messageIndex}
+              message={message}
+              revealed={settled ? messageLength(message) : revealed}
+              showChips={settled || revealed >= messageLength(message)}
+            />
+          )
+        })}
+      </div>
+    </RebyuCard>
+  )
+}
+
 function AiTutorSection() {
   return (
     <section id="ai-tutor" className="scroll-mt-24 bg-rb-beetle-wash px-5 py-20 lg:px-8 lg:py-28">
@@ -1589,42 +1331,7 @@ function AiTutorSection() {
           </TactileButton>
         </div>
 
-        {/* tutor conversation preview */}
-        <RebyuCard raised data-landing-reveal className="!p-0">
-          <div className="flex items-center gap-3 border-b-2 border-rb-swan px-5 py-4">
-            <span className="grid size-10 place-items-center rounded-full bg-rb-beetle text-rb-snow">
-              <Sparkles className="size-5" aria-hidden="true" />
-            </span>
-            <div>
-              <div className="font-rb-display text-base font-extrabold lowercase text-rb-eel">
-                rebyu tutor
-              </div>
-              <div className="text-xs font-semibold text-rb-hare">Databases · Normalization</div>
-            </div>
-          </div>
-
-          <div className="space-y-4 p-5">
-            <div className="ml-auto max-w-[85%] rounded-rb-tile rounded-br-md bg-rb-polar px-4 py-3 text-[0.9375rem] text-rb-eel">
-              What's the difference between 2NF and 3NF?
-            </div>
-
-            <div className="max-w-[92%] rounded-rb-tile rounded-bl-md bg-rb-beetle-wash px-4 py-3 text-[0.9375rem] text-rb-eel">
-              <p>
-                2NF removes <strong>partial</strong> dependencies on a composite key. 3NF goes
-                further and removes <strong>transitive</strong> ones — where a non-key column
-                depends on another non-key column.
-              </p>
-              <p className="mt-2 text-sm text-rb-wolf">
-                Want to practise this before moving on?
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Chip tone="beetle">make a quiz</Chip>
-              <Chip tone="beetle">make flashcards</Chip>
-            </div>
-          </div>
-        </RebyuCard>
+        <TutorConversation />
       </div>
     </section>
   );

@@ -6,6 +6,7 @@
  * these must sit inside a `.rebyu-ds` scope so the tokens resolve.
  */
 import { cloneElement } from "react";
+import { motion } from "framer-motion";
 import { ArrowLeft } from "@/components/icons";
 import { Slot } from "radix-ui";
 
@@ -121,6 +122,17 @@ export function Chip({ tone = "neutral", className, children, ...props }) {
 /**
  * Mastery / completion bar. `label` is required for a11y because the bar is
  * frequently the only representation of the value on screen.
+ *
+ * The fill grows from zero the first time the bar is seen, rather than being
+ * painted at its final width. Progress is the one number on these pages the
+ * learner earned, and watching it travel is most of why a progress bar beats
+ * printing the percentage. Subsequent value changes animate from wherever the
+ * bar already was, so completing a lesson nudges it forward instead of
+ * restarting it.
+ *
+ * `whileInView` rather than `animate`, because most of these are below the fold
+ * on a curriculum page — filling while off-screen would mean every bar was
+ * already full by the time it was scrolled to.
  */
 export function ProgressBar({ value, label, tone = "mask", className }) {
   const clamped = Math.max(0, Math.min(100, value));
@@ -142,7 +154,19 @@ export function ProgressBar({ value, label, tone = "mask", className }) {
       aria-valuemax={100}
       aria-label={label}
     >
-      <div className={cn("rb-progress-fill", TONES[tone])} style={{ width: `${clamped}%` }} />
+      <motion.div
+        className={cn("rb-progress-fill", TONES[tone])}
+        initial={{ width: 0 }}
+        // `once` keeps the in-view state latched after the first entrance, so a
+        // later value change still animates from where the bar is. A second
+        // `animate` prop here would fight this one for the same property.
+        whileInView={{ width: `${clamped}%` }}
+        viewport={{ once: true, amount: 0.5 }}
+        transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+        // The CSS layer also transitions width; leaving both on double-animates
+        // the bar and it arrives twice.
+        style={{ transition: "none" }}
+      />
     </div>
   );
 }

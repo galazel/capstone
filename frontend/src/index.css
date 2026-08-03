@@ -241,6 +241,24 @@ body.netacad-overlay-theme {
     border-color: color-mix(in srgb, var(--border) 75%, transparent);
 }
 
+/* Route entrance. Applied to the wrapper around every page, keyed on pathname
+   so it replays on navigation. Kept in CSS rather than JS on purpose — see
+   RouteTransition in App.jsx. The reduced-motion block below neuters it. */
+@keyframes rb-route-enter {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.rb-route-enter {
+    animation: rb-route-enter 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

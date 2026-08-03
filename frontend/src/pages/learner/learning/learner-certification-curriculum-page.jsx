@@ -23,6 +23,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { BackButton, ProgressBar, TactileButton } from "@/components/rebyu/rebyu-ui.jsx"
+import {
+  Collapse,
+  CountUp,
+  Reveal,
+  StaggerItem,
+  StaggerList,
+  fadeUp,
+  motion,
+  popIn,
+  useAnimationControls,
+} from "@/components/motion/rebyu-motion.jsx"
 import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
 import { getExams, getExamTypes } from "@/services/assessmentService.js"
 import { buildCurriculum, hasSatDiagnostic } from "./curriculum-model.js"
@@ -103,10 +114,13 @@ const TONE = {
 /* ------------------------------------------------------------------- pieces */
 
 /** One row inside an opened topic. Not a control — the icon and the label say
- *  what the item is, and the topic above it is what the learner acts on. */
+ *  what the item is, and the topic above it is what the learner acts on.
+ *
+ *  A div, not an li: the `<StaggerItem>` around it supplies the list item, and
+ *  an li inside an li is invalid. */
 function ItemRow({ icon: Icon, tone, label, meta, done }) {
   return (
-    <li className="flex items-center gap-3 py-2">
+    <div className="flex items-center gap-3 py-2">
       <span
         className={`grid size-8 shrink-0 place-items-center rounded-full ${
           done ? "bg-rb-feather text-white" : TONE[tone].chip
@@ -122,7 +136,7 @@ function ItemRow({ icon: Icon, tone, label, meta, done }) {
       <span className="min-w-0 flex-1 truncate text-sm font-bold text-rb-eel">{label}</span>
 
       {meta ? <span className="shrink-0 text-xs font-bold text-rb-wolf">{meta}</span> : null}
-    </li>
+    </div>
   )
 }
 
@@ -160,10 +174,13 @@ function MiddleRow({ middle, tone, index, onStudy }) {
             </span>
           </span>
 
-          <ChevronDown
-            className={`size-4 shrink-0 text-rb-hare transition-transform ${open ? "rotate-180" : ""}`}
-            aria-hidden="true"
-          />
+          <motion.span
+            animate={{ rotate: open ? 180 : 0 }}
+            transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+            className="shrink-0"
+          >
+            <ChevronDown className="size-4 text-rb-hare" aria-hidden="true" />
+          </motion.span>
         </button>
 
         <div className="flex shrink-0 items-center gap-3 sm:pl-2">
@@ -195,22 +212,25 @@ function MiddleRow({ middle, tone, index, onStudy }) {
         </div>
       </div>
 
-      {open ? (
+      <Collapse open={open}>
         <div className={`border-t-2 border-rb-swan px-4 py-3 ${TONE[tone].wash}`}>
           {empty ? (
             <p className="py-2 text-sm font-medium text-rb-wolf">
               No lessons have been published in this topic yet.
             </p>
           ) : (
-            <ul className="divide-y divide-black/5">
+            /* `amount: 0` — the panel is already on screen when it opens, so
+               waiting for it to scroll into view would leave the rows blank. */
+            <StaggerList as="ul" className="divide-y divide-black/5" stagger={0.04} amount={0}>
               {lessons.map((lesson) => (
-                <ItemRow
-                  key={lesson.id}
-                  icon={BookOpen}
-                  tone={tone}
-                  label={lesson.name}
-                  done={lesson.completed}
-                />
+                <StaggerItem as="li" key={lesson.id} variants={fadeUp}>
+                  <ItemRow
+                    icon={BookOpen}
+                    tone={tone}
+                    label={lesson.name}
+                    done={lesson.completed}
+                  />
+                </StaggerItem>
               ))}
 
               {/* Quizzes after the lessons rather than interleaved: reading
@@ -219,40 +239,48 @@ function MiddleRow({ middle, tone, index, onStudy }) {
               {lessons
                 .filter((lesson) => lesson.quiz)
                 .map((lesson) => (
-                  <ItemRow
-                    key={`quiz-${lesson.quiz.examId}`}
-                    icon={CircleHelp}
-                    tone={tone}
-                    label={lesson.quiz.title}
-                    meta={`${lesson.quiz.totalQuestions} questions`}
-                  />
+                  <StaggerItem as="li" key={`quiz-${lesson.quiz.examId}`} variants={fadeUp}>
+                    <ItemRow
+                      icon={CircleHelp}
+                      tone={tone}
+                      label={lesson.quiz.title}
+                      meta={`${lesson.quiz.totalQuestions} questions`}
+                    />
+                  </StaggerItem>
                 ))}
 
               {middle.assessment ? (
-                <ItemRow
-                  icon={ClipboardCheck}
-                  tone={tone}
-                  label={middle.assessment.title}
-                  meta={`${middle.assessment.totalQuestions} questions · ${Math.round(
-                    Number(middle.assessment.passingScore ?? 0),
-                  )}% to pass`}
-                />
+                <StaggerItem as="li" variants={fadeUp}>
+                  <ItemRow
+                    icon={ClipboardCheck}
+                    tone={tone}
+                    label={middle.assessment.title}
+                    meta={`${middle.assessment.totalQuestions} questions · ${Math.round(
+                      Number(middle.assessment.passingScore ?? 0),
+                    )}% to pass`}
+                  />
+                </StaggerItem>
               ) : null}
-            </ul>
+            </StaggerList>
           )}
         </div>
-      ) : null}
+      </Collapse>
     </li>
   )
 }
 
 function MajorCard({ major, locked, onLocked, onStudy }) {
   const [open, setOpen] = useState(false)
+  const shake = useAnimationControls()
   const tone = TONE[major.tone]
   const Icon = major.icon
 
   function toggle() {
     if (locked) {
+      // Imperative rather than a declarative `animate` prop: the same refusal
+      // has to replay every time it is pressed, and a prop holding the same
+      // keyframes twice in a row does not re-fire.
+      shake.start({ x: [0, -8, 8, -6, 6, -3, 3, 0], transition: { duration: 0.45 } })
       onLocked()
       return
     }
@@ -260,7 +288,12 @@ function MajorCard({ major, locked, onLocked, onStudy }) {
   }
 
   return (
-    <article className="overflow-hidden rounded-rb-card border-2 border-rb-swan bg-rb-snow shadow-[0_5px_0_var(--color-rb-swan)]">
+    <motion.article
+      // The dialog explains the lock, but it opens elsewhere on the screen. The
+      // shake answers where the finger already is.
+      animate={shake}
+      className="overflow-hidden rounded-rb-card border-2 border-rb-swan bg-rb-snow shadow-[0_5px_0_var(--color-rb-swan)]"
+    >
       <div className="grid lg:grid-cols-[300px_1fr]">
         {/* Identity panel — the wordmark bleeds off it the way it does on the
             landing page's certification bands. */}
@@ -327,7 +360,7 @@ function MajorCard({ major, locked, onLocked, onStudy }) {
                 <span className="text-xs font-bold text-rb-wolf">
                   {major.doneCount} of {major.lessonCount} lessons
                 </span>
-                <span className="rb-numeric text-sm">{major.progress}%</span>
+                <CountUp value={major.progress} suffix="%" className="rb-numeric text-sm" />
               </div>
               <ProgressBar
                 value={major.progress}
@@ -362,21 +395,22 @@ function MajorCard({ major, locked, onLocked, onStudy }) {
         </div>
       </div>
 
-      {open && !locked ? (
+      <Collapse open={open && !locked}>
         <div className="border-t-2 border-rb-swan bg-rb-polar p-5">
           <p className="rb-eyebrow">topics in this unit</p>
 
-          <ul className="mt-4 space-y-3">
+          <StaggerList as="ul" className="mt-4 space-y-3" stagger={0.06} amount={0}>
             {major.middles.map((middle, index) => (
-              <MiddleRow
-                key={middle.id}
-                middle={middle}
-                tone={major.tone}
-                index={`${major.index}.${index + 1}`}
-                onStudy={onStudy}
-              />
+              <StaggerItem as="li" key={middle.id} variants={fadeUp}>
+                <MiddleRow
+                  middle={middle}
+                  tone={major.tone}
+                  index={`${major.index}.${index + 1}`}
+                  onStudy={onStudy}
+                />
+              </StaggerItem>
             ))}
-          </ul>
+          </StaggerList>
 
           {major.assessment ? (
             <div className="mt-4 flex flex-col gap-3 rounded-rb-card border-2 border-rb-swan bg-rb-snow p-4 sm:flex-row sm:items-center">
@@ -403,8 +437,8 @@ function MajorCard({ major, locked, onLocked, onStudy }) {
             </div>
           ) : null}
         </div>
-      ) : null}
-    </article>
+      </Collapse>
+    </motion.article>
   )
 }
 
@@ -619,7 +653,7 @@ export default function LearnerCertificationCurriculumPage() {
             <div className="w-full max-w-sm shrink-0">
               <div className="flex items-baseline justify-between">
                 <span className="rb-eyebrow">overall progress</span>
-                <span className="rb-numeric text-lg">{curriculum.progress}%</span>
+                <CountUp value={curriculum.progress} suffix="%" className="rb-numeric text-lg" />
               </div>
               <ProgressBar
                 value={curriculum.progress}
@@ -638,10 +672,20 @@ export default function LearnerCertificationCurriculumPage() {
               below. Gone entirely once the diagnostic is sat, rather than
               turning into a banner nobody needs to keep reading. */}
           {!diagnosticDone ? (
-            <div className="mt-7 flex flex-col gap-4 rounded-rb-card border-2 border-rb-swan bg-rb-fox-wash p-5 sm:flex-row sm:items-center">
-              <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-rb-fox text-white">
+            <Reveal
+              variants={popIn}
+              amount={0}
+              className="mt-7 flex flex-col gap-4 rounded-rb-card border-2 border-rb-swan bg-rb-fox-wash p-5 sm:flex-row sm:items-center"
+            >
+              <motion.span
+                className="grid size-12 shrink-0 place-items-center rounded-2xl bg-rb-fox text-white"
+                // A slow, small pulse. The gate is the one thing on this page
+                // that has to be noticed before anything else can happen.
+                animate={{ scale: [1, 1.08, 1] }}
+                transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+              >
                 <Lock className="size-5" aria-hidden="true" />
-              </span>
+              </motion.span>
 
               <div className="min-w-0 flex-1">
                 <p className="font-rb-display text-base font-extrabold text-rb-eel">
@@ -656,7 +700,7 @@ export default function LearnerCertificationCurriculumPage() {
                 <ClipboardCheck className="size-4" />
                 take diagnostic
               </TactileButton>
-            </div>
+            </Reveal>
           ) : null}
         </div>
       </header>
@@ -670,25 +714,31 @@ export default function LearnerCertificationCurriculumPage() {
             description="This certification has no units with published lessons. Check back once content is released."
           />
         ) : (
-          <div className="space-y-6">
+          /* Bands arrive one after another as you scroll. The stagger is the
+             page saying the stack has an order — which is the whole reason
+             units are a column rather than a grid. */
+          <StaggerList className="space-y-6" stagger={0.09}>
             {curriculum.majors.map((major) => (
-              <MajorCard
-                key={major.id}
-                major={major}
-                locked={!diagnosticDone}
-                onLocked={() => setDialogOpen(true)}
-                onStudy={openTopic}
-              />
+              <StaggerItem key={major.id} variants={fadeUp}>
+                <MajorCard
+                  major={major}
+                  locked={!diagnosticDone}
+                  onLocked={() => setDialogOpen(true)}
+                  onStudy={openTopic}
+                />
+              </StaggerItem>
             ))}
 
             {curriculum.mockExam ? (
-              <MockExamCard
-                exam={curriculum.mockExam}
-                locked={!diagnosticDone}
-                onLocked={() => setDialogOpen(true)}
-              />
+              <StaggerItem variants={fadeUp}>
+                <MockExamCard
+                  exam={curriculum.mockExam}
+                  locked={!diagnosticDone}
+                  onLocked={() => setDialogOpen(true)}
+                />
+              </StaggerItem>
             ) : null}
-          </div>
+          </StaggerList>
         )}
       </main>
 

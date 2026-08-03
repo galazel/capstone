@@ -1,5 +1,5 @@
-import { lazy, Suspense } from "react"
-import { Navigate, Routes, Route } from "react-router-dom"
+import { lazy, Suspense, useEffect, useRef } from "react"
+import { Navigate, Routes, Route, useLocation } from "react-router-dom"
 import ProtectedRoute from "./components/ProtectedRoute"
 import { LoadingScreen } from "./components/loading-screen.jsx"
 import { roleHomePath, useAuth } from "./context/auth-context.jsx"
@@ -40,6 +40,10 @@ const LearnerChallengesPage = lazy(() => import("./pages/learner/learning/learne
 const LearnerFilesPage = lazy(() => import("./pages/learner/files/learner-files-page.jsx"))
 const LearnerAccountPage = lazy(() => import("./pages/learner/dashboard/learner-account-page.jsx"))
 const LearnerAssessmentAttemptPage = lazy(() => import("./pages/learner/assessments/learner-assessment-attempt-page.jsx"))
+// Dev-only screenshot harness for the landing hero. Never routed in a
+// production build (see the guarded <Route> below), so this chunk is only ever
+// requested by a developer opening the preview URL.
+const AttemptPreviewPage = lazy(() => import("./pages/dev/attempt-preview-page.jsx"))
 const LearnerAssessmentResultPage = lazy(() => import("./pages/learner/assessments/learner-assessment-result-page.jsx"))
 const LearnerAssessmentHistoryPage = lazy(() => import("./pages/learner/assessments/learner-assessment-history-page.jsx"))
 const LearnerPracticeAttemptPage = lazy(() => import("./pages/learner/practice/learner-practice-attempt-page.jsx"))
@@ -70,8 +74,6 @@ const CompilerArea = lazy(() => import("./pages/challenges/compiler-area-page.js
 const CodeStrikePage = lazy(() => import("./pages/learner/challenges/codestrike-page.jsx"))
 const BlueprintArenaPage = lazy(() => import("./pages/learner/challenges/blueprint-arena-page.jsx"))
 const WorldCupPage = lazy(() => import("./pages/learner/challenges/world-cup-page.jsx"))
-const LearnerCurriculumPage = lazy(() => import("./pages/learner/learning/learner-curriculum-page.jsx"))
-const LearnerStudyPage = lazy(() => import("./pages/learner/learning/learner-study-page.jsx"))
 const LearnerCertificationCurriculumPage = lazy(() =>
     import("./pages/learner/learning/learner-certification-curriculum-page.jsx")
 )
@@ -112,9 +114,55 @@ function EnterpriseDashboardEntry() {
         : <EnterpriseMemberDashboardPage />
 }
 
+/**
+ * Route transition.
+ *
+ * A CSS animation, not a motion component, even though the rest of the app
+ * animates with framer. This element wraps *every page*, and a JS-driven
+ * entrance means the whole app sits at `opacity: 0` until an animation frame
+ * runs. Anything that stops frames arriving — a throttled background tab, a
+ * paused renderer, framer failing to start — leaves a blank window rather than
+ * an unanimated one. A CSS keyframe cannot fail that way: it either runs or the
+ * declaration is ignored and the page is simply visible.
+ *
+ * Deliberately enter-only: exiting means holding the old page mounted while the
+ * new one loads, which fights `Suspense` on lazily-loaded routes and delays
+ * every navigation by the length of the exit.
+ *
+ * Keyed on `pathname` only, not `search` — restarting the animation when a
+ * query param changes would flash the page on every filter change.
+ */
+function RouteTransition({ children }) {
+    const { pathname } = useLocation()
+    const ref = useRef(null)
+
+    // Restart the animation by removing and re-adding the class, rather than by
+    // keying this element on `pathname`. A changing key would remount the whole
+    // subtree on every navigation — including the shared portal layouts, which
+    // hold search state, open sheets, and the portal data query — so moving
+    // between two pages of the same layout would tear down and rebuild the
+    // layout around them. Reading `offsetWidth` between the two is what forces
+    // the reflow that makes the browser treat it as a new animation.
+    useEffect(() => {
+        const node = ref.current
+        if (!node) return
+
+        node.classList.remove("rb-route-enter")
+        void node.offsetWidth
+        node.classList.add("rb-route-enter")
+    }, [pathname])
+
+    return (
+        <div ref={ref} className="rb-route-enter">
+            {children}
+        </div>
+    )
+}
+
 export function App() {
     return (
       <Suspense fallback={<LoadingScreen />}>
+        <RouteTransition>
         <Routes>
             <Route path="/" element={<GuestOnlyRoute><LandingPage /></GuestOnlyRoute>} />
             <Route path="/welcome" element={<Navigate to="/" replace />} />
@@ -148,13 +196,19 @@ export function App() {
             <Route path="/learner/challenges/blueprint-arena" element={<BlueprintArenaPage />} />
             <Route path="/learner/challenges/world-cup" element={<WorldCupPage />} />
 
-            {/* Same deal for the curriculum and study redesigns: both render
-                the fixture curriculum in `curriculum-fixtures.js` and call no
-                API. Move them under the LEARNER block — and onto the real
-                `learning/:certificationId` and `lessons/:lessonId` paths —
-                once the design is signed off. */}
-            <Route path="/learner/curriculum-preview" element={<LearnerCurriculumPage />} />
-            <Route path="/learner/study-preview" element={<LearnerStudyPage />} />
+            {/* Dev-only: renders the real attempt page against fixture data so
+                the landing hero can be re-shot from the actual product. Stripped
+                from production builds. */}
+            {import.meta.env.DEV ? (
+                <Route path="/__preview/attempt/:examId" element={<AttemptPreviewPage />} />
+            ) : null}
+
+            {/* Dev-only: the boot screen, held on screen. It normally shows for
+                a few hundred milliseconds during Suspense, which is not long
+                enough to review it. Stripped from production builds. */}
+            {import.meta.env.DEV ? (
+                <Route path="/__preview/loading" element={<LoadingScreen />} />
+            ) : null}
 
             <Route element={<ProtectedRoute allowedRoles={["ADMIN"]} />}>
                 <Route path="/admin" element={<DashboardLayout />}>
@@ -346,6 +400,7 @@ export function App() {
             <Route path="/403" element={<ForbiddenPage />} />
             <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        </RouteTransition>
       </Suspense>
     )
 }

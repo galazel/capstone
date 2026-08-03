@@ -32,13 +32,17 @@ export default function QuestionNavigator({
         {/* Scrollable, but scrollbar is hidden */}
         <div
             className="
-          mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 pb-3
+          mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 pt-1.5 pb-3
           [scrollbar-width:none]
           [-ms-overflow-style:none]
           [&::-webkit-scrollbar]:hidden
         "
         >
-          <div className="grid w-full grid-cols-5 auto-rows-max gap-2">
+          {/* Fits the column rather than assuming five will: the written-type
+              aside is narrower than the programming layout's right column, and
+              a fixed five across overflowed it — the last item in every row lost
+              its points and its flag badge to the clip. */}
+          <div className="grid w-full auto-rows-max grid-cols-[repeat(auto-fill,minmax(2.6rem,1fr))] gap-2">
             {list.map((item, index) => (
                 <ItemNavigatorCard
                     key={item.attemptQuestionId ?? index}

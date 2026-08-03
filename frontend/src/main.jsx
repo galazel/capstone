@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { Toaster } from "@/components/ui/sonner"
 import { configureAmplify } from "@/lib/amplify.js"
 import { AuthProvider } from "@/context/auth-context.jsx"
+import { MotionConfig } from "framer-motion"
 
 configureAmplify()
 
@@ -19,16 +20,23 @@ if (!rootElement) throw new Error("Root element not found")
 createRoot(rootElement).render(
   <StrictMode>
     <ThemeProvider>
-      <BrowserRouter>
-        <TooltipProvider>
-          <QueryClientProvider client={queryClient}>
-            <AuthProvider>
-              <App />
-              <Toaster />
-            </AuthProvider>
-          </QueryClientProvider>
-        </TooltipProvider>
-      </BrowserRouter>
+      {/* `reducedMotion="user"` makes every framer-motion animation in the app
+          fall back to an opacity change when the OS asks for reduced motion.
+          Set once here so no individual component has to remember to check the
+          media query. The CSS motion layer opts out separately, at the foot of
+          rebyu-ds.css. */}
+      <MotionConfig reducedMotion="user">
+        <BrowserRouter>
+          <TooltipProvider>
+            <QueryClientProvider client={queryClient}>
+              <AuthProvider>
+                <App />
+                <Toaster />
+              </AuthProvider>
+            </QueryClientProvider>
+          </TooltipProvider>
+        </BrowserRouter>
+      </MotionConfig>
     </ThemeProvider>
   </StrictMode>
 )

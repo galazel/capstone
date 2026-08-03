@@ -21,6 +21,17 @@ import {
 
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { TactileButton, ProgressBar } from "@/components/rebyu/rebyu-ui.jsx"
+import {
+  AnimatePresence,
+  Collapse,
+  CountUp,
+  Reveal,
+  StaggerList,
+  TickPop,
+  fadeUp,
+  motion,
+  popIn,
+} from "@/components/motion/rebyu-motion.jsx"
 import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
 import { LessonAiTutor } from "@/components/learner/lesson-ai-tutor.jsx"
 import { LessonTool } from "@/components/certifications/lesson-content-renderer.jsx"
@@ -115,12 +126,26 @@ function OutlineRow({
   const hasChildren = item.kind === "lesson" && (sections.length > 0 || Boolean(item.quiz))
 
   return (
-    <li>
+    // A variant participant, so the parent <StaggerList> can time its entrance.
+    <motion.li variants={fadeUp}>
       <div
-        className={`flex items-center gap-1 border-l-4 transition-colors ${
-          active ? "border-rb-macaw bg-rb-macaw-wash" : "border-transparent hover:bg-rb-polar"
+        className={`relative flex items-center gap-1 transition-colors ${
+          active ? "bg-rb-macaw-wash" : "hover:bg-rb-polar"
         }`}
       >
+        {/* One shared bar that travels between rows rather than a border that
+            blinks off one and on at the next. `layoutId` is what makes the
+            move continuous — this is the clearest signal in the rail that you
+            changed lesson rather than opened a different page. */}
+        {active ? (
+          <motion.span
+            layoutId="rail-active"
+            className="absolute inset-y-0 left-0 w-1 bg-rb-macaw"
+            transition={{ type: "spring", stiffness: 520, damping: 40 }}
+            aria-hidden="true"
+          />
+        ) : null}
+        <span className="w-1 shrink-0" aria-hidden="true" />
         <button
           type="button"
           onClick={() => onSelect(item)}
@@ -130,8 +155,9 @@ function OutlineRow({
             collapsed ? "justify-center px-2" : "px-3"
           }`}
         >
-          <span
-            className={`grid size-8 shrink-0 place-items-center rounded-full ${
+          <TickPop
+            done={done}
+            className={`grid size-8 shrink-0 place-items-center rounded-full transition-colors ${
               done
                 ? "bg-rb-feather text-white"
                 : active
@@ -146,7 +172,7 @@ function OutlineRow({
             ) : (
               <Icon className="size-4" aria-hidden="true" />
             )}
-          </span>
+          </TickPop>
 
           {!collapsed ? (
             <span className="min-w-0 flex-1">
@@ -175,15 +201,18 @@ function OutlineRow({
             aria-label={`${expanded ? "Hide" : "Show"} contents of ${item.name}`}
             className="grid size-8 shrink-0 place-items-center rounded-full text-rb-hare hover:bg-rb-swan hover:text-rb-eel"
           >
-            <ChevronDown
-              className={`size-3.5 transition-transform ${expanded ? "rotate-180" : ""}`}
-              aria-hidden="true"
-            />
+            <motion.span
+              animate={{ rotate: expanded ? 180 : 0 }}
+              transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+              className="grid place-items-center"
+            >
+              <ChevronDown className="size-3.5" aria-hidden="true" />
+            </motion.span>
           </button>
         ) : null}
       </div>
 
-      {hasChildren && expanded && !collapsed ? (
+      <Collapse open={Boolean(hasChildren && expanded && !collapsed)} duration={0.26}>
         <ul className="border-l-4 border-transparent bg-rb-polar/60 py-1 pl-[2.75rem] pr-3">
           {sections.map((section) => {
             const sectionRead = readSections.has(section.key)
@@ -196,13 +225,13 @@ function OutlineRow({
                     sectionRead ? "text-[#3d6b06]" : "text-rb-wolf"
                   }`}
                 >
-                  <span className="grid size-5 shrink-0 place-items-center">
+                  <TickPop done={sectionRead} className="grid size-5 shrink-0 place-items-center">
                     {sectionRead ? (
                       <Check className="size-3 text-rb-feather" aria-hidden="true" />
                     ) : (
                       <Circle className="size-1.5" aria-hidden="true" />
                     )}
-                  </span>
+                  </TickPop>
                   <span className="min-w-0 truncate">{section.name}</span>
                 </a>
               </li>
@@ -228,8 +257,8 @@ function OutlineRow({
             </li>
           ) : null}
         </ul>
-      ) : null}
-    </li>
+      </Collapse>
+    </motion.li>
   )
 }
 
@@ -297,7 +326,7 @@ function Outline({
               <span className="text-[11px] font-bold uppercase tracking-wide text-rb-wolf">
                 {done} of {lessons.length} lessons
               </span>
-              <span className="rb-numeric text-xs">{progress}%</span>
+              <CountUp value={progress} suffix="%" className="rb-numeric text-xs" />
             </div>
             <ProgressBar value={progress} tone="macaw" label="Topic progress" className="mt-2 !h-3" />
           </div>
@@ -305,7 +334,9 @@ function Outline({
       </div>
 
       <nav className="min-h-0 flex-1 overflow-y-auto py-2" aria-label="Topic outline">
-        <ul>
+        {/* `amount: 0` — the rail is on screen from the moment the page mounts,
+            so there is nothing to scroll into view. */}
+        <StaggerList as="ul" stagger={0.045} amount={0}>
           {track.map((item) => {
             if (item.kind === "lesson") lessonNumber += 1
 
@@ -328,7 +359,7 @@ function Outline({
               />
             )
           })}
-        </ul>
+        </StaggerList>
       </nav>
 
       {!collapsed ? (
@@ -354,13 +385,20 @@ function Outline({
  */
 function ReadCheck({ done, label, onToggle, pending, size = "size-8" }) {
   return (
-    <button
+    <motion.button
       type="button"
       onClick={onToggle}
       aria-pressed={done}
       aria-label={label}
       title={label}
-      className={`grid ${size} shrink-0 place-items-center rounded-full border-2 transition ${
+      whileTap={{ scale: 0.88 }}
+      // The pop only fires on the transition into done, so ticking is
+      // rewarding and unticking is quiet.
+      animate={done ? { scale: [1, 1.3, 1] } : { scale: 1 }}
+      transition={
+        done ? { duration: 0.42, ease: [0.34, 1.56, 0.64, 1] } : { duration: 0.18 }
+      }
+      className={`grid ${size} shrink-0 place-items-center rounded-full border-2 transition-colors ${
         done
           ? "border-rb-feather bg-rb-feather text-white"
           : "border-rb-swan bg-rb-snow text-rb-hare hover:border-rb-hare"
@@ -371,7 +409,7 @@ function ReadCheck({ done, label, onToggle, pending, size = "size-8" }) {
       ) : (
         <Check className="size-4" aria-hidden="true" />
       )}
-    </button>
+    </motion.button>
   )
 }
 
@@ -488,7 +526,12 @@ function LessonView({
               The bullets are the lesson's own section names: categories and
               lessons carry a title and a body, and there is no objectives field
               behind them to read. */}
-          <section className="mt-8 rounded-rb-card border-2 border-rb-swan bg-rb-macaw-wash p-6">
+          <Reveal
+            as="section"
+            variants={popIn}
+            amount={0}
+            className="mt-8 rounded-rb-card border-2 border-rb-swan bg-rb-macaw-wash p-6"
+          >
             <p className="font-rb-display text-lg font-extrabold text-rb-eel">
               Welcome to {lessonItem.name.toLowerCase()}.
             </p>
@@ -514,7 +557,7 @@ function LessonView({
                 </li>
               ))}
             </ul>
-          </section>
+          </Reveal>
 
           {/* Table of contents. Sections are also in the rail, but the rail is
               collapsible and this is where the learner is already looking. */}
@@ -570,7 +613,16 @@ function LessonView({
               const done = readSections.has(section.key)
 
               return (
-                <section key={section.key} id={section.key} className="scroll-mt-8">
+                /* Each section rises as it is reached. `once` matters here more
+                   than anywhere: re-animating body copy on the way back up
+                   would make re-reading the lesson unpleasant. */
+                <Reveal
+                  as="section"
+                  key={section.key}
+                  id={section.key}
+                  amount={0.05}
+                  className="scroll-mt-8"
+                >
                   <div className="flex items-start gap-4">
                     <ReadCheck
                       done={done}
@@ -599,7 +651,7 @@ function LessonView({
                   {/* Trailing sentinel: scrolling past this ticks the section
                       above it. */}
                   <span aria-hidden="true" data-read-section={section.key} className="block h-px" />
-                </section>
+                </Reveal>
               )
             })}
           </div>
@@ -618,8 +670,12 @@ function LessonView({
       {/* End of the lesson. The tick goes green on its own when you get here —
           the sentinel below it is what the scroll check watches — and can also
           be pressed, so a learner who jumped to the end can still set it. */}
-      <div
+      <motion.div
         aria-live="polite"
+        // A single settle when the lesson lands, so finishing registers as an
+        // event rather than a colour swap you might not look up for.
+        animate={lessonDone ? { scale: [1, 1.015, 1] } : { scale: 1 }}
+        transition={{ duration: 0.5, ease: [0.34, 1.56, 0.64, 1] }}
         className={`mt-12 flex items-center gap-4 rounded-rb-card border-2 p-5 transition-colors ${
           lessonDone ? "border-rb-feather bg-rb-feather-wash" : "border-rb-swan bg-rb-polar"
         }`}
@@ -646,7 +702,7 @@ function LessonView({
               : "Completion is saved automatically once you reach the end."}
           </p>
         </div>
-      </div>
+      </motion.div>
 
       <span aria-hidden="true" data-read-lesson="true" className="block h-px" />
 
@@ -678,12 +734,18 @@ function QuizBand({ quiz }) {
   return (
     <section id={`quiz-${quiz.examId}`} className="scroll-mt-8 bg-rb-bee px-5 py-12 sm:px-10 lg:px-14">
       <div className="mx-auto w-full max-w-6xl">
-        <p className="font-rb-display text-2xl font-extrabold text-white">Test your skills</p>
-        <p className="mt-1 text-sm font-bold text-white/80">
-          {quiz.title} · {quiz.totalQuestions} questions
-        </p>
+        <Reveal amount={0.2}>
+          <p className="font-rb-display text-2xl font-extrabold text-white">Test your skills</p>
+          <p className="mt-1 text-sm font-bold text-white/80">
+            {quiz.title} · {quiz.totalQuestions} questions
+          </p>
+        </Reveal>
 
-        <div className="mt-6 rounded-rb-card border-2 border-rb-swan bg-rb-snow p-6 sm:p-8">
+        <Reveal
+          variants={popIn}
+          amount={0.2}
+          className="mt-6 rounded-rb-card border-2 border-rb-swan bg-rb-snow p-6 sm:p-8"
+        >
           <p className="rb-body">
             {quiz.description ??
               "A short check on what this lesson covered. Answer it while the lesson is fresh — it is scored, and you can retake it."}
@@ -713,7 +775,7 @@ function QuizBand({ quiz }) {
               </Link>
             </TactileButton>
           </div>
-        </div>
+        </Reveal>
       </div>
     </section>
   )
@@ -725,14 +787,26 @@ function AssessmentView({ exam, position, total }) {
 
   return (
     <div className="px-5 py-16 sm:px-10 lg:px-14">
-      <div className="mx-auto w-full max-w-6xl rounded-rb-card border-2 border-rb-swan bg-rb-snow p-8 shadow-[0_5px_0_var(--color-rb-swan)] sm:p-12">
+      <Reveal
+        variants={popIn}
+        amount={0}
+        className="mx-auto w-full max-w-6xl rounded-rb-card border-2 border-rb-swan bg-rb-snow p-8 shadow-[0_5px_0_var(--color-rb-swan)] sm:p-12"
+      >
         <p className="rb-eyebrow">
           lesson {position} of {total}
         </p>
 
         <h1 className="rb-display rb-display-sm mt-3">assessment</h1>
 
-        <span className="mt-5 block h-1.5 w-24 rounded-full bg-rb-fox" aria-hidden="true" />
+        {/* The rule draws itself in — a small piece of choreography that makes
+            the splash feel authored rather than printed. */}
+        <motion.span
+          className="mt-5 block h-1.5 rounded-full bg-rb-fox"
+          initial={{ width: 0 }}
+          animate={{ width: "6rem" }}
+          transition={{ duration: 0.5, delay: 0.18, ease: [0.22, 1, 0.36, 1] }}
+          aria-hidden="true"
+        />
 
         <p className="rb-body-lg mt-7">
           You must score {passMark} percent or higher on this assessment to pass the module. You
@@ -761,7 +835,7 @@ function AssessmentView({ exam, position, total }) {
             <ArrowRight className="size-4" />
           </Link>
         </TactileButton>
-      </div>
+      </Reveal>
     </div>
   )
 }
@@ -1030,6 +1104,17 @@ export default function LearnerTopicPage() {
             </div>
           </div>
 
+          {/* Crossfade between a lesson and the unit assessment. Keyed on the
+              item so switching rows in the rail reads as the content changing
+              under a fixed frame, rather than the page reloading. */}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={active?.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            >
           {active?.kind === "lesson" ? (
             <LessonView
               key={active.id}
@@ -1069,6 +1154,8 @@ export default function LearnerTopicPage() {
               total={track.length}
             />
           )}
+            </motion.div>
+          </AnimatePresence>
         </main>
 
         {/* --------------------------------------------------------- right */}
@@ -1088,16 +1175,24 @@ export default function LearnerTopicPage() {
 
       {/* The circle. Only shown while the column is closed — once the tutor is
           on screen a second control to open it is noise. */}
-      {!tutorOpen ? (
-        <button
-          type="button"
-          onClick={() => setTutorOpen(true)}
-          aria-label="Open AI tutor"
-          className="fixed bottom-6 right-6 z-50 grid size-16 place-items-center rounded-full bg-rb-beetle text-white shadow-[0_6px_0_var(--color-rb-beetle-lip)] transition active:translate-y-[4px] active:shadow-[0_2px_0_var(--color-rb-beetle-lip)]"
-        >
-          <Sparkles className="size-7" aria-hidden="true" />
-        </button>
-      ) : null}
+      <AnimatePresence>
+        {!tutorOpen ? (
+          <motion.button
+            type="button"
+            onClick={() => setTutorOpen(true)}
+            aria-label="Open AI tutor"
+            initial={{ scale: 0, rotate: -90 }}
+            animate={{ scale: 1, rotate: 0 }}
+            exit={{ scale: 0, rotate: 90 }}
+            whileHover={{ scale: 1.07 }}
+            whileTap={{ scale: 0.92 }}
+            transition={{ type: "spring", stiffness: 480, damping: 22 }}
+            className="fixed bottom-6 right-6 z-50 grid size-16 place-items-center rounded-full bg-rb-beetle text-white shadow-[0_6px_0_var(--color-rb-beetle-lip)]"
+          >
+            <Sparkles className="size-7" aria-hidden="true" />
+          </motion.button>
+        ) : null}
+      </AnimatePresence>
 
       {/* Narrow windows get the outline and the tutor as sheets rather than
           columns — three columns on a laptop leaves nothing for the reading. */}
