@@ -45,7 +45,6 @@ const LearnerAssessmentHistoryPage = lazy(() => import("./pages/learner/assessme
 const LearnerPracticeAttemptPage = lazy(() => import("./pages/learner/practice/learner-practice-attempt-page.jsx"))
 const LearnerPracticeHistoryPage = lazy(() => import("./pages/learner/practice/learner-practice-history-page.jsx"))
 const LearnerPracticeReviewPage = lazy(() => import("./pages/learner/practice/learner-practice-review-page.jsx"))
-const LearnerRankingsPage = lazy(() => import("./pages/learner/practice/learner-rankings-page.jsx"))
 const MistakesBank = lazy(() => import("./pages/learner/practice/learner-mistakes-bank.jsx"))
 const Community = lazy(() => import("./pages/learner/community/learner-community-qa.jsx"))
 const EnterpriseDashboardPage = lazy(() => import("./pages/enterprise/dashboard/enterprise-dashboard-page.jsx"))
@@ -71,6 +70,12 @@ const CompilerArea = lazy(() => import("./pages/challenges/compiler-area-page.js
 const CodeStrikePage = lazy(() => import("./pages/learner/challenges/codestrike-page.jsx"))
 const BlueprintArenaPage = lazy(() => import("./pages/learner/challenges/blueprint-arena-page.jsx"))
 const WorldCupPage = lazy(() => import("./pages/learner/challenges/world-cup-page.jsx"))
+const LearnerCurriculumPage = lazy(() => import("./pages/learner/learning/learner-curriculum-page.jsx"))
+const LearnerStudyPage = lazy(() => import("./pages/learner/learning/learner-study-page.jsx"))
+const LearnerCertificationCurriculumPage = lazy(() =>
+    import("./pages/learner/learning/learner-certification-curriculum-page.jsx")
+)
+const LearnerTopicPage = lazy(() => import("./pages/learner/learning/learner-topic-page.jsx"))
 const ArenaConfig = lazy(() => import("./pages/admin/arena-config-page.jsx"))
 const ArenaDetail = lazy(() => import("./pages/admin/arena-detail-page.jsx"))
 const NotificationsPage = lazy(() => import("./pages/notifications-page.jsx"))
@@ -143,6 +148,14 @@ export function App() {
             <Route path="/learner/challenges/blueprint-arena" element={<BlueprintArenaPage />} />
             <Route path="/learner/challenges/world-cup" element={<WorldCupPage />} />
 
+            {/* Same deal for the curriculum and study redesigns: both render
+                the fixture curriculum in `curriculum-fixtures.js` and call no
+                API. Move them under the LEARNER block — and onto the real
+                `learning/:certificationId` and `lessons/:lessonId` paths —
+                once the design is signed off. */}
+            <Route path="/learner/curriculum-preview" element={<LearnerCurriculumPage />} />
+            <Route path="/learner/study-preview" element={<LearnerStudyPage />} />
+
             <Route element={<ProtectedRoute allowedRoles={["ADMIN"]} />}>
                 <Route path="/admin" element={<DashboardLayout />}>
                     <Route index element={<Certifications />} />
@@ -193,9 +206,21 @@ export function App() {
                         element={<LearnerDiagnosticGatePage />}
                     />
 
+                    {/* Opening an enrolled certification from My Learning lands
+                        on its curriculum: units as bands, opening to topics,
+                        opening to the lessons/quizzes/assessments inside them.
+                        This path used to render the My Learning *list* again,
+                        so clicking a certification showed the same page back. */}
                     <Route
                         path="learning/:certificationId"
-                        element={<LearnerLearningPage />}
+                        element={<LearnerCertificationCurriculumPage />}
+                    />
+
+                    {/* One middle category, start to finish: outline, lesson
+                        content, AI tutor. */}
+                    <Route
+                        path="learning/:certificationId/topics/:middleCategoryId"
+                        element={<LearnerTopicPage />}
                     />
                     <Route path="lessons/:lessonId" element={<LearnerLessonPage />} />
                     <Route path="plan" element={<LearnerStudyPlanCalendarPage />} />
@@ -212,7 +237,6 @@ export function App() {
                     <Route path="library" element={<LearnerFilesPage />} />
                     <Route path="mistakes" element={<MistakesBank />} />
                     <Route path="community" element={<Community />} />
-                    <Route path="rankings" element={<LearnerRankingsPage />} />
                     <Route path="account" element={<LearnerAccountPage />} />
                 </Route>
 

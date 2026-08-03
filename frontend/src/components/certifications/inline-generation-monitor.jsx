@@ -94,6 +94,12 @@ export function InlineGenerationMonitor({ certificationId, onClose }) {
     enabled: Boolean(runId && versionKey),
   })
 
+  // Answers as soon as the decision is recorded, not when the work it unblocks
+  // finishes. The server drives the graph afterwards and reports it on this
+  // run's stream, so an error here is a genuine refusal — the decision was
+  // rejected — rather than the old symptom, where a slow-but-healthy resume
+  // outlived the gateway's timeout and reported a failure over a run that was
+  // still generating.
   const submitReview = useMutation({
     mutationFn: (decision) =>
       submitCertificationReview(review.data?.thread_id ?? run?.thread_id, decision),

@@ -67,30 +67,39 @@ export function EnterprisePageHeader({ title, subtitle, actions }) {
   ) : null
 }
 
-export function EnterpriseStatCard({ icon: Icon, label, value, hint }) {
+/** Matches LearnerStatCard so a tile reads the same in either portal. */
+const STAT_TONES = {
+  macaw: "bg-rb-macaw-wash text-rb-macaw-lip",
+  feather: "bg-rb-feather-wash text-rb-feather-lip",
+  fox: "bg-rb-fox-wash text-rb-fox-lip",
+  beetle: "bg-rb-beetle-wash text-rb-beetle-lip",
+  bee: "bg-rb-bee-wash text-rb-bee-lip",
+}
+
+export function EnterpriseStatCard({ icon: Icon, label, value, hint, tone = "macaw" }) {
   return (
-    <Card className="gap-3 border-0 border-l border-border bg-transparent py-2 shadow-none first:border-l-0">
-      <CardHeader className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-4 pb-0">
+    <div className="rounded-rb-card border-2 border-border bg-card p-5">
+      <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <CardDescription className="truncate text-sm font-medium">
-            {label}
-          </CardDescription>
-          <CardTitle className="mt-2 text-2xl font-semibold tabular-nums text-foreground">
+          <p className="truncate text-sm font-semibold text-muted-foreground">{label}</p>
+          <p className="mt-3 font-rb-display text-4xl font-extrabold leading-none tabular-nums tracking-tight text-foreground sm:text-5xl">
             {value}
-          </CardTitle>
+          </p>
         </div>
         {Icon ? (
-          <span className="flex size-9 items-center justify-center rounded bg-primary/10 text-primary">
-            <Icon className="size-4" aria-hidden="true" />
+          <span
+            className={`grid size-11 shrink-0 place-items-center rounded-2xl ${
+              STAT_TONES[tone] ?? STAT_TONES.macaw
+            }`}
+          >
+            <Icon className="size-5" aria-hidden="true" />
           </span>
         ) : null}
-      </CardHeader>
+      </div>
       {hint ? (
-        <CardContent className="px-4 pt-0 text-xs leading-5 text-muted-foreground">
-          {hint}
-        </CardContent>
+        <p className="mt-3 text-xs leading-5 text-muted-foreground">{hint}</p>
       ) : null}
-    </Card>
+    </div>
   )
 }
 
@@ -99,12 +108,12 @@ export function EnterpriseLoadingSkeleton({ rows = 4 }) {
     <div className="space-y-4" aria-busy="true" aria-label="Loading">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
-          <Skeleton key={index} className="h-24 rounded-md" />
+          <Skeleton key={index} className="h-28 rounded-rb-card" />
         ))}
       </div>
       <div className="space-y-2">
         {Array.from({ length: rows }).map((_, index) => (
-          <Skeleton key={index} className="h-11 rounded-md" />
+          <Skeleton key={index} className="h-11 rounded-rb-tile" />
         ))}
       </div>
     </div>
@@ -113,43 +122,43 @@ export function EnterpriseLoadingSkeleton({ rows = 4 }) {
 
 export function EnterpriseErrorState({ title, description, onRetry }) {
   return (
-    <Card>
-      <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-        <AlertCircle className="size-8 text-destructive" aria-hidden="true" />
-        <div>
-          <p className="font-medium">{title ?? "Unable to load this data"}</p>
-          <p className="mt-1 max-w-md text-sm text-muted-foreground">
-            {description ??
-              "The organization data could not be loaded right now. It may require a signed-in organization account."}
-          </p>
-        </div>
-        {onRetry ? (
-          <Button variant="outline" size="sm" onClick={onRetry}>
-            <RefreshCw aria-hidden="true" />
-            Try again
-          </Button>
-        ) : null}
-      </CardContent>
-    </Card>
+    <div className="rounded-rb-card border-2 border-rb-cardinal/40 bg-rb-cardinal-wash p-6 text-center">
+      <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-rb-snow text-rb-cardinal-lip">
+        <AlertCircle className="size-6" aria-hidden="true" />
+      </span>
+      <p className="mt-4 font-rb-display font-extrabold lowercase text-rb-cardinal-lip">
+        {title ?? "Unable to load this data"}
+      </p>
+      <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-rb-eel">
+        {description ??
+          "The organization data could not be loaded right now. It may require a signed-in organization account."}
+      </p>
+      {onRetry ? (
+        <Button variant="outline" size="sm" className="mt-4 rounded-full" onClick={onRetry}>
+          <RefreshCw aria-hidden="true" />
+          Try again
+        </Button>
+      ) : null}
+    </div>
   )
 }
 
 export function EnterpriseEmptyState({ icon: Icon = Inbox, title, description, action }) {
   return (
-    <Card>
-      <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-        <Icon className="size-8 text-muted-foreground" aria-hidden="true" />
-        <div>
-          <p className="font-medium">{title}</p>
-          {description ? (
-            <p className="mt-1 max-w-md text-sm text-muted-foreground">
-              {description}
-            </p>
-          ) : null}
-        </div>
-        {action ?? null}
-      </CardContent>
-    </Card>
+    <div className="flex min-h-64 flex-col items-center justify-center rounded-rb-card border-2 border-dashed border-border px-6 py-12 text-center">
+      <span className="grid size-12 place-items-center rounded-2xl bg-rb-macaw-wash text-rb-macaw-lip">
+        <Icon className="size-6" aria-hidden="true" />
+      </span>
+      <p className="mt-4 font-rb-display text-base font-extrabold lowercase text-foreground">
+        {title}
+      </p>
+      {description ? (
+        <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+          {description}
+        </p>
+      ) : null}
+      {action ? <div className="mt-5">{action}</div> : null}
+    </div>
   )
 }
 

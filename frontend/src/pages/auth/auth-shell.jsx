@@ -1,4 +1,3 @@
-import { Check } from "@/components/icons"
 import { Link } from "react-router-dom"
 
 import { BrandLogo } from "@/components/brand-logo"
@@ -19,12 +18,6 @@ import { BackButton } from "@/components/rebyu/rebyu-ui.jsx"
  * for a login page that failed to submit.
  */
 
-const BENEFITS = [
-  "Find weak topics before you begin",
-  "Follow a study plan shaped by your progress",
-  "Build confidence through structured practice",
-]
-
 export default function AuthShell({
   title,
   description,
@@ -37,7 +30,11 @@ export default function AuthShell({
 
   return (
     <main
-      className={`rebyu-ds public-auth-shell min-h-dvh bg-rb-polar text-rb-eel lg:grid lg:grid-cols-2 ${
+      /* Only one half of the screen is coloured. The form side used to sit on
+         the macaw wash, which put a blue behind the form and a louder blue
+         beside it — two colours competing over a screen whose only job is to
+         get you through a form. The form side is plain now. */
+      className={`rebyu-ds public-auth-shell min-h-dvh bg-rb-snow text-rb-eel lg:grid lg:grid-cols-2 ${
         compact ? "lg:h-dvh lg:overflow-hidden" : ""
       }`}
     >
@@ -91,46 +88,37 @@ export default function AuthShell({
         <p className="text-xs font-semibold text-rb-hare">© {new Date().getFullYear()} Rebyu</p>
       </section>
 
-      {/* The wordmark panel, in place of the stock photograph that used to
-          live here. The photo said nothing the page did not already say and
-          cost a hero-sized download on the one route where nobody is signed in
-          yet; the oversized lowercase mark is the same device the footer ends
-          on, so the product closes and opens on the same note. */}
+      {/* The arena card at panel scale: the same macaw gradient cap and two
+          oversized translucent bubbles the challenge cards, the dashboard's
+          macaw tiles and the sign-in key all run on. Keeping this panel on the
+          product's blue is the whole point — it is the first screen a learner
+          sees, and it should be the same blue as everything behind it.
+
+          Nothing but the wordmark sits on it. The eyebrow, headline and benefit
+          list were three claims competing with the form for attention. */}
       <aside
-        className={`relative hidden min-h-dvh overflow-hidden bg-rb-feather lg:flex lg:flex-col lg:justify-end ${
+        className={`relative hidden min-h-dvh overflow-hidden lg:flex lg:items-end lg:justify-end ${
           compact ? "lg:h-dvh lg:min-h-0" : ""
         } ${formFirst ? "lg:order-2" : "lg:order-1"}`}
+        style={{ background: "linear-gradient(135deg, #1B6EF3, #1CB0F6)" }}
       >
-        {/* Colour is set inline, not with `text-white`: `.rebyu-ds .rb-display`
-            and `.rb-eyebrow` both pin a colour at two-class specificity, which
-            a single utility class cannot outrank. Everything else on this
-            panel has no competing rule and takes its utility normally. */}
-        <div className="relative px-12 pt-16 xl:px-16">
-          <p className="rb-eyebrow" style={{ color: "rgb(255 255 255 / 0.75)" }}>
-            One connected review experience
-          </p>
-          <h2
-            className="rb-display rb-display-lg mt-4 max-w-xl"
-            style={{ color: "var(--color-rb-snow)" }}
-          >
-            prepare with clarity. walk into the exam confident.
-          </h2>
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-24 -top-24 size-[28rem] rounded-full bg-white/10"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-32 -left-24 size-[34rem] rounded-full bg-white/10"
+        />
 
-          <ul className="mt-8 grid max-w-xl gap-3 border-t-2 border-white/25 pt-7">
-            {BENEFITS.map((benefit) => (
-              <li key={benefit} className="flex items-center gap-3 text-sm font-semibold text-white/90">
-                <Check className="size-4 shrink-0 text-rb-bee" aria-hidden="true" />
-                {benefit}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Bled off the bottom edge on purpose — a wordmark that fits inside
-            its box reads as a logo placement, not as the surface itself. */}
+        {/* Same move as the landing footer's oversized wordmark: sized to fill
+            its container's width rather than the viewport's, so all five letters
+            land inside it. The panel is half the screen, hence ~12vw against the
+            footer's 24vw. Sat in the bottom-right corner, and like the footer
+            the tight leading lets the descender bleed off the bottom edge. */}
         <span
           aria-hidden="true"
-          className="pointer-events-none mt-10 block select-none overflow-hidden whitespace-nowrap pl-8 font-rb-display text-[15vw] font-black lowercase leading-[0.66] tracking-tight text-white/20"
+          className="pointer-events-none relative block w-full select-none whitespace-nowrap pr-6 text-right font-rb-display text-[17vw] font-black lowercase leading-[0.72] tracking-tight text-white/25"
         >
           rebyu
         </span>

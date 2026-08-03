@@ -2,15 +2,10 @@ import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import {
   Award,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
   Eye,
   GraduationCap,
   MoreHorizontal,
   Pencil,
-  Search,
   Trash2,
   UserPlus,
   Users,
@@ -25,7 +20,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
 import {
   Progress,
 } from "@/components/ui/progress"
@@ -40,13 +34,19 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  PlainHead,
+  SortableHead,
+  TableCard,
+  TablePagination,
+  TableToolbar,
+  useTableSort,
+} from "@/components/commons/data-table.jsx"
 import { getAllLearners } from "@/services/adminLearnerService"
 
-const PAGE_SIZE = 8
 const ALL_FILTER_VALUE = "all"
 
 // Replace this with data from your learner service.
@@ -274,6 +274,8 @@ export default function Learners({
   const [organizationFilter, setOrganizationFilter] =
       useState(ALL_FILTER_VALUE)
   const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const { sort, toggle, sortRows } = useTableSort()
 
   const { data: fetchedLearners = [], isLoading } = useQuery({
     queryKey: ["admin-learners"],
@@ -349,27 +351,66 @@ export default function Learners({
     typeFilter,
   ])
 
+  /* Sorting runs on the filtered set, so a sort never pulls in a row the
+     filters excluded. Accessors read the same fallbacks the cells render. */
+  const sortedLearners = useMemo(
+      () =>
+          sortRows(filteredLearners, {
+            learner: (learner) => getLearnerName(learner),
+            organization: (learner) =>
+                learner.organizationName ??
+                learner.organization?.name ??
+                learner.organization?.organizationName ??
+                null,
+            type: (learner) =>
+                learner.learnerType ?? learner.type ?? "individual",
+            certifications: (learner) =>
+                Number(
+                    learner.certificationCount ??
+                    learner.totalCertifications ??
+                    learner.certificationsCount ??
+                    0
+                ),
+            progress: (learner) =>
+                Number(
+                    learner.progressPercentage ??
+                    learner.progress ??
+                    learner.overallProgress ??
+                    0
+                ),
+            status: (learner) => learner.status ?? "pending",
+            joined: (learner) => {
+              const raw =
+                  learner.joinedAt ?? learner.createdAt ?? learner.dateCreated
+              const time = raw ? new Date(raw).getTime() : Number.NaN
+              return Number.isNaN(time) ? null : time
+            },
+          }),
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [filteredLearners, sort]
+  )
+
   const totalPages = Math.max(
       1,
-      Math.ceil(filteredLearners.length / PAGE_SIZE)
+      Math.ceil(sortedLearners.length / pageSize)
   )
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchQuery, statusFilter, typeFilter, organizationFilter])
+  }, [searchQuery, statusFilter, typeFilter, organizationFilter, pageSize])
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages))
   }, [totalPages])
 
   const paginatedLearners = useMemo(() => {
-    const startIndex = (currentPage - 1) * PAGE_SIZE
+    const startIndex = (currentPage - 1) * pageSize
 
-    return filteredLearners.slice(
+    return sortedLearners.slice(
         startIndex,
-        startIndex + PAGE_SIZE
+        startIndex + pageSize
     )
-  }, [currentPage, filteredLearners])
+  }, [currentPage, pageSize, sortedLearners])
 
   const activeCount = useMemo(
       () =>
@@ -402,13 +443,13 @@ export default function Learners({
   const individualCount = list.length - enterpriseCount
 
   const visibleStart =
-      filteredLearners.length === 0
+      sortedLearners.length === 0
           ? 0
-          : (currentPage - 1) * PAGE_SIZE + 1
+          : (currentPage - 1) * pageSize + 1
 
   const visibleEnd = Math.min(
-      currentPage * PAGE_SIZE,
-      filteredLearners.length
+      currentPage * pageSize,
+      sortedLearners.length
   )
 
   return (
@@ -470,86 +511,121 @@ export default function Learners({
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-col gap-3 border-b border-border bg-background py-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="relative w-full xl:max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-
-            <Input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search learner, email, or organization..."
-                className="pl-9"
-            />
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-3 xl:flex">
-            <Select
-                value={organizationFilter}
-                onValueChange={setOrganizationFilter}
-            >
-              <SelectTrigger className="w-full sm:w-52">
-                <SelectValue placeholder="All organizations" />
-              </SelectTrigger>
-
-              <SelectContent>
-                <SelectItem value={ALL_FILTER_VALUE}>
-                  All organizations
-                </SelectItem>
-
-                {organizations.map((organization) => (
-                    <SelectItem
-                        key={organization}
-                        value={organization}
-                    >
-                      {organization}
-                    </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-full sm:w-40">
-                <SelectValue placeholder="All learner types" />
-              </SelectTrigger>
-
-              <SelectContent>
-                <SelectItem value={ALL_FILTER_VALUE}>All types</SelectItem>
-                <SelectItem value="individual">Individual</SelectItem>
-                <SelectItem value="enterprise">Enterprise</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-40">
-                <SelectValue placeholder="All statuses" />
-              </SelectTrigger>
-
-              <SelectContent>
-                <SelectItem value={ALL_FILTER_VALUE}>All statuses</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-                <SelectItem value="suspended">Suspended</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
+        {/* One card holds the toolbar, the rows, and the pager, so the table
+            reads as a single object rather than three stacked panels. */}
         <div className="min-h-0 flex-1 overflow-auto py-4">
-          <div className="overflow-hidden rounded-xl border bg-background">
+          <TableCard>
+            <TableToolbar
+                pageSize={pageSize}
+                onPageSizeChange={setPageSize}
+                search={searchQuery}
+                onSearchChange={setSearchQuery}
+                searchPlaceholder="Search learner, email, or organization"
+            >
+              <Select
+                  value={organizationFilter}
+                  onValueChange={setOrganizationFilter}
+              >
+                <SelectTrigger className="h-9 w-full sm:w-52">
+                  <SelectValue placeholder="All organizations" />
+                </SelectTrigger>
+
+                <SelectContent>
+                  <SelectItem value={ALL_FILTER_VALUE}>
+                    All organizations
+                  </SelectItem>
+
+                  {organizations.map((organization) => (
+                      <SelectItem
+                          key={organization}
+                          value={organization}
+                      >
+                        {organization}
+                      </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="h-9 w-full sm:w-36">
+                  <SelectValue placeholder="All learner types" />
+                </SelectTrigger>
+
+                <SelectContent>
+                  <SelectItem value={ALL_FILTER_VALUE}>All types</SelectItem>
+                  <SelectItem value="individual">Individual</SelectItem>
+                  <SelectItem value="enterprise">Enterprise</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="h-9 w-full sm:w-36">
+                  <SelectValue placeholder="All statuses" />
+                </SelectTrigger>
+
+                <SelectContent>
+                  <SelectItem value={ALL_FILTER_VALUE}>All statuses</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                  <SelectItem value="suspended">Suspended</SelectItem>
+                </SelectContent>
+              </Select>
+            </TableToolbar>
+
             <Table>
               <TableHeader>
-                <TableRow className="bg-muted/50 hover:bg-muted/50">
-                  <TableHead className="min-w-64">Learner</TableHead>
-                  <TableHead className="min-w-52">Organization</TableHead>
-                  <TableHead className="w-32">Type</TableHead>
-                  <TableHead className="w-32 text-center">
-                    Certifications
-                  </TableHead>
-                  <TableHead className="min-w-52">Progress</TableHead>
-                  <TableHead className="w-28">Status</TableHead>
-                  <TableHead className="min-w-32">Date joined</TableHead>
-                  <TableHead className="w-16 text-right">Actions</TableHead>
+                <TableRow className="hover:bg-transparent">
+                  <SortableHead
+                      column="learner"
+                      label="Learner"
+                      sort={sort}
+                      onSort={toggle}
+                      className="min-w-64"
+                  />
+                  <SortableHead
+                      column="organization"
+                      label="Organization"
+                      sort={sort}
+                      onSort={toggle}
+                      className="min-w-52"
+                  />
+                  <SortableHead
+                      column="type"
+                      label="Type"
+                      sort={sort}
+                      onSort={toggle}
+                      className="w-32"
+                  />
+                  <SortableHead
+                      column="certifications"
+                      label="Certifications"
+                      sort={sort}
+                      onSort={toggle}
+                      className="w-32 text-center"
+                  />
+                  <SortableHead
+                      column="progress"
+                      label="Progress"
+                      sort={sort}
+                      onSort={toggle}
+                      className="min-w-52"
+                  />
+                  <SortableHead
+                      column="status"
+                      label="Status"
+                      sort={sort}
+                      onSort={toggle}
+                      className="w-28"
+                  />
+                  <SortableHead
+                      column="joined"
+                      label="Date joined"
+                      sort={sort}
+                      onSort={toggle}
+                      className="min-w-32"
+                  />
+                  <PlainHead label="Actions" align="right" className="w-16" />
                 </TableRow>
               </TableHeader>
 
@@ -733,81 +809,18 @@ export default function Learners({
                 )}
               </TableBody>
             </Table>
-          </div>
+
+            <TablePagination
+                page={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                rangeStart={visibleStart}
+                rangeEnd={visibleEnd}
+                total={sortedLearners.length}
+                unit="learners"
+            />
+          </TableCard>
         </div>
-
-        <footer className="flex shrink-0 flex-col gap-3 border-t border-border bg-background py-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-muted-foreground">
-            Showing{" "}
-            <span className="font-medium text-foreground">{visibleStart}</span>
-            {"–"}
-            <span className="font-medium text-foreground">{visibleEnd}</span>
-            {" of "}
-            <span className="font-medium text-foreground">
-            {filteredLearners.length}
-          </span>{" "}
-            learners
-          </p>
-
-          <div className="flex items-center gap-1">
-            <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setCurrentPage(1)}
-                disabled={currentPage === 1}
-                aria-label="First page"
-            >
-              <ChevronsLeft className="h-4 w-4" />
-            </Button>
-
-            <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                disabled={currentPage === 1}
-                aria-label="Previous page"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-
-            <span className="min-w-24 px-2 text-center text-sm tabular-nums text-muted-foreground">
-            Page{" "}
-              <span className="font-medium text-foreground">{currentPage}</span>
-              {" of "}
-              <span className="font-medium text-foreground">{totalPages}</span>
-          </span>
-
-            <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() =>
-                    setCurrentPage((page) => Math.min(totalPages, page + 1))
-                }
-                disabled={currentPage === totalPages}
-                aria-label="Next page"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-
-            <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setCurrentPage(totalPages)}
-                disabled={currentPage === totalPages}
-                aria-label="Last page"
-            >
-              <ChevronsRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </footer>
       </section>
   )
 }

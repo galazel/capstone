@@ -31,6 +31,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  BarBreakdownChart,
+  ChartPanel,
+  RadialGauge,
+  TrendLineChart,
+} from "@/components/charts/rebyu-charts.jsx"
+import { BubbleCard, toneForIndex } from "@/components/commons/bubble-card.jsx"
 
 const mainItems = [
   { label: "Progress", href: "/learner/progress", icon: BarChart3 },
@@ -273,11 +280,13 @@ export function LearnerPageHeader({ title, subtitle, children }) {
 
 export function LearnerEmptyState({ icon: Icon = BookOpen, title, description, action }) {
   return (
-    <div className="flex min-h-64 flex-col items-center justify-center border-y border-border/60 px-6 py-12 text-center">
-      <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-        <Icon className="h-6 w-6" />
-      </div>
-      <h2 className="mt-4 text-base font-semibold text-foreground">{title}</h2>
+    <div className="flex min-h-64 flex-col items-center justify-center rounded-rb-card border-2 border-dashed border-border px-6 py-12 text-center">
+      <span className="grid size-12 place-items-center rounded-2xl bg-rb-macaw-wash text-rb-macaw-lip">
+        <Icon className="size-6" />
+      </span>
+      <h2 className="mt-4 font-rb-display text-base font-extrabold lowercase text-foreground">
+        {title}
+      </h2>
       <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
         {description}
       </p>
@@ -288,13 +297,13 @@ export function LearnerEmptyState({ icon: Icon = BookOpen, title, description, a
 
 export function LearnerErrorState({ title = "Could not load data", error, onRetry }) {
   return (
-    <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
-      <p className="font-semibold text-red-900">{title}</p>
-      <p className="mt-2 text-sm leading-6 text-red-700">
+    <div className="rounded-rb-card border-2 border-rb-cardinal/40 bg-rb-cardinal-wash p-6">
+      <p className="font-rb-display font-extrabold lowercase text-rb-cardinal-lip">{title}</p>
+      <p className="mt-2 text-sm leading-6 text-rb-eel">
         {error?.response?.data?.message || error?.message || "Please try again."}
       </p>
       {onRetry && (
-        <Button className="mt-4" variant="outline" onClick={onRetry}>
+        <Button className="mt-4 rounded-full" variant="outline" onClick={onRetry}>
           Retry
         </Button>
       )}
@@ -307,33 +316,46 @@ export function LearnerLoadingSkeleton() {
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-4">
         {[1, 2, 3, 4].map((item) => (
-      <Skeleton key={item} className="h-32 rounded-2xl" />
+          <Skeleton key={item} className="h-32 rounded-rb-card" />
         ))}
       </div>
-      <Skeleton className="h-80 rounded-2xl" />
+      <Skeleton className="h-80 rounded-rb-card" />
       <div className="grid gap-4 lg:grid-cols-2">
-        <Skeleton className="h-72 rounded-2xl" />
-        <Skeleton className="h-72 rounded-2xl" />
+        <Skeleton className="h-72 rounded-rb-card" />
+        <Skeleton className="h-72 rounded-rb-card" />
       </div>
     </div>
   )
 }
 
-export function LearnerStatCard({ icon: Icon = Award, label, value, helper }) {
+/** Tone keys the icon chip to the metric so a row of tiles is scannable. */
+const STAT_TONES = {
+  macaw: "bg-rb-macaw-wash text-rb-macaw-lip",
+  feather: "bg-rb-feather-wash text-rb-feather-lip",
+  fox: "bg-rb-fox-wash text-rb-fox-lip",
+  beetle: "bg-rb-beetle-wash text-rb-beetle-lip",
+  bee: "bg-rb-bee-wash text-rb-bee-lip",
+}
+
+export function LearnerStatCard({ icon: Icon = Award, label, value, helper, tone = "macaw" }) {
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+    <div className="rounded-rb-card border-2 border-border bg-card p-5">
       <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-zinc-500">{label}</p>
-          <p className="mt-3 text-3xl font-bold tracking-tight text-zinc-950">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-muted-foreground">{label}</p>
+          <p className="mt-3 font-rb-display text-4xl font-extrabold leading-none tabular-nums tracking-tight text-foreground sm:text-5xl">
             {value}
           </p>
         </div>
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-700">
-          <Icon className="h-5 w-5" />
-        </div>
+        <span
+          className={`grid size-11 shrink-0 place-items-center rounded-2xl ${
+            STAT_TONES[tone] ?? STAT_TONES.macaw
+          }`}
+        >
+          <Icon className="size-5" />
+        </span>
       </div>
-      {helper && <p className="mt-3 text-xs leading-5 text-zinc-500">{helper}</p>}
+      {helper && <p className="mt-3 text-xs leading-5 text-muted-foreground">{helper}</p>}
     </div>
   )
 }
@@ -341,9 +363,9 @@ export function LearnerStatCard({ icon: Icon = Award, label, value, helper }) {
 export function ProgressBar({ value = 0 }) {
   const width = Math.max(0, Math.min(100, Number(value) || 0))
   return (
-    <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
+    <div className="h-2.5 overflow-hidden rounded-full bg-muted">
       <div
-        className="h-full rounded-full bg-zinc-950 transition-all"
+        className="h-full rounded-full bg-primary transition-all"
         style={{ width: `${width}%` }}
       />
     </div>
@@ -357,60 +379,74 @@ export function CertificationProgressCard({ certification, lessons, onContinue, 
   const completed = related.filter((lesson) => lesson.completed).length
   const percent = related.length ? Math.round((completed / related.length) * 100) : 0
 
+  /* Same bubble card the challenge arenas use — the certification is the
+     entity, so it keeps one tone wherever it appears. */
+  const tone = toneForCertification(certification)
+
   return (
-    <article className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">
-            {certification.industry || "Certification"}
-          </p>
-          <h2 className="mt-2 text-lg font-semibold text-zinc-950">
-            {certification.title}
-          </h2>
-          <p className="mt-2 line-clamp-2 text-sm leading-6 text-zinc-500">
-            {certification.description || "No description available."}
-          </p>
+    <BubbleCard
+      tone={tone}
+      icon={GraduationCap}
+      eyebrow={certification.industry || "Certification"}
+      title={certification.title}
+      chips={[{ label: `${percent}%`, side: "right" }]}
+      footer={
+        <div className="flex flex-wrap gap-2">
+          <Button className="rounded-full" onClick={onContinue}>Continue Learning</Button>
+          <Button variant="outline" className="rounded-full" onClick={onProgress}>
+            View Progress
+          </Button>
         </div>
-        <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-700">
-          {percent}%
-        </span>
-      </div>
-      <div className="mt-5 space-y-2">
+      }
+    >
+      <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
+        {certification.description || "No description available."}
+      </p>
+
+      <div className="mt-4 space-y-2">
         <ProgressBar value={percent} />
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs font-semibold text-muted-foreground">
           {completed} of {related.length} lessons completed
         </p>
       </div>
-      <div className="mt-5 flex flex-wrap gap-2">
-        <Button onClick={onContinue}>Continue Learning</Button>
-        <Button variant="outline" onClick={onProgress}>
-          View Progress
-        </Button>
-      </div>
-    </article>
+    </BubbleCard>
   )
+}
+
+/** Stable per certification, so a track is the same colour on every page. */
+export function toneForCertification(certification) {
+  const seed = String(
+    certification?.certificationId ?? certification?.title ?? certification?.name ?? ""
+  )
+  let total = 0
+  for (let index = 0; index < seed.length; index += 1) total += seed.charCodeAt(index)
+  return toneForIndex(total)
 }
 
 export function LessonRow({ lesson, onOpen }) {
   const statusClass =
     lesson.status === "Completed"
-      ? "bg-emerald-50 text-emerald-700"
-      : "bg-zinc-100 text-zinc-600"
+      ? "bg-rb-feather-wash text-rb-feather-lip"
+      : "bg-muted text-muted-foreground"
 
   return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-zinc-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-4 rounded-rb-tile border-2 border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="font-semibold text-zinc-950">{lesson.name}</h3>
-          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusClass}`}>
+          <h3 className="font-bold text-foreground">{lesson.name}</h3>
+          <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${statusClass}`}>
             {lesson.status}
           </span>
         </div>
-        <p className="mt-1 text-sm text-zinc-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           {lesson.middleCategoryTitle || lesson.majorCategoryTitle || "Module"}
         </p>
       </div>
-      <Button onClick={onOpen} variant={lesson.completed ? "outline" : "default"}>
+      <Button
+        onClick={onOpen}
+        className="shrink-0 rounded-full"
+        variant={lesson.completed ? "outline" : "default"}
+      >
         {lesson.completed ? "Review" : "Start"}
       </Button>
     </div>
@@ -419,120 +455,88 @@ export function LessonRow({ lesson, onOpen }) {
 
 export function WeakTopicCard({ topic }) {
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-4">
+    <div className="rounded-rb-tile border-2 border-border bg-card p-4">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="font-medium text-zinc-950">{topic.title}</p>
-          <p className="mt-1 text-xs text-zinc-500">{topic.category}</p>
+        <div className="min-w-0">
+          <p className="font-bold text-foreground">{topic.title}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{topic.category}</p>
         </div>
-        <span className="text-sm font-semibold text-zinc-900">{topic.percent}%</span>
+        <span className="shrink-0 text-sm font-bold tabular-nums text-foreground">
+          {topic.percent}%
+        </span>
       </div>
       <div className="mt-3">
         <ProgressBar value={topic.percent} />
       </div>
-      <p className="mt-2 text-xs text-zinc-500">{topic.recommendation}</p>
+      <p className="mt-2 text-xs text-muted-foreground">{topic.recommendation}</p>
     </div>
   )
 }
 
+/* These three used to be hand-rolled SVG on hardcoded zinc hex. They now render
+   through the shared chart kit, so the portal and the landing page plot on one
+   palette and one set of mark specs. The prop shapes are unchanged. */
+
 export function LineChartCard({ title, data }) {
-  const points = data.filter((item) => Number.isFinite(Number(item.score)))
-  const width = 640
-  const height = 220
-  const padding = 28
-  const coords = points.map((point, index) => {
-    const x =
-      points.length === 1
-        ? width / 2
-        : padding + (index / (points.length - 1)) * (width - padding * 2)
-    const y = height - padding - (Number(point.score) / 100) * (height - padding * 2)
-    return { ...point, x, y }
-  })
-  const path = coords.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ")
+  const points = (data ?? [])
+    .filter((item) => Number.isFinite(Number(item.score)))
+    .map((item) => ({ ...item, score: Number(item.score) }))
 
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between">
-        <h2 className="font-semibold text-zinc-950">{title}</h2>
-        <div className="flex items-center gap-3 text-xs text-zinc-500">
-          <span className="inline-flex items-center gap-1">
-            <span className="h-2 w-2 rounded-full bg-zinc-950" />
-            Quiz / Exam
-          </span>
-        </div>
-      </div>
-      {coords.length === 0 ? (
+    <ChartPanel title={title} subtitle="Quiz and exam scores, most recent last">
+      {points.length === 0 ? (
         <LearnerEmptyState
           icon={BarChart3}
           title="No assessment results yet"
           description="Quiz and exam scores will appear here after you complete assessments."
         />
       ) : (
-        <div className="mt-5 overflow-x-auto">
-          <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[560px]">
-            {[0, 25, 50, 75, 100].map((tick) => {
-              const y = height - padding - (tick / 100) * (height - padding * 2)
-              return (
-                <g key={tick}>
-                  <line x1={padding} x2={width - padding} y1={y} y2={y} stroke="#e4e4e7" />
-                  <text x={0} y={y + 4} className="fill-zinc-400 text-[10px]">
-                    {tick}
-                  </text>
-                </g>
-              )
-            })}
-            <path d={path} fill="none" stroke="#18181b" strokeWidth="3" strokeLinecap="round" />
-            {coords.map((point) => (
-              <g key={point.id}>
-                <circle cx={point.x} cy={point.y} r="4" fill="#18181b" />
-                <text x={point.x} y={height - 6} textAnchor="middle" className="fill-zinc-500 text-[10px]">
-                  {point.label}
-                </text>
-              </g>
-            ))}
-          </svg>
-        </div>
+        <TrendLineChart
+          data={points}
+          xKey="label"
+          series={[{ key: "score", name: "Score" }]}
+          unit="%"
+          ticks={[0, 25, 50, 75, 100]}
+          legendNote="Most recent attempt"
+        />
       )}
-    </div>
+    </ChartPanel>
   )
 }
 
 export function BarChartCard({ title, data }) {
+  const rows = (data ?? []).slice(0, 6).map((item) => ({
+    topic: item.title,
+    percent: Number(item.percent) || 0,
+  }))
+
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-      <h2 className="font-semibold text-zinc-950">{title}</h2>
-      {data.length === 0 ? (
+    <ChartPanel title={title} subtitle="Lowest scoring topics first">
+      {rows.length === 0 ? (
         <LearnerEmptyState
           icon={Target}
           title="No weak areas recorded"
           description="Weak area analytics will appear after lesson or assessment activity is available."
         />
       ) : (
-        <div className="mt-5 space-y-4">
-          {data.slice(0, 6).map((item) => (
-            <div key={item.lessonId}>
-              <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                <span className="truncate font-medium text-zinc-800">{item.title}</span>
-                <span className="text-zinc-500">{item.percent}%</span>
-              </div>
-              <ProgressBar value={item.percent} />
-            </div>
-          ))}
-        </div>
+        <BarBreakdownChart
+          data={rows}
+          categoryKey="topic"
+          valueKey="percent"
+          unit="%"
+          target={70}
+        />
       )}
-    </div>
+    </ChartPanel>
   )
 }
 
 export function DonutCard({ title, result }) {
   const score = Number(result?.score)
   const value = Number.isFinite(score) ? Math.max(0, Math.min(100, score)) : null
-  const radius = 46
-  const circumference = 2 * Math.PI * radius
 
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-      <h2 className="font-semibold text-zinc-950">{title}</h2>
+    <ChartPanel title={title} subtitle={result?.title}>
       {value === null ? (
         <LearnerEmptyState
           icon={Award}
@@ -540,32 +544,31 @@ export function DonutCard({ title, result }) {
           description="Your most recent mock exam breakdown will appear here once an exam result exists."
         />
       ) : (
-        <div className="mt-6 flex flex-col items-center gap-5 sm:flex-row">
-          <svg width="132" height="132" viewBox="0 0 132 132">
-            <circle cx="66" cy="66" r={radius} fill="none" stroke="#f4f4f5" strokeWidth="16" />
-            <circle
-              cx="66"
-              cy="66"
-              r={radius}
-              fill="none"
-              stroke="#18181b"
-              strokeWidth="16"
-              strokeDasharray={`${(value / 100) * circumference} ${circumference}`}
-              strokeLinecap="round"
-              transform="rotate(-90 66 66)"
-            />
-            <text x="66" y="71" textAnchor="middle" className="fill-zinc-950 text-xl font-bold">
-              {Math.round(value)}%
-            </text>
-          </svg>
-          <div className="space-y-2 text-sm">
-            <p className="font-medium text-zinc-950">{result.title}</p>
-            <p className="text-zinc-500">Attempt {result.id?.split("-").at(-1) ?? ""}</p>
-            <p className="text-zinc-500">Passed: {result.score >= 70 ? "Likely" : "Needs review"}</p>
+        <div className="flex flex-col items-center gap-5 sm:flex-row">
+          <div className="w-full max-w-52">
+            <RadialGauge value={value} label="score" />
           </div>
+          <dl className="space-y-2 text-sm">
+            <div>
+              <dt className="text-xs text-muted-foreground">Exam</dt>
+              <dd className="font-bold text-foreground">{result.title}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Attempt</dt>
+              <dd className="font-semibold text-foreground">
+                {result.id?.split("-").at(-1) ?? "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Outcome</dt>
+              <dd className="font-semibold text-foreground">
+                {value >= 70 ? "Likely pass" : "Needs review"}
+              </dd>
+            </div>
+          </dl>
         </div>
       )}
-    </div>
+    </ChartPanel>
   )
 }
 

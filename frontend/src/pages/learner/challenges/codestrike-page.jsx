@@ -31,6 +31,9 @@ const SOLVED_COUNT = 3
 const TONE = {
   face: "bg-rb-macaw",
   border: "border-rb-macaw-lip",
+  // Colour of the road already travelled on the roadmap. A CSS colour rather
+  // than a class: the road is an SVG stroke, not a box.
+  road: "var(--color-rb-macaw-lip)",
 }
 
 const GRID_PROBLEMS = CODESTRIKE_PROBLEMS.map((problem, index) => ({

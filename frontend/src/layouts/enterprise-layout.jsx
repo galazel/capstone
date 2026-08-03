@@ -18,7 +18,7 @@ import { useAuth } from "@/context/auth-context.jsx"
 import { useNotifications } from "@/hooks/use-notifications.js"
 import { NotificationBell } from "@/components/notification-bell.jsx"
 import { usePortalTheme } from "@/hooks/use-portal-theme.js"
-import { PortalThemeToggle } from "@/components/portal-theme-toggle"
+import { PortalThemeMenuItem } from "@/components/portal-theme-toggle"
 
 function getInitials(name = "") {
   return (
@@ -97,7 +97,6 @@ export default function EnterpriseLayout() {
               onDelete={notifications.remove}
             />
 
-            <PortalThemeToggle />
 
            <DropdownMenu>
              <DropdownMenuTrigger asChild>
@@ -137,6 +136,8 @@ export default function EnterpriseLayout() {
                    Files
                  </DropdownMenuItem>
                ) : null}
+               <DropdownMenuSeparator />
+               <PortalThemeMenuItem />
                <DropdownMenuSeparator />
                <DropdownMenuItem variant="destructive" onClick={logout}>
                  <LogOutIcon />

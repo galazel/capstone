@@ -170,53 +170,67 @@ const CERTIFICATIONS = [
   },
 ];
 
-/* Blade fills for the arena blades — saturated so white type holds across the
-   full panel height. */
-const BLADE_FILL = {
-  macaw: "bg-gradient-to-b from-rb-macaw to-rb-macaw-lip",
-  beetle: "bg-gradient-to-b from-rb-beetle to-rb-beetle-lip",
-  bee: "bg-gradient-to-b from-rb-bee to-rb-bee-lip",
-};
-
 /* IT Olympics — two solo endurance modes plus the synchronised 8-player
    tournament. `format` is the honest distinction between them, and it is what
    the card leads with: solo runs can be started any time, the World Cup needs
-   seven other people. */
+   seven other people.
+
+   `accent` and `surfaceClass` are the same pairings the in-product challenge
+   hub uses for each arena, so an arena is the same colour to a visitor as it is
+   to a signed-in learner. */
 const OLYMPICS_MODES = [
   {
     id: "codestrike",
     name: "codestrike",
+    role: "Coding Skills",
+    tag: "Practice",
     format: "solo · 10 problems",
-    tone: "macaw",
     icon: Code2,
+    accent: "linear-gradient(135deg, #1B6EF3, #1CB0F6)",
+    surfaceClass: "bg-rb-macaw-wash",
     blurb:
-      "Ten coding problems back to back. Your code runs against real unit tests as you type, and scoring rewards correctness, speed, and time complexity — not just a green tick.",
+      "Ten coding problems back to back, judged against real unit tests as you type and scored on time complexity.",
     points: ["Live judge with split-screen tests", "Scored on Big-O efficiency", "Global and tier ranking"],
     to: "/learner/challenges/codestrike",
   },
   {
     id: "blueprint",
     name: "blueprint arena",
+    role: "Design Skills",
+    tag: "Design",
     format: "solo · 10 problems",
-    tone: "beetle",
     icon: Network,
+    accent: "linear-gradient(135deg, #B061E6, #CE82FF)",
+    surfaceClass: "bg-rb-beetle-wash",
     blurb:
-      "Ten UML and system design problems on a drag-and-drop canvas. Submissions are checked against structural rules, so marking is consistent rather than subjective.",
+      "Ten UML and system design problems on a drag-and-drop canvas, checked against structural rules rather than opinion.",
     points: ["Pre-loaded architecture components", "Structural validation, not opinion", "Accuracy score and rank tier"],
     to: "/learner/challenges/blueprint-arena",
   },
   {
     id: "worldcup",
     name: "world cup",
+    role: "Exam Readiness",
+    tag: "Tournament",
     format: "8 players · live bracket",
-    tone: "bee",
     icon: Trophy,
+    accent: "linear-gradient(135deg, #E08600, #FF9600)",
+    surfaceClass: "bg-rb-fox-wash",
     blurb:
-      "Pick your track, queue into an eight-player lobby, and fight through quarterfinals, semis, and a grand final — everyone answering from the same syllabus.",
+      "Queue into an eight-player lobby on your track and fight through quarterfinals, semis, and a grand final.",
     points: ["Track-locked matchmaking", "Timed 1v1 bracket rounds", "MVP and match awards"],
     to: "/learner/challenges/world-cup",
   },
 ];
+
+/** Wraps the index so the carousel is a ring, not a strip with two dead ends. */
+function olympicsOffset(index, activeIndex) {
+  let difference = index - activeIndex;
+  const midpoint = Math.floor(OLYMPICS_MODES.length / 2);
+  if (difference > midpoint) difference -= OLYMPICS_MODES.length;
+  if (difference < -midpoint) difference += OLYMPICS_MODES.length;
+  return difference;
+}
 
 /* Priority is derived, not chosen: it ranks how weak the learner is against how
    heavily the exam weights that domain. Shared by the roadmap path and the
@@ -1371,9 +1385,19 @@ function CertificationSection() {
 /* ----------------------------------------------------------------- olympics */
 
 function OlympicsSection() {
-  /* Mode select, not a card grid: three angled blades that expand on hover.
-     Picking a competitive format is a choice between three things, and blades
-     put them side by side at full height instead of stacking equal boxes. */
+  /* The same mode-select carousel the signed-in challenge hub uses: one arena
+     at full size with the other two racked behind it, rather than three equal
+     boxes. Picking a competitive format is a choice, and the carousel puts the
+     choice itself on screen — a visitor sees the arena exactly as it will look
+     once they are inside the product. */
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activeMode = OLYMPICS_MODES[activeIndex];
+
+  const move = (direction) =>
+    setActiveIndex(
+      (current) => (current + direction + OLYMPICS_MODES.length) % OLYMPICS_MODES.length
+    );
+
   return (
     <section id="roadmap" className="scroll-mt-24 overflow-hidden bg-rb-polar px-5 py-20 lg:px-8 lg:py-28">
       <div className="mx-auto max-w-[1280px]">
@@ -1387,66 +1411,143 @@ function OlympicsSection() {
         </div>
       </div>
 
-      {/* Cards, not the angled blades this used to be. The skew clipped its own
-          content at both edges -- "codestrike" rendered as "destrike", the
-          bullets lost their first word, and the call to action read "TER
-          ARENA". A shape that cannot hold its own text is not a stylistic
-          choice. These carry the same solid face and lip as the buttons, so
-          the section reads as part of the same system. */}
-      <div className="mx-auto mt-12 max-w-[1280px] px-5 lg:px-8">
-        <div data-landing-reveal className="grid gap-6 md:grid-cols-3">
-          {OLYMPICS_MODES.map((mode) => (
-            <Link
-              key={mode.id}
-              to={mode.to}
-              className={`group/mode flex flex-col rounded-rb-card p-6 text-left transition-transform duration-150 hover:-translate-y-1 lg:p-7 ${BLADE_FILL[mode.tone]}`}
-              style={{ boxShadow: "0 6px 0 rgba(0,0,0,0.22)" }}
-            >
-              <span
-                className="rb-eyebrow inline-flex w-fit items-center gap-1.5 rounded-rb-pill px-3 py-1.5"
+      <div
+        data-landing-reveal
+        className="mx-auto mt-12 max-w-[1280px]"
+        onKeyDown={(event) => {
+          if (event.key === "ArrowLeft") move(-1);
+          if (event.key === "ArrowRight") move(1);
+        }}
+        tabIndex={0}
+        aria-label="Arena carousel"
+      >
+        <div className="relative h-[470px] sm:h-[490px]">
+          {OLYMPICS_MODES.map((mode, index) => {
+            const position = olympicsOffset(index, activeIndex);
+            const isActive = position === 0;
+
+            return (
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => (isActive ? undefined : setActiveIndex(index))}
+                className={`absolute left-1/2 top-1/2 isolate h-[430px] w-[280px] overflow-hidden rounded-rb-card border-2 text-left transition-all duration-500 ease-out [backface-visibility:hidden] focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-rb-macaw sm:w-[320px] ${mode.surfaceClass} ${
+                  isActive
+                    ? "border-rb-macaw shadow-[0_26px_65px_-18px_rgba(27,110,243,0.45)]"
+                    : "border-rb-swan shadow-[0_22px_55px_-18px_rgba(15,23,42,0.35)]"
+                }`}
                 style={{
-                  color: "#fff",
-                  background: "var(--color-rb-eel)",
-                  boxShadow: "0 2px 0 rgba(0,0,0,0.35)",
+                  transform: `translate(calc(-50% + ${position * 230}px), -50%) scale(${
+                    isActive ? 1 : Math.abs(position) === 1 ? 0.82 : 0.66
+                  })`,
+                  zIndex: 10 - Math.abs(position),
                 }}
+                aria-current={isActive ? "true" : undefined}
+                aria-label={`${mode.name}${isActive ? ", selected" : ", select"}`}
               >
-                <mode.icon className="size-3.5" aria-hidden="true" />
-                {mode.format}
-              </span>
+                <div
+                  className="relative flex h-40 items-center justify-center overflow-hidden"
+                  style={{ background: mode.accent }}
+                >
+                  <div className="absolute left-3 right-3 top-3 z-10 flex items-center justify-between gap-2">
+                    <span className="rounded-rb-pill bg-white/90 px-2.5 py-1 font-rb-display text-[10px] font-extrabold uppercase tracking-wide text-rb-eel backdrop-blur-sm">
+                      {mode.tag}
+                    </span>
+                    <span className="rounded-rb-pill bg-black/35 px-2.5 py-1 font-rb-display text-[10px] font-extrabold uppercase tracking-wide text-white backdrop-blur-sm">
+                      {mode.format}
+                    </span>
+                  </div>
 
-              <span
-                className="rb-display rb-display-md mt-4 block"
-                style={{ color: "#fff" }}
-              >
-                {mode.name}
-              </span>
+                  <div className="absolute -right-8 -top-8 size-28 rounded-full bg-white/10" />
+                  <div className="absolute -bottom-10 -left-7 size-32 rounded-full bg-white/10" />
 
-              <span className="mt-3 block text-sm leading-6 text-white/90">{mode.blurb}</span>
-
-              <span className="mt-4 flex flex-1 flex-col gap-1.5">
-                {mode.points.map((point) => (
                   <span
-                    key={point}
-                    className="flex items-start gap-2 text-xs font-semibold text-white/85"
+                    className={`grid size-24 place-items-center rounded-full bg-white/20 text-white transition-transform duration-500 ${
+                      isActive ? "scale-100" : "scale-90"
+                    }`}
                   >
-                    <Check className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-                    {point}
+                    <mode.icon className="size-12" strokeWidth={1.7} aria-hidden="true" />
                   </span>
-                ))}
-              </span>
+                </div>
 
+                <div className={`h-[286px] p-5 text-center ${mode.surfaceClass}`}>
+                  <p className="font-rb-display text-[10px] font-extrabold uppercase tracking-[0.16em] text-rb-macaw-lip">
+                    {mode.role}
+                  </p>
+                  <span className="rb-display rb-display-md mt-1 block">{mode.name}</span>
+                  <p className="mt-2 text-xs leading-5 text-rb-wolf">{mode.blurb}</p>
+
+                  <span className="mt-3 flex flex-col items-start gap-1.5">
+                    {mode.points.map((point) => (
+                      <span
+                        key={point}
+                        className="flex items-start gap-2 text-left text-[11px] font-semibold text-rb-eel"
+                      >
+                        <Check className="mt-0.5 size-3.5 shrink-0 text-rb-macaw-lip" aria-hidden="true" />
+                        {point}
+                      </span>
+                    ))}
+                  </span>
+
+                  <span
+                    className={`mx-auto mt-4 block h-1 rounded-full transition-all ${
+                      isActive ? "w-14 bg-rb-macaw" : "w-6 bg-rb-swan"
+                    }`}
+                    aria-hidden="true"
+                  />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center justify-center gap-4">
+          <button
+            type="button"
+            onClick={() => move(-1)}
+            aria-label="Previous arena"
+            className="grid size-11 place-items-center rounded-rb-pill border-2 border-rb-swan bg-rb-snow text-rb-eel transition-colors hover:border-rb-macaw focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-rb-macaw"
+          >
+            <ArrowLeft className="size-5" aria-hidden="true" />
+          </button>
+
+          <div className="flex gap-1.5" aria-hidden="true">
+            {OLYMPICS_MODES.map((mode, index) => (
               <span
-                className="mt-6 inline-flex w-fit items-center gap-1.5 rounded-rb-pill bg-white px-5 py-2.5 text-xs font-extrabold uppercase tracking-wide text-rb-eel transition-transform duration-150 group-hover/mode:translate-y-0.5"
-                style={{ boxShadow: "0 var(--rb-lip, 4px) 0 var(--color-rb-swan)" }}
-              >
-                enter arena
-                <ArrowRight className="size-4" aria-hidden="true" />
-              </span>
+                key={mode.id}
+                className={`h-1.5 rounded-full transition-all ${
+                  index === activeIndex ? "w-7 bg-rb-macaw" : "w-1.5 bg-rb-swan"
+                }`}
+              />
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => move(1)}
+            aria-label="Next arena"
+            className="grid size-11 place-items-center rounded-rb-pill border-2 border-rb-swan bg-rb-snow text-rb-eel transition-colors hover:border-rb-macaw focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-rb-macaw"
+          >
+            <ArrowRight className="size-5" aria-hidden="true" />
+          </button>
+        </div>
+
+        {/* The hub's footer row: what is selected, and the one way in. Here the
+            way in is registration — the arenas are behind a learner account. */}
+        <div className="mx-auto mt-8 flex max-w-3xl flex-col items-center justify-between gap-3 text-center sm:flex-row sm:text-left">
+          <div>
+            <p className="rb-display rb-display-md">{activeMode.name}</p>
+            <p className="mt-1 text-sm text-rb-wolf">{activeMode.format}</p>
+          </div>
+
+          <TactileButton asChild variant="macaw">
+            <Link to="/register">
+              enter arena
+              <ArrowRight className="size-5" />
             </Link>
-          ))}
+          </TactileButton>
         </div>
       </div>
-
     </section>
   );
 }

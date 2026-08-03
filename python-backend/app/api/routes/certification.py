@@ -3,7 +3,16 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Annotated, Any, Literal, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from langgraph.types import Command
 from pydantic import BaseModel
 
@@ -75,23 +84,22 @@ def _reject_if_cancelled(thread_id: str) -> None:
             )
 
 
-async def _advance(
-    thread_id: str, graph_input: Any, *, title: str | None = None, decision: str | None = None
-) -> dict:
-    """Moves a thread forward through the run lifecycle rather than around it.
+def _claim(
+    thread_id: str, *, title: str | None = None, decision: str | None = None
+) -> certification_run.RunContext:
+    """Takes ownership of a thread and builds the context for driving it.
 
-    These routes used to call `graph.ainvoke` directly. That skipped
-    finalisation entirely, so a run driven over HTTP never persisted its
-    curriculum or assessments on success, and on failure kept whatever status
-    it already had while its checkpoint advanced past the interrupt -- the live
-    symptom being a run reported as WAITING_FOR_REVIEW with no pending
-    interrupt, unrecoverable because only FAILED runs may be retried.
+    Split from the driving below because the two belong on opposite sides of
+    the HTTP response: claiming is instant and its failure modes are the
+    caller's problem (409, already resumed), while driving takes minutes and
+    nothing waiting on a socket should be holding it.
 
-    Accepting the review `decision` also lets the run leave WAITING_FOR_REVIEW
-    the moment work restarts. Nothing recorded that transition before, so a
-    resumed run kept reading as paused for the several minutes it took to reach
-    the next checkpoint -- long enough for the workspace to offer Retry on a run
-    that was busy executing, and for two drivers to end up on one thread.
+    Recording the review `decision` is what lets the run leave
+    WAITING_FOR_REVIEW the moment work restarts. Nothing recorded that
+    transition before, so a resumed run kept reading as paused for the several
+    minutes it took to reach the next checkpoint -- long enough for the
+    workspace to offer Retry on a run that was busy executing, and for two
+    drivers to end up on one thread.
 
     A thread with no registry row is still driven, just without the Java-side
     persistence there is nothing to attach.
@@ -115,15 +123,38 @@ async def _advance(
                 )
 
     if run is None:
-        context = certification_run.RunContext(
+        return certification_run.RunContext(
             thread_id=thread_id, certification_title=title or f"thread {thread_id}"
         )
-    else:
-        context = certification_run.context_for(run)
-        if title and context.certification_id is None:
-            # A direct-upload run has no certification row, so `context_for`
-            # can only name it "certification None". The caller knows better.
-            context = replace(context, certification_title=title)
+
+    context = certification_run.context_for(run)
+    if title and context.certification_id is None:
+        # A direct-upload run has no certification row, so `context_for` can
+        # only name it "certification None". The caller knows better.
+        context = replace(context, certification_title=title)
+    return context
+
+
+async def _advance(
+    thread_id: str, graph_input: Any, *, title: str | None = None, decision: str | None = None
+) -> dict:
+    """Moves a thread forward through the run lifecycle rather than around it,
+    and waits for it to reach its next stopping point.
+
+    These routes used to call `graph.ainvoke` directly. That skipped
+    finalisation entirely, so a run driven over HTTP never persisted its
+    curriculum or assessments on success, and on failure kept whatever status
+    it already had while its checkpoint advanced past the interrupt -- the live
+    symptom being a run reported as WAITING_FOR_REVIEW with no pending
+    interrupt, unrecoverable because only FAILED runs may be retried.
+
+    Only for callers that genuinely need the graph's own result in the
+    response. Anything a client merely watches must claim the thread and hand
+    the driving to a background task instead -- see `resume_certification`,
+    which had to, because the work between two review pauses outlives any HTTP
+    timeout worth setting.
+    """
+    context = _claim(thread_id, title=title, decision=decision)
 
     try:
         result, _ = await certification_run.advance(context, graph_input)
@@ -218,23 +249,49 @@ async def generate_certification(
     return _to_response(thread_id, result)
 
 
-@router.post("/{thread_id}/resume")
-async def resume_certification(thread_id: str, request: ResumeRequest) -> dict[str, Any]:
+@router.post("/{thread_id}/resume", status_code=status.HTTP_202_ACCEPTED)
+async def resume_certification(
+    thread_id: str, request: ResumeRequest, background: BackgroundTasks
+) -> dict[str, Any]:
     """
     Resumes a paused run with the admin's HITL decision for the stage it's
-    currently paused on.
+    currently paused on, and returns as soon as the decision is recorded.
 
     approve / approve_remaining continue, regenerate and improve redo the
     current item (improve with the reviewer's guidance), edit accepts the
     reviewer's own version, and skip (alias: reject) leaves the item out and
     moves on.
+
+    Accepted rather than completed, because resuming runs the graph on to its
+    *next* review pause -- authoring a lesson, its quiz, and an LLM validation
+    pass, which is minutes of work. Holding the response open for that put the
+    whole run behind an HTTP timeout: Java's gateway gives up after 120s and
+    the reviewer was told "could not submit that decision" while Python
+    carried on generating in the background, with no way to tell an approval
+    that was lost from one that was merely slow. The workspace already streams
+    the timeline, so it never needed this response to know what happened next
+    -- and if the resumed run fails, it now fails as a *run*: marked FAILED,
+    the admin notified, Retry offered.
+
+    Retry and restart are 202 for exactly the same reason.
     """
     _reject_if_cancelled(thread_id)
 
-    result = await _advance(
-        thread_id, Command(resume=request.as_resume_value()), decision=request.action
+    # Claimed here, not in the background task, so a second click still gets
+    # the 409 rather than a cheerful 202 and a duplicate driver.
+    context = _claim(thread_id, decision=request.action)
+
+    # `execute`, not `advance`: it converts a RunFailed into a recorded
+    # outcome. Nothing is waiting to catch an exception out here.
+    background.add_task(
+        certification_run.execute, context, Command(resume=request.as_resume_value())
     )
-    return _to_response(thread_id, result)
+
+    return {
+        "thread_id": thread_id,
+        "status": "RESUMING",
+        "action": request.action,
+    }
 
 
 @router.get("/{thread_id}/versions")

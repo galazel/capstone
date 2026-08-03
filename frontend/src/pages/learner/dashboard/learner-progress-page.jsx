@@ -47,14 +47,11 @@ ChartJS.register(
     Filler
 )
 
-const BAR_COLORS = [
-  "#8F9AF6",
-  "#B8EFC7",
-  "#242424",
-  "#A9DEFA",
-  "#A9C7E5",
-  "#8BD4B4",
-]
+/* Same fixed categorical order the shared chart kit uses (azure → teal →
+   orange → violet), so this chart.js page and the recharts panels elsewhere
+   read as one system. The order is assigned by position, never cycled by rank;
+   past the fourth slot a category takes neutral ink rather than a new hue. */
+const BAR_COLORS = ["#1B6EF3", "#00B8D4", "#FF9600", "#CE82FF", "#AFAFAF", "#AFAFAF"]
 
 function toPercent(value) {
   if (value === null || value === undefined || value === "") {
@@ -177,9 +174,9 @@ function TopicReviewRow({ topic, index }) {
         </span>
         </div>
 
-        <div className="mt-2 h-[3px] overflow-hidden rounded-full bg-[#E5E7EB]">
+        <div className="mt-2 h-[3px] overflow-hidden rounded-full bg-muted">
           <div
-              className="h-full rounded-full bg-[#252525]"
+              className="h-full rounded-full bg-primary"
               style={{
                 width: `${mastery}%`,
               }}
@@ -193,13 +190,13 @@ function ChartLegend() {
   return (
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-1.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#A8DDF9]" />
-          <span className="text-xs text-zinc-500">Quiz</span>
+          <span className="size-2 rounded-sm" style={{ background: BAR_COLORS[0] }} />
+          <span className="text-xs font-semibold text-muted-foreground">Quiz</span>
         </div>
 
         <div className="flex items-center gap-1.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#202020]" />
-          <span className="text-xs text-zinc-500">Exam</span>
+          <span className="size-2 rounded-sm" style={{ background: BAR_COLORS[1] }} />
+          <span className="text-xs font-semibold text-muted-foreground">Exam</span>
         </div>
       </div>
   )
@@ -325,8 +322,8 @@ function PerformanceBreakdownList({ buckets }) {
 function ContinueLearningSection({ nextLesson, certification }) {
   if (!nextLesson) {
     return (
-        <section className="rounded-[10px] border border-[#EEF0F3] bg-[#FBFCFD] px-4 py-4">
-          <h2 className="text-sm font-semibold text-zinc-800">
+        <section className="rounded-rb-tile border-2 border-border bg-card px-4 py-4">
+          <h2 className="text-sm font-bold text-foreground">
             Continue Learning
           </h2>
 
@@ -351,8 +348,8 @@ function ContinueLearningSection({ nextLesson, certification }) {
       ) ?? 0
 
   return (
-      <section className="rounded-[10px] border border-[#EEF0F3] bg-[#FBFCFD] px-4 py-4">
-        <h2 className="text-sm font-semibold text-zinc-800">
+      <section className="rounded-rb-tile border-2 border-border bg-card px-4 py-4">
+        <h2 className="text-sm font-bold text-foreground">
           Continue Learning
         </h2>
 
@@ -362,7 +359,7 @@ function ContinueLearningSection({ nextLesson, certification }) {
               {certification?.title ?? "Certification"}
             </p>
 
-            <p className="mt-1 truncate text-base font-semibold text-zinc-800">
+            <p className="mt-1 truncate text-base font-semibold text-foreground">
               {nextLesson.name ?? nextLesson.title ?? "Untitled Lesson"}
             </p>
 
@@ -507,26 +504,26 @@ export default function LearnerProgressPage() {
         {
           label: "Quiz",
           data: quizScores,
-          borderColor: "#A8DDF9",
-          backgroundColor: "rgba(168, 221, 249, 0.16)",
+          borderColor: BAR_COLORS[0],
+          backgroundColor: "rgba(27, 110, 243, 0.16)",
           borderWidth: 2,
           tension: 0.45,
           pointRadius: 0,
           pointHoverRadius: 4,
-          pointHoverBackgroundColor: "#A8DDF9",
+          pointHoverBackgroundColor: BAR_COLORS[0],
           fill: false,
         },
         {
           label: "Exam",
           data: examScores,
-          borderColor: "#202020",
-          backgroundColor: "rgba(32, 32, 32, 0.10)",
+          borderColor: BAR_COLORS[1],
+          backgroundColor: "rgba(0, 184, 212, 0.14)",
           borderWidth: 2,
           borderDash: [5, 4],
           tension: 0.45,
           pointRadius: 0,
           pointHoverRadius: 4,
-          pointHoverBackgroundColor: "#202020",
+          pointHoverBackgroundColor: BAR_COLORS[1],
           fill: false,
         },
       ],
@@ -570,7 +567,7 @@ export default function LearnerProgressPage() {
             display: false,
           },
           ticks: {
-            color: "#A1A1AA",
+            color: "#777777",
             font: {
               size: 11,
             },
@@ -583,11 +580,11 @@ export default function LearnerProgressPage() {
             display: false,
           },
           grid: {
-            color: "#EEF0F3",
+            color: "#E5E5E5",
             borderDash: [3, 3],
           },
           ticks: {
-            color: "#A1A1AA",
+            color: "#777777",
             font: {
               size: 11,
             },
@@ -656,7 +653,7 @@ export default function LearnerProgressPage() {
             display: false,
           },
           ticks: {
-            color: "#A1A1AA",
+            color: "#777777",
             font: {
               size: 10,
             },
@@ -669,11 +666,11 @@ export default function LearnerProgressPage() {
             display: false,
           },
           grid: {
-            color: "#EEF0F3",
+            color: "#E5E5E5",
             borderDash: [3, 3],
           },
           ticks: {
-            color: "#A1A1AA",
+            color: "#777777",
             font: {
               size: 10,
             },

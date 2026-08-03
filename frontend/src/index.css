@@ -1379,6 +1379,13 @@ body.netacad-overlay-theme {
     min-height: 56px;
     padding-inline: var(--rb-s3);
     border-radius: var(--radius-rb-tile);
+    /* Colour normally lives in the block near the top of this file, but the
+       global input rule matches with equal specificity and lands after it, so
+       a field here inherits `--card` — white. That was fine while the form
+       side sat on the macaw wash; on the plain white shell it left a white
+       field on a white page held apart by one hairline. Polar puts the field
+       back on its own tone, and focus still lifts it to snow. */
+    background: var(--color-rb-polar);
 }
 
 /* The submit key, given the lip and the travel. A flat rectangle beneath a

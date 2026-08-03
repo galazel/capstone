@@ -31,6 +31,9 @@ const SOLVED_COUNT = 2
 const TONE = {
   face: "bg-rb-beetle",
   border: "border-rb-beetle-lip",
+  // Colour of the road already travelled on the roadmap. A CSS colour rather
+  // than a class: the road is an SVG stroke, not a box.
+  road: "var(--color-rb-beetle-lip)",
 }
 
 const GRID_PROBLEMS = BLUEPRINT_PROBLEMS.map((problem, index) => ({

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Annotated, Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -17,6 +18,8 @@ router = APIRouter(
     tags=["question-bank"],
     dependencies=[Depends(require_service_key)],
 )
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_DOCUMENT_TYPES = [
     "application/pdf",
@@ -48,6 +51,28 @@ def _reject_if_cancelled(thread_id: str) -> None:
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Run {thread_id} was cancelled and cannot be resumed.",
             )
+
+
+def _fail(thread_id: str, error: Exception, what: str) -> HTTPException:
+    """Ends the run, then reports it.
+
+    The graph raising means this thread is not executing any more, and a run
+    nobody is driving must not be left claiming RUNNING or WAITING_FOR_REVIEW:
+    the workspace keeps drawing a progress spinner for it, and recovery refuses
+    to touch it because only failed runs are recoverable. Recording the failure
+    is what turns a silently abandoned run into one that visibly stopped.
+    """
+    logger.exception("Question-bank run %s failed during %s", thread_id, what)
+    try:
+        with SessionLocal() as session:
+            registry.mark_failed(session, thread_id, error=str(error))
+    except Exception:
+        # Reporting the original failure matters more than recording it. A
+        # run left RUNNING here is picked up as stalled later.
+        logger.exception("Could not record the failure of run %s", thread_id)
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)
+    )
 
 
 def _to_response(thread_id: str, result: dict) -> dict[str, Any]:
@@ -117,7 +142,7 @@ async def generate_question_bank(
             config=_thread_config(thread_id),
         )
     except Exception as error:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
+        raise _fail(thread_id, error, "generation") from error
 
     return _to_response(thread_id, result)
 
@@ -143,7 +168,7 @@ async def review_question_batch(thread_id: str, request: ReviewRequest) -> dict[
         graph = await get_question_bank_graph()
         result = await graph.ainvoke(Command(resume=resume_value), config=config)
     except Exception as error:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
+        raise _fail(thread_id, error, "review") from error
 
     return _to_response(thread_id, result)
 

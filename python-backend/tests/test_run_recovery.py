@@ -695,6 +695,77 @@ async def test_resuming_leaves_waiting_for_review_before_the_work_starts(
     )
 
 
+async def test_resuming_answers_before_the_graph_runs(session, session_factory, monkeypatch):
+    """Resuming used to drive the graph inside the HTTP request, which meant
+    the reviewer's browser held a connection open for the several minutes it
+    takes to author the next lesson, its quiz, and an LLM validation pass.
+    Java's gateway gives up after 120s, so an approval that was merely slow
+    came back as "could not submit that decision" -- while Python carried on
+    generating in the background, invisible and uncancellable from that error.
+
+    The decision is recorded synchronously (so a double-click still 409s) and
+    the graph is driven afterwards, exactly as retry and restart already were.
+    """
+    from app.api.routes import certification as cert_routes
+
+    monkeypatch.setattr(cert_routes, "SessionLocal", session_factory)
+    monkeypatch.setattr(
+        cert_routes.certification_run, "context_for",
+        lambda run: certification_run.RunContext(thread_id=run.thread_id, certification_title="T"),
+    )
+
+    queued = []
+
+    class _Background:
+        def add_task(self, func, *args, **kwargs):
+            queued.append((func, args, kwargs))
+
+    registry.start_run(session, thread_id="t-async", kind="CERTIFICATION")
+    registry.mark_waiting_for_review(session, "t-async", stage="LESSON")
+
+    response = await cert_routes.resume_certification(
+        "t-async", cert_routes.ResumeRequest(action="approve"), _Background()
+    )
+
+    assert response["status"] == "RESUMING"
+    assert len(queued) == 1, "the graph must be driven after the response, not during it"
+    assert queued[0][0] is certification_run.execute, (
+        "execute, not advance: nothing is left to catch a RunFailed once the "
+        "response has gone out, so the failure has to be recorded rather than raised"
+    )
+
+    with session_factory() as s:
+        assert registry.get_run_by_thread(s, "t-async").status == registry.RUNNING, (
+            "the pause must be claimed before responding, or a second click "
+            "gets a 202 and puts a second driver on the thread"
+        )
+
+
+async def test_resuming_a_run_already_resumed_is_refused(session, session_factory, monkeypatch):
+    """The 409 has to survive the move to a background task -- it is the only
+    thing standing between a double-click and two drivers on one thread."""
+    from fastapi import HTTPException
+
+    from app.api.routes import certification as cert_routes
+
+    monkeypatch.setattr(cert_routes, "SessionLocal", session_factory)
+
+    class _Background:
+        def add_task(self, func, *args, **kwargs):
+            raise AssertionError("a refused resume must not queue any work")
+
+    registry.start_run(session, thread_id="t-twice", kind="CERTIFICATION")
+    registry.mark_waiting_for_review(session, "t-twice", stage="LESSON")
+    registry.mark_review_submitted(session, "t-twice", stage="LESSON", decision="approve")
+
+    with pytest.raises(HTTPException) as refused:
+        await cert_routes.resume_certification(
+            "t-twice", cert_routes.ResumeRequest(action="approve"), _Background()
+        )
+
+    assert refused.value.status_code == 409
+
+
 async def test_a_run_that_is_executing_is_never_reconciled_as_stranded(
     fake_graph, captured_outcome
 ):
