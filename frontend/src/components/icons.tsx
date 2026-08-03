@@ -204,7 +204,9 @@ function icon(definition: IconDefinition, displayName: string) {
         icon={definition}
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ref={ref as any}
-        style={size === undefined ? style : { width: size, height: size, ...style }}
+        // Cast to any to allow CSS custom properties used by FontAwesome (e.g. --fa-font-*)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        style={size === undefined ? (style as any) : ({ width: size, height: size, ...(style as any) } as any)}
         {...props}
       />
     )
