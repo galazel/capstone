@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react"
 import { useNavigate, useOutletContext } from "react-router-dom"
-import { useMutation, useQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import {
   ArcElement,
   BarElement,
@@ -14,8 +14,7 @@ import {
   Tooltip,
 } from "chart.js"
 import { Bar, Doughnut, Line } from "react-chartjs-2"
-import { BookOpen, Target } from "@/components/icons"
-import { toast } from "sonner"
+import { Brain, BookOpen, Flame, Gauge, Loader2, Target, TrendingUp } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -25,15 +24,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   LearnerEmptyState,
   LearnerErrorState,
-  LearnerLoadingSkeleton,
 } from "@/components/learner/learner-ui.jsx"
 import LearnerPremiumGuard from "@/components/learner/learner-premium-guard.jsx"
+import { PrioritySeal } from "@/components/learner/priority-tag.jsx"
+import { BentoGrid, BentoHeading, BentoStat, BentoTile } from "@/components/commons/bento.jsx"
 import { FEATURES } from "@/services/subscriptionService.js"
 import { getProgressAnalytics } from "@/services/learnerAnalyticsService.js"
-import { convertCoinsToAiCredits, getMyRewardBalance, getMyRewardLedger } from "@/services/gamificationService.js"
 
 ChartJS.register(
     CategoryScale,
@@ -78,6 +78,19 @@ function getNumber(value, fallback = 0) {
   return Number.isFinite(parsedValue) ? parsedValue : fallback
 }
 
+// A bare percentage doesn't say whether 55% is good or bad without a scale to
+// compare it against -- the same reason a difficulty label reads faster than
+// a raw score. Bands are wide on purpose: confidence is noisy at the edges,
+// and a tier that flips on every point swing would read as jittery rather
+// than informative.
+function confidenceTier(value) {
+  if (value === null) return null
+  if (value < 40) return "Low"
+  if (value < 70) return "Moderate"
+  if (value < 90) return "High"
+  return "Very high"
+}
+
 // For values the backend already reports on a 0-100 scale. Unlike toPercent,
 // this never re-scales -- a real value of 0.5 (half a percent) must stay 0.5,
 // not become 50, which toPercent's 0-1-means-a-fraction heuristic would do.
@@ -118,46 +131,6 @@ function getTopicTitle(topic, fallback = "Untitled Topic") {
   )
 }
 
-function ProgressStatCard({
-                            label,
-                            value,
-                            trend,
-                          }) {
-  return (
-      <article className="min-w-0 py-2 sm:px-5 sm:first:pl-0 sm:[&:not(:first-child)]:border-l sm:[&:not(:first-child)]:border-border/70">
-        <div className="flex items-start justify-between gap-3">
-          <p className="text-sm font-medium text-muted-foreground">
-            {label}
-          </p>
-
-          {trend && (
-              <span className="text-xs font-medium text-zinc-500">
-            {trend}
-          </span>
-          )}
-        </div>
-
-        <p className="mt-3 font-heading text-3xl font-semibold leading-none tracking-tight text-foreground">
-          {value}
-        </p>
-      </article>
-  )
-}
-
-function DashboardPanel({ title, children, className = "" }) {
-  return (
-      <section
-          className={`border-t border-border/70 pt-5 ${className}`}
-      >
-        <h2 className="text-lg font-semibold text-foreground">
-          {title}
-        </h2>
-
-        {children}
-      </section>
-  )
-}
-
 function TopicReviewRow({ topic, index }) {
   const title = getTopicTitle(topic, `Topic ${index + 1}`)
   const mastery = getTopicScore(topic)
@@ -165,11 +138,11 @@ function TopicReviewRow({ topic, index }) {
   return (
       <div>
         <div className="flex items-center justify-between gap-3">
-          <p className="truncate text-sm font-medium text-zinc-600">
+          <p className="truncate text-sm font-medium text-foreground">
             {title}
           </p>
 
-          <span className="shrink-0 text-xs font-medium text-zinc-400">
+          <span className="shrink-0 text-xs font-medium text-muted-foreground">
           {mastery}%
         </span>
         </div>
@@ -207,7 +180,7 @@ function StrongestTopicRow({ topic }) {
 
   return (
       <div className="flex items-center justify-between gap-3">
-        <p className="truncate text-sm font-medium text-zinc-600">
+        <p className="truncate text-sm font-medium text-foreground">
           {topic.lessonTitle ?? "Untitled Topic"}
         </p>
 
@@ -220,24 +193,20 @@ function StrongestTopicRow({ topic }) {
 
 function RecommendationCard({ recommendation }) {
   return (
-      <div className="rounded-lg border border-border/60 px-3.5 py-3">
-        <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start gap-3 rounded-lg border border-border/60 px-3.5 py-3">
+        <PrioritySeal tag={recommendation.priorityTag} size={48} />
+
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-foreground">
             {recommendation.lessonTitle ?? "Untitled Topic"}
           </p>
 
-          {recommendation.priorityTag && (
-              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {recommendation.priorityTag.replaceAll("_", " ")}
-              </span>
+          {recommendation.reason && (
+              <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
+                {recommendation.reason}
+              </p>
           )}
         </div>
-
-        {recommendation.reason && (
-            <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-              {recommendation.reason}
-            </p>
-        )}
       </div>
   )
 }
@@ -275,18 +244,18 @@ function RecentActivityRow({ activity }) {
   return (
       <div className="flex items-center justify-between gap-3 py-1.5">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-zinc-700">
+          <p className="truncate text-sm font-medium text-foreground">
             {activity.title ?? (activity.activityType === "CHALLENGE" ? "Challenge" : "Assessment")}
           </p>
 
-          <p className="text-xs text-zinc-400">
+          <p className="text-xs text-muted-foreground">
             {activity.activityType === "CHALLENGE" ? "Challenge" : "Assessment"}
             {occurredAt ? ` · ${occurredAt.toLocaleDateString()}` : ""}
           </p>
         </div>
 
         {activity.scorePercentage != null && (
-            <span className="shrink-0 text-xs font-semibold text-zinc-700">
+            <span className="shrink-0 text-xs font-semibold text-foreground">
               {clampPercent(activity.scorePercentage)}%
             </span>
         )}
@@ -305,11 +274,11 @@ function PerformanceBreakdownList({ buckets }) {
       <div className="mt-3 space-y-2.5">
         {visible.map((bucket) => (
             <div key={bucket.bucketKey} className="flex items-center justify-between gap-3">
-              <span className="truncate text-sm text-zinc-600">
+              <span className="truncate text-sm text-foreground">
                 {bucket.bucketKey?.replaceAll("_", " ") ?? "Unknown"}
               </span>
 
-              <span className="shrink-0 text-xs font-medium text-zinc-500">
+              <span className="shrink-0 text-xs font-medium text-muted-foreground">
                 {bucket.correctAnswers}/{bucket.totalAnswered} correct
                 {bucket.accuracyPercentage != null ? ` (${Math.round(bucket.accuracyPercentage)}%)` : ""}
               </span>
@@ -327,12 +296,12 @@ function ContinueLearningSection({ nextLesson, certification }) {
             Continue Learning
           </h2>
 
-          <div className="mt-4 rounded-lg border border-dashed border-zinc-200 bg-white px-4 py-5 text-center">
-            <p className="text-sm font-medium text-zinc-700">
+          <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/30 px-4 py-5 text-center">
+            <p className="text-sm font-medium text-foreground">
               No unfinished lessons available.
             </p>
 
-            <p className="mt-1 text-xs text-zinc-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               Complete an assessment or review previous lessons to continue learning.
             </p>
           </div>
@@ -353,9 +322,9 @@ function ContinueLearningSection({ nextLesson, certification }) {
           Continue Learning
         </h2>
 
-        <div className="mt-4 flex flex-col gap-4 rounded-lg bg-white px-4 py-4 md:flex-row md:items-center md:justify-between">
+        <div className="mt-4 flex flex-col gap-4 rounded-lg bg-muted/30 px-4 py-4 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {certification?.title ?? "Certification"}
             </p>
 
@@ -363,25 +332,25 @@ function ContinueLearningSection({ nextLesson, certification }) {
               {nextLesson.name ?? nextLesson.title ?? "Untitled Lesson"}
             </p>
 
-            <p className="mt-1 text-sm text-zinc-500">
+            <p className="mt-1 text-sm text-muted-foreground">
               Continue studying to improve your topic mastery.
             </p>
           </div>
 
           <div className="w-full md:w-44">
             <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs text-zinc-500">
+            <span className="text-xs text-muted-foreground">
               Lesson Progress
             </span>
 
-              <span className="text-xs font-semibold text-zinc-700">
+              <span className="text-xs font-semibold text-foreground">
               {lessonProgress}%
             </span>
             </div>
 
-            <div className="h-1.5 overflow-hidden rounded-full bg-zinc-100">
+            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
               <div
-                  className="h-full rounded-full bg-zinc-900"
+                  className="h-full rounded-full bg-primary"
                   style={{
                     width: `${lessonProgress}%`,
                   }}
@@ -390,6 +359,84 @@ function ContinueLearningSection({ nextLesson, certification }) {
           </div>
         </div>
       </section>
+  )
+}
+
+/**
+ * Mirrors the real BentoGrid's band shape (2+1+2+1 stats, 4+2 charts, 4+2,
+ * 3+3, 3+3, 3+3) so the page doesn't jump around once real content swaps in.
+ */
+function AnalyticsLoadingSkeleton() {
+  return (
+    <BentoGrid>
+      <BentoTile col={2} row={1} className="justify-center gap-2">
+        <Skeleton className="h-3 w-20" />
+        <Skeleton className="h-8 w-16" />
+      </BentoTile>
+      <BentoTile col={1} row={1} className="justify-center gap-2">
+        <Skeleton className="h-3 w-14" />
+        <Skeleton className="h-8 w-10" />
+      </BentoTile>
+      <BentoTile col={2} row={1} className="justify-center gap-2">
+        <Skeleton className="h-3 w-24" />
+        <Skeleton className="h-8 w-16" />
+      </BentoTile>
+      <BentoTile col={1} row={1} className="justify-center gap-2">
+        <Skeleton className="h-3 w-16" />
+        <Skeleton className="h-8 w-12" />
+      </BentoTile>
+
+      <BentoTile col={4} row={2} className="gap-3">
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="h-[180px] w-full" />
+      </BentoTile>
+      <BentoTile col={2} row={2} className="gap-3">
+        <Skeleton className="h-4 w-28" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-3/4" />
+      </BentoTile>
+
+      <BentoTile col={4} row={2} className="gap-3">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-[180px] w-full" />
+      </BentoTile>
+      <BentoTile col={2} row={2} className="gap-3">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="mx-auto h-[100px] w-[100px] rounded-full" />
+      </BentoTile>
+
+      <BentoTile col={3} row={2} className="gap-3">
+        <Skeleton className="h-4 w-36" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-full" />
+      </BentoTile>
+      <BentoTile col={3} row={2} className="gap-3">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-full" />
+      </BentoTile>
+
+      <BentoTile col={3} row={2} className="gap-3">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-5/6" />
+      </BentoTile>
+      <BentoTile col={3} row={2} className="gap-3">
+        <Skeleton className="h-4 w-28" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-5/6" />
+      </BentoTile>
+
+      <BentoTile col={3} row={1} className="gap-3">
+        <Skeleton className="h-4 w-44" />
+        <Skeleton className="h-4 w-full" />
+      </BentoTile>
+      <BentoTile col={3} row={1} className="gap-3">
+        <Skeleton className="h-4 w-44" />
+        <Skeleton className="h-4 w-full" />
+      </BentoTile>
+    </BentoGrid>
   )
 }
 
@@ -440,6 +487,10 @@ export default function LearnerProgressPage() {
     queryFn: () => getProgressAnalytics(selectedCertificationId),
     enabled: Boolean(selectedCertificationId),
     staleTime: 30_000,
+    // Mastery numbers land asynchronously after a diagnostic or assessment --
+    // poll while the BKT service hasn't caught up yet so the banner below
+    // clears itself the moment it does, instead of needing a manual refresh.
+    refetchInterval: (query) => (query.state.data?.bktAvailable === false ? 4000 : false),
   })
   const analytics = analyticsQuery.data
 
@@ -744,13 +795,6 @@ export default function LearnerProgressPage() {
   const studyStreak = getNumber(analytics?.studyStreakDays, 0)
   const readinessLevel = clampPercent(analytics?.readinessPercentage)
   const bktUnavailable = analytics != null && analytics.bktAvailable === false
-  const rewardsQuery = useQuery({ queryKey: ["my-reward-balance"], queryFn: getMyRewardBalance })
-  const rewardLedgerQuery = useQuery({ queryKey: ["my-reward-ledger"], queryFn: getMyRewardLedger })
-  const convertCoinsMutation = useMutation({
-    mutationFn: () => convertCoinsToAiCredits(10, globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`),
-    onSuccess: (result) => { rewardsQuery.refetch(); rewardLedgerQuery.refetch(); toast.success(result.converted ? `Converted 10 coins into ${result.aiCreditsReceived} AI credit.` : "That conversion was already processed.") },
-    onError: (error) => toast.error(error?.message || "Could not convert coins."),
-  })
 
   return (
       <LearnerPremiumGuard
@@ -758,17 +802,15 @@ export default function LearnerProgressPage() {
           title="Advanced progress analytics"
           description="Unlock mastery, weakness analysis, performance trends, confidence, and recommended next actions with Pro or institution access."
       >
-        <div className="space-y-8 font-sans">
-        <section className="grid gap-3 sm:grid-cols-3" aria-label="Learning rewards">
-          {[
-            ["XP", rewardsQuery.data?.xp ?? 0, "Permanent learning progression"],
-            ["Coins", rewardsQuery.data?.coins ?? 0, "Community reward balance"],
-            ["AI credits", rewardsQuery.data?.aiCredits ?? 0, "Tutor generation balance"],
-          ].map(([label, value, caption]) => <div key={label} className="rounded-xl border bg-background p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p><p className="mt-1 text-2xl font-bold">{Number(value).toLocaleString()}</p><p className="mt-1 text-xs text-muted-foreground">{caption}</p></div>)}
-        </section>
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 px-4 py-3 text-sm"><p className="text-muted-foreground">Convert 10 Community Coins into 1 AI Credit for Tutor generation.</p><Button size="sm" variant="outline" disabled={(rewardsQuery.data?.coins ?? 0) < 10 || convertCoinsMutation.isPending} onClick={() => convertCoinsMutation.mutate()}>Convert 10 coins</Button></div>
-        {(rewardLedgerQuery.data?.length ?? 0) > 0 ? <section className="rounded-xl border bg-background p-4"><h2 className="text-sm font-semibold">Recent reward activity</h2><div className="mt-3 space-y-2">{rewardLedgerQuery.data.slice(0, 5).map((entry, index) => <div key={`${entry.createdAt}-${index}`} className="flex items-center justify-between gap-3 text-sm"><span className="truncate text-muted-foreground">{entry.reason.replaceAll("_", " ")}</span><span className={entry.amount > 0 ? "font-semibold text-emerald-700" : "font-semibold text-rose-700"}>{entry.amount > 0 ? "+" : ""}{entry.amount} {entry.currency.replace("_", " ")}</span></div>)}</div></section> : null}
-        <div className="flex justify-end">
+        <div className="space-y-6">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Analytics</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Your mastery, performance trends, and recommended next steps.
+            </p>
+          </div>
+
           <Select
               value={selectedCertificationId}
               onValueChange={setSelectedCertificationId}
@@ -804,7 +846,7 @@ export default function LearnerProgressPage() {
                 }
             />
         ) : analyticsQuery.isLoading ? (
-            <LearnerLoadingSkeleton />
+            <AnalyticsLoadingSkeleton />
         ) : analyticsQuery.isError ? (
             <LearnerErrorState
                 title="Couldn't load your analytics"
@@ -814,66 +856,78 @@ export default function LearnerProgressPage() {
         ) : (
             <>
               {bktUnavailable && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
-                    Mastery analytics are temporarily unavailable. Your assessment scores below are still up to date.
+                  <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
+                    <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden="true" />
+                    <span>
+                      Processing your mastery — this updates itself once it's ready. Your assessment scores below are still up to date.
+                    </span>
                   </div>
               )}
 
-              <section className="grid gap-5 sm:grid-cols-2 sm:gap-0 xl:grid-cols-4" aria-label="Analytics summary">
-                <ProgressStatCard
+              <BentoGrid>
+                {/* Band 1 — 2 + 1 + 2 + 1, mirroring the admin dashboard's counter rhythm */}
+                <BentoStat
+                    tone="macaw"
+                    col={2}
+                    row={1}
+                    icon={TrendingUp}
                     label="Overall Progress"
                     value={`${overallProgress}%`}
-                    backgroundClassName="bg-[#E2F5FF]"
                 />
 
-                <ProgressStatCard
+                <BentoStat
+                    tone="feather"
+                    col={1}
+                    row={1}
+                    icon={Brain}
                     label="Topic Mastery"
-                    value={
-                      topicMastery === null
-                          ? "—"
-                          : `${topicMastery}%`
-                    }
-                    backgroundClassName="bg-[#E8EFF9]"
+                    value={topicMastery === null ? "—" : `${topicMastery}%`}
                 />
 
-                <ProgressStatCard
+                <BentoStat
+                    tone="bee"
+                    col={2}
+                    row={1}
+                    icon={Gauge}
                     label="Confidence Level"
-                    value={
-                      confidenceLevel === null
-                          ? "—"
-                          : `${confidenceLevel}%`
-                    }
-                    trend={
-                      readinessLevel === null
-                          ? null
-                          : `Readiness ${readinessLevel}%`
-                    }
-                    backgroundClassName="bg-[#E2F5FF]"
-                />
+                    value={confidenceLevel === null ? "—" : confidenceTier(confidenceLevel)}
+                >
+                  {confidenceLevel !== null ? (
+                      <p className="mt-2 inline-flex w-fit items-center gap-1.5 rounded-full bg-white/60 px-2.5 py-1 text-xs font-bold text-rb-bee-lip dark:bg-white/10">
+                        {confidenceLevel}% confidence
+                      </p>
+                  ) : null}
 
-                <ProgressStatCard
+                  {readinessLevel !== null ? (
+                      <p className="mt-2 text-xs font-semibold text-rb-bee-lip">
+                        Readiness {readinessLevel}%
+                      </p>
+                  ) : null}
+                </BentoStat>
+
+                <BentoStat
+                    tone="fox"
+                    col={1}
+                    row={1}
+                    icon={Flame}
                     label="Study Streak"
                     value={`${studyStreak} days`}
-                    backgroundClassName="bg-[#E8EFF9]"
                 />
-              </section>
 
-              <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_250px]">
-                <DashboardPanel title="Learning Performance">
-                  <div className="mt-1 flex items-center justify-end">
-                    <ChartLegend />
-                  </div>
+                {/* Band 2 — 4 + 2 */}
+                <BentoTile col={4} row={2}>
+                  <BentoHeading title="learning performance" action={<ChartLegend />} />
 
-                  <div className="mt-1 h-[215px]">
+                  <div className="h-[215px]">
                     {scoreTrend.length === 0 ? (
                         <div className="flex h-full flex-col items-center justify-center">
-                          <Target className="h-7 w-7 text-zinc-300" />
+                          <Target className="h-7 w-7 text-muted-foreground/50" />
 
-                          <p className="mt-3 text-sm font-medium text-zinc-600">
+                          <p className="mt-3 text-sm font-medium text-foreground">
                             No performance data yet
                           </p>
 
-                          <p className="mt-1 text-xs text-zinc-400">
+                          <p className="mt-1 text-xs text-muted-foreground">
                             Complete quizzes or mock exams to see your progress.
                           </p>
                         </div>
@@ -884,23 +938,25 @@ export default function LearnerProgressPage() {
                         />
                     )}
                   </div>
-                </DashboardPanel>
+                </BentoTile>
 
-                <DashboardPanel title="Topics to Review">
+                <BentoTile col={2} row={2}>
+                  <BentoHeading title="topics to review" />
+
                   {certificationWeakAreas.length === 0 ? (
-                      <div className="flex min-h-[215px] flex-col items-center justify-center text-center">
-                        <Target className="h-6 w-6 text-zinc-300" />
+                      <div className="flex min-h-[195px] flex-col items-center justify-center text-center">
+                        <Target className="h-6 w-6 text-muted-foreground/50" />
 
-                        <p className="mt-3 text-sm font-medium text-zinc-600">
+                        <p className="mt-3 text-sm font-medium text-foreground">
                           No review topics yet
                         </p>
 
-                        <p className="mt-1 text-xs leading-4 text-zinc-400">
+                        <p className="mt-1 text-xs leading-4 text-muted-foreground">
                           Complete assessments to identify weak areas.
                         </p>
                       </div>
                   ) : (
-                      <div className="mt-5 space-y-4">
+                      <div className="space-y-4">
                         {certificationWeakAreas.slice(0, 6).map((topic, index) => (
                             <TopicReviewRow
                                 key={
@@ -915,19 +971,20 @@ export default function LearnerProgressPage() {
                         ))}
                       </div>
                   )}
-                </DashboardPanel>
-              </section>
+                </BentoTile>
 
-              <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(310px,0.78fr)]">
-                <DashboardPanel title="Weak Areas">
-                  <div className="mt-4 h-[195px]">
+                {/* Band 3 — 4 + 2, mirrored against band 2 */}
+                <BentoTile col={4} row={2}>
+                  <BentoHeading title="weak areas" />
+
+                  <div className="h-[195px]">
                     {certificationWeakAreas.length === 0 ? (
                         <div className="flex h-full flex-col items-center justify-center">
-                          <p className="text-sm font-medium text-zinc-600">
+                          <p className="text-sm font-medium text-foreground">
                             No weak-area data yet
                           </p>
 
-                          <p className="mt-1 text-xs text-zinc-400">
+                          <p className="mt-1 text-xs text-muted-foreground">
                             Assessment results will appear here.
                           </p>
                         </div>
@@ -938,22 +995,24 @@ export default function LearnerProgressPage() {
                         />
                     )}
                   </div>
-                </DashboardPanel>
+                </BentoTile>
 
-                <DashboardPanel title="Accuracy by Difficulty">
+                <BentoTile col={2} row={2}>
+                  <BentoHeading title="accuracy by difficulty" />
+
                   {mockExamSegments.length === 0 ? (
                       <div className="flex h-[195px] flex-col items-center justify-center">
-                        <p className="text-sm font-medium text-zinc-600">
+                        <p className="text-sm font-medium text-foreground">
                           No graded answers yet
                         </p>
 
-                        <p className="mt-1 text-xs text-zinc-400">
+                        <p className="mt-1 text-xs text-muted-foreground">
                           Complete an assessment to see accuracy by difficulty.
                         </p>
                       </div>
                   ) : (
-                      <div className="mt-2 grid min-h-[195px] items-center gap-3 sm:grid-cols-[115px_minmax(0,1fr)]">
-                        <div className="h-[120px]">
+                      <div className="grid min-h-[150px] items-center gap-3 sm:grid-cols-[100px_minmax(0,1fr)]">
+                        <div className="h-[100px]">
                           <Doughnut
                               data={doughnutChartData}
                               options={doughnutChartOptions}
@@ -974,12 +1033,12 @@ export default function LearnerProgressPage() {
                               }}
                           />
 
-                                  <span className="truncate text-xs text-zinc-600">
+                                  <span className="truncate text-xs text-muted-foreground">
                             {segment.label}
                           </span>
                                 </div>
 
-                                <span className="shrink-0 text-xs font-semibold text-zinc-700">
+                                <span className="shrink-0 text-xs font-semibold text-foreground">
                           {segment.value}%
                         </span>
                               </div>
@@ -987,17 +1046,17 @@ export default function LearnerProgressPage() {
                         </div>
                       </div>
                   )}
-                </DashboardPanel>
-              </section>
+                </BentoTile>
 
-              <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(310px,0.78fr)]">
-                <DashboardPanel title="Recommended Topics">
+                {/* Band 4 — even thirds */}
+                <BentoTile col={3} row={2}>
+                  <BentoHeading title="recommended topics" />
                   {(analytics?.recommendedTopics ?? []).length === 0 ? (
-                      <p className="mt-4 text-sm text-muted-foreground">
+                      <p className="text-sm text-muted-foreground">
                         No recommendations yet -- complete an assessment to get personalized suggestions.
                       </p>
                   ) : (
-                      <div className="mt-4 space-y-2.5">
+                      <div className="space-y-2.5">
                         {analytics.recommendedTopics.map((recommendation) => (
                             <RecommendationCard
                                 key={recommendation.lessonId}
@@ -1006,68 +1065,75 @@ export default function LearnerProgressPage() {
                         ))}
                       </div>
                   )}
-                </DashboardPanel>
+                </BentoTile>
 
-                <DashboardPanel title="Strongest Topics">
+                <BentoTile col={3} row={2}>
+                  <BentoHeading title="strongest topics" />
                   {(analytics?.strongestTopics ?? []).length === 0 ? (
-                      <p className="mt-4 text-sm text-muted-foreground">
+                      <p className="text-sm text-muted-foreground">
                         No strong topics identified yet.
                       </p>
                   ) : (
-                      <div className="mt-4 space-y-3">
+                      <div className="space-y-3">
                         {analytics.strongestTopics.map((topic) => (
                             <StrongestTopicRow key={topic.lessonId} topic={topic} />
                         ))}
                       </div>
                   )}
-                </DashboardPanel>
-              </section>
+                </BentoTile>
 
-              <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(310px,0.78fr)]">
-                <DashboardPanel title="Category Mastery">
-                  {(analytics?.categoryMastery ?? []).length === 0 ? (
-                      <p className="mt-4 text-sm text-muted-foreground">
-                        No category mastery data yet.
-                      </p>
-                  ) : (
-                      <div className="mt-3 divide-y divide-border/60">
-                        {analytics.categoryMastery.map((category) => (
-                            <CategoryMasteryNode
-                                key={`${category.categoryLevel}-${category.categoryId}`}
-                                category={category}
-                            />
-                        ))}
-                      </div>
-                  )}
-                </DashboardPanel>
+                {/* Band 5 — even thirds */}
+                <BentoTile col={3} row={2} className="!p-0">
+                  <div className="flex min-h-0 flex-1 flex-col p-5 sm:p-6">
+                    <BentoHeading title="category mastery" />
+                    {(analytics?.categoryMastery ?? []).length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          No category mastery data yet.
+                        </p>
+                    ) : (
+                        <div className="-mr-2 min-h-0 flex-1 divide-y divide-border/60 overflow-y-auto pr-2">
+                          {analytics.categoryMastery.map((category) => (
+                              <CategoryMasteryNode
+                                  key={`${category.categoryLevel}-${category.categoryId}`}
+                                  category={category}
+                              />
+                          ))}
+                        </div>
+                    )}
+                  </div>
+                </BentoTile>
 
-                <DashboardPanel title="Recent Activity">
-                  {(analytics?.recentActivity ?? []).length === 0 ? (
-                      <p className="mt-4 text-sm text-muted-foreground">
-                        No recent assessment or challenge activity yet.
-                      </p>
-                  ) : (
-                      <div className="mt-3 divide-y divide-border/60">
-                        {analytics.recentActivity.map((activity, index) => (
-                            <RecentActivityRow
-                                key={`${activity.activityType}-${activity.occurredAt}-${index}`}
-                                activity={activity}
-                            />
-                        ))}
-                      </div>
-                  )}
-                </DashboardPanel>
-              </section>
+                <BentoTile col={3} row={2} className="!p-0">
+                  <div className="flex min-h-0 flex-1 flex-col p-5 sm:p-6">
+                    <BentoHeading title="recent activity" />
+                    {(analytics?.recentActivity ?? []).length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          No recent assessment or challenge activity yet.
+                        </p>
+                    ) : (
+                        <div className="-mr-2 min-h-0 flex-1 divide-y divide-border/60 overflow-y-auto pr-2">
+                          {analytics.recentActivity.map((activity, index) => (
+                              <RecentActivityRow
+                                  key={`${activity.activityType}-${activity.occurredAt}-${index}`}
+                                  activity={activity}
+                              />
+                          ))}
+                        </div>
+                    )}
+                  </div>
+                </BentoTile>
 
-              <section className="grid gap-4 sm:grid-cols-2">
-                <DashboardPanel title="Performance by Question Type">
+                {/* Band 6 — even halves */}
+                <BentoTile col={3} row={1}>
+                  <BentoHeading title="performance by question type" />
                   <PerformanceBreakdownList buckets={analytics?.performanceByQuestionType} />
-                </DashboardPanel>
+                </BentoTile>
 
-                <DashboardPanel title="Performance by Assessment Type">
+                <BentoTile col={3} row={1}>
+                  <BentoHeading title="performance by assessment type" />
                   <PerformanceBreakdownList buckets={analytics?.performanceByAssessmentType} />
-                </DashboardPanel>
-              </section>
+                </BentoTile>
+              </BentoGrid>
 
               <ContinueLearningSection
                   nextLesson={nextLesson}

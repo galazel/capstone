@@ -34,7 +34,7 @@ const MESSAGES = [
 
 const TAG_TONE = {
   macaw: "bg-rb-macaw-wash text-rb-macaw-lip",
-  bee: "bg-rb-bee-wash text-[#8a6d00]",
+  bee: "bg-rb-bee-wash text-rb-bee-ink",
   beetle: "bg-rb-beetle-wash text-rb-beetle-lip",
   fox: "bg-rb-fox-wash text-rb-fox-lip",
 }

@@ -21,7 +21,7 @@ export const PRIORITY_CONFIG = {
   MEDIUM_PRIORITY: {
     label: '🟡 Medium',
     bgColor: 'bg-rb-bee-wash',
-    textColor: 'text-[#8a6d00]',
+    textColor: 'text-rb-bee-ink',
     icon: BookOpen,
     description: 'Good to practice',
   },
@@ -35,7 +35,7 @@ export const PRIORITY_CONFIG = {
   STRONG: {
     label: '✅ Strong',
     bgColor: 'bg-rb-feather-wash',
-    textColor: 'text-[#3d6b06]',
+    textColor: 'text-rb-feather-ink',
     icon: CheckCircle,
     description: 'Well mastered',
   },
@@ -87,6 +87,79 @@ export function PriorityTag({ tag, size = 'md', showDescription = false }) {
         <p className="text-xs text-muted-foreground">{config.description}</p>
       )}
     </div>
+  )
+}
+
+// Solid fills for the seal badge -- CSS custom properties from the rebyu-ds
+// theme (see styles/rebyu-ds.css @theme) rather than Tailwind class names,
+// since an inline SVG `fill` attribute can't take a `fill-rb-*` utility class.
+const SEAL_CONFIG = {
+  CRITICAL_PRIORITY: { fill: "var(--color-rb-cardinal)", short: "critical" },
+  HIGH_PRIORITY: { fill: "var(--color-rb-fox)", short: "high" },
+  MEDIUM_PRIORITY: { fill: "var(--color-rb-bee)", short: "medium" },
+  LOW_PRIORITY: { fill: "var(--color-rb-macaw)", short: "low" },
+  STRONG: { fill: "var(--color-rb-feather)", short: "strong" },
+  ON_TRACK: { fill: "var(--color-rb-macaw)", short: "on track" },
+  NOT_ENOUGH_DATA: { fill: "var(--color-rb-hare)", short: "no data" },
+  NEEDS_REASSESSMENT: { fill: "var(--color-rb-beetle)", short: "reassess" },
+}
+
+/** A 20-point zigzag ring, computed once at module load. */
+const SEAL_OUTLINE = (() => {
+  const spikes = 20
+  const outerR = 48
+  const innerR = 41
+  const cx = 50
+  const cy = 50
+  const points = []
+
+  for (let i = 0; i < spikes * 2; i += 1) {
+    const r = i % 2 === 0 ? outerR : innerR
+    const angle = (Math.PI * i) / spikes
+    const x = cx + r * Math.sin(angle)
+    const y = cy - r * Math.cos(angle)
+    points.push(`${x.toFixed(2)},${y.toFixed(2)}`)
+  }
+
+  return points.join(" ")
+})()
+
+/**
+ * The seal/stamp badge -- a jagged-edge rosette with the priority stamped
+ * across a band through its middle, echoing a certificate seal. Reserved for
+ * spots where a priority is the headline of the row (recommended topics);
+ * `PriorityTag` stays the everyday inline pill everywhere else.
+ */
+export function PrioritySeal({ tag, size = 56 }) {
+  if (!tag) return null
+
+  const config = SEAL_CONFIG[tag]
+  if (!config) return null
+
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      width={size}
+      height={size}
+      className="shrink-0"
+      role="img"
+      aria-label={`${config.short} priority`}
+    >
+      <polygon points={SEAL_OUTLINE} fill={config.fill} />
+      <rect x="0" y="42" width="100" height="16" fill="white" />
+      <text
+        x="50"
+        y="53.5"
+        textAnchor="middle"
+        fontSize={config.short.length > 7 ? "10" : "13"}
+        fontWeight="800"
+        letterSpacing="0.5"
+        fill={config.fill}
+        style={{ textTransform: "uppercase", fontFamily: "inherit" }}
+      >
+        {config.short}
+      </text>
+    </svg>
   )
 }
 

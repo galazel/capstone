@@ -183,6 +183,8 @@ const STATUS_BADGE_VARIANTS = {
   draft: "outline",
   active: "default",
   expired: "outline",
+  pending: "secondary",
+  suspended: "destructive",
 }
 
 export function EnterpriseStatusBadge({ status }) {

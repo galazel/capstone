@@ -2,8 +2,24 @@ import { useEffect, useState } from 'react'
 import api from '@/services/api'
 import { StreakWidget } from '@/components/learner/streak-widget'
 import { MasteryIndicator } from '@/components/learner/mastery-indicator'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { BookOpen, Trophy, Zap, TrendingUp } from "@/components/icons"
+import { BentoGrid, BentoHeading, BentoStat, BentoTile } from '@/components/commons/bento.jsx'
+import { BookOpen, Trophy, Zap, TrendingUp, Coins, Bell } from "@/components/icons"
+
+const QUICK_ACTIONS = [
+  { href: "/study-plans", label: "Study Plans", icon: BookOpen, tone: "feather" },
+  { href: "/leaderboard", label: "Leaderboard", icon: Trophy, tone: "fox" },
+  { href: "/subscription", label: "Go Pro", icon: Zap, tone: "beetle" },
+  { href: "/settings/notifications", label: "Reminders", icon: Bell, tone: "bee" },
+]
+
+const ACTION_TONE_CLASSES = {
+  feather: "border-rb-feather/30 bg-rb-feather-wash text-rb-feather-lip dark:bg-[#152744]",
+  fox: "border-rb-fox/30 bg-rb-fox-wash text-rb-fox-lip dark:bg-[#3a2a12]",
+  beetle: "border-rb-beetle/30 bg-rb-beetle-wash text-rb-beetle-lip dark:bg-[#2a1f3a]",
+  bee: "border-rb-bee/30 bg-rb-bee-wash text-rb-bee-lip dark:bg-[#12333a]",
+}
+
+const MASTERY_BAR_TONE = ['bg-muted-foreground/40', 'bg-rb-fox', 'bg-rb-beetle', 'bg-rb-feather', 'bg-rb-bee']
 
 export default function DashboardEnhancedPage() {
   const [portal, setPortal] = useState(null)
@@ -24,163 +40,86 @@ export default function DashboardEnhancedPage() {
     }
   }
 
-  if (loading) return <div className="p-8">Loading dashboard...</div>
+  if (loading) return <div className="p-8 text-muted-foreground">Loading dashboard...</div>
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-8">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
+    <div className="min-h-screen bg-background p-8">
+      <div className="mx-auto max-w-6xl">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Welcome back! 👋</h1>
-          <p className="text-slate-600">Here's your learning progress at a glance</p>
+          <h1 className="font-rb-display text-4xl font-extrabold tracking-tight">Welcome back! 👋</h1>
+          <p className="mt-1 text-muted-foreground">Here's your learning progress at a glance</p>
         </div>
 
-        {/* Gamification Stats */}
-        <div className="grid md:grid-cols-4 gap-4 mb-8">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-slate-600">Total XP</p>
-                  <p className="text-2xl font-bold text-blue-600">{portal?.totalXp || 0}</p>
-                </div>
-                <TrendingUp className="w-8 h-8 text-blue-400" />
-              </div>
-            </CardContent>
-          </Card>
+        <BentoGrid className="mb-8">
+          {/* Band 1 — 3 + 3 */}
+          <BentoStat tone="feather" col={3} row={1} icon={TrendingUp} label="Total XP" value={portal?.totalXp || 0} />
+          <BentoStat tone="fox" col={3} row={1} icon={Coins} label="Coins" value={portal?.coinBalance || 0} />
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-slate-600">Coins</p>
-                  <p className="text-2xl font-bold text-yellow-600">{portal?.coinBalance || 0}</p>
-                </div>
-                <span className="text-2xl">🪙</span>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Band 2 — 3 + 3 */}
+          <BentoStat tone="bee" col={3} row={1} icon={Trophy} label="Completed" value={portal?.completedCount || 0} />
+          <BentoStat
+            tone="beetle"
+            col={3}
+            row={1}
+            icon={Zap}
+            label="AI Credits"
+            value={portal?.aiCreditsRemaining || 0}
+          />
+        </BentoGrid>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-slate-600">AI Credits</p>
-                  <p className="text-2xl font-bold text-purple-600">{portal?.aiCreditsRemaining || 0}</p>
-                </div>
-                <Zap className="w-8 h-8 text-purple-400" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-slate-600">Completed</p>
-                  <p className="text-2xl font-bold text-green-600">{portal?.completedCount || 0}</p>
-                </div>
-                <Trophy className="w-8 h-8 text-green-400" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Streak Widget */}
         <div className="mb-8">
           <StreakWidget />
         </div>
 
         {/* Certifications */}
         {portal?.certifications && portal.certifications.length > 0 && (
-          <Card className="mb-8">
-            <CardHeader>
-              <CardTitle>Learning Certifications</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid md:grid-cols-2 gap-6">
-                {portal.certifications.map((cert) => {
-                  const masteryLevel = portal.masteryByMasteryByCertification?.[cert.certId] || 0
-                  const progress = Math.min((masteryLevel / 4) * 100, 100)
+          <BentoTile tone="plain" col={6} row={1} className="mb-8 !p-6">
+            <BentoHeading title="Learning Certifications" />
+            <div className="grid gap-4 md:grid-cols-2">
+              {portal.certifications.map((cert) => {
+                const masteryLevel = portal.masteryByMasteryByCertification?.[cert.certId] || 0
+                const progress = Math.min((masteryLevel / 4) * 100, 100)
 
-                  return (
-                    <Card key={cert.certId} className="border-slate-200">
-                      <CardContent className="pt-6">
-                        <div className="flex items-start justify-between mb-4">
-                          <div>
-                            <h3 className="font-semibold">{cert.name}</h3>
-                            <p className="text-sm text-slate-600">{cert.description}</p>
-                          </div>
-                          <MasteryIndicator level={masteryLevel} size="sm" />
-                        </div>
+                return (
+                  <section key={cert.certId} className="rounded-rb-card border-2 border-border bg-card p-5">
+                    <div className="mb-4 flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="font-semibold">{cert.name}</h3>
+                        <p className="text-sm text-muted-foreground">{cert.description}</p>
+                      </div>
+                      <MasteryIndicator level={masteryLevel} size="sm" />
+                    </div>
 
-                        {/* Progress Bar */}
-                        <div className="w-full bg-slate-200 rounded-full h-2 mb-2">
-                          <div
-                            className={`h-2 rounded-full transition-all ${
-                              masteryLevel === 0
-                                ? 'bg-gray-300'
-                                : masteryLevel === 1
-                                  ? 'bg-yellow-400'
-                                  : masteryLevel === 2
-                                    ? 'bg-orange-400'
-                                    : masteryLevel === 3
-                                      ? 'bg-blue-400'
-                                      : 'bg-green-500'
-                            }`}
-                            style={{ width: `${progress}%` }}
-                          />
-                        </div>
-                        <p className="text-xs text-slate-500">
-                          {progress.toFixed(0)}% towards mastery
-                        </p>
-                      </CardContent>
-                    </Card>
-                  )
-                })}
-              </div>
-            </CardContent>
-          </Card>
+                    <div className="mb-2 h-2 w-full rounded-full bg-muted">
+                      <div
+                        className={`h-2 rounded-full transition-all ${MASTERY_BAR_TONE[Math.min(masteryLevel, 4)]}`}
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">{progress.toFixed(0)}% towards mastery</p>
+                  </section>
+                )
+              })}
+            </div>
+          </BentoTile>
         )}
 
         {/* Quick Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid md:grid-cols-4 gap-4">
+        <BentoTile tone="plain" col={6} row={1} className="!p-6">
+          <BentoHeading title="Quick Actions" />
+          <div className="grid gap-4 md:grid-cols-4">
+            {QUICK_ACTIONS.map(({ href, label, icon: Icon, tone }) => (
               <a
-                href="/study-plans"
-                className="flex items-center gap-3 p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition"
+                key={href}
+                href={href}
+                className={`flex items-center gap-3 rounded-xl border-2 p-4 transition hover:brightness-95 ${ACTION_TONE_CLASSES[tone]}`}
               >
-                <BookOpen className="w-6 h-6 text-blue-600" />
-                <span className="font-medium text-blue-900">Study Plans</span>
+                <Icon className="size-6" />
+                <span className="font-semibold">{label}</span>
               </a>
-              <a
-                href="/leaderboard"
-                className="flex items-center gap-3 p-4 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition"
-              >
-                <Trophy className="w-6 h-6 text-yellow-600" />
-                <span className="font-medium text-yellow-900">Leaderboard</span>
-              </a>
-              <a
-                href="/subscription"
-                className="flex items-center gap-3 p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition"
-              >
-                <Zap className="w-6 h-6 text-purple-600" />
-                <span className="font-medium text-purple-900">Go Pro</span>
-              </a>
-              <a
-                href="/settings/notifications"
-                className="flex items-center gap-3 p-4 bg-green-50 rounded-lg hover:bg-green-100 transition"
-              >
-                <span className="text-2xl">🔔</span>
-                <span className="font-medium text-green-900">Reminders</span>
-              </a>
-            </div>
-          </CardContent>
-        </Card>
+            ))}
+          </div>
+        </BentoTile>
       </div>
     </div>
   )

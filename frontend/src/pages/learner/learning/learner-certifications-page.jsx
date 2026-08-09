@@ -1,23 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react"
 import { useNavigate, useOutletContext } from "react-router-dom"
-import { Award, ExternalLink } from "@/components/icons"
+import { Award, GraduationCap } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
-import CertificationCoverPanel from "@/components/certifications/certification-cover.jsx"
+import { BubbleCard } from "@/components/commons/bubble-card.jsx"
+import { LearnerEmptyState, ProgressBar, toneForCertification } from "@/components/learner/learner-ui.jsx"
 
 const INITIAL_VISIBLE_COUNT = 8
 const LOAD_MORE_COUNT = 8
-
-const CATEGORY_STYLES = [
-  "bg-blue-100 text-blue-700",
-  "bg-sky-100 text-sky-700",
-  "bg-emerald-100 text-emerald-700",
-  "bg-amber-100 text-amber-700",
-  "bg-rose-100 text-rose-700",
-  "bg-yellow-100 text-yellow-800",
-]
 
 function getCertificationId(certification) {
   return certification?.certificationId ?? certification?.id
@@ -38,29 +29,11 @@ function getCertificationDescription(certification) {
   )
 }
 
-function CertificationCover({ certification, onOpen }) {
-  return (
-      <button
-          type="button"
-          onClick={onOpen}
-          aria-label={`View ${getCertificationTitle(certification)}`}
-          className="group relative block h-48 w-full shrink-0 overflow-hidden border-b border-border text-left sm:h-52"
-      >
-        <CertificationCoverPanel
-            title={getCertificationTitle(certification)}
-            className="h-full w-full transition-transform duration-300 group-hover:scale-105"
-        />
-
-        <span className="absolute right-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition group-hover:bg-white group-hover:text-rb-feather">
-          <ExternalLink className="h-4 w-4" />
-        </span>
-      </button>
-  )
-}
-
+/* The same bubble card the admin challenges arenas use — gradient cap,
+   bubbles, icon medallion, wash body — so a certification reads as one card
+   design wherever it shows up across the learner portal. */
 function CertificationCard({
                              certification,
-                             index,
                              lessons,
                              enrolled,
                              onOpen,
@@ -83,86 +56,51 @@ function CertificationCard({
           : 0
 
   const category = getCertificationCategory(certification)
-  const categoryStyle =
-      CATEGORY_STYLES[index % CATEGORY_STYLES.length]
 
   return (
-      <article className="group flex min-h-[435px] min-w-0 flex-col overflow-hidden rounded-[28px] border border-border bg-card shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-primary/45 hover:shadow-xl">
-        <CertificationCover
-            certification={certification}
-            onOpen={onOpen}
-        />
-
-        <div className="flex min-h-0 flex-1 flex-col p-5">
-          <div className="flex min-w-0 items-center justify-between gap-3">
-          <span
-              title={category}
-              className={`max-w-[72%] truncate rounded-full px-2.5 py-1 text-xs font-semibold ${categoryStyle}`}
-          >
-            {category}
-          </span>
-
-            {enrolled && (
-                <span className="shrink-0 text-xs font-semibold text-emerald-600">
-              Enrolled
-            </span>
-            )}
-          </div>
-
-          <button
-              type="button"
-              onClick={onOpen}
-              className="mt-4 text-left"
-          >
-            <h2 className="line-clamp-2 text-lg font-semibold leading-6 text-foreground transition group-hover:text-primary">
+      <BubbleCard
+          tone={toneForCertification(certification)}
+          icon={GraduationCap}
+          eyebrow={category}
+          title={
+            <button
+                type="button"
+                onClick={onOpen}
+                className="rounded-sm text-left hover:underline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-rb-macaw"
+            >
               {getCertificationTitle(certification)}
-            </h2>
-          </button>
+            </button>
+          }
+          chips={[
+            { label: enrolled ? "Enrolled" : "Free to study" },
+            ...(enrolled && relatedLessons.length > 0
+                ? [{ label: `${progress}%`, side: "right" }]
+                : []),
+          ]}
+          footer={
+            <Button className="w-full rounded-full" onClick={onAction}>
+              {enrolled ? "Continue Learning" : "View Certification"}
+            </Button>
+          }
+      >
+        <p className="mt-2 line-clamp-3 min-h-[60px] break-words text-sm leading-6 text-muted-foreground">
+          {getCertificationDescription(certification)}
+        </p>
 
-          <p className="mt-2 line-clamp-3 min-h-[60px] break-words text-sm leading-5 text-muted-foreground">
-            {getCertificationDescription(certification)}
-          </p>
+        {enrolled && relatedLessons.length > 0 && (
+            <div className="mt-4 space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Course progress</span>
 
-          <div className="mt-4 flex items-center justify-between gap-3">
-          <span className="text-sm font-medium text-muted-foreground">
-            Free to study
-          </span>
-
-            {enrolled && relatedLessons.length > 0 && (
-                <span className="shrink-0 text-xs text-muted-foreground">
-              {completedLessons}/{relatedLessons.length} lessons
-            </span>
-            )}
-          </div>
-
-          {enrolled && relatedLessons.length > 0 && (
-              <div className="mt-4">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Course progress</span>
-
-                  <span className="font-semibold text-foreground">
+                <span className="font-semibold text-foreground">
                 {progress}%
               </span>
-                </div>
-
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-                  <div
-                      className="h-full rounded-full bg-primary transition-all duration-300"
-                      style={{ width: `${progress}%` }}
-                  />
-                </div>
               </div>
-          )}
 
-          <button
-              type="button"
-              onClick={onAction}
-              className="mt-auto h-11 w-full rounded bg-primary text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 active:scale-[0.99]"
-          >
-            {enrolled ? "Continue Learning" : "View Certification"}
-          </button>
-        </div>
-      </article>
+              <ProgressBar value={progress} />
+            </div>
+        )}
+      </BubbleCard>
   )
 }
 
@@ -443,7 +381,6 @@ export default function LearnerCertificationsPage() {
                           <CertificationCard
                               key={certificationId}
                               certification={certification}
-                              index={index}
                               lessons={lessons}
                               enrolled={enrolled}
                               onOpen={() => openCertification(certification)}

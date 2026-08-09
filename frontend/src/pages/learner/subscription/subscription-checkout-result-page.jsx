@@ -80,7 +80,7 @@ export default function SubscriptionCheckoutResultPage({ canceled = false }) {
           </Button>
           {state === "success" && (
             <Button variant="outline" className="w-full" asChild>
-              <Link to="/learner/dashboard">Go to dashboard</Link>
+              <Link to="/learner/analytics">Go to analytics</Link>
             </Button>
           )}
         </CardContent>

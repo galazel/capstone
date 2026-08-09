@@ -23,6 +23,10 @@
     --background: #ffffff; /* Snow */
     --foreground: #4b4b4b; /* Eel — never pure black */
 
+    /* Full-bleed surface for the challenges/arena pages — one token instead
+       of re-typing the same light/dark pair at every usage site. */
+    --rb-challenges-surface: #f1f7fc;
+
     --card: #ffffff;
     --card-foreground: #4b4b4b;
 
@@ -766,6 +770,8 @@ body.netacad-overlay-theme {
 .dark {
     --background: #111b26;
     --foreground: #f1f2f8;
+
+    --rb-challenges-surface: #111b26;
 
     --card: #182635;
     --card-foreground: #f1f2f8;

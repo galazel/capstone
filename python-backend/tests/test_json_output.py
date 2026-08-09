@@ -145,9 +145,17 @@ def test_a_truncated_curriculum_survives_the_whole_invocation_path(monkeypatch):
     from app.ai.invocation import json_output
     from app.schemas.certification.curriculum_schema import Curriculum
 
+    # Both ends of each range are pinned. Setting only the minimums left the
+    # maximums coming from whatever `.env` happened to hold, so this test
+    # passed or failed on ambient config: a .env narrowed for a cheap test run
+    # (max 1) makes min 3 > max 1 and the Settings validator rejects it before
+    # the sample under test is ever parsed.
     monkeypatch.setenv("CURRICULUM_MIN_MAJORS", "3")
+    monkeypatch.setenv("CURRICULUM_MAX_MAJORS", "6")
     monkeypatch.setenv("CURRICULUM_MIN_MIDDLES", "2")
+    monkeypatch.setenv("CURRICULUM_MAX_MIDDLES", "5")
     monkeypatch.setenv("CURRICULUM_MIN_LESSONS", "3")
+    monkeypatch.setenv("CURRICULUM_MAX_LESSONS", "6")
     from app.core.config import get_settings
 
     get_settings.cache_clear()

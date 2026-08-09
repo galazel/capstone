@@ -12,6 +12,7 @@ import {
   ListIcon,
   Loader2Icon,
   SkipForwardIcon,
+  Zap,
 } from "@/components/icons"
 import { toast } from "sonner"
 
@@ -102,7 +103,7 @@ const QUESTION_TYPE_STYLES = {
   },
   DESCRIPTIVE: {
     label: "Descriptive",
-    className: "border-rb-bee bg-rb-bee-wash text-[#8a6d00]",
+    className: "border-rb-bee bg-rb-bee-wash text-rb-bee-ink",
   },
   CRITICAL_THINKING: {
     label: "Critical Thinking",
@@ -710,7 +711,11 @@ export default function LearnerAssessmentAttemptPage() {
       await queryClient.invalidateQueries({
         queryKey: ["learner-progress-analytics", String(result.certificationId)],
       })
-      toast.success("Assessment submitted.")
+      await queryClient.invalidateQueries({ queryKey: ["learner-streak"] })
+      toast.success("Assessment submitted.", {
+        icon: <Zap className="size-4" aria-hidden="true" />,
+        description: "+300 XP",
+      })
       navigate(`/learner/results/${result.assessmentAttemptId}`, {
         replace: true,
       })

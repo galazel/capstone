@@ -102,15 +102,15 @@ export default function AcceptEnterpriseInvitationPage() {
 
   if (!hasValidToken) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#F6F9FC] px-5 py-10">
-        <section className="w-full max-w-md rounded-xl border border-[#E0E7EF] bg-white p-8 text-center">
-          <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-red-50">
-            <CircleAlert className="size-6 text-red-600" />
+      <main className="flex min-h-screen items-center justify-center bg-background px-5 py-10">
+        <section className="w-full max-w-md rounded-xl border border-border bg-card p-8 text-center">
+          <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-destructive/10">
+            <CircleAlert className="size-6 text-destructive" />
           </div>
-          <h1 className="mt-5 text-xl font-bold text-zinc-950">
+          <h1 className="mt-5 text-xl font-bold text-foreground">
             Invalid invitation link
           </h1>
-          <p className="mt-2 text-sm leading-6 text-zinc-500">
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
             This invitation link does not contain a valid token. Please use the
             complete invitation link sent to your email.
           </p>
@@ -129,18 +129,18 @@ export default function AcceptEnterpriseInvitationPage() {
 
   if (accepted) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#F6F9FC] px-5 py-10">
-        <section className="w-full max-w-md rounded-xl border border-[#E0E7EF] bg-white p-8 text-center">
+      <main className="flex min-h-screen items-center justify-center bg-background px-5 py-10">
+        <section className="w-full max-w-md rounded-xl border border-border bg-card p-8 text-center">
           <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/10">
             <CheckCircle2 className="size-6 text-primary" />
           </div>
           <p className="mt-5 text-sm font-semibold text-primary">
             Invitation Accepted
           </p>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-zinc-950">
+          <h1 className="mt-2 text-2xl font-bold tracking-tight text-foreground">
             You are now enrolled
           </h1>
-          <p className="mt-3 text-sm leading-6 text-zinc-500">
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
             {certificationTitle
               ? `You now have access to ${certificationTitle}. Start learning whenever you are ready.`
               : "Your certification access has been added to your REBYU account."}
@@ -154,32 +154,32 @@ export default function AcceptEnterpriseInvitationPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#F6F9FC] px-5 py-10">
-      <section className="w-full max-w-md overflow-hidden rounded-xl border border-[#E0E7EF] bg-white">
-        <div className="border-b border-[#E0E7EF] bg-[#EAF3FA] px-8 py-9 text-center">
+    <main className="flex min-h-screen items-center justify-center bg-background px-5 py-10">
+      <section className="w-full max-w-md overflow-hidden rounded-xl border border-border bg-card">
+        <div className="border-b border-border bg-primary/5 px-8 py-9 text-center">
           <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/10">
             <Mail className="size-6 text-primary" />
           </div>
           <p className="mt-5 text-sm font-semibold text-primary">
             REBYU Enterprise Invitation
           </p>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-zinc-950">
+          <h1 className="mt-2 text-2xl font-bold tracking-tight text-foreground">
             You have been invited
           </h1>
-          <p className="mt-3 text-sm leading-6 text-zinc-500">
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
             Accept this invitation to receive certification access from your
             organization.
           </p>
         </div>
 
         <div className="p-8">
-          <div className="flex gap-3 border-y border-[#E0E7EF] bg-[#F6F9FC] p-4">
+          <div className="flex gap-3 border-y border-border bg-muted/50 p-4">
             <ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" />
             <div>
-              <p className="text-sm font-semibold text-zinc-900">
+              <p className="text-sm font-semibold text-foreground">
                 Before you continue
               </p>
-              <p className="mt-1 text-xs leading-5 text-zinc-500">
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
                 Make sure you are signed in using the same email address where
                 this invitation was sent. An invitation can only be accepted
                 once.
@@ -190,10 +190,10 @@ export default function AcceptEnterpriseInvitationPage() {
           {errorMessage ? (
             <div
               role="alert"
-              className="mt-5 flex gap-3 rounded-xl border border-red-200 bg-red-50 p-4"
+              className="mt-5 flex gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4"
             >
-              <CircleAlert className="mt-0.5 size-5 shrink-0 text-red-600" />
-              <p className="text-sm leading-6 text-red-700">{errorMessage}</p>
+              <CircleAlert className="mt-0.5 size-5 shrink-0 text-destructive" />
+              <p className="text-sm leading-6 text-destructive">{errorMessage}</p>
             </div>
           ) : null}
 
@@ -213,7 +213,7 @@ export default function AcceptEnterpriseInvitationPage() {
             )}
           </Button>
 
-          <p className="mt-4 text-center text-xs leading-5 text-zinc-400">
+          <p className="mt-4 text-center text-xs leading-5 text-muted-foreground">
             Do not accept this invitation if it was not intended for you.
           </p>
         </div>

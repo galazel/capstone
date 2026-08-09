@@ -1,7 +1,6 @@
 package com.capstone.rebyu.gamification.controller;
 
 import com.capstone.rebyu.auth.dto.CurrentUserDto;
-import com.capstone.rebyu.gamification.entity.Streak;
 import com.capstone.rebyu.gamification.service.StreakService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -15,7 +14,7 @@ public class StreakController {
 
   @GetMapping("/me")
   @PreAuthorize("hasRole('LEARNER')")
-  public ResponseEntity<Streak> getMyStreak(@RequestAttribute CurrentUserDto currentUser) {
+  public ResponseEntity<StreakService.StreakView> getMyStreak(@RequestAttribute CurrentUserDto currentUser) {
     return ResponseEntity.ok(streakService.getStreak(currentUser.getLearnerId()));
   }
 

@@ -3,7 +3,6 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from app.agents.tutor.tutor_agent import get_generation_agent, get_query_agent
 from app.ai.invocation import structured
 from app.ai.router import ainvoke_with_fallback
-from app.utils.helpers import get_config
 from app.graphs.tutor.state import TutorState
 
 
@@ -71,17 +70,13 @@ async def answer_question(state: TutorState):
         structured(get_query_agent),
         {
             "messages": messages
-        },
-        config=get_config(
-            state["learnerId"],
-            state["lessonId"]
-        )
+        }
     )
 
     return {
         "messages": [
             AIMessage(
-                content=response
+                content=response.response
             )
         ]
     }
@@ -111,7 +106,7 @@ async def summarize_conversation(state: TutorState):
                 HumanMessage(
                     content=f"""
                 Summarize this conversation.
-                
+
                 {state["messages"]}
                 """
                 )
@@ -120,5 +115,5 @@ async def summarize_conversation(state: TutorState):
     )
 
     return {
-        "summary": summary
+        "summary": summary.response
     }

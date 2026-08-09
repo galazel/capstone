@@ -45,6 +45,13 @@ class CertificationState(TypedDict, total=False):
     # them.
     uploaded_files: List[Dict]
 
+    # Screenshots of figures/diagrams/tables/charts captured out of the PDFs
+    # in `document_refs`/`uploaded_files` -- {s3_key, source_file, page,
+    # figure_index, bbox, width, height}, never raw image bytes (see
+    # `app/rag/visuals.py`). Populated by `capture_document_visuals_node`
+    # before ingestion clears `uploaded_files`.
+    document_visuals: List[Dict]
+
     curriculum: Dict
 
     # Populated by Send() fan-out payloads when a branch is scoped to one

@@ -28,6 +28,7 @@ from app.rag.chunking import chunk_documents
 from app.rag.loaders import fetch_document_ref, load_upload, resolve_documents
 from app.rag.retriever import retrieve_context
 from app.rag.store import add_documents, namespace_for
+from app.rag.visuals import capture_document_visuals
 from app.agents.certification.auditor_document_agent import get_auditor_agent
 from app.agents.certification.curriculum_agent import get_curriculum_agent
 from app.agents.certification.lesson_agent import get_lesson_generation_agent
@@ -79,6 +80,25 @@ def _namespace(state: CertificationState) -> str:
         certification_id=state.get("certification_id"),
         certification_name=state.get("certification_name", ""),
     )
+
+
+async def capture_document_visuals_node(state: CertificationState):
+    """Screenshots figures/diagrams/tables/charts out of the uploaded PDFs
+    before ingestion drops the raw bytes, so a later lesson/question stage
+    can attach the *original visual* to what it generates instead of only a
+    text description of it (or a stock-photo search result -- see
+    `app/domain/lesson_media.py`)."""
+    logger.info("Document visual capture started")
+
+    visuals = await asyncio.to_thread(
+        capture_document_visuals,
+        state.get("document_refs"),
+        state.get("uploaded_files"),
+        certification_id=state.get("certification_id"),
+    )
+    logger.info("Captured %d figures from source documents", len(visuals))
+
+    return {"document_visuals": visuals}
 
 
 async def document_ingestion_node(state: CertificationState):

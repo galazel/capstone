@@ -31,7 +31,7 @@ const BLADE_TONE = {
 }
 
 const TRACK_TONE = {
-  bee: { wash: "bg-rb-bee-wash", ink: "text-[#8a6d00]" },
+  bee: { wash: "bg-rb-bee-wash", ink: "text-rb-bee-ink" },
   macaw: { wash: "bg-rb-macaw-wash", ink: "text-rb-macaw-lip" },
   beetle: { wash: "bg-rb-beetle-wash", ink: "text-rb-beetle-lip" },
 }

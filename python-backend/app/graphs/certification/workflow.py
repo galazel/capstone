@@ -7,6 +7,7 @@ from .nodes import (
     MAJOR_PHASE,
     MIDDLE_PHASE,
     LESSON_PHASE,
+    capture_document_visuals_node,
     document_ingestion_node,
     validate_documents_node,
     route_after_validation,
@@ -75,6 +76,9 @@ def build_certification_graph(checkpointer):
 
     # --- Documents ---------------------------------------------------------
     workflow.add_node("validate_documents", instrument(validate_documents_node, "validate_documents"))
+    workflow.add_node(
+        "capture_document_visuals", instrument(capture_document_visuals_node, "capture_document_visuals")
+    )
     workflow.add_node("ingest_documents", instrument(document_ingestion_node, "ingest_documents"))
     workflow.add_node("plan_curriculum", instrument(curriculum_planning_agent_node, "plan_curriculum"))
     workflow.add_node("await_curriculum_review", await_curriculum_review_node)
@@ -83,8 +87,13 @@ def build_certification_graph(checkpointer):
     workflow.add_conditional_edges(
         "validate_documents",
         route_after_validation,
-        {"continue": "ingest_documents", "stop": END},
+        {"continue": "capture_document_visuals", "stop": END},
     )
+    # Visual capture runs before ingestion, not in parallel with it: ingestion
+    # clears `uploaded_files` once it has indexed the text (see
+    # `document_ingestion_node`), and capture needs those same raw bytes to
+    # screenshot figures out of.
+    workflow.add_edge("capture_document_visuals", "ingest_documents")
     workflow.add_edge("ingest_documents", "plan_curriculum")
     workflow.add_edge("plan_curriculum", "await_curriculum_review")
     # The walk starts at the deepest level: lessons come before the quizzes

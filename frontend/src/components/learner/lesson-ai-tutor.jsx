@@ -6,14 +6,16 @@ import {
   BookOpenCheck,
   Layers3,
   Loader2,
+  MessageCircle,
   Plus,
   SendHorizontal,
   Sparkles,
+  Target,
   X,
 } from "@/components/icons"
 
 import { Bubble, BubbleContent } from "@/components/ui/bubble"
-import { Button } from "@/components/ui/button"
+import { TactileButton } from "@/components/rebyu/rebyu-ui.jsx"
 import { Message, MessageContent } from "@/components/ui/message"
 import {
   MessageScroller,
@@ -32,6 +34,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Reveal, motion, popIn } from "@/components/motion/rebyu-motion.jsx"
 
 import { base } from "@/services/base"
 import { useLearnerEntitlements } from "@/hooks/use-learner-entitlements.js"
@@ -86,26 +89,98 @@ function getTutorErrorMessage(error) {
   )
 }
 
-function GeminiTutorMessage({ message }) {
+function TutorAvatar({ size = "size-7" }) {
+  return (
+      <span
+          className={`grid ${size} shrink-0 place-items-center rounded-full bg-gradient-to-br from-rb-beetle to-rb-macaw text-white shadow-[0_2px_0_var(--color-rb-beetle-lip)]`}
+      >
+        <Bot className="size-3.5" aria-hidden="true" />
+      </span>
+  )
+}
+
+function LearnerAvatar({ size = "size-7", learnerName }) {
+  const initial = (learnerName ?? "?").trim().charAt(0).toUpperCase() || "?"
+  return (
+      <span
+          className={`grid ${size} shrink-0 place-items-center rounded-full bg-gradient-to-br from-rb-feather to-rb-macaw text-xs font-extrabold text-white shadow-[0_2px_0_var(--color-rb-macaw-lip)]`}
+      >
+        {initial}
+      </span>
+  )
+}
+
+function formatMessageTime(timestamp) {
+  if (!timestamp) return ""
+  try {
+    return new Date(timestamp).toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+    })
+  } catch {
+    return ""
+  }
+}
+
+function GeminiTutorMessage({ message, learnerName, isFirstInGroup, isLastInGroup }) {
   const isLearner = message.role === "user"
+
+  // Messenger-style grouping: tight gap inside a run of same-sender bubbles,
+  // full round on non-tail corners, a "tail" corner only on the last bubble
+  // of the run (the one that sits next to the avatar), avatar/name shown
+  // once per run instead of once per bubble.
+  const tailCorner = isLearner ? "!rounded-br-md" : "!rounded-bl-md"
 
   return (
       <Message align={isLearner ? "end" : "start"}>
-        <MessageContent>
+        <MessageContent className="flex-row items-end gap-2.5">
           {!isLearner ? (
-              <p className="mb-1 text-xs font-semibold text-primary">
-                REBYU AI Tutor
-              </p>
+              isLastInGroup ? (
+                  <TutorAvatar />
+              ) : (
+                  <span className="size-7 shrink-0" aria-hidden="true" />
+              )
           ) : null}
 
-          <Bubble
-              variant={isLearner ? "default" : "secondary"}
-              align={isLearner ? "end" : "start"}
-          >
-            <BubbleContent className="whitespace-pre-wrap text-sm leading-6">
-              {message.text}
-            </BubbleContent>
-          </Bubble>
+          <div className="min-w-0 flex-1">
+            {!isLearner && isFirstInGroup ? (
+                <p className="mb-1 text-xs font-bold uppercase tracking-wide text-rb-beetle-lip">
+                  REBYU AI Tutor
+                </p>
+            ) : null}
+
+            <Bubble
+                variant={isLearner ? "default" : "secondary"}
+                align={isLearner ? "end" : "start"}
+                className={
+                  isLearner
+                    ? `!rounded-2xl ${tailCorner} !bg-rb-macaw !text-white !shadow-[0_2px_0_var(--color-rb-macaw-lip)]`
+                    : `!rounded-2xl ${tailCorner} !border-2 !border-rb-swan !bg-rb-snow !text-rb-eel`
+                }
+            >
+              <BubbleContent className="whitespace-pre-wrap text-sm font-medium leading-6">
+                {message.text}
+              </BubbleContent>
+            </Bubble>
+
+            {isLastInGroup ? (
+                <p
+                    className={`mt-1 text-[10px] font-medium text-rb-hare ${
+                        isLearner ? "text-right" : "text-left"
+                    }`}
+                >
+                  {formatMessageTime(message.createdAt)}
+                </p>
+            ) : null}
+          </div>
+
+          {isLearner ? (
+              isLastInGroup ? (
+                  <LearnerAvatar learnerName={learnerName} />
+              ) : (
+                  <span className="size-7 shrink-0" aria-hidden="true" />
+              )
+          ) : null}
         </MessageContent>
       </Message>
   )
@@ -143,6 +218,7 @@ export function LessonAiTutor({
         id: createTutorMessageId("learner"),
         role: "user",
         text: question,
+        createdAt: Date.now(),
       },
     ])
 
@@ -171,6 +247,7 @@ export function LessonAiTutor({
           id: createTutorMessageId("assistant"),
           role: "assistant",
           text: answer,
+          createdAt: Date.now(),
         },
       ])
     } catch (error) {
@@ -180,6 +257,7 @@ export function LessonAiTutor({
           id: createTutorMessageId("error"),
           role: "assistant",
           text: getTutorErrorMessage(error),
+          createdAt: Date.now(),
         },
       ])
     } finally {
@@ -233,68 +311,85 @@ export function LessonAiTutor({
   const hasConversation = messages.length > 0
 
   return (
-      <section className="flex h-full min-h-0 flex-col bg-white">
-        <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-100 px-4">
-          <div className="flex items-center gap-2">
-            <Bot className="size-4 text-primary" />
+      <section className="flex h-full min-h-0 flex-col bg-rb-snow">
+        <header className="relative flex h-16 shrink-0 items-center justify-between overflow-hidden border-b-2 border-rb-swan bg-gradient-to-r from-rb-beetle-wash via-rb-beetle-wash to-rb-snow px-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <TutorAvatar size="size-10" />
 
-            <p className="text-sm font-semibold text-zinc-800">
-              REBYU AI Tutor
-            </p>
+            <div className="min-w-0">
+              <p className="font-rb-display text-sm font-extrabold leading-tight text-rb-eel">
+                REBYU AI Tutor
+              </p>
+              <p className="truncate text-xs font-bold text-rb-beetle-lip">
+                {lessonName ?? "This lesson"}
+              </p>
+            </div>
           </div>
 
-          <Button
-              type="button"
+          <TactileButton
               variant="ghost"
-              size="icon"
+              size="sm"
+              className="rb-btn-icon shrink-0"
               onClick={onClose}
               aria-label="Close AI Tutor"
-              className="size-8 text-zinc-500 hover:text-zinc-950"
           >
-            <X className="size-4" />
-          </Button>
+            <X className="size-4" aria-hidden="true" />
+          </TactileButton>
         </header>
 
         {!hasConversation ? (
-            <div className="flex min-h-0 flex-1 flex-col justify-end px-5 pb-7">
-              <div>
-                <p className="text-xl font-semibold tracking-tight text-primary">
-                  Hello, {learnerName}
-                </p>
-
-                <h2 className="mt-1 text-xl font-medium tracking-tight text-zinc-700">
-                  How can I help you today?
-                </h2>
-
-                <p className="mt-3 text-sm leading-6 text-zinc-500">
-                  Ask me anything about{" "}
-                  <span className="font-medium text-zinc-700">
-                {lessonName ?? "this lesson"}
-              </span>
-                  .
-                </p>
+            <Reveal
+                variants={popIn}
+                amount={0}
+                className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-8 text-center"
+            >
+              <div className="relative">
+                <motion.span
+                    className="absolute inset-0 -z-10 rounded-full bg-rb-beetle/30 blur-xl"
+                    animate={{ scale: [1, 1.18, 1], opacity: [0.55, 0.9, 0.55] }}
+                    transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
+                    aria-hidden="true"
+                />
+                <span className="relative grid size-16 shrink-0 place-items-center rounded-3xl bg-gradient-to-br from-rb-beetle to-rb-macaw text-white shadow-[0_4px_0_var(--color-rb-beetle-lip)]">
+                  <Bot className="size-8" aria-hidden="true" />
+                </span>
               </div>
 
-              <div className="mt-5 flex flex-wrap gap-2">
-                <Button
-                    type="button"
-                    variant="secondary"
+              <p className="mt-6 font-rb-display text-xl font-extrabold text-rb-eel">
+                Hi {learnerName}, ready to dig in?
+              </p>
+
+              <p className="mt-2 max-w-[16rem] text-sm font-medium leading-6 text-rb-wolf">
+                Ask anything about{" "}
+                <span className="font-bold text-rb-eel">{lessonName ?? "this lesson"}</span> —
+                I'll stick to what's covered here.
+              </p>
+
+              <div className="mt-7 grid w-full gap-2.5">
+                <TactileButton
+                    variant="snow"
                     size="sm"
-                    className="h-8 rounded-full text-xs"
+                    className="!h-auto !justify-start !gap-3 !rounded-2xl !border-2 !border-rb-swan !py-3 text-left hover:!border-rb-macaw/50"
                     disabled={pending}
                     onClick={() =>
                         sendTutorMessage("Explain this lesson in simple words.")
                     }
                 >
-                  <Sparkles className="size-3.5" />
-                  Explain simply
-                </Button>
+                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-rb-macaw-wash text-rb-macaw-lip">
+                    <Sparkles className="size-4" aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-bold text-rb-eel">Explain simply</span>
+                    <span className="block text-xs font-medium text-rb-wolf">
+                      Break it down in plain words
+                    </span>
+                  </span>
+                </TactileButton>
 
-                <Button
-                    type="button"
-                    variant="secondary"
+                <TactileButton
+                    variant="snow"
                     size="sm"
-                    className="h-8 rounded-full text-xs"
+                    className="!h-auto !justify-start !gap-3 !rounded-2xl !border-2 !border-rb-swan !py-3 text-left hover:!border-rb-feather/50"
                     disabled={pending}
                     onClick={() =>
                         sendTutorMessage(
@@ -302,14 +397,21 @@ export function LessonAiTutor({
                         )
                     }
                 >
-                  Give example
-                </Button>
+                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-rb-feather-wash text-rb-feather-ink">
+                    <MessageCircle className="size-4" aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-bold text-rb-eel">Give example</span>
+                    <span className="block text-xs font-medium text-rb-wolf">
+                      See it applied in real life
+                    </span>
+                  </span>
+                </TactileButton>
 
-                <Button
-                    type="button"
-                    variant="secondary"
+                <TactileButton
+                    variant="snow"
                     size="sm"
-                    className="h-8 rounded-full text-xs"
+                    className="!h-auto !justify-start !gap-3 !rounded-2xl !border-2 !border-rb-swan !py-3 text-left hover:!border-rb-bee/50"
                     disabled={pending}
                     onClick={() =>
                         sendTutorMessage(
@@ -317,42 +419,70 @@ export function LessonAiTutor({
                         )
                     }
                 >
-                  Practice me
-                </Button>
+                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-rb-bee-wash text-[#0092a8]">
+                    <Target className="size-4" aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-bold text-rb-eel">Practice me</span>
+                    <span className="block text-xs font-medium text-rb-wolf">
+                      Try one quick question
+                    </span>
+                  </span>
+                </TactileButton>
               </div>
-            </div>
+            </Reveal>
         ) : (
             <MessageScrollerProvider autoScroll scrollPreviousItemPeek={48}>
               <MessageScroller className="min-h-0 flex-1">
                 <MessageScrollerViewport>
                   <MessageScrollerContent
-                      className="space-y-5 px-4 py-5"
+                      className="px-4 py-5"
                       aria-busy={pending}
                   >
-                    {messages.map((message) => (
-                        <MessageScrollerItem
-                            key={message.id}
-                            messageId={message.id}
-                            scrollAnchor={message.role === "user"}
-                        >
-                          <GeminiTutorMessage message={message} />
-                        </MessageScrollerItem>
-                    ))}
+                    {messages.map((message, index) => {
+                      const prev = messages[index - 1]
+                      const next = messages[index + 1]
+                      const isFirstInGroup = !prev || prev.role !== message.role
+                      const isLastInGroup = !next || next.role !== message.role
+
+                      return (
+                          <MessageScrollerItem
+                              key={message.id}
+                              messageId={message.id}
+                              scrollAnchor={message.role === "user"}
+                              className={index === 0 ? "" : isFirstInGroup ? "mt-5" : "mt-1"}
+                          >
+                            <GeminiTutorMessage
+                                message={message}
+                                learnerName={learnerName}
+                                isFirstInGroup={isFirstInGroup}
+                                isLastInGroup={isLastInGroup}
+                            />
+                          </MessageScrollerItem>
+                      )
+                    })}
 
                     {pending ? (
-                        <MessageScrollerItem messageId={`thinking-${lessonId}`}>
+                        <MessageScrollerItem messageId={`thinking-${lessonId}`} className="mt-5">
                           <Message align="start">
-                            <MessageContent>
-                              <p className="mb-1 text-xs font-semibold text-primary">
-                                REBYU AI Tutor
-                              </p>
+                            <MessageContent className="flex-row items-end gap-2.5">
+                              <TutorAvatar />
 
-                              <Bubble variant="secondary">
-                                <BubbleContent className="flex items-center gap-2 text-sm text-zinc-500">
-                                  <Loader2 className="size-4 animate-spin" />
-                                  Thinking...
-                                </BubbleContent>
-                              </Bubble>
+                              <div className="min-w-0 flex-1">
+                                <p className="mb-1 text-xs font-bold uppercase tracking-wide text-rb-beetle-lip">
+                                  REBYU AI Tutor
+                                </p>
+
+                                <Bubble
+                                    variant="secondary"
+                                    className="!rounded-2xl !rounded-bl-md !border-2 !border-rb-swan !bg-rb-snow"
+                                >
+                                  <BubbleContent className="flex items-center gap-2 text-sm font-medium text-rb-wolf">
+                                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                                    Thinking...
+                                  </BubbleContent>
+                                </Bubble>
+                              </div>
                             </MessageContent>
                           </Message>
                         </MessageScrollerItem>
@@ -367,29 +497,38 @@ export function LessonAiTutor({
 
         <form
             onSubmit={handleSubmit}
-            className="shrink-0 border-t border-zinc-100 bg-white p-4"
+            className="shrink-0 border-t-2 border-rb-swan bg-rb-polar/60 p-3"
         >
-          <div className="rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm">
+          <div className="rounded-2xl border-2 border-rb-swan bg-rb-snow p-2 shadow-[0_2px_0_var(--color-rb-swan)] transition-colors focus-within:border-rb-macaw/60">
             <Textarea
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Type to ask about this lesson"
                 disabled={pending}
-                className="min-h-[72px] resize-none border-0 bg-transparent px-2 py-2 text-sm shadow-none outline-none focus-visible:ring-0"
+                className="min-h-[64px] resize-none border-0 bg-transparent px-2 py-2 text-sm font-medium text-rb-eel shadow-none outline-none focus-visible:ring-0"
             />
 
             <div className="flex items-center justify-between px-1 pb-1">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button type="button" variant="ghost" size="icon" className="size-8 text-zinc-500" aria-label="Create study aid">
-                    {generating ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-                  </Button>
+                  <TactileButton
+                      variant="ghost"
+                      size="sm"
+                      className="rb-btn-icon"
+                      aria-label="Create study aid"
+                  >
+                    {generating ? (
+                        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                    ) : (
+                        <Plus className="size-4" aria-hidden="true" />
+                    )}
+                  </TactileButton>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-64">
                   <DropdownMenuLabel>
-                    <span className="block text-sm">Create with AI</span>
-                    <span className="mt-0.5 block text-xs font-normal text-muted-foreground">Generated items are saved to Library. {entitlements.hasPremium ? `${rewardsQuery.data?.aiCredits ?? 0} AI Credits available.` : "Pro required."}</span>
+                    <span className="block text-sm font-bold text-rb-eel">Create with AI</span>
+                    <span className="mt-0.5 block text-xs font-medium text-rb-wolf">Generated items are saved to Library. {entitlements.hasPremium ? `${rewardsQuery.data?.aiCredits ?? 0} AI Credits available.` : "Pro required."}</span>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -401,7 +540,7 @@ export function LessonAiTutor({
                   >
                     <BookOpenCheck className="mr-2 size-4" />
                     <span className="flex-1">Generate quiz</span>
-                    {!entitlements.hasPremium ? <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-primary">PRO</span> : null}
+                    {!entitlements.hasPremium ? <span className="rounded bg-rb-macaw-wash px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-rb-macaw-lip">PRO</span> : null}
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onSelect={(event) => {
@@ -412,34 +551,35 @@ export function LessonAiTutor({
                   >
                     <Layers3 className="mr-2 size-4" />
                     <span className="flex-1">Generate flashcards</span>
-                    {!entitlements.hasPremium ? <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-primary">PRO</span> : null}
+                    {!entitlements.hasPremium ? <span className="rounded bg-rb-macaw-wash px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-rb-macaw-lip">PRO</span> : null}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
 
               <div className="flex items-center gap-2">
-              <span className="hidden text-[10px] text-zinc-400 sm:inline">
+              <span className="hidden text-[10px] font-bold uppercase tracking-wide text-rb-hare sm:inline">
                 REBYU AI
               </span>
 
-                <Button
+                <TactileButton
                     type="submit"
-                    size="icon"
+                    variant="macaw"
+                    size="sm"
+                    className="rb-btn-icon"
                     disabled={pending || !draft.trim()}
                     aria-label="Send message"
-                    className="size-8 rounded-lg"
                 >
                   {pending ? (
-                      <Loader2 className="size-4 animate-spin" />
+                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                   ) : (
-                      <SendHorizontal className="size-4" />
+                      <SendHorizontal className="size-4" aria-hidden="true" />
                   )}
-                </Button>
+                </TactileButton>
               </div>
             </div>
           </div>
 
-          <p className="mt-2 text-center text-[10px] text-zinc-400">
+          <p className="mt-2 text-center text-[10px] font-medium text-rb-hare">
             AI responses may be inaccurate. Review your lesson materials.
           </p>
         </form>

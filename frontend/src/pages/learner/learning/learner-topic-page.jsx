@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -17,6 +18,7 @@ import {
   Loader2,
   PanelLeft,
   Sparkles,
+  Zap,
 } from "@/components/icons"
 
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
@@ -34,13 +36,18 @@ import {
 } from "@/components/motion/rebyu-motion.jsx"
 import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
 import { LessonAiTutor } from "@/components/learner/lesson-ai-tutor.jsx"
+import { PriorityTag } from "@/components/learner/priority-tag.jsx"
 import { LessonTool } from "@/components/certifications/lesson-content-renderer.jsx"
 import {
   getLessonById,
+  getReadSections,
   markLessonComplete,
+  markSectionRead,
+  markSectionUnread,
   parseLessonStructure,
 } from "@/services/learnerService.js"
 import { getExams, getExamTypes } from "@/services/assessmentService.js"
+import { getProgressAnalytics } from "@/services/learnerAnalyticsService.js"
 import { buildCurriculum, findMiddle } from "./curriculum-model.js"
 
 /**
@@ -97,12 +104,52 @@ function buildTrack(middle) {
 
 /** The structure JSON gives sections a name and a tool list, not always an id. */
 function readSectionsOf(structure) {
-  return parseLessonStructure(structure).map((section, index) => ({
+  const parsed = parseLessonStructure(structure).map((section, index) => ({
     ...section,
     key: String(section.id ?? `section-${index}`),
     name: section.sectionName ?? section.name ?? `Section ${index + 1}`,
     tools: Array.isArray(section.content) ? section.content : [],
   }))
+
+  // netacad's course intros fold "what this covers" straight into the intro
+  // rather than giving Learning Objectives (and Prerequisites) a heading of
+  // their own. Every generated lesson orders them adjacently starting with
+  // Introduction, so merge whichever of the two follow it into one section --
+  // and one read-tracking key.
+  const merged = []
+  for (let index = 0; index < parsed.length; index += 1) {
+    const current = parsed[index]
+    const name = current.name.trim().toLowerCase()
+
+    if (name === "introduction") {
+      const group = [current]
+      let lookahead = index + 1
+
+      if (parsed[lookahead]?.name.trim().toLowerCase() === "learning objectives") {
+        group.push(parsed[lookahead])
+        lookahead += 1
+      }
+      if (parsed[lookahead]?.name.trim().toLowerCase().startsWith("prerequisite")) {
+        group.push(parsed[lookahead])
+        lookahead += 1
+      }
+
+      if (group.length > 1) {
+        merged.push({
+          ...current,
+          key: group.map((section) => section.key).join("+"),
+          name: "Introduction & Learning Objectives",
+          tools: group.flatMap((section) => section.tools),
+        })
+        index = lookahead - 1
+        continue
+      }
+    }
+
+    merged.push(current)
+  }
+
+  return merged
 }
 
 /* ------------------------------------------------------------------- outline */
@@ -177,9 +224,10 @@ function OutlineRow({
           {!collapsed ? (
             <span className="min-w-0 flex-1">
               <span
-                className={`block truncate text-sm ${
+                className={`line-clamp-2 text-sm leading-snug ${
                   active ? "font-extrabold text-rb-macaw-lip" : "font-bold text-rb-eel"
                 }`}
+                title={item.name}
               >
                 {index ? `${index} ` : ""}
                 {item.name}
@@ -189,6 +237,10 @@ function OutlineRow({
                   ? `lesson${item.quiz ? " · 1 quiz" : ""}`
                   : `unit assessment · ${item.exam.totalQuestions} questions`}
               </span>
+
+              {item.kind === "lesson" && !done && item.priorityTag ? (
+                <PriorityTag tag={item.priorityTag} size="sm" />
+              ) : null}
             </span>
           ) : null}
         </button>
@@ -222,7 +274,7 @@ function OutlineRow({
                 <a
                   href={`#${section.key}`}
                   className={`flex items-center gap-2 py-1.5 text-xs font-bold hover:text-rb-macaw-lip ${
-                    sectionRead ? "text-[#3d6b06]" : "text-rb-wolf"
+                    sectionRead ? "text-rb-feather-ink" : "text-rb-wolf"
                   }`}
                 >
                   <TickPop done={sectionRead} className="grid size-5 shrink-0 place-items-center">
@@ -273,7 +325,6 @@ function Outline({
   activeSections,
   readSections,
   isDone,
-  backTo,
 }) {
   const [expanded, setExpanded] = useState(() => new Set([track[0]?.id]))
 
@@ -300,10 +351,13 @@ function Outline({
         <div className="flex items-center justify-between gap-2">
           {!collapsed ? (
             <div className="min-w-0">
-              <p className="rb-eyebrow truncate">
+              <p className="rb-eyebrow line-clamp-1" title={`Unit ${major.index} · ${major.name}`}>
                 unit {major.index} · {major.name}
               </p>
-              <p className="mt-1 truncate font-rb-display text-base font-extrabold text-rb-eel">
+              <p
+                className="mt-1 line-clamp-2 font-rb-display text-base font-extrabold leading-snug text-rb-eel"
+                title={middle.name}
+              >
                 {middle.name}
               </p>
             </div>
@@ -361,17 +415,6 @@ function Outline({
           })}
         </StaggerList>
       </nav>
-
-      {!collapsed ? (
-        <div className="shrink-0 border-t-2 border-rb-swan p-3">
-          <TactileButton asChild variant="ghost" size="sm" className="w-full">
-            <Link to={backTo}>
-              <ArrowLeft className="size-4" />
-              back to curriculum
-            </Link>
-          </TactileButton>
-        </div>
-      ) : null}
     </div>
   )
 }
@@ -422,12 +465,14 @@ function LessonView({
   readSections,
   lessonDone,
   completing,
+  showToc,
   onReadSection,
   onToggleSection,
   onReadLesson,
   onToggleLesson,
   onPrev,
   onNext,
+  backTo,
 }) {
   const articleRef = useRef(null)
 
@@ -477,34 +522,56 @@ function LessonView({
   const readCount = sections.filter((section) => readSections.has(section.key)).length
 
   return (
-    <article ref={articleRef} className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-10 lg:px-14">
-      <p className="rb-eyebrow">
-        lesson {position} of {total}
-      </p>
+    <article ref={articleRef} className="w-full px-5 pb-10 sm:px-8 lg:px-12">
+      <div className="sticky top-0 z-10 -mx-5 border-b-2 border-rb-swan bg-rb-snow/95 px-5 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)] backdrop-blur supports-[backdrop-filter]:bg-rb-snow/80 sm:-mx-8 sm:px-8 lg:-mx-12 lg:px-12">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="rb-eyebrow">
+              lesson {position} of {total}
+            </p>
 
-      <h1 className="rb-display rb-display-sm mt-3">{lessonItem.name}</h1>
+            <h1 className="mt-0.5 truncate font-rb-display text-lg font-extrabold text-rb-eel sm:text-xl">
+              {lessonItem.name}
+            </h1>
+          </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <span className="rb-chip">
-          <ListChecks className="size-3.5" aria-hidden="true" />
-          {sections.length} section{sections.length === 1 ? "" : "s"}
-        </span>
-        {lessonItem.quiz ? (
-          <span className="rb-chip bg-rb-beetle-wash text-rb-beetle-lip">
-            <CircleHelp className="size-3.5" aria-hidden="true" />
-            quick check · {lessonItem.quiz.totalQuestions} questions
+          {backTo ? (
+            <TactileButton asChild variant="macaw" size="sm" className="shrink-0">
+              <Link to={backTo}>
+                <ArrowLeft className="size-4" />
+                back to curriculum
+              </Link>
+            </TactileButton>
+          ) : null}
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="rb-chip">
+            <ListChecks className="size-3.5" aria-hidden="true" />
+            {sections.length} section{sections.length === 1 ? "" : "s"}
           </span>
-        ) : null}
-        <span
-          className={`rb-chip ${lessonDone ? "bg-rb-feather-wash text-[#3d6b06]" : ""}`}
-          aria-live="polite"
-        >
-          <CheckCircle2 className="size-3.5" aria-hidden="true" />
-          {lessonDone ? "lesson complete" : `${readCount} of ${sections.length} sections read`}
-        </span>
+          {lessonItem.quiz ? (
+            <span className="rb-chip bg-rb-beetle-wash text-rb-beetle-lip">
+              <CircleHelp className="size-3.5" aria-hidden="true" />
+              quick check · {lessonItem.quiz.totalQuestions} questions
+            </span>
+          ) : null}
+          <span
+            className={`rb-chip ${lessonDone ? "bg-rb-feather-wash text-rb-feather-ink" : ""}`}
+            aria-live="polite"
+          >
+            <CheckCircle2 className="size-3.5" aria-hidden="true" />
+            {lessonDone ? "lesson complete" : `${readCount} of ${sections.length} sections read`}
+          </span>
+
+          {!lessonDone && lessonItem.priorityTag ? (
+            <PriorityTag tag={lessonItem.priorityTag} size="sm" />
+          ) : null}
+        </div>
       </div>
 
-      {loading ? (
+      <div className="mx-auto w-full max-w-4xl">
+        {loading ? (
         <div className="mt-10 flex items-center gap-3 text-sm font-bold text-rb-wolf">
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
           Loading lesson content…
@@ -519,99 +586,64 @@ function LessonView({
         </div>
       ) : (
         <>
-          {/* Introduction — the welcome, then what the lesson covers. Every
-              lesson opens the same way, so a learner always knows what they are
-              about to spend the next stretch on before they spend it.
-
-              The bullets are the lesson's own section names: categories and
-              lessons carry a title and a body, and there is no objectives field
-              behind them to read. */}
-          <Reveal
-            as="section"
-            variants={popIn}
-            amount={0}
-            className="mt-8 rounded-rb-card border-2 border-rb-swan bg-rb-macaw-wash p-6"
-          >
-            <p className="font-rb-display text-lg font-extrabold text-rb-eel">
-              Welcome to {lessonItem.name.toLowerCase()}.
-            </p>
-
-            <p className="rb-body mt-3">
-              This lesson covers {sections.length} section
-              {sections.length === 1 ? "" : "s"}. Work through it in order — each section assumes
-              the one before it
-              {lessonItem.quiz ? " — and the quick check at the end asks you to apply it." : "."}
-            </p>
-
-            <p className="mt-5 font-rb-display text-sm font-extrabold uppercase tracking-wide text-rb-macaw-lip">
-              In this lesson, you will cover the following:
-            </p>
-
-            <ul className="mt-3 space-y-2">
-              {sections.map((section) => (
-                <li key={section.key} className="flex gap-3 text-sm font-medium text-rb-eel">
-                  <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-rb-macaw text-white">
-                    <Check className="size-3" aria-hidden="true" />
-                  </span>
-                  {section.name}
-                </li>
-              ))}
-            </ul>
-          </Reveal>
-
           {/* Table of contents. Sections are also in the rail, but the rail is
-              collapsible and this is where the learner is already looking. */}
-          <nav
-            className="mt-6 rounded-rb-card border-2 border-rb-swan bg-rb-snow p-6"
-            aria-label="Table of contents"
-          >
-            <p className="rb-eyebrow">table of contents</p>
+              collapsible (or, below xl, replaced by a Sheet) -- shown only when
+              the rail itself isn't already on screen, so the list never
+              appears twice at once. */}
+          {showToc ? (
+            <nav
+              className="mt-6 rounded-rb-card border-2 border-rb-swan bg-rb-snow p-6"
+              aria-label="Table of contents"
+            >
+              <p className="rb-eyebrow">table of contents</p>
 
-            <ol className="mt-4 space-y-1">
-              {sections.map((section, index) => {
-                const done = readSections.has(section.key)
+              <ol className="mt-4 space-y-1">
+                {sections.map((section, index) => {
+                  const done = readSections.has(section.key)
 
-                return (
-                  <li key={section.key}>
+                  return (
+                    <li key={section.key}>
+                      <a
+                        href={`#${section.key}`}
+                        className="flex items-center gap-3 rounded-xl px-2 py-2 text-sm font-bold text-rb-eel transition hover:bg-rb-polar"
+                      >
+                        <span
+                          className={`grid size-7 shrink-0 place-items-center rounded-full text-xs ${
+                            done ? "bg-rb-feather text-white" : "rb-numeric bg-rb-swan"
+                          }`}
+                        >
+                          {done ? <Check className="size-3.5" aria-hidden="true" /> : index + 1}
+                        </span>
+                        <span className="min-w-0 flex-1">{section.name}</span>
+                        <ArrowRight className="size-3.5 shrink-0 text-rb-hare" aria-hidden="true" />
+                      </a>
+                    </li>
+                  )
+                })}
+
+                {lessonItem.quiz ? (
+                  <li>
                     <a
-                      href={`#${section.key}`}
+                      href={`#quiz-${lessonItem.quiz.examId}`}
                       className="flex items-center gap-3 rounded-xl px-2 py-2 text-sm font-bold text-rb-eel transition hover:bg-rb-polar"
                     >
-                      <span
-                        className={`grid size-7 shrink-0 place-items-center rounded-full text-xs ${
-                          done ? "bg-rb-feather text-white" : "rb-numeric bg-rb-swan"
-                        }`}
-                      >
-                        {done ? <Check className="size-3.5" aria-hidden="true" /> : index + 1}
+                      <span className="grid size-7 shrink-0 place-items-center rounded-full bg-rb-beetle-wash text-rb-beetle-lip">
+                        <CircleHelp className="size-3.5" aria-hidden="true" />
                       </span>
-                      <span className="min-w-0 flex-1">{section.name}</span>
+                      <span className="min-w-0 flex-1">Test your skills</span>
                       <ArrowRight className="size-3.5 shrink-0 text-rb-hare" aria-hidden="true" />
                     </a>
                   </li>
-                )
-              })}
+                ) : null}
+              </ol>
+            </nav>
+          ) : null}
 
-              {lessonItem.quiz ? (
-                <li>
-                  <a
-                    href={`#quiz-${lessonItem.quiz.examId}`}
-                    className="flex items-center gap-3 rounded-xl px-2 py-2 text-sm font-bold text-rb-eel transition hover:bg-rb-polar"
-                  >
-                    <span className="grid size-7 shrink-0 place-items-center rounded-full bg-rb-beetle-wash text-rb-beetle-lip">
-                      <CircleHelp className="size-3.5" aria-hidden="true" />
-                    </span>
-                    <span className="min-w-0 flex-1">Test your skills</span>
-                    <ArrowRight className="size-3.5 shrink-0 text-rb-hare" aria-hidden="true" />
-                  </a>
-                </li>
-              ) : null}
-            </ol>
-          </nav>
-
-          <div className="mt-10 space-y-10">
-            {sections.map((section, index) => {
-              const done = readSections.has(section.key)
-
+          <div className="mt-10 divide-y-2 divide-rb-swan">
+            {/* Plain document flow, netacad-style: sections read as one
+                continuous page separated by hairlines, not a stack of
+                individually boxed, colour-banded cards. */}
+            {sections.map((section) => {
               return (
                 /* Each section rises as it is reached. `once` matters here more
                    than anywhere: re-animating body copy on the way back up
@@ -621,30 +653,17 @@ function LessonView({
                   key={section.key}
                   id={section.key}
                   amount={0.05}
-                  className="scroll-mt-8"
+                  className="flex min-h-dvh scroll-mt-8 flex-col justify-center py-8 first:pt-0"
                 >
-                  <div className="flex items-start gap-4">
-                    <ReadCheck
-                      done={done}
-                      label={`Mark "${section.name}" as ${done ? "unread" : "read"}`}
-                      onToggle={() => onToggleSection(section.key)}
-                    />
+                  <h2 className="font-rb-display text-2xl font-extrabold text-rb-eel">
+                    {section.name}
+                  </h2>
 
-                    <div className="min-w-0 flex-1">
-                      <p className={`rb-eyebrow ${done ? "!text-[#3d6b06]" : ""}`}>
-                        section {index + 1}
-                        {done ? " · read" : ""}
-                      </p>
-
-                      <h2 className="mt-1 font-rb-display text-2xl font-extrabold text-rb-eel">
-                        {section.name}
-                      </h2>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 space-y-5 sm:pl-12">
+                  <div className="mt-4 space-y-5">
                     {section.tools.map((tool, toolIndex) => (
-                      <LessonTool key={tool.id ?? toolIndex} tool={tool} />
+                      <div key={tool.id ?? toolIndex}>
+                        <LessonTool tool={tool} index={toolIndex} />
+                      </div>
                     ))}
                   </div>
 
@@ -657,12 +676,13 @@ function LessonView({
           </div>
         </>
       )}
+      </div>
 
       {/* The lesson's own quick check, bled to the column edges so the band
           reads as a change of activity rather than one more card in the
           reading column. */}
       {lessonItem.quiz ? (
-        <div className="-mx-5 mt-14 sm:-mx-10 lg:-mx-14">
+        <div className="-mx-5 mt-14 sm:-mx-8 lg:-mx-12">
           <QuizBand quiz={lessonItem.quiz} />
         </div>
       ) : null}
@@ -670,6 +690,7 @@ function LessonView({
       {/* End of the lesson. The tick goes green on its own when you get here —
           the sentinel below it is what the scroll check watches — and can also
           be pressed, so a learner who jumped to the end can still set it. */}
+      <div className="mx-auto w-full max-w-4xl">
       <motion.div
         aria-live="polite"
         // A single settle when the lesson lands, so finishing registers as an
@@ -717,6 +738,7 @@ function LessonView({
           <ArrowRight className="size-4" />
         </TactileButton>
       </div>
+      </div>
     </article>
   )
 }
@@ -733,7 +755,7 @@ function LessonView({
 function QuizBand({ quiz }) {
   return (
     <section id={`quiz-${quiz.examId}`} className="scroll-mt-8 bg-rb-bee px-5 py-12 sm:px-10 lg:px-14">
-      <div className="mx-auto w-full max-w-6xl">
+      <div className="w-full">
         <Reveal amount={0.2}>
           <p className="font-rb-display text-2xl font-extrabold text-white">Test your skills</p>
           <p className="mt-1 text-sm font-bold text-white/80">
@@ -883,6 +905,24 @@ export default function LearnerTopicPage() {
     [data?.lessons],
   )
 
+  // Same per-lesson priority tags the curriculum page shows -- fetched here
+  // too so the rail (which is entered directly, not only by drilling in from
+  // the curriculum page) can show them on each lesson as well.
+  const masteryQuery = useQuery({
+    queryKey: ["learner-progress-analytics", certificationId],
+    queryFn: () => getProgressAnalytics(certificationId),
+    enabled: Boolean(certificationId),
+    staleTime: 30_000,
+  })
+
+  const lessonPriorityById = useMemo(() => {
+    const map = new Map()
+    for (const topic of masteryQuery.data?.lessonPriorities ?? []) {
+      if (topic.lessonId != null) map.set(String(topic.lessonId), topic.priorityTag)
+    }
+    return map
+  }, [masteryQuery.data])
+
   const curriculum = useMemo(() => {
     if (!certification) return null
     return buildCurriculum({
@@ -892,8 +932,9 @@ export default function LearnerTopicPage() {
         (exam) => String(exam.certificationId) === String(certificationId),
       ),
       examTypesById,
+      lessonPriorityById,
     })
-  }, [certification, lessonById, examsQuery.data, certificationId, examTypesById])
+  }, [certification, lessonById, examsQuery.data, certificationId, examTypesById, lessonPriorityById])
 
   const { major, middle } = useMemo(
     () => (curriculum ? findMiddle(curriculum, middleCategoryId) : { major: null, middle: null }),
@@ -930,6 +971,17 @@ export default function LearnerTopicPage() {
     [lessonQuery.data?.lessonComponentStructure],
   )
 
+  const readSectionsQuery = useQuery({
+    queryKey: ["learner-read-sections", activeLessonId],
+    queryFn: () => getReadSections(activeLessonId),
+    enabled: Boolean(activeLessonId) && Boolean(data?.learnerId),
+  })
+
+  // Keys already confirmed saved on the server for the active lesson, so the
+  // scroll check (which fires on every scroll frame) doesn't re-POST a
+  // section that is already marked read.
+  const persistedReadRef = useRef(new Set())
+
   const isDone = useCallback(
     (lessonId) => locallyDone.has(lessonId) || Boolean(lessonById.get(lessonId)?.completed),
     [locallyDone, lessonById],
@@ -940,14 +992,19 @@ export default function LearnerTopicPage() {
       markLessonComplete({
         learnerId: data?.learnerId,
         lessonId: Number(lessonId),
-        completedAt: new Date().toISOString(),
+        // The backend's `completedAt` is a LocalDateTime and rejects an ISO
+        // string with a trailing `Z` (offset) — see markSectionRead below,
+        // which never had this bug because it doesn't send a timestamp.
+        completedAt: new Date().toISOString().slice(0, 19),
       }),
     onSuccess: async (_result, lessonId) => {
       setLocallyDone((current) => new Set(current).add(lessonId))
       toast.success("Lesson completed", {
-        description: "Your certification progress has been updated.",
+        icon: <Zap className="size-4" aria-hidden="true" />,
+        description: "+100 XP · Your certification progress has been updated.",
       })
       await queryClient.invalidateQueries({ queryKey: ["learner-portal-data"] })
+      await queryClient.invalidateQueries({ queryKey: ["learner-streak"] })
     },
     onError: (error) => {
       toast.error("Could not mark lesson complete", {
@@ -958,18 +1015,46 @@ export default function LearnerTopicPage() {
 
   // Stable identities: the lesson's scroll check is rebuilt whenever these
   // change, and a fresh closure each render would tear it down on every tick.
-  const readSection = useCallback((key) => {
-    setReadSections((current) => (current.has(key) ? current : new Set(current).add(key)))
-  }, [])
+  const readSection = useCallback(
+    (key) => {
+      setReadSections((current) => (current.has(key) ? current : new Set(current).add(key)))
 
-  const toggleSection = useCallback((key) => {
-    setReadSections((current) => {
-      const nextSet = new Set(current)
-      if (nextSet.has(key)) nextSet.delete(key)
-      else nextSet.add(key)
-      return nextSet
-    })
-  }, [])
+      if (!activeLessonId || persistedReadRef.current.has(key)) return
+      persistedReadRef.current.add(key)
+      markSectionRead(activeLessonId, key).catch(() => {
+        persistedReadRef.current.delete(key)
+      })
+    },
+    [activeLessonId],
+  )
+
+  const toggleSection = useCallback(
+    (key) => {
+      const willBeRead = !readSections.has(key)
+
+      setReadSections((current) => {
+        const nextSet = new Set(current)
+        if (nextSet.has(key)) nextSet.delete(key)
+        else nextSet.add(key)
+        return nextSet
+      })
+
+      if (!activeLessonId) return
+
+      if (willBeRead) {
+        persistedReadRef.current.add(key)
+        markSectionRead(activeLessonId, key).catch(() => {
+          persistedReadRef.current.delete(key)
+        })
+      } else {
+        persistedReadRef.current.delete(key)
+        markSectionUnread(activeLessonId, key).catch(() => {
+          persistedReadRef.current.add(key)
+        })
+      }
+    },
+    [activeLessonId, readSections],
+  )
 
   const alreadyDone = activeLessonId ? isDone(activeLessonId) : false
   const completing = completeMutation.isPending
@@ -982,10 +1067,16 @@ export default function LearnerTopicPage() {
     completeMutation.mutate(activeLessonId)
   }, [activeLessonId, alreadyDone, completing, data?.learnerId, completeMutation])
 
-  // Reset per-lesson reading state when the lesson changes.
+  // Seed per-lesson reading state from the server once it loads, so refreshing
+  // the page (or coming back to a lesson) restores the ticks instead of
+  // starting empty. Resets immediately on lesson change so the previous
+  // lesson's ticks don't flash under the new one while the fetch is in flight.
   useEffect(() => {
-    setReadSections(new Set())
-  }, [activeLessonId])
+    const saved = new Set(readSectionsQuery.data ?? [])
+    persistedReadRef.current = saved
+    setReadSections(saved)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeLessonId, readSectionsQuery.data])
 
   if (!certification) {
     return (
@@ -1050,11 +1141,11 @@ export default function LearnerTopicPage() {
 
   const columns = outlineCollapsed
     ? tutorOpen
-      ? "xl:grid-cols-[72px_minmax(0,1fr)_380px]"
-      : "xl:grid-cols-[72px_minmax(0,1fr)]"
+      ? "xl:grid-cols-[88px_minmax(0,1fr)_400px]"
+      : "xl:grid-cols-[88px_minmax(0,1fr)]"
     : tutorOpen
-      ? "xl:grid-cols-[320px_minmax(0,1fr)_380px]"
-      : "xl:grid-cols-[320px_minmax(0,1fr)]"
+      ? "xl:grid-cols-[340px_minmax(0,1fr)_400px]"
+      : "xl:grid-cols-[340px_minmax(0,1fr)]"
 
   const outline = (
     <Outline
@@ -1072,12 +1163,11 @@ export default function LearnerTopicPage() {
       activeSections={sections}
       readSections={readSections}
       isDone={isDone}
-      backTo={backTo}
     />
   )
 
   return (
-    <div className="rebyu-ds -mx-4 -my-6 min-h-dvh bg-rb-polar sm:-mx-6 lg:-mx-8">
+    <div className="rebyu-ds min-h-dvh w-full bg-rb-polar">
       <div className={`grid min-h-dvh ${columns}`}>
         {/* ---------------------------------------------------------- left */}
         <aside className="hidden min-h-0 border-r-2 border-rb-swan xl:block">
@@ -1126,6 +1216,7 @@ export default function LearnerTopicPage() {
               readSections={readSections}
               lessonDone={alreadyDone}
               completing={completing}
+              showToc={!isXl || outlineCollapsed}
               onReadSection={readSection}
               onToggleSection={toggleSection}
               onReadLesson={readLesson}
@@ -1146,6 +1237,7 @@ export default function LearnerTopicPage() {
                     }
                   : undefined
               }
+              backTo={backTo}
             />
           ) : (
             <AssessmentView
@@ -1173,26 +1265,55 @@ export default function LearnerTopicPage() {
         ) : null}
       </div>
 
-      {/* The circle. Only shown while the column is closed — once the tutor is
-          on screen a second control to open it is noise. */}
-      <AnimatePresence>
-        {!tutorOpen ? (
-          <motion.button
-            type="button"
-            onClick={() => setTutorOpen(true)}
-            aria-label="Open AI tutor"
-            initial={{ scale: 0, rotate: -90 }}
-            animate={{ scale: 1, rotate: 0 }}
-            exit={{ scale: 0, rotate: 90 }}
-            whileHover={{ scale: 1.07 }}
-            whileTap={{ scale: 0.92 }}
-            transition={{ type: "spring", stiffness: 480, damping: 22 }}
-            className="fixed bottom-6 right-6 z-50 grid size-16 place-items-center rounded-full bg-rb-beetle text-white shadow-[0_6px_0_var(--color-rb-beetle-lip)]"
-          >
-            <Sparkles className="size-7" aria-hidden="true" />
-          </motion.button>
-        ) : null}
-      </AnimatePresence>
+      {/* The circle, portaled straight to <body>. Hidden while the tutor
+          column is open (no second control to open it needed) and while the
+          mobile outline Sheet is open (it would otherwise render on top of
+          that Sheet's overlay, poking through a modal that is supposed to be
+          covering the page).
+
+          Portaled rather than rendered inline: every route is wrapped by
+          `RouteTransition` in App.jsx (the `.rb-route-enter` class), whose
+          entrance keyframe applies a real `transform` for the run of that
+          animation. Any non-`none` transform on an ancestor creates a new
+          containing block *and* stacking context for `position: fixed`
+          descendants — this button stops being fixed to the viewport and its
+          z-index stops being comparable to page-level UI (like the Sheets
+          below, which Radix portals straight to `<body>`) for as long as
+          that ancestor's transform is live. Rendering here via
+          `createPortal` sidesteps that entirely by never being a descendant
+          of `.rb-route-enter` in the first place, so it stays fixed to the
+          real viewport and stacks by z-index alone against Radix's own
+          body-level portals.
+
+          `z-[60]`, one step above the Sheets' `z-50`, covers the moment
+          right after either Sheet closes: Radix keeps a closed Sheet's
+          portal (overlay + content) mounted with `pointer-events: auto`
+          until its own CSS exit animation fires `animationend`, which is not
+          instant. At equal z-index the Sheet's portal would win that
+          stacking tie and silently swallow clicks on this button right after
+          closing it (or picking a lesson from the mobile outline).
+          Outranking it here keeps the button clickable regardless. */}
+      {createPortal(
+        <AnimatePresence>
+          {!tutorOpen && !railOpen ? (
+            <motion.button
+              type="button"
+              onClick={() => setTutorOpen(true)}
+              aria-label="Open AI tutor"
+              initial={{ scale: 0, rotate: -90 }}
+              animate={{ scale: 1, rotate: 0 }}
+              exit={{ scale: 0, rotate: 90 }}
+              whileHover={{ scale: 1.07 }}
+              whileTap={{ scale: 0.92 }}
+              transition={{ type: "spring", stiffness: 480, damping: 22 }}
+              className="fixed bottom-6 right-6 z-[60] grid size-16 place-items-center rounded-full bg-rb-beetle text-white shadow-[0_6px_0_var(--color-rb-beetle-lip)]"
+            >
+              <Sparkles className="size-7" aria-hidden="true" />
+            </motion.button>
+          ) : null}
+        </AnimatePresence>,
+        document.body,
+      )}
 
       {/* Narrow windows get the outline and the tutor as sheets rather than
           columns — three columns on a laptop leaves nothing for the reading. */}

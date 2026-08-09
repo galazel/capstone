@@ -45,6 +45,25 @@ export function markLessonComplete(data) {
   })
 }
 
+// Section-level lesson-read progress for the signed-in learner (learnerId is
+// resolved server-side from the JWT, so it survives a refresh).
+export function getReadSections(lessonId) {
+  return base(`learners/me/read-sections?lessonId=${encodeURIComponent(lessonId)}`)
+}
+
+export function markSectionRead(lessonId, sectionKey) {
+  return base("learners/me/read-sections", {
+    method: "POST",
+    data: { lessonId: Number(lessonId), sectionKey },
+  })
+}
+
+export function markSectionUnread(lessonId, sectionKey) {
+  return base(`learners/me/read-sections/${lessonId}/${encodeURIComponent(sectionKey)}`, {
+    method: "DELETE",
+  })
+}
+
 export function getAllExams() {
   return base("exams")
 }

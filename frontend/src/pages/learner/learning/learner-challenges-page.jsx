@@ -46,7 +46,7 @@ const CHALLENGES = [
       "Ten stages of coding problems, judged against real unit tests and scored on time complexity.",
     icon: Code2,
     tag: "Practice",
-    accent: "linear-gradient(135deg, #1B6EF3, #1CB0F6)",
+    accent: "linear-gradient(135deg, var(--color-rb-feather), var(--color-rb-macaw))",
     surfaceClass: "bg-rb-macaw-wash dark:bg-[#12283d]",
     route: "/learner/challenges/codestrike",
   },
@@ -58,7 +58,7 @@ const CHALLENGES = [
       "Ten stages of UML and system design on a drag-and-drop canvas, checked against structural rules.",
     icon: Network,
     tag: "Design",
-    accent: "linear-gradient(135deg, #B061E6, #CE82FF)",
+    accent: "linear-gradient(135deg, var(--color-rb-beetle-lip), var(--color-rb-beetle))",
     surfaceClass: "bg-rb-beetle-wash dark:bg-[#2a1f3a]",
     route: "/learner/challenges/blueprint-arena",
   },
@@ -70,7 +70,7 @@ const CHALLENGES = [
       "An eight-player bracket on one of your certification tracks — quarterfinals, semis, and a timed final.",
     icon: Trophy,
     tag: "Tournament",
-    accent: "linear-gradient(135deg, #E08600, #FF9600)",
+    accent: "linear-gradient(135deg, var(--color-rb-fox-lip), var(--color-rb-fox))",
     surfaceClass: "bg-rb-fox-wash dark:bg-[#3a2a12]",
     route: "/learner/challenges/world-cup",
     // The bracket is played on one certification's question bank, so it opens
@@ -234,7 +234,7 @@ export default function LearnerChallengesPage() {
       description="Unlock ranked challenges, battles, leaderboards, rewards, and certification-specific practice with Pro or institution access."
     >
     <div
-      className="relative left-1/2 isolate -my-6 min-h-[calc(100dvh-4rem)] w-screen -translate-x-1/2 overflow-hidden bg-[#f1f7fc] px-4 py-8 sm:px-6 lg:px-8 dark:bg-[#111b26]"
+      className="relative left-1/2 isolate -my-6 min-h-[calc(100dvh-4rem)] w-screen -translate-x-1/2 overflow-hidden bg-[var(--rb-challenges-surface)] px-4 py-8 sm:px-6 lg:px-8"
       style={{
         backgroundImage:
           "radial-gradient(circle at 18% 18%, rgba(47,125,211,0.16), transparent 27%), radial-gradient(circle at 82% 22%, rgba(53,169,160,0.12), transparent 28%), radial-gradient(circle at 50% 92%, rgba(226,170,54,0.09), transparent 30%)",

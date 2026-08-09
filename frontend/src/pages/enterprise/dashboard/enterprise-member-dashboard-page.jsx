@@ -12,9 +12,10 @@ import {
 } from "@/components/enterprise/enterprise-ui.jsx"
 import {
   BarBreakdownChart,
-  ChartPanel,
   DonutChart,
+  SampleChip,
 } from "@/components/charts/rebyu-charts.jsx"
+import { BentoGrid, BentoHeading, BentoTile } from "@/components/commons/bento.jsx"
 import { BubbleCard, toneForIndex } from "@/components/commons/bubble-card.jsx"
 import {
   ENTERPRISE_COMPLETION_MIX,
@@ -79,7 +80,9 @@ export default function EnterpriseMemberDashboardPage() {
       )}
 
       {/* Layout preview for per-group analytics. Placeholder series live in
-          components/charts/sample-data.js, each naming its future endpoint. */}
+          components/charts/sample-data.js, each naming its future endpoint.
+          Same BentoGrid/BentoTile mosaic as the org-admin dashboard, so the
+          chart panels read as the same product across both dashboards. */}
       <section className="space-y-4">
         <div>
           <h2 className="font-rb-display text-xl font-extrabold lowercase">group analytics</h2>
@@ -88,25 +91,29 @@ export default function EnterpriseMemberDashboardPage() {
           </p>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <ChartPanel title="Completion by group" subtitle="Share of assigned work done" sample>
+        <BentoGrid>
+          <BentoTile col={3} row={2}>
+            <BentoHeading title="Completion by group" hint="Share of assigned work done" chip={<SampleChip />} />
             <BarBreakdownChart
               data={ENTERPRISE_GROUP_PROGRESS}
               categoryKey="group"
               valueKey="completion"
               unit="%"
               target={60}
+              height={168}
             />
-          </ChartPanel>
+          </BentoTile>
 
-          <ChartPanel title="Where your learners are" subtitle="Across every group you lead" sample>
+          <BentoTile col={3} row={2}>
+            <BentoHeading title="Where your learners are" hint="Across every group you lead" chip={<SampleChip />} />
             <DonutChart
               data={ENTERPRISE_COMPLETION_MIX}
+              height={168}
               centerValue="120"
               centerLabel="learners"
             />
-          </ChartPanel>
-        </div>
+          </BentoTile>
+        </BentoGrid>
       </section>
     </div>
   )

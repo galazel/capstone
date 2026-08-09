@@ -259,7 +259,16 @@ public class ProgressAnalyticsService {
         List<TopicRow> weakestTopics = lessonPriorities.stream()
                 .filter(l -> l.masteryProbability() != null)
                 .sorted(Comparator
-                        .<LessonPriorityView>comparingInt(l -> "HIGHEST_PRIORITY".equals(l.priorityTag()) ? 0 : 1)
+                        // "CRITICAL_PRIORITY" and "HIGH_PRIORITY" are the tags the BKT
+                        // service actually emits (see priority_service.py) -- this used
+                        // to compare against "HIGHEST_PRIORITY", which no tag ever
+                        // equals, so the "surface the most urgent topics first" sort
+                        // silently never fired and fell through to mastery order alone.
+                        .<LessonPriorityView>comparingInt(l -> switch (String.valueOf(l.priorityTag())) {
+                            case "CRITICAL_PRIORITY" -> 0;
+                            case "HIGH_PRIORITY" -> 1;
+                            default -> 2;
+                        })
                         .thenComparing(LessonPriorityView::masteryProbability))
                 .limit(TOPIC_LIST_LIMIT)
                 .map(l -> toTopicRow(l, lessonById))
@@ -326,7 +335,10 @@ public class ProgressAnalyticsService {
                 categoryMastery,
                 weakestTopics,
                 strongestTopics,
-                recommendations
+                recommendations,
+                lessonPriorities.stream()
+                        .map(l -> toTopicRow(l, lessonById))
+                        .toList()
         );
     }
 

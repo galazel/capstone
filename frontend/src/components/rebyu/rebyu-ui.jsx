@@ -104,9 +104,9 @@ export function RebyuCard({ raised = false, press = false, className, ...props }
 export function Chip({ tone = "neutral", className, children, ...props }) {
   const TONES = {
     neutral: "",
-    feather: "bg-rb-feather-wash text-[#3d6b06]",
+    feather: "bg-rb-feather-wash text-rb-feather-ink",
     macaw: "bg-rb-macaw-wash text-rb-macaw-lip",
-    bee: "bg-rb-bee-wash text-[#8a6d00]",
+    bee: "bg-rb-bee-wash text-rb-bee-ink",
     fox: "bg-rb-fox-wash text-rb-fox-lip",
     beetle: "bg-rb-beetle-wash text-rb-beetle-lip",
     cardinal: "bg-rb-cardinal-wash text-rb-cardinal-lip",
@@ -189,7 +189,7 @@ export function StatTile({ icon: Icon, value, label, tone = "feather", className
   const TONES = {
     feather: "bg-rb-feather-wash text-rb-feather-lip",
     macaw: "bg-rb-macaw-wash text-rb-macaw-lip",
-    bee: "bg-rb-bee-wash text-[#8a6d00]",
+    bee: "bg-rb-bee-wash text-rb-bee-ink",
     fox: "bg-rb-fox-wash text-rb-fox-lip",
     beetle: "bg-rb-beetle-wash text-rb-beetle-lip",
   };

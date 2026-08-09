@@ -16,11 +16,12 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { BubbleCard } from "@/components/commons/bubble-card.jsx"
 import {
   LearnerEmptyState,
   ProgressBar,
+  toneForCertification,
 } from "@/components/learner/learner-ui.jsx"
-import CertificationCoverPanel from "@/components/certifications/certification-cover.jsx"
 
 function getCertificationTitle(certification) {
   return certification?.title ?? "Untitled Certification"
@@ -220,6 +221,10 @@ function isDiagnosticCompleted(certification, data) {
   })
 }
 
+/* The same bubble card the admin challenges arenas use — gradient cap,
+   bubbles, icon medallion, wash body — so an enrolled course reads as the
+   same card design as the browse-certifications page and admin's own
+   challenge cards. */
 function CourseCard({ course, onOpen }) {
   const {
     certification,
@@ -233,91 +238,64 @@ function CourseCard({ course, onOpen }) {
 
   const status = getCourseStatus(progress, completedLessons)
   const needsDiagnostic = !diagnosticCompleted
+  const completed = progress >= 100
 
   return (
-      <article className="group overflow-hidden border border-border bg-card transition hover:border-primary/40 hover:shadow-md">
-        <div className="relative h-40 overflow-hidden">
-          <CertificationCoverPanel
-              title={getCertificationTitle(certification)}
-              className="h-full w-full"
-          />
+      <BubbleCard
+          tone={toneForCertification(certification)}
+          icon={needsDiagnostic ? LockKeyhole : completed ? Award : CirclePlay}
+          eyebrow="REBYU Certification Review"
+          title={
+            <button
+                type="button"
+                onClick={onOpen}
+                className="rounded-sm text-left hover:underline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-rb-macaw"
+            >
+              {getCertificationTitle(certification)}
+            </button>
+          }
+          chips={[
+            { label: needsDiagnostic ? "Diagnostic required" : status },
+          ]}
+          footer={
+            <Button className="w-full rounded-full" onClick={onOpen}>
+              {needsDiagnostic ? (
+                  <ClipboardCheck className="mr-2 size-3.5" />
+              ) : null}
+              {needsDiagnostic ? "Start" : completed ? "Review" : "Continue"}
+            </Button>
+          }
+      >
+        <p className="mt-2 line-clamp-2 min-h-[42px] text-sm leading-5 text-muted-foreground">
+          {getCertificationDescription(certification)}
+        </p>
 
-          <span className="absolute left-3 top-3 z-10 rounded-sm bg-white/20 px-2 py-1 text-[10px] font-semibold tracking-wide text-white backdrop-blur-sm">
-          {needsDiagnostic ? "DIAGNOSTIC REQUIRED" : status}
-        </span>
-
-          {needsDiagnostic ? (
-              <span className="absolute right-3 top-3 flex items-center gap-1 rounded-sm bg-background/95 px-2 py-1 text-[10px] font-semibold tracking-wide text-foreground shadow-sm">
-                <LockKeyhole className="size-3" />
-                Locked
-              </span>
-          ) : null}
-
-          <div className="absolute inset-0 flex items-center justify-center bg-black/10 opacity-0 transition group-hover:opacity-100">
-            <div className="flex size-12 items-center justify-center rounded-full border-2 border-white bg-black/20 text-white backdrop-blur-sm">
-              <CirclePlay className="size-7" />
-            </div>
-          </div>
-        </div>
-
-        <div className="p-4">
-          <p className="text-xs font-medium text-muted-foreground">
-            REBYU Certification Review
-          </p>
-
-          <h2 className="mt-2 min-h-[48px] text-base font-semibold leading-6 text-foreground">
-            {getCertificationTitle(certification)}
-          </h2>
-
-          <p className="mt-2 min-h-[42px] text-sm leading-5 text-muted-foreground">
-            {getCertificationDescription(certification)}
-          </p>
-
-          <div className="mt-4">
-            <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>
               {completedLessons} of {totalLessons} lessons
             </span>
 
-              <span className="font-medium text-foreground">
+            <span className="font-medium text-foreground">
               {progress}%
             </span>
-            </div>
-
-            <ProgressBar value={progress} />
           </div>
 
-          <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
-            <p className="truncate text-xs text-muted-foreground">
-              {needsDiagnostic
-                  ? diagnosticAssessment
-                      ? "Take the diagnostic before learning"
-                      : "Diagnostic exam is not configured yet"
-                  : nextLesson
-                      ? `Next: ${nextLesson.name ?? nextLesson.title}`
-                      : progress >= 100
-                          ? "Course completed"
-                          : "Start learning"}
-            </p>
-
-            <Button
-                size="sm"
-                variant={needsDiagnostic ? "default" : "ghost"}
-                className={needsDiagnostic ? "shrink-0 gap-1" : "shrink-0 text-primary hover:text-primary"}
-                onClick={onOpen}
-            >
-              {needsDiagnostic ? (
-                  <ClipboardCheck className="size-3.5" />
-              ) : null}
-              {needsDiagnostic
-                  ? "Start"
-                  : progress >= 100
-                      ? "Review"
-                      : "Continue"}
-            </Button>
-          </div>
+          <ProgressBar value={progress} />
         </div>
-      </article>
+
+        <p className="mt-4 truncate border-t border-border pt-3 text-xs text-muted-foreground">
+          {needsDiagnostic
+              ? diagnosticAssessment
+                  ? "Take the diagnostic before learning"
+                  : "Diagnostic exam is not configured yet"
+              : nextLesson
+                  ? `Next: ${nextLesson.name ?? nextLesson.title}`
+                  : completed
+                      ? "Course completed"
+                      : "Start learning"}
+        </p>
+      </BubbleCard>
   )
 }
 

@@ -148,15 +148,15 @@ function getDurationText(assessment) {
 
 function DiagnosticStep({ number, title, description }) {
     return (
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
             <div className="flex items-start gap-3">
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                     {number}
                 </div>
 
                 <div className="min-w-0">
-                    <p className="text-sm font-semibold text-zinc-950">{title}</p>
-                    <p className="mt-1 text-sm leading-6 text-zinc-600">{description}</p>
+                    <p className="text-sm font-semibold text-foreground">{title}</p>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
                 </div>
             </div>
         </div>
@@ -237,12 +237,12 @@ export default function LearnerDiagnosticGatePage() {
     }
 
     return (
-        <main className="min-h-[calc(100dvh-8rem)] rounded-xl border border-zinc-200 bg-white px-5 py-10 shadow-sm sm:px-8 sm:py-12 xl:px-14">
+        <main className="min-h-[calc(100dvh-8rem)] rounded-xl border border-border bg-card px-5 py-10 shadow-sm sm:px-8 sm:py-12 xl:px-14">
             <article className="mx-auto w-full max-w-6xl">
                 <Button
                     type="button"
                     variant="ghost"
-                    className="mb-6 -ml-3 gap-2 text-zinc-500 hover:text-zinc-950"
+                    className="mb-6 -ml-3 gap-2 text-muted-foreground hover:text-foreground"
                     onClick={() => navigate("/learner/learning")}
                 >
                     <ArrowLeft className="size-4" />
@@ -263,11 +263,11 @@ export default function LearnerDiagnosticGatePage() {
                                     Diagnostic required
                                 </p>
 
-                                <h1 className="mt-2 max-w-4xl text-3xl font-bold tracking-tight text-zinc-950 sm:text-4xl">
+                                <h1 className="mt-2 max-w-4xl text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
                                     Before you study the lessons, take the diagnostic exam.
                                 </h1>
 
-                                <p className="mt-4 max-w-3xl text-base leading-8 text-zinc-600">
+                                <p className="mt-4 max-w-3xl text-base leading-8 text-muted-foreground">
                                     The lesson content is locked for now. Complete the diagnostic first to unlock the learning path.
                                 </p>
                             </div>
@@ -275,14 +275,14 @@ export default function LearnerDiagnosticGatePage() {
                     </div>
                 </section>
 
-                <section className="mt-8 rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-8 lg:p-10">
+                <section className="mt-8 rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8 lg:p-10">
                     <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
                         <div className="min-w-0">
-                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">
+                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                                 {getCertificationTitle(certification)}
                             </p>
 
-                            <h2 className="mt-2 text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl">
+                            <h2 className="mt-2 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
                                 {diagnosticAssessment
                                     ? getAssessmentTitle(diagnosticAssessment)
                                     : "Diagnostic Exam"}
@@ -290,70 +290,70 @@ export default function LearnerDiagnosticGatePage() {
                         </div>
 
                         <div className="grid gap-3 sm:grid-cols-3 lg:w-[520px]">
-                            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-                                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                            <div className="rounded-2xl border border-border bg-muted p-4">
+                                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                     <FileQuestion className="size-4 text-primary" />
                                     Items
                                 </div>
-                                <p className="mt-2 text-sm font-semibold text-zinc-950">
+                                <p className="mt-2 text-sm font-semibold text-foreground">
                                     {questionCount ? `${questionCount} items` : "Not shown"}
                                 </p>
                             </div>
 
-                            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-                                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                            <div className="rounded-2xl border border-border bg-muted p-4">
+                                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                     <Clock3 className="size-4 text-primary" />
                                     Time
                                 </div>
-                                <p className="mt-2 text-sm font-semibold text-zinc-950">
+                                <p className="mt-2 text-sm font-semibold text-foreground">
                                     {getDurationText(diagnosticAssessment)}
                                 </p>
                             </div>
 
-                            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-                                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                            <div className="rounded-2xl border border-border bg-muted p-4">
+                                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                     <ShieldCheck className="size-4 text-primary" />
                                     Access
                                 </div>
-                                <p className="mt-2 text-sm font-semibold text-zinc-950">
+                                <p className="mt-2 text-sm font-semibold text-foreground">
                                     Required
                                 </p>
                             </div>
                         </div>
                     </div>
 
-                    <div className="mt-8 w-full rounded-3xl border border-dashed border-red-200 bg-red-50/60 p-6 shadow-sm sm:p-8">
+                    <div className="mt-8 w-full rounded-3xl border border-dashed border-destructive/30 bg-destructive/5 p-6 shadow-sm sm:p-8">
                         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                            <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-white text-red-500 shadow-sm ring-1 ring-red-100">
+                            <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-card text-destructive shadow-sm ring-1 ring-destructive/20">
                                 <LockKeyhole className="size-6" />
                             </div>
 
                             <div className="min-w-0 flex-1">
-                                <p className="text-base font-semibold text-red-950">
+                                <p className="text-base font-semibold text-destructive">
                                     Lesson content is locked
                                 </p>
 
-                                <p className="mt-2 max-w-4xl text-sm leading-7 text-red-800/80">
+                                <p className="mt-2 max-w-4xl text-sm leading-7 text-destructive/80">
                                     You can open the lessons after submitting the diagnostic exam. This area is full-width so you can later replace it with the actual locked lesson preview or exam-related content.
                                 </p>
                             </div>
                         </div>
                     </div>
 
-                    <div className="mt-8 w-full rounded-3xl border border-zinc-200 bg-zinc-50/70 p-6 sm:p-8">
+                    <div className="mt-8 w-full rounded-3xl border border-border bg-muted/70 p-6 sm:p-8">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
-                                <div className="flex items-center gap-2 text-sm font-semibold text-zinc-950">
+                                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                                     <ClipboardCheck className="size-4 text-primary" />
                                     Diagnostic content area
                                 </div>
 
-                                <p className="mt-2 max-w-3xl text-sm leading-7 text-zinc-600">
+                                <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
                                     This wide section can later be replaced with the diagnostic exam content.
                                 </p>
                             </div>
 
-                            <span className="inline-flex w-fit items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-medium text-zinc-500">
+                            <span className="inline-flex w-fit items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground">
                 Locked for now
               </span>
                         </div>
@@ -379,9 +379,9 @@ export default function LearnerDiagnosticGatePage() {
                         </div>
                     </div>
 
-                    <div className="mt-8 flex flex-col gap-4 border-t border-zinc-100 pt-6 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="mt-8 flex flex-col gap-4 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between">
                         <div className="min-w-0">
-                            <p className="text-xs font-medium text-zinc-500">
+                            <p className="text-xs font-medium text-muted-foreground">
                                 Progress unlocked after diagnostic
                             </p>
 
@@ -405,22 +405,22 @@ export default function LearnerDiagnosticGatePage() {
                     </div>
 
                     {!diagnosticAssessment ? (
-                        <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+                        <p className="mt-4 rounded-xl bg-rb-fox-wash px-4 py-3 text-sm leading-6 text-rb-fox-lip">
                             The diagnostic exam is not found for this certification yet. Create a Diagnostic assessment in the admin Assessments tab first.
                         </p>
                     ) : null}
                 </section>
 
-                <section className="mt-8 rounded-3xl border border-zinc-200 bg-zinc-50 p-6 sm:p-8">
+                <section className="mt-8 rounded-3xl border border-border bg-muted p-6 sm:p-8">
                     <div className="flex items-start gap-3">
                         <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary" />
 
                         <div>
-                            <h2 className="font-semibold text-zinc-950">
+                            <h2 className="font-semibold text-foreground">
                                 Ready to unlock your study path
                             </h2>
 
-                            <p className="mt-2 text-sm leading-7 text-zinc-600">
+                            <p className="mt-2 text-sm leading-7 text-muted-foreground">
                                 Once you finish the diagnostic, the learning content can become available for this certification review.
                             </p>
                         </div>

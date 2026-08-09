@@ -9,9 +9,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 public interface LearnerRewardBalanceRepository extends JpaRepository<LearnerRewardBalance, Long> {
 
+    // Columns spelled out rather than relying on the table's DEFAULT clauses:
+    // the live schema has drifted from the V31 migration (likely from
+    // ddl-auto: update managing this table without carrying the SQL-level
+    // defaults over), so a bare `INSERT (learner_id)` was inserting NULL into
+    // every NOT NULL column and failing the constraint instead of the row
+    // quietly getting its zeroed defaults.
     @Modifying
     @Transactional
-    @Query(value = "INSERT INTO learner_reward_balances(learner_id) VALUES (:learnerId) ON CONFLICT (learner_id) DO NOTHING",
+    @Query(value = "INSERT INTO learner_reward_balances(learner_id, xp_balance, coin_balance, ai_credit_balance, updated_at) "
+            + "VALUES (:learnerId, 0, 0, 0, now()) ON CONFLICT (learner_id) DO NOTHING",
             nativeQuery = true)
     void ensureExists(@Param("learnerId") Long learnerId);
 

@@ -51,6 +51,10 @@ export default function LearnerLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const isChallengesPage = location.pathname === "/learner/challenges"
+  // The topic study page is a full-bleed reading surface with its own fixed
+  // sidebar — `.rebyu-page`'s 1440px cap would otherwise re-centre it and
+  // strand a wide gutter of unused width on large screens.
+  const isTopicPage = /^\/learner\/learning\/[^/]+\/topics\/[^/]+$/.test(location.pathname)
   const { logout: authLogout } = useAuth()
   const [searchValue, setSearchValue] = useState("")
   const entitlements = useLearnerEntitlements()
@@ -155,7 +159,8 @@ export default function LearnerLayout() {
   }
 
   return (
-    <div className={`netacad-portal learner-portal flex min-h-screen flex-col ${isChallengesPage ? "!bg-[#f1f7fc] dark:!bg-[#111b26]" : "bg-background"}`}>
+    <div className={`netacad-portal learner-portal flex min-h-screen flex-col ${isChallengesPage ? "!bg-[var(--rb-challenges-surface)]" : "bg-background"}`}>
+      {!isTopicPage ? (
       <PortalTopNavigation role="LEARNER" actions={<>
             {/* Ahead of the action icons: these are what the learner is
                 playing for, and they read as state rather than controls. */}
@@ -234,8 +239,13 @@ export default function LearnerLayout() {
               </DropdownMenuContent>
             </DropdownMenu>
       </>} />
+      ) : null}
 
-        <main className={`rebyu-page pb-24 lg:pb-8 ${isChallengesPage ? "!bg-[#f1f7fc] dark:!bg-[#111b26]" : ""}`}>
+        <main
+          className={`rebyu-page ${isTopicPage ? "" : "pb-24 lg:pb-8"} ${isChallengesPage ? "!bg-[var(--rb-challenges-surface)]" : ""} ${
+            isTopicPage ? "!max-w-none !gap-0 !p-0" : ""
+          }`}
+        >
           {query.isLoading ? (
             <LearnerLoadingSkeleton />
           ) : query.isError ? (
@@ -244,7 +254,7 @@ export default function LearnerLayout() {
             <Outlet context={outletContext} />
           )}
         </main>
-      <LearnerMobileNavigation />
+      {!isTopicPage ? <LearnerMobileNavigation /> : null}
     </div>
   )
 }

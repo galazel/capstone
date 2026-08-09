@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import api from '@/services/api'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts'
+import { BentoGrid, BentoHeading, BentoStat, BentoTile } from '@/components/commons/bento.jsx'
+import { SampleChip, TrendLineChart } from '@/components/charts/rebyu-charts.jsx'
 import { DollarSign, Users, TrendingUp, AlertCircle } from "@/components/icons"
 
 export default function RevenueDashboardPage() {
@@ -23,7 +23,7 @@ export default function RevenueDashboardPage() {
     }
   }
 
-  if (loading) return <div className="p-8">Loading revenue dashboard...</div>
+  if (loading) return <div className="p-8 text-muted-foreground">Loading revenue dashboard...</div>
 
   const mockData = {
     totalMRR: 15420,
@@ -53,135 +53,97 @@ export default function RevenueDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center gap-3 mb-8">
-          <DollarSign className="w-8 h-8 text-green-600" />
-          <h1 className="text-4xl font-bold">Revenue Dashboard</h1>
+    <div className="min-h-screen bg-background p-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-8 flex items-center gap-3">
+          <DollarSign className="size-8 text-rb-bee-lip" />
+          <h1 className="font-rb-display text-4xl font-extrabold tracking-tight">Revenue Dashboard</h1>
         </div>
 
-        {/* KPI Cards */}
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-600">Total MRR</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-3">
-                <DollarSign className="w-8 h-8 text-green-600" />
-                <div>
-                  <p className="text-3xl font-bold">${mockData.totalMRR.toLocaleString()}</p>
-                  <p className="text-xs text-green-600">+12% from last month</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Bento — same mosaic as the platform dashboard, mocked data chipped
+            "sample data" until /admin/revenue/metrics returns real series. */}
+        <BentoGrid className="mb-8">
+          <BentoStat
+            tone="bee"
+            col={2}
+            row={1}
+            icon={DollarSign}
+            label="Total MRR"
+            value={`$${mockData.totalMRR.toLocaleString()}`}
+            hint="+12% from last month"
+          />
+          <BentoStat
+            tone="macaw"
+            col={2}
+            row={1}
+            icon={Users}
+            label="Active Subscribers"
+            value={mockData.activeSubscribers.toLocaleString()}
+            hint="+11.8% growth"
+          />
+          <BentoStat
+            tone="fox"
+            col={2}
+            row={1}
+            icon={TrendingUp}
+            label="Churn Rate"
+            value={`${mockData.churnRate}%`}
+            hint="Monthly churn"
+          />
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-600">Active Subscribers</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-3">
-                <Users className="w-8 h-8 text-blue-600" />
-                <div>
-                  <p className="text-3xl font-bold">{mockData.activeSubscribers.toLocaleString()}</p>
-                  <p className="text-xs text-blue-600">+11.8% growth</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <BentoTile col={3} row={2}>
+            <BentoHeading title="Revenue growth" hint="Monthly recurring revenue" chip={<SampleChip />} />
+            <TrendLineChart
+              data={mockData.revenueHistory}
+              xKey="month"
+              series={[{ key: "revenue", name: "Revenue" }]}
+              domain={[0, 18000]}
+              height={220}
+              legendNote="Latest month"
+            />
+          </BentoTile>
+          <BentoTile col={3} row={2}>
+            <BentoHeading title="Subscriber growth" hint="Active subscribers per month" chip={<SampleChip />} />
+            <TrendLineChart
+              data={mockData.subscriberGrowth}
+              xKey="month"
+              series={[{ key: "subscribers", name: "Subscribers" }]}
+              domain={[0, 1700]}
+              height={220}
+              legendNote="Latest month"
+            />
+          </BentoTile>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-600">Churn Rate</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-3">
-                <TrendingUp className="w-8 h-8 text-orange-600" />
-                <div>
-                  <p className="text-3xl font-bold">{mockData.churnRate}%</p>
-                  <p className="text-xs text-orange-600">Monthly churn</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Charts */}
-        <div className="grid md:grid-cols-2 gap-8 mb-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>Revenue Growth</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={mockData.revenueHistory}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => `$${value}`} />
-                  <Line type="monotone" dataKey="revenue" stroke="#3b82f6" dot={{ r: 4 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Subscriber Growth</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={mockData.subscriberGrowth}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="subscribers" fill="#10b981" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Payment Methods */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Payment Methods</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {mockData.paymentMethods.map((method) => (
-                <div key={method.method} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
-                  <div>
-                    <p className="font-semibold">{method.method}</p>
-                    <p className="text-sm text-slate-600">{method.count} transactions</p>
+          <BentoTile col={4} row={1} className="!p-0">
+            <div className="flex flex-1 flex-col p-5 sm:p-6">
+              <BentoHeading title="Payment methods" />
+              <div className="grid gap-3 sm:grid-cols-3">
+                {mockData.paymentMethods.map((method) => (
+                  <div key={method.method} className="rounded-xl border-2 border-border bg-background p-3">
+                    <p className="font-bold">{method.method}</p>
+                    <p className="text-xs text-muted-foreground">{method.count} transactions</p>
+                    <p className="mt-1 text-lg font-extrabold text-rb-bee-lip">
+                      ${method.revenue.toLocaleString()}
+                    </p>
                   </div>
-                  <p className="text-lg font-bold text-green-600">${method.revenue.toLocaleString()}</p>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </BentoTile>
 
-        {/* Alerts */}
-        <Card className="mt-8 border-amber-200 bg-amber-50">
-          <CardHeader>
+          <BentoTile tone="fox" col={2} row={1}>
             <div className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-amber-600" />
-              <CardTitle>Business Insights</CardTitle>
+              <AlertCircle className="size-5 shrink-0" />
+              <h3 className="font-rb-display text-sm font-extrabold lowercase">business insights</h3>
             </div>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-2 text-sm text-slate-700">
-              <li>• Revenue up 12% MoM - Strong product-market fit</li>
-              <li>• Churn at 2.3% - Better than industry average (5%)</li>
-              <li>• Conversion rate: 8.2% of free users → Pro</li>
-              <li>• Average subscription lifetime: 14.3 months</li>
+            <ul className="mt-3 space-y-1.5 text-xs font-semibold">
+              <li>Revenue up 12% MoM — strong product-market fit</li>
+              <li>Churn at 2.3% — better than industry average (5%)</li>
+              <li>Conversion rate: 8.2% of free users → Pro</li>
+              <li>Average subscription lifetime: 14.3 months</li>
             </ul>
-          </CardContent>
-        </Card>
+          </BentoTile>
+        </BentoGrid>
       </div>
     </div>
   )

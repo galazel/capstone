@@ -202,11 +202,20 @@ export default function LearnerAssessmentResultPage() {
         ) : null}
 
         <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline">
-            <Link to={`/learner/assessments/${result.assessmentId}`}>
-              Retake Assessment
-            </Link>
-          </Button>
+          {result.assessmentType !== "DIAGNOSTIC" ? (
+            <>
+              <Button asChild variant="outline">
+                <Link to={`/learner/assessments/${result.assessmentId}`}>
+                  Retake Assessment
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link to={`/learner/assessments/${result.assessmentId}/history`}>
+                  View All Attempts
+                </Link>
+              </Button>
+            </>
+          ) : null}
           <Button asChild>
             <Link to="/learner/learning">Continue Learning</Link>
           </Button>

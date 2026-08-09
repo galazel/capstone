@@ -6,7 +6,6 @@ import { roleHomePath, useAuth } from "./context/auth-context.jsx"
 
 const DashboardLayout = lazy(() => import("./layouts/DashboardLayout"))
 const LearnerLayout = lazy(() => import("./layouts/learner-layout.jsx"))
-const LearnerDashboardPage = lazy(() => import("./pages/learner/dashboard/learner-dashboard-page.jsx"))
 const EnterpriseLayout = lazy(() => import("./layouts/enterprise-layout.jsx"))
 const LoginPage = lazy(() => import("./pages/auth/login-page.jsx"))
 const RegisterPage = lazy(() => import("./pages/auth/register-page.jsx"))
@@ -248,8 +247,8 @@ export function App() {
 
             <Route element={<ProtectedRoute allowedRoles={["LEARNER"]} />}>
                 <Route path="/learner" element={<LearnerLayout />}>
-                    <Route index element={<Navigate to="dashboard" replace />} />
-                    <Route path="dashboard" element={<LearnerDashboardPage />} />
+                    <Route index element={<Navigate to="analytics" replace />} />
+                    <Route path="dashboard" element={<Navigate to="/learner/analytics" replace />} />
                     <Route path="analytics" element={<LearnerProgressPage />} />
                     <Route path="progress" element={<LearnerProgressPage />} />
                     <Route path="learning" element={<LearnerLearningPage />} />

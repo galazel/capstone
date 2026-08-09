@@ -27,6 +27,10 @@
     --color-rb-cardinal-lip: #e03d3d;
     --color-rb-bee: #00b8d4;
     --color-rb-bee-lip: #0092a8;
+    /* Accessible text ink for content sat on a wash background — the -lip
+       shades above are tuned for button shadows, not AA text contrast. */
+    --color-rb-bee-ink: #8a6d00;
+    --color-rb-feather-ink: #3d6b06;
     --color-rb-fox: #ff9600;
     --color-rb-fox-lip: #e08600;
     --color-rb-beetle: #ce82ff;

@@ -13,6 +13,8 @@ import com.capstone.rebyu.assessment.repository.*;
 import com.capstone.rebyu.billing.entitlement.Entitlements;
 import com.capstone.rebyu.billing.service.LearnerEntitlementService;
 import com.capstone.rebyu.bkt.service.BktOutboxService;
+import com.capstone.rebyu.gamification.RewardService;
+import com.capstone.rebyu.gamification.service.StreakService;
 import com.capstone.rebyu.certification.entity.Lesson;
 import com.capstone.rebyu.certification.repository.LessonRepository;
 import com.capstone.rebyu.common.BusinessRuleException;
@@ -85,6 +87,10 @@ public class AssessmentAttemptService {
     private final DiagramGradingService diagramGradingService;
     private final AdaptiveRetakeQuestionSelectionService adaptiveRetakeQuestionSelectionService;
     private final AssessmentEventProducer assessmentEventProducer;
+    private final RewardService rewardService;
+    private final StreakService streakService;
+
+    private static final int ASSESSMENT_COMPLETION_XP = 300;
 
     private static final int MAX_EXECUTION_HISTORY = 20;
 
@@ -394,6 +400,14 @@ public class AssessmentAttemptService {
                 .between(attempt.getStartedAt(), now).getSeconds());
         attemptRepository.save(attempt);
 
+        // Keyed by examId, not attemptId: unlimited retakes are allowed (see
+        // resolveLockReason), but XP is a one-time reward for finishing an
+        // assessment at all -- keying by attempt would let a learner farm XP
+        // by retaking the same exam repeatedly.
+        rewardService.awardXp(attempt.getLearnerId(), ASSESSMENT_COMPLETION_XP, "ASSESSMENT_COMPLETED",
+                "assessment-completed:" + attempt.getExam().getExamId());
+        streakService.recordActivity(attempt.getLearnerId());
+
         recordLegacyExamResult(attempt);
         completeDiagnosticGateIfApplicable(attempt);
 
@@ -627,6 +641,11 @@ public class AssessmentAttemptService {
                 && !learnerEntitlementService.hasLearnerEntitlement(
                         learnerId, Entitlements.MOCK_EXAM_ACCESS, certificationId)) {
             return "This mock exam requires REBYU Pro or an eligible institutional license.";
+        }
+        // The diagnostic is a one-time placement check, not a retakeable quiz:
+        // once it has completed the enrollment's gate, block starting another.
+        if (TYPE_DIAGNOSTIC.equals(type) && enrollment.get().getDiagnosticCompletedAt() != null) {
+            return "You have already completed the diagnostic assessment for this certification.";
         }
         if (!TYPE_DIAGNOSTIC.equals(type)
                 && enrollment.get().getDiagnosticCompletedAt() == null

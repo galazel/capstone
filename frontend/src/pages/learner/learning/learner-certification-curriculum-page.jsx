@@ -4,12 +4,14 @@ import { useQuery } from "@tanstack/react-query"
 import {
   ArrowRight,
   BookOpen,
+  Brain,
   Check,
   CheckCircle2,
   ChevronDown,
   ClipboardCheck,
   Clock,
   CircleHelp,
+  Loader2,
   Lock,
   Trophy,
 } from "@/components/icons"
@@ -22,7 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { BackButton, ProgressBar, TactileButton } from "@/components/rebyu/rebyu-ui.jsx"
+import { BackButton, TactileButton } from "@/components/rebyu/rebyu-ui.jsx"
 import {
   Collapse,
   CountUp,
@@ -35,7 +37,9 @@ import {
   useAnimationControls,
 } from "@/components/motion/rebyu-motion.jsx"
 import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
+import { PRIORITY_CONFIG, PriorityTag } from "@/components/learner/priority-tag.jsx"
 import { getExams, getExamTypes } from "@/services/assessmentService.js"
+import { getProgressAnalytics } from "@/services/learnerAnalyticsService.js"
 import { buildCurriculum, hasSatDiagnostic } from "./curriculum-model.js"
 
 /**
@@ -72,8 +76,8 @@ const TONE = {
   bee: {
     face: "bg-rb-bee",
     wash: "bg-rb-bee-wash",
-    chip: "bg-rb-bee-wash text-[#8a6d00]",
-    ink: "text-[#8a6d00]",
+    chip: "bg-rb-bee-wash text-rb-bee-ink",
+    ink: "text-rb-bee-ink",
     btn: "fox",
     bar: "bee",
   },
@@ -96,8 +100,8 @@ const TONE = {
   feather: {
     face: "bg-rb-feather",
     wash: "bg-rb-feather-wash",
-    chip: "bg-rb-feather-wash text-[#3d6b06]",
-    ink: "text-[#3d6b06]",
+    chip: "bg-rb-feather-wash text-rb-feather-ink",
+    ink: "text-rb-feather-ink",
     btn: "feather",
     bar: "feather",
   },
@@ -111,6 +115,21 @@ const TONE = {
   },
 }
 
+// Worst-first: the summary reads like a triage list, not an alphabetical one.
+const PRIORITY_SUMMARY_ORDER = [
+  "CRITICAL_PRIORITY",
+  "HIGH_PRIORITY",
+  "MEDIUM_PRIORITY",
+  "LOW_PRIORITY",
+]
+
+const PRIORITY_SUMMARY_LABEL = {
+  CRITICAL_PRIORITY: "critical",
+  HIGH_PRIORITY: "high priority",
+  MEDIUM_PRIORITY: "medium priority",
+  LOW_PRIORITY: "low priority",
+}
+
 /* ------------------------------------------------------------------- pieces */
 
 /** One row inside an opened topic. Not a control — the icon and the label say
@@ -118,12 +137,25 @@ const TONE = {
  *
  *  A div, not an li: the `<StaggerItem>` around it supplies the list item, and
  *  an li inside an li is invalid. */
-function ItemRow({ icon: Icon, tone, label, meta, done }) {
+function ItemRow({ icon: Icon, label, meta, done, priorityTag, historyHref }) {
+  // Critical is the one tag that means "you are behind here" -- everything
+  // else on this row is informational, so it is the only one that earns a
+  // red highlight and a pulse instead of just its usual pill.
+  const isCritical = !done && priorityTag === "CRITICAL_PRIORITY"
+
   return (
-    <div className="flex items-center gap-3 py-2">
+    <div
+      className={`flex items-center gap-3 py-2 ${
+        isCritical ? "-mx-2 rounded-xl bg-rb-cardinal-wash/50 px-2 ring-2 ring-rb-cardinal/30" : ""
+      }`}
+    >
       <span
-        className={`grid size-8 shrink-0 place-items-center rounded-full ${
-          done ? "bg-rb-feather text-white" : TONE[tone].chip
+        className={`relative grid size-8 shrink-0 place-items-center rounded-full ${
+          done
+            ? "bg-rb-feather text-white"
+            : isCritical
+              ? "bg-rb-cardinal text-white"
+              : "bg-rb-swan text-rb-wolf"
         }`}
       >
         {done ? (
@@ -131,11 +163,36 @@ function ItemRow({ icon: Icon, tone, label, meta, done }) {
         ) : (
           <Icon className="size-4" aria-hidden="true" />
         )}
+
+        {isCritical ? (
+          <motion.span
+            className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-rb-cardinal ring-2 ring-rb-snow"
+            animate={{ scale: [1, 1.35, 1], opacity: [1, 0.6, 1] }}
+            transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+            aria-hidden="true"
+          />
+        ) : null}
       </span>
 
       <span className="min-w-0 flex-1 truncate text-sm font-bold text-rb-eel">{label}</span>
 
+      {/* Nothing to prioritize once it's done -- the tag is about where to
+          spend study time next, not a permanent label on the lesson. */}
+      {!done && priorityTag ? <PriorityTag tag={priorityTag} size="sm" /> : null}
+
       {meta ? <span className="shrink-0 text-xs font-bold text-rb-wolf">{meta}</span> : null}
+
+      {/* Every non-diagnostic assessment allows unlimited retakes -- this is
+          the quick way to see every past attempt without going through a
+          fresh attempt's result page first. */}
+      {historyHref ? (
+        <Link
+          to={historyHref}
+          className="shrink-0 text-xs font-bold text-rb-macaw-lip underline decoration-dotted underline-offset-2 hover:text-rb-macaw"
+        >
+          attempts
+        </Link>
+      ) : null}
     </div>
   )
 }
@@ -144,7 +201,6 @@ function MiddleRow({ middle, tone, index, onStudy }) {
   const [open, setOpen] = useState(false)
 
   const lessons = middle.lessons
-  const progress = lessons.length ? Math.round((middle.done / lessons.length) * 100) : 0
   const empty = lessons.length === 0
 
   return (
@@ -184,13 +240,8 @@ function MiddleRow({ middle, tone, index, onStudy }) {
         </button>
 
         <div className="flex shrink-0 items-center gap-3 sm:pl-2">
-          <span className="hidden w-28 sm:block">
-            <ProgressBar
-              value={progress}
-              tone={TONE[tone].bar}
-              label={`${middle.name} progress`}
-              className="!h-3"
-            />
+          <span className="hidden text-xs font-bold text-rb-wolf sm:block">
+            {middle.done} of {lessons.length} lessons
           </span>
 
           <TactileButton
@@ -226,9 +277,9 @@ function MiddleRow({ middle, tone, index, onStudy }) {
                 <StaggerItem as="li" key={lesson.id} variants={fadeUp}>
                   <ItemRow
                     icon={BookOpen}
-                    tone={tone}
                     label={lesson.name}
                     done={lesson.completed}
+                    priorityTag={lesson.priorityTag}
                   />
                 </StaggerItem>
               ))}
@@ -242,9 +293,9 @@ function MiddleRow({ middle, tone, index, onStudy }) {
                   <StaggerItem as="li" key={`quiz-${lesson.quiz.examId}`} variants={fadeUp}>
                     <ItemRow
                       icon={CircleHelp}
-                      tone={tone}
-                      label={lesson.quiz.title}
+                        label={lesson.quiz.title}
                       meta={`${lesson.quiz.totalQuestions} questions`}
+                      historyHref={`/learner/assessments/${lesson.quiz.examId}/history`}
                     />
                   </StaggerItem>
                 ))}
@@ -253,11 +304,11 @@ function MiddleRow({ middle, tone, index, onStudy }) {
                 <StaggerItem as="li" variants={fadeUp}>
                   <ItemRow
                     icon={ClipboardCheck}
-                    tone={tone}
                     label={middle.assessment.title}
                     meta={`${middle.assessment.totalQuestions} questions · ${Math.round(
                       Number(middle.assessment.passingScore ?? 0),
                     )}% to pass`}
+                    historyHref={`/learner/assessments/${middle.assessment.examId}/history`}
                   />
                 </StaggerItem>
               ) : null}
@@ -356,18 +407,9 @@ function MajorCard({ major, locked, onLocked, onStudy }) {
 
           <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center">
             <div className="min-w-0 flex-1">
-              <div className="flex items-baseline justify-between">
-                <span className="text-xs font-bold text-rb-wolf">
-                  {major.doneCount} of {major.lessonCount} lessons
-                </span>
-                <CountUp value={major.progress} suffix="%" className="rb-numeric text-sm" />
-              </div>
-              <ProgressBar
-                value={major.progress}
-                tone={tone.bar}
-                label={`${major.name} progress`}
-                className="mt-2"
-              />
+              <span className="text-xs font-bold text-rb-wolf">
+                {major.doneCount} of {major.lessonCount} lessons
+              </span>
             </div>
 
             <TactileButton
@@ -428,12 +470,21 @@ function MajorCard({ major, locked, onLocked, onStudy }) {
                 </p>
               </div>
 
-              <TactileButton asChild variant="fox" size="sm" className="shrink-0">
-                <Link to={`/learner/assessments/${major.assessment.examId}`}>
-                  start unit exam
-                  <ArrowRight className="size-4" />
+              <div className="flex shrink-0 items-center gap-3">
+                <Link
+                  to={`/learner/assessments/${major.assessment.examId}/history`}
+                  className="text-xs font-bold text-rb-fox-lip underline decoration-dotted underline-offset-2 hover:text-rb-fox"
+                >
+                  view attempts
                 </Link>
-              </TactileButton>
+
+                <TactileButton asChild variant="fox" size="sm">
+                  <Link to={`/learner/assessments/${major.assessment.examId}`}>
+                    start unit exam
+                    <ArrowRight className="size-4" />
+                  </Link>
+                </TactileButton>
+              </div>
             </div>
           ) : null}
         </div>
@@ -510,12 +561,21 @@ function MockExamCard({ exam, locked, onLocked }) {
                 unlock mock exam
               </TactileButton>
             ) : (
-              <TactileButton asChild variant="fox" size="sm" className="w-fit">
-                <Link to={`/learner/assessments/${exam.examId}`}>
-                  <Trophy className="size-4" />
-                  start mock exam
+              <div className="flex flex-wrap items-center gap-3">
+                <TactileButton asChild variant="fox" size="sm" className="w-fit">
+                  <Link to={`/learner/assessments/${exam.examId}`}>
+                    <Trophy className="size-4" />
+                    start mock exam
+                  </Link>
+                </TactileButton>
+
+                <Link
+                  to={`/learner/assessments/${exam.examId}/history`}
+                  className="text-xs font-bold text-rb-fox-lip underline decoration-dotted underline-offset-2 hover:text-rb-fox"
+                >
+                  view attempts
                 </Link>
-              </TactileButton>
+              </div>
             )}
           </div>
         </div>
@@ -568,6 +628,29 @@ export default function LearnerCertificationCurriculumPage() {
     [examsQuery.data, certificationId],
   )
 
+  // Fetched as soon as the certification is known rather than gated on the
+  // diagnostic: a learner who hasn't sat it yet just gets bktAvailable=false
+  // back, which is harmless, and gating on diagnosticDone would create a
+  // circular dependency since diagnosticDone itself comes from `curriculum`.
+  // Polling (rather than a one-shot check) is what lets the "processing"
+  // screen below flip itself over the moment mastery finishes computing,
+  // instead of making the learner refresh to find out.
+  const masteryQuery = useQuery({
+    queryKey: ["learner-progress-analytics", certificationId],
+    queryFn: () => getProgressAnalytics(certificationId),
+    enabled: Boolean(certificationId),
+    staleTime: 0,
+    refetchInterval: (query) => (query.state.data?.bktAvailable ? false : 4000),
+  })
+
+  const lessonPriorityById = useMemo(() => {
+    const map = new Map()
+    for (const topic of masteryQuery.data?.lessonPriorities ?? []) {
+      if (topic.lessonId != null) map.set(String(topic.lessonId), topic.priorityTag)
+    }
+    return map
+  }, [masteryQuery.data])
+
   const curriculum = useMemo(() => {
     if (!certification) return null
     return buildCurriculum({
@@ -575,8 +658,26 @@ export default function LearnerCertificationCurriculumPage() {
       lessonById,
       exams: certificationExams,
       examTypesById,
+      lessonPriorityById,
     })
-  }, [certification, lessonById, certificationExams, examTypesById])
+  }, [certification, lessonById, certificationExams, examTypesById, lessonPriorityById])
+
+  // How many not-yet-done lessons carry each priority tag, so the learner
+  // sees at a glance where the study plan wants them to focus before opening
+  // a single unit. Ordered worst-first: critical is the tag that means
+  // "behind on this", so it leads and gets the loudest colour.
+  const priorityCounts = useMemo(() => {
+    const counts = {}
+    for (const major of curriculum?.majors ?? []) {
+      for (const middle of major.middles) {
+        for (const lesson of middle.lessons) {
+          if (lesson.completed || !lesson.priorityTag) continue
+          counts[lesson.priorityTag] = (counts[lesson.priorityTag] ?? 0) + 1
+        }
+      }
+    }
+    return counts
+  }, [curriculum])
 
   const diagnosticDone = useMemo(() => {
     if (!curriculum) return false
@@ -586,6 +687,10 @@ export default function LearnerCertificationCurriculumPage() {
       certificationId,
     })
   }, [curriculum, data?.examResults, certificationId])
+
+  const [skippedMasteryWait, setSkippedMasteryWait] = useState(false)
+  const masteryReady =
+    !diagnosticDone || skippedMasteryWait || masteryQuery.data?.bktAvailable === true
 
   if (!certification) {
     return (
@@ -614,6 +719,44 @@ export default function LearnerCertificationCurriculumPage() {
     )
   }
 
+  // Diagnostic taken, mastery not back yet: hold here rather than dropping the
+  // learner straight into "continue learning" against a curriculum that has no
+  // priority order yet. Polls itself off this screen the moment bktAvailable
+  // flips true -- no refresh needed.
+  if (diagnosticDone && !masteryReady) {
+    return (
+      <div className="rebyu-ds flex min-h-[calc(100dvh-4rem)] items-center justify-center bg-rb-polar px-5">
+        <div className="w-full max-w-md rounded-rb-card border-2 border-rb-swan bg-rb-snow p-8 text-center shadow-[0_5px_0_var(--color-rb-swan)]">
+          <span className="mx-auto grid size-16 place-items-center rounded-2xl bg-rb-macaw-wash text-rb-macaw-lip">
+            <Brain className="size-7" aria-hidden="true" />
+          </span>
+
+          <h1 className="mt-5 font-rb-display text-xl font-extrabold text-rb-eel">
+            Processing your mastery
+          </h1>
+
+          <p className="mt-2 text-sm leading-6 text-rb-wolf">
+            We're turning your diagnostic answers into a priority-ordered study plan. This
+            usually takes a few seconds.
+          </p>
+
+          <div className="mt-6 flex items-center justify-center gap-2 text-sm font-bold text-rb-macaw-lip">
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            Analyzing results…
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setSkippedMasteryWait(true)}
+            className="mt-6 text-xs font-bold text-rb-hare underline decoration-dotted underline-offset-4 hover:text-rb-wolf"
+          >
+            Taking too long? Continue without waiting
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   function openTopic(middle) {
     navigate(`/learner/learning/${certificationId}/topics/${middle.id}`)
   }
@@ -631,42 +774,94 @@ export default function LearnerCertificationCurriculumPage() {
   return (
     <div className="rebyu-ds -mx-4 -my-6 min-h-dvh bg-rb-polar pb-20 sm:-mx-6 lg:-mx-8">
       {/* ------------------------------------------------------------ header */}
-      <header className="border-b-2 border-rb-swan bg-rb-snow px-5 py-8 lg:px-8">
-        <div className="mx-auto max-w-[1280px]">
+      <header className="relative overflow-hidden px-5 py-6 lg:px-8 lg:py-8">
+        <div className="mx-auto max-w-[1600px]">
           <div className="flex items-center gap-3">
             <BackButton asChild label="Back to my learning">
               <Link to="/learner/learning" />
             </BackButton>
-            <p className="rb-eyebrow">enrolled certification</p>
+            <span className="rb-chip">enrolled certification</span>
           </div>
 
-          <div className="mt-4 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="min-w-0">
-              <h1 className="rb-display rb-display-lg">
-                {String(certification.title ?? "certification").toLowerCase()}.
-              </h1>
-              {certification.description ? (
-                <p className="rb-body-lg mt-3 max-w-2xl">{certification.description}</p>
-              ) : null}
+          <h1 className="mt-3 max-w-3xl font-rb-display text-2xl font-extrabold tracking-tight text-rb-eel sm:text-3xl lg:text-4xl">
+            {String(certification.title ?? "certification").toLowerCase()}.
+          </h1>
+
+          {certification.description ? (
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-rb-wolf">
+              {certification.description}
+            </p>
+          ) : null}
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <div className="rb-chip">
+              <BookOpen className="size-4" aria-hidden="true" />
+              {curriculum.majors.length} unit{curriculum.majors.length === 1 ? "" : "s"} ·{" "}
+              {curriculum.lessonTotal} lessons
             </div>
 
-            <div className="w-full max-w-sm shrink-0">
-              <div className="flex items-baseline justify-between">
-                <span className="rb-eyebrow">overall progress</span>
-                <CountUp value={curriculum.progress} suffix="%" className="rb-numeric text-lg" />
+            {curriculum.mockExam ? (
+              <div className="rb-chip">
+                <Trophy className="size-4" aria-hidden="true" />1 mock exam
               </div>
-              <ProgressBar
-                value={curriculum.progress}
-                label="Certification progress"
-                className="mt-3 !h-5"
-              />
-              <p className="mt-2 text-xs font-bold text-rb-wolf">
-                {curriculum.lessonDone} of {curriculum.lessonTotal} lessons ·{" "}
-                {curriculum.majors.length} unit{curriculum.majors.length === 1 ? "" : "s"}
-                {curriculum.mockExam ? " · 1 mock exam" : ""}
-              </p>
+            ) : null}
+
+            <div className="flex items-center gap-3 rounded-full border-2 border-rb-swan bg-rb-polar py-2 pl-4 pr-5">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-rb-wolf">
+                progress
+              </span>
+              <div className="h-2 w-24 overflow-hidden rounded-full bg-rb-swan sm:w-32">
+                <motion.div
+                  className="h-full rounded-full bg-rb-macaw"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.max(0, Math.min(100, curriculum.progress))}%` }}
+                  transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+                />
+              </div>
+              <CountUp value={curriculum.progress} suffix="%" className="rb-numeric text-sm text-rb-eel" />
             </div>
           </div>
+
+          {/* Priority summary -- how many not-yet-done lessons need attention,
+              worst tag first, so the learner knows before opening a unit
+              whether anything here is urgent. Only shown once the diagnostic
+              has produced a priority order; before that every lesson's tag
+              is null and the row would just be empty. */}
+          {diagnosticDone && PRIORITY_SUMMARY_ORDER.some((tag) => priorityCounts[tag]) ? (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-rb-wolf">
+                priority focus
+              </span>
+
+              {PRIORITY_SUMMARY_ORDER.map((tag) => {
+                const count = priorityCounts[tag]
+                if (!count) return null
+
+                const config = PRIORITY_CONFIG[tag]
+                const Icon = config.icon
+                const isCritical = tag === "CRITICAL_PRIORITY"
+
+                return (
+                  <motion.span
+                    key={tag}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-bold ${config.bgColor} ${config.textColor} ${
+                      isCritical ? "ring-2 ring-rb-cardinal/40" : ""
+                    }`}
+                    animate={isCritical ? { scale: [1, 1.06, 1] } : undefined}
+                    transition={
+                      isCritical
+                        ? { duration: 1.6, repeat: Infinity, ease: "easeInOut" }
+                        : undefined
+                    }
+                  >
+                    <Icon className="size-4" aria-hidden="true" />
+                    <CountUp value={count} className="rb-numeric" />
+                    {PRIORITY_SUMMARY_LABEL[tag]}
+                  </motion.span>
+                )
+              })}
+            </div>
+          ) : null}
 
           {/* The gate, stated once at the top and then enforced on every card
               below. Gone entirely once the diagnostic is sat, rather than
@@ -706,7 +901,7 @@ export default function LearnerCertificationCurriculumPage() {
       </header>
 
       {/* ------------------------------------------------------------- units */}
-      <main className="mx-auto max-w-[1280px] px-5 py-10 lg:px-8">
+      <main className="mx-auto max-w-[1600px] px-5 py-10 lg:px-8">
         {curriculum.majors.length === 0 ? (
           <LearnerEmptyState
             icon={BookOpen}

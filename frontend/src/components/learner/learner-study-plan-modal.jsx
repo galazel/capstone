@@ -93,7 +93,7 @@ export default function LearnerStudyPlanCalendarPage() {
 
         <div className="overflow-x-auto border-y border-border bg-card [scrollbar-width:thin]">
           <div className="min-w-[900px]">
-            <div className="grid grid-cols-7 border-b border-border bg-[#F6F9FC]">
+            <div className="grid grid-cols-7 border-b border-border bg-muted">
               {DAY_NAMES.map((day, index) => (
                 <div key={day} className={`px-4 py-3 text-xs font-semibold ${index === 0 || index === 6 ? "text-primary" : "text-muted-foreground"}`}>{day}</div>
               ))}
@@ -104,7 +104,7 @@ export default function LearnerStudyPlanCalendarPage() {
                 const isToday = day.key === today
                 const isWeekend = day.date.getDay() === 0 || day.date.getDay() === 6
                 return (
-                  <div key={day.key} className={`min-h-36 border-b border-r border-border/70 p-3.5 [&:nth-child(7n)]:border-r-0 ${dayIndex >= 35 ? "border-b-0" : ""} ${day.currentMonth ? (isWeekend ? "bg-[#FAFCFE]" : "bg-white") : "bg-muted/20 text-muted-foreground"} ${isToday ? "shadow-[inset_0_3px_0_var(--primary)]" : ""}`}>
+                  <div key={day.key} className={`min-h-36 border-b border-r border-border/70 p-3.5 [&:nth-child(7n)]:border-r-0 ${dayIndex >= 35 ? "border-b-0" : ""} ${day.currentMonth ? (isWeekend ? "bg-muted/40" : "bg-card") : "bg-muted/20 text-muted-foreground"} ${isToday ? "shadow-[inset_0_3px_0_var(--primary)]" : ""}`}>
                     <div className="flex items-center justify-between">
                       <span className={`inline-flex size-7 items-center justify-center text-xs font-medium ${isToday ? "rounded-full bg-primary font-semibold text-primary-foreground" : ""}`}>{day.date.getDate()}</span>
                       {events.length ? <span className="text-[10px] font-medium text-muted-foreground">{events.length} {events.length === 1 ? "task" : "tasks"}</span> : null}

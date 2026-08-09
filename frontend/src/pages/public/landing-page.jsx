@@ -200,7 +200,7 @@ const PRIORITY = {
   high: { label: "high priority", chip: "bg-rb-cardinal-wash text-rb-cardinal-lip", bar: "cardinal" },
   medium: { label: "worth a look", chip: "bg-rb-fox-wash text-rb-fox-lip", bar: "fox" },
   low: { label: "low priority", chip: "bg-rb-polar text-rb-wolf", bar: "mask" },
-  done: { label: "mastered", chip: "bg-rb-feather-wash text-[#3d6b06]", bar: "feather" },
+  done: { label: "mastered", chip: "bg-rb-feather-wash text-rb-feather-ink", bar: "feather" },
 };
 
 const LEARNER_POINTS = [
@@ -244,7 +244,7 @@ const FEED_POSTS = [
     tag: "FE Exam · Networks",
     when: "5h",
     kind: "material",
-    kindChip: "bg-rb-bee-wash text-[#8a6d00]",
+    kindChip: "bg-rb-bee-wash text-rb-bee-ink",
     text: "My subnetting cheat sheet from last week's review. The CIDR table on page 2 is the useful bit.",
     attachIcon: FileText,
     attachTone: "bg-rb-cardinal-wash text-rb-cardinal-lip",
@@ -594,7 +594,7 @@ function AboutSection() {
             [Users, "Built for both", "Study on your own, or through your institution."],
           ].map(([Icon, title, body]) => (
             <RebyuCard key={title} raised data-landing-reveal>
-              <span className="grid size-12 place-items-center rounded-2xl bg-rb-feather-wash text-[#3d6b06]">
+              <span className="grid size-12 place-items-center rounded-2xl bg-rb-feather-wash text-rb-feather-ink">
                 <Icon className="size-6" aria-hidden="true" />
               </span>
               <h3 className="rb-display rb-display-sm mt-4">{title}</h3>
@@ -702,7 +702,7 @@ function SolutionSection() {
             ].map(([Icon, title, body]) => (
               <li key={title} className="flex gap-3">
                 <span className="mt-1 grid size-6 shrink-0 place-items-center rounded-full bg-rb-feather-wash">
-                  <Icon className="size-3.5 text-[#3d6b06]" aria-hidden="true" />
+                  <Icon className="size-3.5 text-rb-feather-ink" aria-hidden="true" />
                 </span>
                 <div>
                   <div className="font-bold text-rb-eel">{title}</div>
@@ -723,7 +723,7 @@ function HowItWorksSection() {
   const TONE_CLASSES = {
     macaw: "bg-rb-macaw-wash text-rb-macaw-lip",
     beetle: "bg-rb-beetle-wash text-rb-beetle-lip",
-    feather: "bg-rb-feather-wash text-[#3d6b06]",
+    feather: "bg-rb-feather-wash text-rb-feather-ink",
     fox: "bg-rb-fox-wash text-rb-fox-lip",
   };
 
@@ -765,7 +765,7 @@ function CertificationSection() {
      system", and that is the topics — not a spec sheet of exam trivia. */
   const TONE = {
     macaw: { face: "bg-rb-macaw", chip: "bg-rb-macaw-wash text-rb-macaw-lip", btn: "macaw" },
-    bee: { face: "bg-rb-bee", chip: "bg-rb-bee-wash text-[#8a6d00]", btn: "fox" },
+    bee: { face: "bg-rb-bee", chip: "bg-rb-bee-wash text-rb-bee-ink", btn: "fox" },
     beetle: { face: "bg-rb-beetle", chip: "bg-rb-beetle-wash text-rb-beetle-lip", btn: "beetle" },
   };
 
@@ -1262,7 +1262,7 @@ function TutorConversation() {
         </div>
 
         {/* Scoped, and says so: the tutor answers inside the lesson you are on. */}
-        <span className="ml-auto flex shrink-0 items-center gap-1.5 rounded-rb-pill bg-rb-feather-wash px-2.5 py-1 text-[0.6875rem] font-bold text-[#3d6b06]">
+        <span className="ml-auto flex shrink-0 items-center gap-1.5 rounded-rb-pill bg-rb-feather-wash px-2.5 py-1 text-[0.6875rem] font-bold text-rb-feather-ink">
           <span className="size-1.5 animate-pulse rounded-full bg-rb-feather" aria-hidden="true" />
           in this lesson
         </span>
@@ -1476,7 +1476,7 @@ function WeaknessSection() {
             {/* confidence in the estimates themselves, not exam readiness */}
             <RebyuCard raised data-landing-reveal>
               <div className="flex items-center gap-4">
-                <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-rb-feather-wash text-[#3d6b06]">
+                <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-rb-feather-wash text-rb-feather-ink">
                   <Gauge className="size-6" aria-hidden="true" />
                 </span>
                 <div className="min-w-0">
@@ -1615,7 +1615,7 @@ function AccessCard({ icon: Icon, title, description, points, cta, to, tone }) {
       <span
         className={`grid size-14 place-items-center rounded-2xl ${
           tone === "feather"
-            ? "bg-rb-feather-wash text-[#3d6b06]"
+            ? "bg-rb-feather-wash text-rb-feather-ink"
             : "bg-rb-humpback/10 text-rb-humpback"
         }`}
       >

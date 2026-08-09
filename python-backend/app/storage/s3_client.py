@@ -29,3 +29,17 @@ def fetch_object_bytes(s3_key: str) -> bytes:
     settings = get_settings()
     response = get_s3_client().get_object(Bucket=settings.aws_s3_bucket_name, Key=s3_key)
     return response["Body"].read()
+
+
+def upload_object_bytes(s3_key: str, content: bytes, content_type: str) -> None:
+    """Writes bytes Python itself produced (captured figure screenshots) back
+    to the same bucket Java owns writes to. Java still owns document uploads;
+    this is the one case where a Python node needs to persist a derived
+    artifact rather than only read one."""
+    settings = get_settings()
+    get_s3_client().put_object(
+        Bucket=settings.aws_s3_bucket_name,
+        Key=s3_key,
+        Body=content,
+        ContentType=content_type,
+    )

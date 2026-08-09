@@ -1,11 +1,11 @@
 import { TrendingUp } from "@/components/icons"
 
 const MASTERY_LEVELS = [
-  { level: 0, label: 'Not Started', color: 'bg-gray-300', textColor: 'text-gray-700' },
-  { level: 1, label: 'Familiarity', color: 'bg-yellow-400', textColor: 'text-yellow-700' },
-  { level: 2, label: 'Beginning', color: 'bg-orange-400', textColor: 'text-orange-700' },
-  { level: 3, label: 'Intermediate', color: 'bg-blue-400', textColor: 'text-blue-700' },
-  { level: 4, label: 'Mastery', color: 'bg-green-500', textColor: 'text-green-700' },
+  { level: 0, label: 'Not Started', color: 'bg-muted-foreground/40', textColor: 'text-muted-foreground' },
+  { level: 1, label: 'Familiarity', color: 'bg-rb-fox', textColor: 'text-rb-fox-lip' },
+  { level: 2, label: 'Beginning', color: 'bg-rb-beetle', textColor: 'text-rb-beetle-lip' },
+  { level: 3, label: 'Intermediate', color: 'bg-rb-feather', textColor: 'text-rb-feather-lip' },
+  { level: 4, label: 'Mastery', color: 'bg-rb-bee', textColor: 'text-rb-bee-lip' },
 ]
 
 export function MasteryIndicator({ level = 0, showLabel = true, size = 'md' }) {

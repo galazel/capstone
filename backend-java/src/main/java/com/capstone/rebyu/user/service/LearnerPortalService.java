@@ -7,6 +7,7 @@ import com.capstone.rebyu.enrollment.mapper.LearnerCertificationMapper;
 import com.capstone.rebyu.enrollment.mapper.OrganizationCertificationLearnerMapper;
 import com.capstone.rebyu.enrollment.repository.LearnerCertificationRepository;
 import com.capstone.rebyu.enrollment.repository.OrganizationCertificationLearnerRepository;
+import com.capstone.rebyu.gamification.RewardService;
 import com.capstone.rebyu.organization.dto.OrganizationCertificateDto;
 import com.capstone.rebyu.organization.entity.OrganizationCertificate;
 import com.capstone.rebyu.organization.mapper.OrganizationCertificateMapper;
@@ -54,11 +55,19 @@ public class LearnerPortalService {
     private final OrganizationCertificationLearnerRepository orgCertLearnerRepository;
     private final OrganizationCertificationLearnerMapper orgCertLearnerMapper;
     private final OrganizationCertificateMapper orgCertMapper;
+    private final RewardService rewardService;
 
     public LearnerDto currentLearner(Long learnerId) {
         return learnerRepository.findById(learnerId).map(learnerMapper::toDto).orElse(null);
     }
 
+    // Overrides the class-level readOnly=true: RewardService.balance() below
+    // calls ensureBalance(), a native upsert (@Modifying INSERT ... ON
+    // CONFLICT) that joins this method's transaction rather than starting its
+    // own. Under a read-only transaction that INSERT is rejected by the
+    // database, which is what turned this endpoint into a 500 the moment the
+    // XP balance lookup was added.
+    @Transactional
     public LearnerPortalDto portal(Long learnerId, Long userId) {
         List<OrganizationCertificationLearner> orgCertLearnerEntities =
                 orgCertLearnerRepository.findByLearner_LearnerId(learnerId);
@@ -75,10 +84,10 @@ public class LearnerPortalService {
         List<OrganizationCertificateDto> orgCertificates = orgCertsById.values().stream()
                 .map(orgCertMapper::toDto).toList();
 
-        // Fetch XP and coins (stubbed for now - would come from gamification service)
-        Long totalXp = 0L;
-        java.math.BigDecimal coinBalance = java.math.BigDecimal.ZERO;
-        Long aiCreditsRemaining = 0L;
+        RewardService.Balance rewardBalance = rewardService.balance(learnerId);
+        Long totalXp = rewardBalance.xp();
+        java.math.BigDecimal coinBalance = java.math.BigDecimal.valueOf(rewardBalance.coins());
+        Long aiCreditsRemaining = (long) rewardBalance.aiCredits();
 
         // Fetch BKT mastery state per certification (stubbed for now)
         Map<Long, Integer> masteryByCertification = new java.util.HashMap<>();

@@ -44,6 +44,7 @@ import {
 import { cn } from "@/lib/utils"
 
 const learnerNavigation = [
+  { label: "Analytics", href: "/learner/analytics", icon: BarChart3 },
   { label: "Certifications", href: "/learner/certifications", icon: Award },
   { label: "My Learning", href: "/learner/learning", match: ["/learner/learning", "/learner/lessons"], icon: BookOpenCheck },
   { label: "Challenges", href: "/learner/challenges", icon: Swords },

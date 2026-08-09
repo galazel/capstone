@@ -79,20 +79,20 @@ export default function LearnerPracticeAttemptPage() {
 
   if (!studySet || !attempt) return <div className="mx-auto max-w-4xl p-6"><Skeleton className="h-10 w-44" /><Skeleton className="mt-6 h-[440px] w-full" /></div>
   if (completion) return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#dbeafe,_transparent_45%),linear-gradient(135deg,_#f8fafc,_#eef2ff)] px-5 py-12">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top,var(--color-rb-feather-wash),transparent_45%),linear-gradient(135deg,var(--color-rb-polar),var(--color-rb-feather-wash))] px-5 py-12">
       <section className="mx-auto max-w-xl rounded-3xl border bg-background p-8 text-center shadow-xl">
-        <div className="mx-auto flex size-20 items-center justify-center rounded-full bg-amber-100 text-amber-600"><Trophy className="size-10" /></div>
+        <div className="mx-auto flex size-20 items-center justify-center rounded-full bg-rb-fox-wash text-rb-fox-lip"><Trophy className="size-10" /></div>
         <p className="mt-6 text-sm font-semibold uppercase tracking-[0.2em] text-primary">Practice complete</p>
         <h1 className="mt-2 text-4xl font-bold">{Math.round(completion.percentage)}%</h1>
         <p className="mt-3 text-muted-foreground">You got {completion.score} of {completion.totalItems} correct.</p>
-        {completion.xpEarned > 0 || completion.coinEarned > 0 ? <p className="mt-4 text-sm font-semibold text-violet-700">+{completion.xpEarned} XP {completion.coinEarned > 0 ? `· +${completion.coinEarned} coins` : ""}</p> : null}
+        {completion.xpEarned > 0 || completion.coinEarned > 0 ? <p className="mt-4 text-sm font-semibold text-rb-beetle-lip">+{completion.xpEarned} XP {completion.coinEarned > 0 ? `· +${completion.coinEarned} coins` : ""}</p> : null}
         <div className="mt-7 flex justify-center gap-3"><Button variant="outline" onClick={() => navigate(`/learner/practice-review/${completion.id}`)}>Review answers</Button><Button onClick={() => navigate("/learner/library")}>Back to library</Button></div>
       </section>
     </main>
   )
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#dbeafe,_transparent_40%),linear-gradient(135deg,_#f8fafc,_#eef2ff)] px-4 py-5 sm:px-6">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top,var(--color-rb-feather-wash),transparent_40%),linear-gradient(135deg,var(--color-rb-polar),var(--color-rb-feather-wash))] px-4 py-5 sm:px-6">
       <section className="mx-auto max-w-4xl">
         <header className="flex items-center gap-4 rounded-2xl border bg-background/85 p-4 shadow-sm backdrop-blur">
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Leave practice"><ArrowLeft className="size-5" /></Button>
@@ -105,8 +105,8 @@ export default function LearnerPracticeAttemptPage() {
           <div className="flex items-center gap-2"><Badge variant="outline">{item.type === "MCQ" ? "Multiple choice" : "Flashcard recall"}</Badge>{item.difficulty && <span className="text-xs font-medium text-muted-foreground">{item.difficulty.toLowerCase()}</span>}</div>
           <h1 className="mt-6 text-2xl font-bold leading-tight sm:text-3xl">{item.questionText}</h1>
           {isFlashcard ? (
-            <div className="mt-8 rounded-2xl border-2 border-violet-100 bg-violet-50/50 p-5">
-              <div className="flex items-center gap-2 text-sm font-semibold text-violet-700"><Layers3 className="size-4" />Recall the answer</div>
+            <div className="mt-8 rounded-2xl border-2 border-rb-beetle/30 bg-rb-beetle-wash p-5">
+              <div className="flex items-center gap-2 text-sm font-semibold text-rb-beetle-lip"><Layers3 className="size-4" />Recall the answer</div>
               <Input className="mt-4 h-12 bg-background" value={answer} onChange={(event) => setAnswers((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Type what you remember" />
               {!revealed ? <Button type="button" variant="outline" className="mt-4" disabled={!hasAnswer || isSaving} onClick={async () => { if (await saveCurrent()) setRevealed(true) }}>Reveal answer</Button> : <div className="mt-4 rounded-xl border bg-background p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recall result</p><p className="mt-1 font-medium leading-6">{results[item.id]?.correct ? "You recalled it correctly." : "Review the explanation below, then rate your recall."}</p><p className="mt-3 text-xs font-semibold text-muted-foreground">How well did you remember it?</p><div className="mt-2 grid grid-cols-4 gap-2">{[["AGAIN", "Again"], ["HARD", "Hard"], ["GOOD", "Good"], ["EASY", "Easy"]].map(([value, label]) => <Button key={value} type="button" size="sm" variant={flashcardRating === value ? "default" : "outline"} onClick={() => rateFlashcard(value)}>{label}</Button>)}</div></div>}
             </div>
@@ -115,7 +115,7 @@ export default function LearnerPracticeAttemptPage() {
               {choices.map((choice, choiceIndex) => <label key={`${choice.text}-${choiceIndex}`} className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-4 transition hover:border-primary/50 ${answer === choice.text ? "border-primary bg-primary/5" : "bg-background"}`}><RadioGroupItem value={choice.text} /><span className="font-medium">{choice.text}</span></label>)}
             </RadioGroup>
           )}
-          {results[item.id] && <div className={`mt-6 rounded-xl p-4 text-sm ${results[item.id].correct ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}><div className="flex items-center gap-2 font-semibold"><CheckCircle2 className="size-4" />{results[item.id].correct ? "Correct" : "Saved — review this one later"}</div>{results[item.id].explanation && <p className="mt-2 leading-6">{results[item.id].explanation}</p>}</div>}
+          {results[item.id] && <div className={`mt-6 rounded-xl p-4 text-sm ${results[item.id].correct ? "bg-rb-bee-wash text-rb-bee-ink" : "bg-rb-fox-wash text-rb-fox-lip"}`}><div className="flex items-center gap-2 font-semibold"><CheckCircle2 className="size-4" />{results[item.id].correct ? "Correct" : "Saved — review this one later"}</div>{results[item.id].explanation && <p className="mt-2 leading-6">{results[item.id].explanation}</p>}</div>}
           <div className="mt-10 flex justify-between gap-3"><Button variant="outline" disabled={index === 0 || isSaving} onClick={() => { setIndex((value) => value - 1); setRevealed(false); setFlashcardRating("GOOD") }}><ChevronLeft className="mr-1 size-4" />Back</Button><Button disabled={!hasAnswer || isSaving || (isFlashcard && !revealed)} onClick={goNext}>{isLast ? <><Sparkles className="mr-2 size-4" />Finish</> : <>Continue<ChevronRight className="ml-1 size-4" /></>}</Button></div>
         </article>
       </section>

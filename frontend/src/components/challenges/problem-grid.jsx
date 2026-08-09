@@ -151,7 +151,7 @@ const DIFFICULTY_TAG = {
 }
 
 export const DIFFICULTY_CHIP = {
-  easy: "bg-rb-feather-wash text-[#3d6b06]",
+  easy: "bg-rb-feather-wash text-rb-feather-ink",
   medium: "bg-rb-fox-wash text-rb-fox-lip",
   hard: "bg-rb-cardinal-wash text-rb-cardinal-lip",
 }

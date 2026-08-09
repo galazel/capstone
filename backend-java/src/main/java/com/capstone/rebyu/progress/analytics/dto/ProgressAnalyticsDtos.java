@@ -61,7 +61,13 @@ public final class ProgressAnalyticsDtos {
 
             List<TopicRow> weakestTopics,
             List<TopicRow> strongestTopics,
-            List<RecommendationRow> recommendedTopics
+            List<RecommendationRow> recommendedTopics,
+
+            // Every lesson the BKT service has an opinion on, unfiltered and
+            // uncapped -- weakestTopics/strongestTopics are curated top-N lists
+            // for the analytics page, but a per-lesson priority tag in the
+            // curriculum UI needs every lesson, not just the extremes.
+            List<TopicRow> lessonPriorities
     ) {
     }
 

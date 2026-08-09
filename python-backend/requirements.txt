@@ -84,6 +84,9 @@ langchain-huggingface>=1.2,<2.0
 
 pypdf
 docx2txt
+# PDF figure/diagram/table screenshotting (app/rag/visuals.py) --
+# pypdf/docx2txt above extract text only and have no rendering capability.
+pymupdf>=1.24,<2.0
 python-dotenv
 requests
 tenacity

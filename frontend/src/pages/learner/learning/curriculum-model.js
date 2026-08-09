@@ -52,8 +52,8 @@ export function examScope(exam) {
 }
 
 const LESSON_SCOPES = new Set(["LESSON", "LESSON_QUIZ", "QUIZ"])
-const MIDDLE_SCOPES = new Set(["MIDDLE_CATEGORY", "MIDDLE_EXAM", "MODULE_EXAM"])
-const MAJOR_SCOPES = new Set(["MAJOR_CATEGORY", "MAJOR_EXAM"])
+const MIDDLE_SCOPES = new Set(["MIDDLE", "MIDDLE_CATEGORY", "MIDDLE_EXAM", "MODULE_EXAM"])
+const MAJOR_SCOPES = new Set(["MAJOR", "MAJOR_CATEGORY", "MAJOR_EXAM"])
 
 export function isPublishedExam(exam) {
   // Null status is DRAFT on the backend (`Exam.effectiveStatus`), so an exam
@@ -84,12 +84,21 @@ export function isMockExam(exam, examTypesById) {
 }
 
 /**
- * @param certification  one enrolled certification, with its category tree
- * @param lessonById     Map<lessonId, lesson-with-completed> from the portal
- * @param exams          every exam for this certification
- * @param examTypesById  Map<examTypeId, examTypeText>
+ * @param certification      one enrolled certification, with its category tree
+ * @param lessonById          Map<lessonId, lesson-with-completed> from the portal
+ * @param exams               every exam for this certification
+ * @param examTypesById       Map<examTypeId, examTypeText>
+ * @param lessonPriorityById  Map<lessonId, priorityTag> from the BKT-backed
+ *                            analytics response (`lessonPriorities`), or
+ *                            undefined before that request resolves
  */
-export function buildCurriculum({ certification, lessonById, exams = [], examTypesById }) {
+export function buildCurriculum({
+  certification,
+  lessonById,
+  exams = [],
+  examTypesById,
+  lessonPriorityById,
+}) {
   const published = exams.filter(isPublishedExam)
 
   const diagnostic = published.find((exam) => isDiagnosticExam(exam, examTypesById)) ?? null
@@ -139,6 +148,7 @@ export function buildCurriculum({ certification, lessonById, exams = [], examTyp
           name: lesson.name ?? lesson.title ?? "Untitled lesson",
           completed: Boolean(known?.completed ?? lesson.completed),
           quiz: quizByLesson.get(id) ?? null,
+          priorityTag: lessonPriorityById?.get(id) ?? null,
         }
       })
 

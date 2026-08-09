@@ -70,7 +70,7 @@ export const ARENAS = [
     id: "worldcup",
     name: "World Cup",
     icon: Trophy,
-    tone: "bg-rb-bee-wash text-[#8a6d00]",
+    tone: "bg-rb-bee-wash text-rb-bee-ink",
     format: "8-player tournament",
     blurb:
       "An eight-player bracket on one certification track — quarterfinals, semis, and a timed grand final.",

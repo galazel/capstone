@@ -10,8 +10,8 @@ import {
   Users,
 } from "@/components/icons"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { EnterpriseStatusBadge } from "@/components/enterprise/enterprise-ui.jsx"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -149,15 +149,6 @@ const DEMO_ORGANIZATIONS = [
   },
 ]
 
-const statusStyles = {
-  active:
-      "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
-  pending:
-      "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
-  suspended:
-      "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300",
-}
-
 function getOrganizationId(organization, index) {
   return (
       organization.enterpriseId ??
@@ -201,24 +192,6 @@ function formatDate(value) {
     day: "numeric",
     year: "numeric",
   }).format(date)
-}
-
-function OrganizationStatusBadge({ status }) {
-  const normalizedStatus = String(status ?? "pending").toLowerCase()
-  const label =
-      normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1)
-
-  return (
-      <Badge
-          variant="outline"
-          className={
-              statusStyles[normalizedStatus] ??
-              "border-slate-200 bg-slate-50 text-slate-700"
-          }
-      >
-        {label}
-      </Badge>
-  )
 }
 
 export default function Organizations({ onEdit, onDelete }) {
@@ -399,7 +372,7 @@ export default function Organizations({ onEdit, onDelete }) {
               Active organizations
             </p>
             <div className="mt-2 flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+              <span className="h-2.5 w-2.5 rounded-full bg-rb-bee" />
               <p className="text-xl font-semibold tabular-nums">{activeCount}</p>
             </div>
           </div>
@@ -593,7 +566,7 @@ export default function Organizations({ onEdit, onDelete }) {
                             </TableCell>
 
                             <TableCell>
-                              <OrganizationStatusBadge
+                              <EnterpriseStatusBadge
                                   status={organization.status}
                               />
                             </TableCell>

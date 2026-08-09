@@ -27,11 +27,16 @@ def searches(monkeypatch):
 
     def image(query, num=1):
         calls["image"].append(query)
-        return [{"imageUrl": f"https://img.example/{len(calls['image'])}.png"}]
+        return [{
+            "imageUrl": f"https://img.example/{len(calls['image'])}.png",
+            "link": "https://reference.example/article",
+            "title": query,
+            "source": "Reference Example",
+        }]
 
     def video(query, max_results=1):
         calls["video"].append(query)
-        return [{"id": {"videoId": "abc123"}}]
+        return [{"id": {"videoId": "abc123"}, "snippet": {"channelTitle": "Example Channel"}}]
 
     monkeypatch.setattr(lesson_media, "serper_image_search", image)
     monkeypatch.setattr(lesson_media, "youtube_search", video)
@@ -48,7 +53,62 @@ def test_an_image_request_becomes_a_real_url(searches):
     block = resolve_media([_image_block()])[0]
 
     assert block["data"]["imageKey"] == "https://img.example/1.png"
-    assert searches["image"] == ["requirement management diagram diagram architecture chart"]
+    # A query that already reads as a diagram request isn't padded with a
+    # duplicate hint -- that used to produce "... diagram diagram architecture
+    # chart", an unfocused query that pulled in generic, unrelated results.
+    assert searches["image"] == ["requirement management diagram"]
+
+
+def test_a_query_without_a_diagram_hint_gets_one_appended(searches):
+    resolve_media([_image_block("common requirement management mistakes")])
+    assert searches["image"] == ["common requirement management mistakes diagram"]
+
+
+def test_a_resolved_image_carries_its_source(searches):
+    block = resolve_media([_image_block()])[0]
+
+    assert block["data"]["imageSourceUrl"] == "https://reference.example/article"
+    assert block["data"]["imageSourceName"] == "Reference Example"
+
+
+def test_a_resolved_video_carries_its_channel_as_source(searches):
+    block = resolve_media([{"type": "video", "data": {"videoQuery": "requirements tutorial"}}])[0]
+
+    assert block["data"]["videoSourceName"] == "Example Channel"
+    assert block["data"]["videoSourceUrl"] == block["data"]["videoKey"]
+
+
+def test_the_best_scoring_candidate_is_chosen_over_the_top_result(monkeypatch):
+    """Serper's #1 result is not always the best match -- a lower-ranked
+    candidate whose title actually mentions the query terms should win."""
+
+    def image(query, num=1):
+        return [
+            {"imageUrl": "https://img.example/generic.png", "link": "https://a.example",
+             "title": "Random architecture wallpaper"},
+            {"imageUrl": "https://img.example/match.png", "link": "https://b.example",
+             "title": "Database normalization diagram"},
+        ]
+
+    monkeypatch.setattr(lesson_media, "serper_image_search", image)
+
+    block = resolve_media([_image_block("database normalization")])[0]
+    assert block["data"]["imageKey"] == "https://img.example/match.png"
+
+
+def test_low_signal_domains_are_skipped_in_favor_of_a_worse_scoring_match(monkeypatch):
+    def image(query, num=1):
+        return [
+            {"imageUrl": "https://img.example/pin.png", "link": "https://pinterest.com/pin/1",
+             "title": "database normalization diagram"},
+            {"imageUrl": "https://img.example/ok.png", "link": "https://docs.example.com/db",
+             "title": "reference material"},
+        ]
+
+    monkeypatch.setattr(lesson_media, "serper_image_search", image)
+
+    block = resolve_media([_image_block("database normalization")])[0]
+    assert block["data"]["imageKey"] == "https://img.example/ok.png"
 
 
 def test_the_request_key_does_not_survive_into_the_stored_block():

@@ -138,6 +138,24 @@ public class RewardService {
         return new PracticeReward(xp, coins, true);
     }
 
+    /**
+     * Flat-amount XP award for a one-off milestone (lesson completion, assessment
+     * completion, ...). Idempotent on {@code sourceKey}: a caller that fires
+     * twice for the same key (e.g. a retried request, or a lesson re-marked
+     * complete) only ever credits the balance once.
+     *
+     * @return whether this call actually credited XP, or was a no-op duplicate
+     */
+    @Transactional
+    public boolean awardXp(Long learnerId, int xp, String reason, String sourceKey) {
+        if (xp <= 0) return false;
+        ensureBalance(learnerId);
+        int created = ledger.insertIfAbsent(learnerId, "XP", xp, reason, sourceKey);
+        if (created == 0) return false;
+        balances.addXpAndCoins(learnerId, xp, 0);
+        return true;
+    }
+
     private void ensureBalance(Long learnerId) {
         balances.ensureExists(learnerId);
     }

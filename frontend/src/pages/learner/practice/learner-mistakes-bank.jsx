@@ -26,35 +26,12 @@ import {
     LearnerEmptyState,
     LearnerPageHeader,
 } from "@/components/learner/learner-ui.jsx"
+import { MasteryBadge } from "@/components/commons/status-badge.jsx"
 import { getMistakes, setMistakeReviewed } from "@/services/learnerToolsService"
 import { toast } from "sonner"
 import { useLearnerEntitlements } from "@/hooks/use-learner-entitlements.js"
 
 const ALL_VALUE = "all"
-
-const masteryStyles = {
-    weak:
-        "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300",
-    developing:
-        "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
-    good:
-        "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300",
-    mastered:
-        "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
-}
-
-function MasteryBadge({ status }) {
-    const normalized = String(status ?? "weak").toLowerCase()
-
-    return (
-        <Badge
-            variant="outline"
-            className={masteryStyles[normalized] ?? masteryStyles.weak}
-        >
-            {normalized.charAt(0).toUpperCase() + normalized.slice(1)}
-        </Badge>
-    )
-}
 
 export default function MistakesBank() {
     const entitlements = useLearnerEntitlements()
