@@ -104,7 +104,7 @@ _PROMPT_TEMPLATE = """
     {"type": "tabs",
      "data": {"items": [{"label": "", "title": "", "description": ""}]}}
     {"type": "accordion",
-     "data": {"items": [{"title": "", "description": ""}]}}
+     "data": {"items": [{"title": "", "content": ""}]}}
     {"type": "flip-grid",
      "data": {"cards": [{"frontTitle": "", "backTitle": "", "description": ""}]}}
     {"type": "review-card-grid",
@@ -120,7 +120,7 @@ _PROMPT_TEMPLATE = """
               "gridItems": [{"title": "", "description": ""}]}}
     {"type": "content-accordion-block",
      "data": {"smallHeader": "", "description": "",
-              "items": [{"title": "", "description": ""}]}}
+              "items": [{"title": "", "content": ""}]}}
     {"type": "content-tabs-block",
      "data": {"smallHeader": "", "description": "",
               "items": [{"label": "", "title": "", "description": ""}]}}

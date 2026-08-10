@@ -12,6 +12,15 @@ MIN_SUMMARY_CHARS = 40
 #: a stable `id` for React keys and for editing a single item later.
 ITEM_COLLECTIONS = ("items", "cards", "gridItems")
 
+#: Blocks whose items carry their body on `content`, not `description`.
+#:
+#: The frontend renderer and the admin lesson builder both key an accordion
+#: item's body `content`; the model is asked for the same but naturally reaches
+#: for `description`, which is the key every *other* block in the schema uses.
+#: When it did, the lesson reached the learner as a stack of accordion titles
+#: with nothing underneath them.
+ACCORDION_BLOCK_TYPES = ("accordion", "content-accordion-block")
+
 #: Blocks whose renderer reads `file` (an admin-uploaded asset that overrides
 #: the searched URL). Absent from model output, present in every stored block.
 MEDIA_KEYS = ("imageKey", "videoKey")
@@ -84,6 +93,23 @@ class GeneratedLesson(BaseModel):
                             {"id": create_id(), **entry} if isinstance(entry, dict) else entry
                             for entry in entries
                         ]
+                # An accordion item's body onto the key the renderer reads.
+                # Normalised here rather than only in the prompt: the schema
+                # above is a request, this is a guarantee, and the block is
+                # silently empty on the page when it is missed.
+                if block.get("type") in ACCORDION_BLOCK_TYPES:
+                    entries = data.get("items")
+                    if isinstance(entries, list):
+                        items = []
+                        for entry in entries:
+                            if isinstance(entry, dict):
+                                entry = dict(entry)
+                                body = entry.pop("description", None)
+                                if body is not None and not entry.get("content"):
+                                    entry["content"] = body
+                            items.append(entry)
+                        data["items"] = items
+
                 if any(media in data for media in MEDIA_KEYS):
                     data.setdefault("file", None)
                 block = {**block, "data": data}

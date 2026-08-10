@@ -95,13 +95,34 @@ def create_tabs(items: list[dict]):
     }
 
 
+def _accordion_items(items: list[dict]) -> list[dict]:
+    """Normalise an accordion item's body onto `content`.
+
+    The frontend renderer and the admin lesson builder both key this field
+    `content`; only the generator was writing `description`, so every
+    AI-authored accordion reached the learner as titles with empty bodies.
+
+    Done here rather than by rewording the tool description alone, because a
+    prompt is a request and this is a guarantee -- the model can and does
+    return either key, and both now land in the right place.
+    """
+    normalised = []
+    for item in items:
+        item = dict(item)
+        body = item.pop("description", None)
+        if body is not None and not item.get("content"):
+            item["content"] = body
+        normalised.append({"id": create_id(), **item})
+    return normalised
+
+
 @tool("add_accordion_section",
-      description="Creates expandable/collapsible vertical accordion blocks for toggling details of complex subtopics. Each item requires keys: title, description.")
+      description="Creates expandable/collapsible vertical accordion blocks for toggling details of complex subtopics. Each item requires keys: title, content.")
 def create_accordion(items: list[dict]):
     return {
         "type": "accordion",
         "data": {
-            "items": [{"id": create_id(), **item} for item in items]
+            "items": _accordion_items(items)
         }
     }
 
@@ -195,14 +216,17 @@ def create_review_card_grid(cards: list[dict]):
 
 
 @tool("add_content_accordion_block",
-      description="Creates an introductory section header and description followed by expandable accordion items.")
+      description="Creates an introductory section header and description followed by expandable accordion items. Each item requires keys: title, content.")
 def create_content_accordion_block(small_header: str, description: str, items: list[dict]):
     return {
         "type": "content-accordion-block",
         "data": {
             "smallHeader": small_header,
             "description": description,
-            "items": [{"id": create_id(), **item} for item in items]
+            # Same normalisation as the standalone accordion: this block's own
+            # `description` is the section intro and stays, but an item's
+            # description is its body and belongs on `content`.
+            "items": _accordion_items(items)
         }
     }
 

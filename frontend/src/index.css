@@ -217,7 +217,14 @@ body.netacad-overlay-theme {
     box-shadow: none;
 }
 
-.netacad-portal :is(p, li) {
+/* Comfortable body copy for prose in the learner portal. Opted out of by
+   anything that sets its own leading: this block is unlayered, so it beats
+   every Tailwind `leading-*` utility no matter how specific the class is --
+   a display number asking for `leading-[0.9]` was silently getting a 1.65
+   line box instead, tall enough to push the caption under it out of a
+   fixed-height card. Excluding elements that name a leading of their own
+   keeps the default for prose and returns the choice to anything explicit. */
+.netacad-portal :is(p, li):not([class*="leading-"]) {
     line-height: 1.65;
 }
 

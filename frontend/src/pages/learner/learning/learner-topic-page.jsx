@@ -846,7 +846,7 @@ function LessonView({
                       size in the right corner sat underneath it. */}
                   <span
                     aria-hidden="true"
-                    className={`pointer-events-none absolute -bottom-8 left-2 select-none font-rb-display text-[10rem] font-black leading-none tabular-nums sm:text-[13rem] ${tone.ghost}`}
+                    className={`pointer-events-none absolute -bottom-3 left-2 select-none font-rb-display text-[5rem] font-black leading-none tabular-nums sm:text-[6.5rem] ${tone.ghost}`}
                   >
                     {String(sectionIndex + 1).padStart(2, "0")}
                   </span>
@@ -1018,21 +1018,54 @@ function QuizBand({ quiz }) {
 }
 
 /** The unit assessment splash: what it takes to pass, and one key. */
-function AssessmentView({ exam, position, total }) {
+function AssessmentView({ exam, position, total, backTo }) {
   const passMark = Math.round(Number(exam.passingScore ?? 0))
 
   return (
-    <div className="px-5 py-16 sm:px-10 lg:px-14">
+    <div className="w-full pb-10">
+      {/* Same sticky frame the lesson view wears, so stepping from the last
+          lesson onto the assessment does not drop the title and the way out. */}
+      <div className="sticky top-0 z-10 border-b-2 border-rb-swan bg-rb-snow/95 px-5 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)] backdrop-blur supports-[backdrop-filter]:bg-rb-snow/80 sm:px-10 lg:px-14">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="rb-eyebrow">
+              lesson {position} of {total}
+            </p>
+
+            <h1 className="mt-0.5 truncate font-rb-display text-lg font-extrabold text-rb-eel sm:text-xl">
+              {exam.title}
+            </h1>
+          </div>
+
+          {backTo ? (
+            <TactileButton asChild variant="macaw" size="sm" className="shrink-0">
+              <Link to={backTo}>
+                <ArrowLeft className="size-4" />
+                back to curriculum
+              </Link>
+            </TactileButton>
+          ) : null}
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="rb-chip">
+            <ClipboardCheck className="size-3.5" aria-hidden="true" />
+            unit assessment · {exam.totalQuestions} questions
+          </span>
+          <span className="rb-chip bg-rb-bee-wash text-rb-bee-lip">
+            <Zap className="size-3.5" aria-hidden="true" />
+            up to {ASSESSMENT_MAX_XP} XP
+          </span>
+        </div>
+      </div>
+
+      <div className="px-5 py-16 sm:px-10 lg:px-14">
       <Reveal
         variants={popIn}
         amount={0}
         className="mx-auto w-full max-w-6xl rounded-rb-card border-2 border-rb-swan bg-rb-snow p-8 shadow-[0_5px_0_var(--color-rb-swan)] sm:p-12"
       >
-        <p className="rb-eyebrow">
-          lesson {position} of {total}
-        </p>
-
-        <h1 className="rb-display rb-display-sm mt-3">assessment</h1>
+        <p className="rb-display rb-display-sm">assessment</p>
 
         {/* The rule draws itself in — a small piece of choreography that makes
             the splash feel authored rather than printed. */}
@@ -1072,6 +1105,7 @@ function AssessmentView({ exam, position, total }) {
           </Link>
         </TactileButton>
       </Reveal>
+      </div>
     </div>
   )
 }
@@ -1372,11 +1406,18 @@ export default function LearnerTopicPage() {
     )
   }
 
+  /* The tutor is a lesson companion: it answers from the lesson's own
+     material. On the unit assessment there is no material to answer from and
+     no help to be had mid-exam, so it is not offered at all -- not the panel,
+     not the sheet, not the floating opener. `tutorOpen` is left alone so the
+     panel comes back on its own when the learner steps onto a lesson again. */
+  const tutorVisible = tutorOpen && active?.kind === "lesson"
+
   const columns = outlineCollapsed
-    ? tutorOpen
+    ? tutorVisible
       ? "xl:grid-cols-[88px_minmax(0,1fr)_400px]"
       : "xl:grid-cols-[88px_minmax(0,1fr)]"
-    : tutorOpen
+    : tutorVisible
       ? "xl:grid-cols-[340px_minmax(0,1fr)_400px]"
       : "xl:grid-cols-[340px_minmax(0,1fr)]"
 
@@ -1477,6 +1518,7 @@ export default function LearnerTopicPage() {
               exam={active.exam}
               position={activeIndex + 1}
               total={track.length}
+              backTo={backTo}
             />
           )}
             </motion.div>
@@ -1484,7 +1526,7 @@ export default function LearnerTopicPage() {
         </main>
 
         {/* --------------------------------------------------------- right */}
-        {tutorOpen && isXl ? (
+        {tutorVisible && isXl ? (
           <aside className="hidden min-h-0 border-l-2 border-rb-swan xl:block">
             <div className="sticky top-0 h-dvh overflow-hidden">
               <LessonAiTutor
@@ -1529,7 +1571,7 @@ export default function LearnerTopicPage() {
           Outranking it here keeps the button clickable regardless. */}
       {createPortal(
         <AnimatePresence>
-          {!tutorOpen && !railOpen ? (
+          {!tutorVisible && !railOpen && active?.kind === "lesson" ? (
             <motion.button
               type="button"
               onClick={() => setTutorOpen(true)}
@@ -1558,7 +1600,7 @@ export default function LearnerTopicPage() {
         </SheetContent>
       </Sheet>
 
-      <Sheet open={tutorOpen && !isXl} onOpenChange={(open) => !open && setTutorOpen(false)}>
+      <Sheet open={tutorVisible && !isXl} onOpenChange={(open) => !open && setTutorOpen(false)}>
         <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-md">
           <SheetTitle className="sr-only">AI tutor</SheetTitle>
           <LessonAiTutor

@@ -38,10 +38,15 @@ def key_terms_accordion(terms: list[dict[str, Any]]) -> dict[str, Any]:
     """Key terms as an accordion -- collapsible, so a long glossary doesn't
     bury the summary beneath it."""
     return {
+        # `content`, not `description`: that is the key the frontend renderer
+        # and the admin lesson builder read an accordion item's body from.
+        # This block is assembled for every lesson that declares key terms, so
+        # while it said `description` the glossary reached the learner as a
+        # list of terms that opened onto nothing.
         "type": "accordion",
         "data": {
             "items": [
-                {"id": _id(), "title": t.get("term", ""), "description": t.get("definition", "")}
+                {"id": _id(), "title": t.get("term", ""), "content": t.get("definition", "")}
                 for t in terms
             ]
         },

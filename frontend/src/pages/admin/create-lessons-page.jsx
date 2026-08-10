@@ -1420,15 +1420,16 @@ function CreateLessons() {
       return `${toolLabel}: add at least one review card.`
     }
 
+    // `backTitle` is deliberately not required. A flip card's back now shows
+    // the card's own front title, so whatever is typed here never reaches the
+    // page -- blocking a save on it made admins fill a field with no effect.
+    // The key is still read and stored, so existing content keeps its value.
     const hasInvalidCard = data.cards.some(
-        (card) =>
-            isBlank(card.frontTitle) ||
-            isBlank(card.backTitle) ||
-            isBlank(card.description)
+        (card) => isBlank(card.frontTitle) || isBlank(card.description)
     )
 
     if (hasInvalidCard) {
-      return `${toolLabel}: every review card needs front text, back text, and a description.`
+      return `${toolLabel}: every review card needs front text and a description.`
     }
 
     return null

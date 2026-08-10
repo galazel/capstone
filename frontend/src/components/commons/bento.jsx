@@ -94,6 +94,12 @@ export function BentoTile({
 
 /** The headline shape: a label, one big number, and an optional footnote. */
 export function BentoStat({ tone = "plain", col = 2, row = 1, icon: Icon, label, value, hint, children }) {
+  const valueSize = hint
+    ? "text-4xl sm:text-5xl"
+    : col === 1
+      ? "text-5xl"
+      : "text-5xl sm:text-6xl"
+
   return (
     <BentoTile tone={tone} col={col} row={row}>
       <div className="flex items-start justify-between gap-3">
@@ -108,17 +114,30 @@ export function BentoStat({ tone = "plain", col = 2, row = 1, icon: Icon, label,
       {/* The number is the point of the tile, so it is sized to fill whatever
           width the tile has. A one-column tile is only about 120px of content
           wide, so it stops one step short of the full display size — far enough
-          up that it still reads as the same emphasis as its wider neighbours. */}
+          up that it still reads as the same emphasis as its wider neighbours.
+
+          A tile carrying a hint steps down one more. The base row is a fixed
+          176px and the tile clips what does not fit, so at the full display
+          size a hint that wraps to a second line — which it does at any
+          narrower-than-ideal column — was pushed out of the bottom of the
+          card and simply disappeared. */}
       <p
-        className={`mt-auto font-rb-display font-extrabold leading-[0.9] tracking-tight tabular-nums ${
-          col === 1 ? "text-5xl" : "text-5xl sm:text-6xl"
-        }`}
+        className={`mt-auto font-rb-display font-extrabold leading-[0.9] tracking-tight tabular-nums ${valueSize}`}
       >
         {value}
       </p>
 
+      {/* The hint is clamped to one line on purpose. The row is fixed height
+          and the tile clips, so a hint long enough to wrap would lose its
+          second line silently — an ellipsis at least says there was more. */}
       {hint ? (
-        <p className={`mt-2 text-xs font-semibold ${TONE_INK[tone] ?? TONE_INK.plain}`}>{hint}</p>
+        <p
+          className={`mt-1 line-clamp-1 text-xs font-semibold leading-snug ${
+            TONE_INK[tone] ?? TONE_INK.plain
+          }`}
+        >
+          {hint}
+        </p>
       ) : null}
 
       {children}

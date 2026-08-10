@@ -17,11 +17,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 // identically. Pure: takes a block (tool) or a structure string, no data
 // fetching, no progress/completion concerns.
 //
-// Every block below uses the shadcn semantic tokens (`border-border`,
+// Blocks here use the shadcn semantic tokens (`border-border`,
 // `text-foreground`, `bg-card`, `text-primary`, ...) rather than hardcoded
 // zinc hex values, on purpose: this renderer runs both inside the learner
-// portal's `.rebyu-ds` scope and outside it in the enterprise content
-// viewer, and only the semantic tokens resolve correctly in both.
+// portal's `.rebyu-ds` scope and outside it in the enterprise content viewer.
+//
+// The `rb-*` design-system *utilities* are equally safe in both, contrary to
+// what this note used to claim: they are declared in an `@theme` block, so
+// Tailwind emits their variables on `:root`, and `bg-rb-snow` /
+// `border-rb-swan` / `rounded-rb-card` / `font-rb-display` measure identically
+// in and out of the scope. What is genuinely scoped is the *component* layer
+// -- `.rb-chip`, `.rb-btn`, `.rb-card`, `.rb-display` -- which goes inert
+// outside `.rebyu-ds` (transparent, `display: block`). Never reach for those
+// here; the utilities are fine, and the accordion and tabs blocks use them to
+// borrow the certification surfaces' card language.
 
 const EASE = [0.22, 1, 0.36, 1]
 
@@ -45,6 +54,63 @@ const ACCENTS = [
 function accentFor(index) {
   return ACCENTS[((index % ACCENTS.length) + ACCENTS.length) % ACCENTS.length]
 }
+
+/**
+ * The certification surfaces' accent pairs, for the blocks that borrow their
+ * card language (accordion, tabs) rather than the chart palette above.
+ *
+ * Safe outside `.rebyu-ds` despite the note at the top of this file: the
+ * `rb-*` *utilities* come from an `@theme` block, so Tailwind emits their
+ * variables on `:root` and they resolve identically in the enterprise viewer
+ * (verified: same 24px radius, same #e5e5e5 border in and out of scope). It is
+ * the `.rb-chip` / `.rb-btn` *component classes* that are scoped and go inert
+ * outside it -- those are still off limits here.
+ *
+ * `data-active:` variants are spelled out in full rather than composed at the
+ * call site, because Tailwind scans source text: a class assembled as
+ * `data-active:${x}` is invisible to it and never gets generated.
+ *
+ * Ink shades on bee and feather are the AA-tuned `-ink` values, not the `-lip`
+ * button-shadow ones, since this text sits on a wash.
+ */
+const RB_ACCENTS = [
+  { chip: "bg-rb-macaw-wash text-rb-macaw-lip", wash: "bg-rb-macaw-wash" },
+  { chip: "bg-rb-fox-wash text-rb-fox-lip", wash: "bg-rb-fox-wash" },
+  { chip: "bg-rb-bee-wash text-rb-bee-ink", wash: "bg-rb-bee-wash" },
+  { chip: "bg-rb-beetle-wash text-rb-beetle-lip", wash: "bg-rb-beetle-wash" },
+  { chip: "bg-rb-feather-wash text-rb-feather-ink", wash: "bg-rb-feather-wash" },
+]
+
+/**
+ * The selected tab: one solid Feather pill, not a per-accent tint.
+ *
+ * The accent washes this used to reach for measure 1.10-1.14:1 against the
+ * Snow pill they sit on -- a difference you cannot see, which is why every tab
+ * looked white whichever was open. Filling solid instead of tinting is the
+ * only way the state reads at a glance.
+ *
+ * Feather rather than the tab's own accent because white on solid clears AA
+ * (4.5:1) for almost none of them -- Macaw 2.44, Fox 2.18, Bee 2.38, Beetle
+ * 2.54, Cardinal 3.30. Feather is 4.59 and is already this system's primary
+ * action colour, so selection looks like every other chosen thing in the
+ * product. The per-accent identity is not lost, it just lives where it can be
+ * seen: the panel's number tile and washed body still cycle.
+ */
+const RB_PILL_ACTIVE =
+  "data-active:border-rb-feather data-active:bg-rb-feather data-active:text-white"
+
+function rbAccentFor(index) {
+  return RB_ACCENTS[((index % RB_ACCENTS.length) + RB_ACCENTS.length) % RB_ACCENTS.length]
+}
+
+/* The certification card, as one string: a Snow panel with the system's
+   2px Swan border and 24px corner. Shared by both blocks below so an
+   accordion row and a tab panel are visibly the same object. */
+const RB_CARD = "overflow-hidden rounded-rb-card border-2 border-rb-swan bg-rb-snow"
+
+/* The numbered tile that opens a middle-category row. */
+const RB_INDEX_CHIP =
+  "grid size-11 shrink-0 place-items-center rounded-2xl font-rb-display text-base font-extrabold"
 
 /**
  * AI-generated lessons store either a plain search-result URL (image or
@@ -158,22 +224,55 @@ function SectionIntro({ smallHeader, description, accent = ACCENTS[0] }) {
   )
 }
 
-/** Accordion body -- the shared, already-themed primitive so every collapsible
- * section in the app (not just lessons) shares one look. */
+/**
+ * Accordion body, wearing the certification curriculum's middle-category row:
+ * a Snow card per item, numbered accent tile, display-face title, and a washed
+ * body behind a 2px rule. A learner meets that row when they pick a topic, so
+ * a collapsible inside the lesson that opens the same way is one pattern
+ * learned once rather than two that merely resemble each other.
+ *
+ * Still the Radix primitive underneath, restyled rather than hand-rolled --
+ * the curriculum's own row hand-rolls its toggle and gets no `aria-controls`
+ * or managed region for it. Borrowing the look should not cost the semantics.
+ */
 function AccordionBlock({ items = [] }) {
   if (items.length === 0) return null
 
   return (
-      <Accordion type="single" collapsible defaultValue={String(items[0]?.id ?? 0)} className="px-1">
+      // gap-3, not a divider: each item is its own card now, the way the
+      // curriculum stacks its topic rows.
+      <Accordion type="single" collapsible defaultValue={String(items[0]?.id ?? 0)} className="gap-3">
         {items.map((item, index) => {
           const id = String(item.id ?? index)
+          const rb = rbAccentFor(index)
+
           return (
-              <AccordionItem key={id} value={id}>
-                <AccordionTrigger className="text-base text-foreground">
-                  {item.title}
+              // `not-last:border-b-2` restates the base's `not-last:border-b`
+              // at this card's weight -- left alone it would thin every
+              // non-final card's bottom edge to 1px against its other three.
+              <AccordionItem key={id} value={id} className={`${RB_CARD} not-last:border-b-2`}>
+                <AccordionTrigger className="items-center gap-3 p-4 hover:no-underline">
+                  <span className={`${RB_INDEX_CHIP} ${rb.chip}`} aria-hidden="true">
+                    {index + 1}
+                  </span>
+
+                  <span className="min-w-0 flex-1 font-rb-display text-base font-extrabold text-rb-eel">
+                    {item.title}
+                  </span>
                 </AccordionTrigger>
-                <AccordionContent className="text-[15px] leading-6 text-muted-foreground">
-                  {item.content}
+
+                {/* `content` or `description`: the admin builder writes an
+                    accordion item's body to `content`, but the generator has
+                    been writing it to `description`, so every AI-authored
+                    accordion rendered as a stack of titles with nothing under
+                    them. The generator is fixed to emit `content` too, but
+                    every lesson already sitting in the database still carries
+                    `description` -- reading both is what makes those render
+                    without a migration. */}
+                <AccordionContent
+                    className={`border-t-2 border-rb-swan px-4 py-3 text-[15px] leading-7 text-rb-wolf ${rb.wash}`}
+                >
+                  {item.content ?? item.description}
                 </AccordionContent>
               </AccordionItem>
           )
@@ -182,31 +281,81 @@ function AccordionBlock({ items = [] }) {
   )
 }
 
-/** Real tabs, using the shared segmented-pill primitive. */
+/**
+ * Tabs in the same language: the triggers are the rounded topic pills a unit
+ * card lists its middle categories with, and the panel below is the same
+ * card the accordion above uses -- numbered tile, display-face title, washed
+ * body. Picking a tab should feel like picking a topic.
+ */
 function TabsBlock({ items = [] }) {
   if (items.length === 0) return null
 
   return (
       <Tabs defaultValue="0" className="gap-0">
-        <TabsList className="w-full flex-wrap">
-          {items.map((item, index) => (
-              <TabsTrigger key={item.id ?? item.label ?? index} value={String(index)}>
-                {item.label ?? item.title ?? `Tab ${index + 1}`}
-              </TabsTrigger>
-          ))}
+        {/* `group-data-horizontal/tabs:h-auto`, not a bare `h-auto`: the list's
+            fixed 12rem-tall rule is set behind that same variant, and a
+            different variant chain is a separate utility to tailwind-merge --
+            an unprefixed height simply loses to it. The underline border goes
+            for the same reason the pills arrived: this is a row of chips, not
+            a tab strip. */}
+        <TabsList className="w-full flex-wrap gap-2 border-b-0 bg-transparent p-0 group-data-horizontal/tabs:h-auto">
+          {items.map((item, index) => {
+            return (
+                <TabsTrigger
+                    key={item.id ?? item.label ?? index}
+                    value={String(index)}
+                    // `flex-1` is the primitive's own behaviour, kept: the
+                    // triggers share the list's full width, so the strip ends
+                    // flush with the panel below it. Overriding it to
+                    // `flex-none` left the pills sized to their labels and a
+                    // gap of dead space after the last one.
+                    //
+                    // `after:hidden` kills the primitive's active-underline
+                    // outright -- it is driven by opacity, so dimming it would
+                    // leave the bar in the layout under a pill that already
+                    // shows its state by filling.
+                    className={`h-auto flex-1 rounded-rb-pill border-2 border-rb-swan bg-rb-snow px-3.5 py-2 text-sm font-bold text-rb-wolf after:hidden ${RB_PILL_ACTIVE}`}
+                >
+                  {item.label ?? item.title ?? `Tab ${index + 1}`}
+                </TabsTrigger>
+            )
+          })}
         </TabsList>
 
-        {items.map((item, index) => (
-            <TabsContent key={item.id ?? item.label ?? index} value={String(index)} className="pt-4">
-              {item.label ? (
-                  <p className="text-sm font-semibold text-muted-foreground">{item.label}</p>
-              ) : null}
-              <h3 className="mt-1 text-lg font-semibold text-foreground">{item.title}</h3>
-              <p className="mt-2 text-[15px] leading-6 text-muted-foreground">
-                {item.description}
-              </p>
-            </TabsContent>
-        ))}
+        {items.map((item, index) => {
+          const rb = rbAccentFor(index)
+
+          return (
+              <TabsContent
+                  key={item.id ?? item.label ?? index}
+                  value={String(index)}
+                  className={`mt-3 ${RB_CARD}`}
+              >
+                <div className="flex items-center gap-3 p-4">
+                  <span className={`${RB_INDEX_CHIP} ${rb.chip}`} aria-hidden="true">
+                    {index + 1}
+                  </span>
+
+                  {/* Title only. A topic row carries a summary under its name,
+                      but the only thing this block has to put there is the
+                      label -- which is the pill you just pressed, sitting a few
+                      pixels above. Restating it read as a stutter ("Use Cases /
+                      Use Case Specifications / Use Cases"), so the row is one
+                      line here. Falls back to the label when an item has no
+                      title of its own, rather than rendering an empty heading. */}
+                  <span className="min-w-0 flex-1 font-rb-display text-base font-extrabold text-rb-eel">
+                    {item.title ?? item.label}
+                  </span>
+                </div>
+
+                <div
+                    className={`border-t-2 border-rb-swan px-4 py-3 text-[15px] leading-7 text-rb-wolf ${rb.wash}`}
+                >
+                  {item.description}
+                </div>
+              </TabsContent>
+          )
+        })}
       </Tabs>
   )
 }
@@ -241,7 +390,16 @@ function FlipCard({ frontTitle, backTitle, description, accent = ACCENTS[0] }) {
               className={`absolute inset-0 h-full justify-center p-5 shadow-[0_2px_0_currentColor] [backface-visibility:hidden] ${accent.border} ${accent.bgSoft} ${accent.text}`}
               style={{ transform: "rotateY(180deg)" }}
           >
-            <p className={`font-heading font-semibold ${accent.text}`}>{backTitle}</p>
+            {/* The front's title, not `backTitle`. The generator tends to fill
+                backTitle with a generic label ("The Problem"), so flipping a
+                card replaced the one thing identifying it with a word shared
+                by every other card in the grid -- turn two over and you could
+                no longer tell which was which. The card keeps its name; only
+                the face changes. `backTitle` stays as the fallback for cards
+                that carry no front title. */}
+            <p className={`font-heading font-semibold ${accent.text}`}>
+              {frontTitle ?? backTitle}
+            </p>
             <p className="mt-2 text-[15px] leading-6 text-muted-foreground">{description}</p>
           </Card>
         </motion.div>
@@ -262,9 +420,11 @@ function LessonTool({ tool, index = 0 }) {
   }
 
   if (tool.type === "subheading") {
+    // No leading dot. It read as a bullet, which made a heading look like the
+    // first item of a list that never followed -- and where a real list did
+    // follow, like a stray extra bullet above it.
     return (
-        <h3 className="flex items-center gap-2.5 text-lg font-semibold text-foreground sm:text-xl">
-          <span className={`inline-block size-2 shrink-0 rounded-full ${accent.bgSolid}`} aria-hidden="true" />
+        <h3 className="text-lg font-semibold text-foreground sm:text-xl">
           {data.text}
         </h3>
     )
@@ -329,10 +489,22 @@ function LessonTool({ tool, index = 0 }) {
   if (tool.type === "image") {
     return data.imageKey ? (
         <div>
+          {/* `aspect-video w-full`, the same box the video block below uses, so
+              every piece of media in a lesson is one width and one height
+              instead of each image sizing itself to whatever it happens to be.
+              The old `max-h-[520px]` let a tall image dictate its own height
+              and a short one collapse, which is what made a run of them look
+              ragged.
+
+              `object-contain`, not cover: these are mostly diagrams, and
+              cropping one to fill the box cuts off the labels around its
+              edges -- exactly the part a learner needs. Contain fits the whole
+              image and lets the Muted backing show where the aspect does not
+              match. */}
           <img
               src={resolveMediaSrc(data.imageKey)}
               alt=""
-              className="max-h-[520px] w-full rounded-[var(--radius-rb-tile)] border-2 border-border/70 bg-muted object-contain"
+              className="aspect-video w-full rounded-[var(--radius-rb-tile)] border-2 border-border/70 bg-muted object-contain"
           />
           <ImageAttribution sourceUrl={data.imageSourceUrl} sourceName={data.imageSourceName} />
         </div>
@@ -414,10 +586,14 @@ function LessonTool({ tool, index = 0 }) {
           <SectionIntro smallHeader={data.smallHeader} description={data.description} accent={accent} />
           {data.imageKey ? (
               <div>
+                {/* Same media box as the standalone image and video blocks --
+                    an image inside a card is still an image, and sizing it by
+                    a different rule is what made two of them next to each
+                    other look mismatched. */}
                 <img
                     src={resolveMediaSrc(data.imageKey)}
                     alt=""
-                    className="max-h-[520px] w-full rounded-[var(--radius-rb-tile)] border-2 border-border/70 bg-muted object-contain"
+                    className="aspect-video w-full rounded-[var(--radius-rb-tile)] border-2 border-border/70 bg-muted object-contain"
                 />
                 <ImageAttribution sourceUrl={data.imageSourceUrl} sourceName={data.imageSourceName} />
               </div>
