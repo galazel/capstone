@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { PasswordInput } from "@/components/ui/password-input"
 import { roleHomePath, useAuth } from "@/context/auth-context.jsx"
 import { resendVerificationCode, toSafeAuthMessage } from "@/services/authService.js"
 import AuthShell from "./auth-shell.jsx"
@@ -197,9 +198,8 @@ export default function LoginPage() {
               </Link>
             </div>
 
-            <Input
+            <PasswordInput
                 id="login-password"
-                type="password"
                 autoComplete="current-password"
                 required
                 value={password}

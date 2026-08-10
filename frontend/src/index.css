@@ -23,9 +23,13 @@
     --background: #ffffff; /* Snow */
     --foreground: #4b4b4b; /* Eel — never pure black */
 
-    /* Full-bleed surface for the challenges/arena pages — one token instead
-       of re-typing the same light/dark pair at every usage site. */
-    --rb-challenges-surface: #f1f7fc;
+    /* The canvas every portal page sits on — one token, set in one place (see
+       the `.netacad-portal` rule further down), so the whole product shares a
+       page colour instead of each layout picking one.
+
+       Snow. Cards are Snow too, so on this canvas a card is separated by its
+       border alone rather than by a tonal step. That is the intended look. */
+    --rb-page-surface: #ffffff;
 
     --card: #ffffff;
     --card-foreground: #4b4b4b;
@@ -278,7 +282,10 @@ body.netacad-overlay-theme {
    Shared by the admin, enterprise, and learner layouts. */
 .netacad-portal,
 body.netacad-overlay-theme {
-    --background: #f7f7f7; /* Polar canvas so Snow cards separate from it */
+    /* Polar. No longer the page canvas — see `--rb-page-surface` — this is now
+       just the fill for panels, sticky bars and inputs, which sit a step off
+       the Snow page rather than on it. */
+    --background: #f7f7f7;
     --foreground: #4b4b4b;
     --card: #ffffff;
     --card-foreground: #4b4b4b;
@@ -309,7 +316,13 @@ body.netacad-overlay-theme {
     --sidebar-accent-foreground: #3d6b06;
     --sidebar-border: #e5e5e5;
     --sidebar-ring: #1cb0f6;
-    background: var(--background);
+    /* The page canvas for all three portals, and the one place it is set.
+       Not `var(--background)`: that token stays Polar and is the fill for
+       panels, sticky bars and inputs that need to sit above the page. This
+       rule is unlayered, so it beats any `bg-*` utility on the same element --
+       which is why setting the canvas from a layout's className silently did
+       nothing and the challenges page had to reach for `!important`. */
+    background: var(--rb-page-surface);
 }
 
 /* Dark portal: neutral charcoals derived from Eel rather than a blue-grey, so
@@ -771,7 +784,12 @@ body.netacad-overlay-theme {
     --background: #111b26;
     --foreground: #f1f2f8;
 
-    --rb-challenges-surface: #111b26;
+    /* #1a1a1a, not the #111b26 this token used to carry: now that it is the
+       canvas for every portal and not just the challenges page, it has to
+       honour the dark portal's documented rule below — neutral charcoals
+       derived from Eel, so Azure stays the only saturated colour in the
+       interface. A blue-grey page would have broken that everywhere. */
+    --rb-page-surface: #1a1a1a;
 
     --card: #182635;
     --card-foreground: #f1f2f8;

@@ -1,9 +1,11 @@
 import {
+  ArrowUp,
   Bell,
   CheckCheck,
   CheckCircle2,
   GraduationCap,
   Mail,
+  MessageCircle,
   RotateCcw,
   Sparkles,
   Trash2,
@@ -36,6 +38,11 @@ const iconByTitlePrefix = [
   [/^Generation failed/, XCircle],
   [/^Results ready/, GraduationCap],
   [/^Retake started/, RotateCcw],
+  // Community: an upvote and a reply are different events and read faster with
+  // their own marks than as one generic bell.
+  [/^Your post got an upvote/, ArrowUp],
+  [/^New comment on your post/, MessageCircle],
+  [/^Your community post was hidden/, XCircle],
 ]
 
 function resolveIcon(item) {

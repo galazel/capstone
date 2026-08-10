@@ -34,6 +34,15 @@ import {
 import { BrandLogo } from "@/components/brand-logo";
 import { Chip, ProgressBar, RebyuCard, TactileButton } from "@/components/rebyu/rebyu-ui.jsx";
 import {
+  AnimatePresence,
+  EASE,
+  HoverLift,
+  fadeUp,
+  motion,
+  staggerParent,
+  useParallax,
+} from "@/components/motion/rebyu-motion.jsx";
+import {
   DomainMasteryChart,
   MasteryChart,
   RetentionChart,
@@ -270,6 +279,9 @@ function BrandMark() {
 function LandingNavbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  /* Which link the pointer is on, so one shared pill can slide between them
+     rather than seven independent backgrounds fading in and out. */
+  const [hoveredNav, setHoveredNav] = useState(null);
 
   useEffect(() => {
     const update = () => setIsScrolled(window.scrollY > 24);
@@ -309,14 +321,38 @@ function LandingNavbar() {
             <BrandMark />
           </Link>
 
-          <nav className="hidden items-center gap-1 lg:flex">
+          {/* The hover background is one element carrying a `layoutId`, so
+              moving from "about" to "the problem" animates the same box across
+              the gap instead of cross-fading two. `onMouseLeave` sits on the
+              <nav> rather than each link: leaving one link for the next would
+              otherwise clear and re-set the state on every hop. */}
+          <nav
+            className="hidden items-center gap-1 lg:flex"
+            onMouseLeave={() => setHoveredNav(null)}
+          >
             {NAV_ITEMS.map((item) => (
               <a
                 key={item.href}
                 href={item.href}
-                className="rounded-rb-pill px-4 py-2 font-rb-display text-[0.9375rem] font-extrabold text-rb-wolf transition-colors hover:bg-rb-polar hover:text-rb-eel focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-rb-macaw"
+                onMouseEnter={() => setHoveredNav(item.href)}
+                onFocus={() => setHoveredNav(item.href)}
+                className={`relative rounded-rb-pill px-4 py-2 font-rb-display text-[0.9375rem] font-extrabold transition-colors focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-rb-macaw ${
+                  hoveredNav === item.href ? "text-rb-eel" : "text-rb-wolf"
+                }`}
               >
-                {item.label}
+                {/* Painted before the label and lifted back with a positive
+                    z-index on the text, not a negative one on the pill: the <a>
+                    sets `position` without a `z-index`, so it opens no stacking
+                    context and a negative layer would sink behind the header's
+                    own background. */}
+                {hoveredNav === item.href ? (
+                  <motion.span
+                    layoutId="landing-nav-pill"
+                    className="absolute inset-0 rounded-rb-pill bg-rb-polar"
+                    transition={{ type: "spring", stiffness: 480, damping: 38, mass: 0.7 }}
+                  />
+                ) : null}
+                <span className="relative z-10">{item.label}</span>
               </a>
             ))}
           </nav>
@@ -342,37 +378,58 @@ function LandingNavbar() {
           </button>
         </div>
 
-        {mobileMenuOpen ? (
-          <div
-            id="landing-mobile-navigation"
-            className="max-h-[calc(100dvh-5rem)] overflow-y-auto border-t-2 border-rb-swan bg-rb-snow p-5 lg:hidden"
-          >
-            <nav className="flex flex-col gap-1">
-              {NAV_ITEMS.map((item) => (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  onClick={close}
-                  className="rounded-rb-tile px-4 py-3.5 font-rb-display text-lg font-extrabold text-rb-eel transition-colors hover:bg-rb-polar"
+        {/* Closing used to be instant, because the node left the tree the frame
+            the state flipped. AnimatePresence holds it long enough to roll back
+            up, and the links stagger on the way in so the panel reads as a list
+            arriving rather than a block appearing. `initial={false}` keeps it
+            silent on first paint — a menu that is already shut should not
+            animate shut. */}
+        <AnimatePresence initial={false}>
+          {mobileMenuOpen ? (
+            <motion.div
+              key="mobile-nav"
+              id="landing-mobile-navigation"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ height: { duration: 0.32, ease: EASE }, opacity: { duration: 0.2 } }}
+              className="overflow-hidden border-t-2 border-rb-swan bg-rb-snow lg:hidden"
+            >
+              <div className="max-h-[calc(100dvh-5rem)] overflow-y-auto p-5">
+                <motion.nav
+                  className="flex flex-col gap-1"
+                  initial="hidden"
+                  animate="show"
+                  variants={staggerParent(0.04, 0.06)}
                 >
-                  {item.label}
-                </a>
-              ))}
-            </nav>
-            <div className="mt-4 flex flex-col gap-3">
-              <TactileButton asChild>
-                <Link to="/register" onClick={close}>
-                  start learning
-                </Link>
-              </TactileButton>
-              <TactileButton asChild variant="ghost">
-                <Link to="/login" onClick={close}>
-                  log in
-                </Link>
-              </TactileButton>
-            </div>
-          </div>
-        ) : null}
+                  {NAV_ITEMS.map((item) => (
+                    <motion.a
+                      key={item.href}
+                      href={item.href}
+                      onClick={close}
+                      variants={fadeUp}
+                      className="rounded-rb-tile px-4 py-3.5 font-rb-display text-lg font-extrabold text-rb-eel transition-colors hover:bg-rb-polar"
+                    >
+                      {item.label}
+                    </motion.a>
+                  ))}
+                </motion.nav>
+                <div className="mt-4 flex flex-col gap-3">
+                  <TactileButton asChild>
+                    <Link to="/register" onClick={close}>
+                      start learning
+                    </Link>
+                  </TactileButton>
+                  <TactileButton asChild variant="ghost">
+                    <Link to="/login" onClick={close}>
+                      log in
+                    </Link>
+                  </TactileButton>
+                </div>
+              </div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       </div>
     </header>
   );
@@ -453,9 +510,18 @@ function AssessmentGallery() {
       <div className="relative overflow-hidden rounded-rb-card border-2 border-rb-swan bg-rb-snow shadow-[0_6px_0_var(--color-rb-swan)]">
         <div className="relative aspect-[16/10] w-full">
           {/* All five stay mounted and cross-fade: swapping one <img> src
-              flashes the frame empty for a beat on every cycle. */}
+              flashes the frame empty for a beat on every cycle. That is also
+              why this is not an AnimatePresence — there is nothing to exit,
+              every frame is always in the tree, and only opacity and a hair of
+              scale move. The scale is what stops the swap reading as a slide
+              deck: the outgoing shot settles back as the incoming one arrives.
+
+              `initial={false}` because these values are state, not an entrance.
+              Animated in from the defaults, all five paint at full opacity
+              until the first frame lands — and the fold would open on five
+              screenshots piled on top of each other. */}
           {WORKSPACE_SHOTS.map((shot, shotIndex) => (
-            <img
+            <motion.img
               key={shot.id}
               src={shot.src}
               alt={shot.alt}
@@ -463,10 +529,10 @@ function AssessmentGallery() {
               height={1800}
               loading={shotIndex === 0 ? "eager" : "lazy"}
               decoding="async"
-              className={
-                "absolute inset-0 size-full object-cover object-top transition-opacity duration-500 " +
-                (shotIndex === index ? "opacity-100" : "opacity-0")
-              }
+              className="absolute inset-0 size-full object-cover object-top"
+              initial={false}
+              animate={shotIndex === index ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 1.03 }}
+              transition={{ duration: 0.7, ease: EASE }}
             />
           ))}
         </div>
@@ -475,7 +541,7 @@ function AssessmentGallery() {
 
       {/* Position sits under the frame, where a carousel's controls are looked
           for. The type itself is not named — each shot says what it is. */}
-      <div className="mt-5 flex justify-center gap-2">
+      <div className="mt-5 flex items-center justify-center gap-2">
         {WORKSPACE_SHOTS.map((shot, shotIndex) => (
           <button
             key={shot.id}
@@ -483,13 +549,22 @@ function AssessmentGallery() {
             onClick={() => setIndex(shotIndex)}
             aria-label={`Show the ${shot.label} question type`}
             aria-current={shotIndex === index ? "true" : undefined}
-            className={
-              "h-2.5 rounded-rb-pill transition-all " +
-              (shotIndex === index
-                ? "w-8 bg-rb-eel"
-                : "w-2.5 bg-rb-swan hover:bg-rb-hare")
-            }
-          />
+            className="h-2.5 shrink-0"
+          >
+            {/* Width is animated on the dot itself rather than sliding one
+                shared `layoutId` pill between them: the active dot is over
+                three times wider than the rest, so a free-floating pill would
+                sit on top of its neighbours. Springing the width keeps the
+                row's spacing honest and still lands with a little give. */}
+            <motion.span
+              className={`block h-2.5 rounded-rb-pill ${
+                shotIndex === index ? "bg-rb-eel" : "bg-rb-swan hover:bg-rb-hare"
+              }`}
+              initial={false}
+              animate={{ width: shotIndex === index ? 32 : 10 }}
+              transition={{ type: "spring", stiffness: 420, damping: 34, mass: 0.7 }}
+            />
+          </button>
         ))}
       </div>
 
@@ -502,10 +577,17 @@ function AssessmentGallery() {
 }
 
 function HeroSection() {
+  const sectionRef = useRef(null);
+  /* The wash blob drifts up against the scroll. It is the one element in the
+     fold that carries no information, which is the whole test for whether
+     something may be parallaxed. */
+  const blobY = useParallax(sectionRef, 90);
+
   return (
-    <section className="relative overflow-hidden bg-rb-snow">
-      <div
+    <section ref={sectionRef} className="relative overflow-hidden bg-rb-snow">
+      <motion.div
         aria-hidden="true"
+        style={{ y: blobY }}
         className="pointer-events-none absolute -right-40 -top-52 hidden size-[720px] rounded-full bg-rb-feather-wash lg:block"
       />
 
@@ -519,25 +601,40 @@ function HeroSection() {
             is ~830px, so a 768px block broke it after "don't" and the heading
             came out three lines. The width is set by the heading; the paragraph
             keeps its own narrower measure. */}
-        <div className="mx-auto max-w-4xl text-center">
-          <Chip tone="feather">
-            <Sparkles className="size-4" />
-            topcit · it passport · fe exam
-          </Chip>
+        {/* `animate`, not `whileInView`: the fold is on screen before any
+            observer could fire, and a hero that waits to be scrolled into view
+            is a hero that opens blank. The stagger is what makes the sequence
+            read as one sentence being said — chip, claim, explanation, action —
+            rather than four things appearing at once. */}
+        <motion.div
+          className="mx-auto max-w-4xl text-center"
+          initial="hidden"
+          animate="show"
+          variants={staggerParent(0.09, 0.1)}
+        >
+          <motion.div variants={fadeUp}>
+            <Chip tone="feather">
+              <Sparkles className="size-4" />
+              topcit · it passport · fe exam
+            </Chip>
+          </motion.div>
 
-          <h1 className="rb-display rb-display-xl mt-6 !text-center">
+          <motion.h1 variants={fadeUp} className="rb-display rb-display-xl mt-6 !text-center">
             study what you don't know.
             <br />
             skip what you do.
-          </h1>
+          </motion.h1>
 
-          <p className="rb-body-lg mx-auto mt-6 max-w-xl">
+          <motion.p variants={fadeUp} className="rb-body-lg mx-auto mt-6 max-w-xl">
             Rebyu measures your mastery of every topic as you answer, then puts the weakest ones in
             front of you first. No more re-reading what you already know, and no more finding out
             what you missed on exam day.
-          </p>
+          </motion.p>
 
-          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+          <motion.div
+            variants={fadeUp}
+            className="mt-8 flex flex-col justify-center gap-3 sm:flex-row"
+          >
             <TactileButton asChild size="lg">
               <Link to="/register">
                 start learning
@@ -547,22 +644,30 @@ function HeroSection() {
             <TactileButton asChild size="lg" variant="ghost">
               <a href="#certifications">see what's covered</a>
             </TactileButton>
-          </div>
+          </motion.div>
 
-          <p className="mt-6 flex items-center justify-center gap-2 text-sm font-semibold text-rb-wolf">
+          <motion.p
+            variants={fadeUp}
+            className="mt-6 flex items-center justify-center gap-2 text-sm font-semibold text-rb-wolf"
+          >
             <span className="size-2 rounded-full bg-rb-mask" aria-hidden="true" />
             Every lesson is free. Upgrade only for mock exams and analytics.
-          </p>
-        </div>
+          </motion.p>
+        </motion.div>
 
       </div>
 
       {/* Wider than the copy above it, and outside that container to get there:
           the screenshots are dense product UI, and at the text column's measure
           the code editor and the item navigator stop being legible. */}
-      <div className="relative mx-auto w-full max-w-[1560px] px-5 pb-16 lg:px-8 lg:pb-20">
+      <motion.div
+        className="relative mx-auto w-full max-w-[1560px] px-5 pb-16 lg:px-8 lg:pb-20"
+        initial={{ opacity: 0, y: 32, scale: 0.985 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.7, delay: 0.55, ease: EASE }}
+      >
         <AssessmentGallery />
-      </div>
+      </motion.div>
     </section>
   );
 }
@@ -593,13 +698,19 @@ function AboutSection() {
             [BarChart3, "Mastery tracking", "Every answer updates a per-topic estimate."],
             [Users, "Built for both", "Study on your own, or through your institution."],
           ].map(([Icon, title, body]) => (
-            <RebyuCard key={title} raised data-landing-reveal>
-              <span className="grid size-12 place-items-center rounded-2xl bg-rb-feather-wash text-rb-feather-ink">
-                <Icon className="size-6" aria-hidden="true" />
-              </span>
-              <h3 className="rb-display rb-display-sm mt-4">{title}</h3>
-              <p className="rb-body mt-2 text-[0.9375rem]">{body}</p>
-            </RebyuCard>
+            /* Lift on the wrapper, reveal on the card. The scroll reveal is the
+               CSS layer's `rb-reveal`, which animates a transform of its own —
+               driving both from one element would leave motion and the
+               stylesheet writing the same property. */
+            <HoverLift key={title} className="h-full">
+              <RebyuCard raised data-landing-reveal className="h-full">
+                <span className="grid size-12 place-items-center rounded-2xl bg-rb-feather-wash text-rb-feather-ink">
+                  <Icon className="size-6" aria-hidden="true" />
+                </span>
+                <h3 className="rb-display rb-display-sm mt-4">{title}</h3>
+                <p className="rb-body mt-2 text-[0.9375rem]">{body}</p>
+              </RebyuCard>
+            </HoverLift>
           ))}
         </div>
       </div>
@@ -739,17 +850,19 @@ function HowItWorksSection() {
 
         <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {HOW_IT_WORKS.map((item) => (
-            <RebyuCard key={item.step} raised data-landing-reveal className="flex flex-col">
-              <span
-                className={`grid size-12 place-items-center rounded-2xl font-rb-display text-base font-extrabold ${
-                  TONE_CLASSES[item.tone]
-                }`}
-              >
-                {item.step}
-              </span>
-              <h3 className="rb-display rb-display-sm mt-5">{item.title}</h3>
-              <p className="rb-body mt-2 text-[0.9375rem]">{item.body}</p>
-            </RebyuCard>
+            <HoverLift key={item.step} className="h-full">
+              <RebyuCard raised data-landing-reveal className="flex h-full flex-col">
+                <span
+                  className={`grid size-12 place-items-center rounded-2xl font-rb-display text-base font-extrabold ${
+                    TONE_CLASSES[item.tone]
+                  }`}
+                >
+                  {item.step}
+                </span>
+                <h3 className="rb-display rb-display-sm mt-5">{item.title}</h3>
+                <p className="rb-body mt-2 text-[0.9375rem]">{item.body}</p>
+              </RebyuCard>
+            </HoverLift>
           ))}
         </div>
       </div>
@@ -785,57 +898,66 @@ function CertificationSection() {
 
         <div className="mt-12 space-y-6">
           {CERTIFICATIONS.map((c) => (
-            <article
-              key={c.title}
-              data-landing-reveal
-              className="grid overflow-hidden rounded-rb-card border-2 border-rb-swan bg-rb-snow shadow-[0_5px_0_var(--color-rb-swan)] lg:grid-cols-[300px_1fr]"
-            >
-              {/* colour panel carries identity; the wordmark bleeds off it */}
-              <div className={`relative overflow-hidden p-7 ${TONE[c.tone].face}`}>
-                <span className="pointer-events-none absolute -bottom-7 -right-3 select-none font-rb-display text-[5rem] font-black lowercase leading-none text-white/20">
-                  {c.wordmark}
-                </span>
-                <c.icon className="relative size-9 text-white" aria-hidden="true" />
-                <h3 className="relative mt-4 font-rb-display text-3xl font-extrabold lowercase leading-none text-white">
-                  {c.title}
-                </h3>
-                <div className="relative mt-5 flex gap-4 text-white">
-                  <span className="text-sm font-bold">
-                    <span className="rb-numeric block text-xl text-white">{c.lessons}</span>
-                    lessons
+            /* A gentler lift than the small cards get: these bands run the full
+               width of the page, and travel that reads as a nudge on a 280px
+               tile reads as the whole section jumping on one of these. */
+            <HoverLift key={c.title} lift={-4} scale={1.004}>
+              <article
+                data-landing-reveal
+                className="grid overflow-hidden rounded-rb-card border-2 border-rb-swan bg-rb-snow shadow-[0_5px_0_var(--color-rb-swan)] lg:grid-cols-[300px_1fr]"
+              >
+                {/* colour panel carries identity; the wordmark bleeds off it */}
+                <div className={`relative overflow-hidden p-7 ${TONE[c.tone].face}`}>
+                  <span className="pointer-events-none absolute -bottom-7 -right-3 select-none font-rb-display text-[5rem] font-black lowercase leading-none text-white/20">
+                    {c.wordmark}
                   </span>
-                  <span className="text-sm font-bold">
-                    <span className="rb-numeric block text-xl text-white">{c.questions}</span>
-                    questions
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex flex-col p-7">
-                <p className="rb-body max-w-2xl">{c.summary}</p>
-
-                <div className="mt-6 flex-1">
-                  <p className="rb-eyebrow">Topics covered</p>
-                  <ul className="mt-3 flex flex-wrap gap-2">
-                    {c.topics.map((topic) => (
-                      <li
-                        key={topic}
-                        className={`rounded-rb-pill px-3.5 py-2 text-sm font-bold ${TONE[c.tone].chip}`}
-                      >
-                        {topic}
-                      </li>
-                    ))}
-                  </ul>
+                  <c.icon className="relative size-9 text-white" aria-hidden="true" />
+                  <h3 className="relative mt-4 font-rb-display text-3xl font-extrabold lowercase leading-none text-white">
+                    {c.title}
+                  </h3>
+                  <div className="relative mt-5 flex gap-4 text-white">
+                    <span className="text-sm font-bold">
+                      <span className="rb-numeric block text-xl text-white">{c.lessons}</span>
+                      lessons
+                    </span>
+                    <span className="text-sm font-bold">
+                      <span className="rb-numeric block text-xl text-white">{c.questions}</span>
+                      questions
+                    </span>
+                  </div>
                 </div>
 
-                <TactileButton asChild variant={TONE[c.tone].btn} size="sm" className="mt-7 w-fit">
-                  <Link to="/register">
-                    start {c.title.toLowerCase()}
-                    <ArrowRight className="size-4" />
-                  </Link>
-                </TactileButton>
-              </div>
-            </article>
+                <div className="flex flex-col p-7">
+                  <p className="rb-body max-w-2xl">{c.summary}</p>
+
+                  <div className="mt-6 flex-1">
+                    <p className="rb-eyebrow">Topics covered</p>
+                    <ul className="mt-3 flex flex-wrap gap-2">
+                      {c.topics.map((topic) => (
+                        <li
+                          key={topic}
+                          className={`rounded-rb-pill px-3.5 py-2 text-sm font-bold ${TONE[c.tone].chip}`}
+                        >
+                          {topic}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <TactileButton
+                    asChild
+                    variant={TONE[c.tone].btn}
+                    size="sm"
+                    className="mt-7 w-fit"
+                  >
+                    <Link to="/register">
+                      start {c.title.toLowerCase()}
+                      <ArrowRight className="size-4" />
+                    </Link>
+                  </TactileButton>
+                </div>
+              </article>
+            </HoverLift>
           ))}
         </div>
       </div>
@@ -883,27 +1005,63 @@ function OlympicsSection() {
         tabIndex={0}
         aria-label="Arena carousel"
       >
-        <div className="relative h-[470px] sm:h-[490px]">
+        {/* Drag anywhere on the deck to change arenas. `dragConstraints` are
+            pinned to zero on both sides with `dragElastic` supplying the give,
+            so the deck rubber-bands back to centre and the offset is only ever
+            read as an intent — the cards themselves are positioned by state,
+            never by where the pointer stopped. Velocity is folded in so a
+            decisive flick counts even if it travelled less than 60px. */}
+        <motion.div
+          className="relative h-[470px] cursor-grab active:cursor-grabbing sm:h-[490px]"
+          drag="x"
+          dragConstraints={{ left: 0, right: 0 }}
+          dragElastic={0.16}
+          onDragEnd={(_event, info) => {
+            const intent = info.offset.x + info.velocity.x * 0.12;
+            if (intent < -60) move(1);
+            else if (intent > 60) move(-1);
+          }}
+        >
           {OLYMPICS_MODES.map((mode, index) => {
             const position = olympicsOffset(index, activeIndex);
             const isActive = position === 0;
 
             return (
-              <button
+              <motion.button
                 key={mode.id}
                 type="button"
                 onClick={() => (isActive ? undefined : setActiveIndex(index))}
-                className={`absolute left-1/2 top-1/2 isolate h-[430px] w-[280px] overflow-hidden rounded-rb-card border-2 text-left transition-all duration-500 ease-out [backface-visibility:hidden] focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-rb-macaw sm:w-[320px] ${mode.surfaceClass} ${
+                /* Centred with `inset-0 m-auto` rather than the usual
+                   `left-1/2 -translate-x-1/2`. `x` and `translateX` are the
+                   same transform key to motion, so a centring half-offset in
+                   `style` and a springing `x` in `animate` would be one
+                   property written twice — auto margins centre the card
+                   without spending the transform at all, leaving the whole of
+                   it to the spring. */
+                className={`absolute inset-0 isolate m-auto h-[430px] w-[280px] overflow-hidden rounded-rb-card border-2 text-left [backface-visibility:hidden] focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-rb-macaw sm:w-[320px] ${mode.surfaceClass} ${
                   isActive
                     ? "border-rb-macaw shadow-[0_26px_65px_-18px_rgba(27,110,243,0.45)]"
                     : "border-rb-swan shadow-[0_22px_55px_-18px_rgba(15,23,42,0.35)]"
                 }`}
-                style={{
-                  transform: `translate(calc(-50% + ${position * 230}px), -50%) scale(${
-                    isActive ? 1 : Math.abs(position) === 1 ? 0.82 : 0.66
-                  })`,
-                  zIndex: 10 - Math.abs(position),
+                style={{ zIndex: 10 - Math.abs(position) }}
+                /* `initial={false}` because these values are the deck's layout,
+                   not an entrance. Left to animate in from the transform
+                   defaults, all three cards paint stacked dead centre at full
+                   size until the first frame lands, and on a slow first frame
+                   that stack is what a visitor sees. Off-centre is the resting
+                   state; only *changing* arenas is an animation.
+
+                   A spring rather than the duration this used to carry: it is a
+                   deck of cards being thumbed through, and a fixed duration
+                   cannot move the card with furthest to go any differently
+                   from the one already nearly in place. */
+                initial={false}
+                animate={{
+                  x: position * 230,
+                  scale: isActive ? 1 : Math.abs(position) === 1 ? 0.82 : 0.66,
                 }}
+                transition={{ type: "spring", stiffness: 260, damping: 30, mass: 0.9 }}
+                whileHover={isActive ? undefined : { scale: 0.87 }}
                 aria-current={isActive ? "true" : undefined}
                 aria-label={`${mode.name}${isActive ? ", selected" : ", select"}`}
               >
@@ -958,48 +1116,72 @@ function OlympicsSection() {
                     aria-hidden="true"
                   />
                 </div>
-              </button>
+              </motion.button>
             );
           })}
-        </div>
+        </motion.div>
 
         <div className="flex items-center justify-center gap-4">
-          <button
+          <motion.button
             type="button"
             onClick={() => move(-1)}
             aria-label="Previous arena"
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.92 }}
+            transition={{ type: "spring", stiffness: 500, damping: 24 }}
             className="grid size-11 place-items-center rounded-rb-pill border-2 border-rb-swan bg-rb-snow text-rb-eel transition-colors hover:border-rb-macaw focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-rb-macaw"
           >
             <ArrowLeft className="size-5" aria-hidden="true" />
-          </button>
+          </motion.button>
 
-          <div className="flex gap-1.5" aria-hidden="true">
+          <div className="flex items-center gap-1.5" aria-hidden="true">
             {OLYMPICS_MODES.map((mode, index) => (
-              <span
+              <motion.span
                 key={mode.id}
-                className={`h-1.5 rounded-full transition-all ${
-                  index === activeIndex ? "w-7 bg-rb-macaw" : "w-1.5 bg-rb-swan"
+                className={`h-1.5 rounded-full ${
+                  index === activeIndex ? "bg-rb-macaw" : "bg-rb-swan"
                 }`}
+                initial={false}
+                animate={{ width: index === activeIndex ? 28 : 6 }}
+                transition={{ type: "spring", stiffness: 420, damping: 34, mass: 0.7 }}
               />
             ))}
           </div>
 
-          <button
+          <motion.button
             type="button"
             onClick={() => move(1)}
             aria-label="Next arena"
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.92 }}
+            transition={{ type: "spring", stiffness: 500, damping: 24 }}
             className="grid size-11 place-items-center rounded-rb-pill border-2 border-rb-swan bg-rb-snow text-rb-eel transition-colors hover:border-rb-macaw focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-rb-macaw"
           >
             <ArrowRight className="size-5" aria-hidden="true" />
-          </button>
+          </motion.button>
         </div>
 
         {/* The hub's footer row: what is selected, and the one way in. Here the
             way in is registration — the arenas are behind a learner account. */}
         <div className="mx-auto mt-8 flex max-w-3xl flex-col items-center justify-between gap-3 text-center sm:flex-row sm:text-left">
-          <div>
-            <p className="rb-display rb-display-md">{activeMode.name}</p>
-            <p className="mt-1 text-sm text-rb-wolf">{activeMode.format}</p>
+          {/* `mode="wait"` so the outgoing arena name is gone before the next
+              one arrives — overlapping them cross-fades two different words
+              through each other, which at display size is unreadable. The
+              wrapper is min-height'd because the row is empty for the ~220ms
+              between them, and the CTA beside it must not step sideways. */}
+          <div className="min-h-[3.75rem]">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={activeMode.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.22, ease: EASE }}
+              >
+                <p className="rb-display rb-display-md">{activeMode.name}</p>
+                <p className="mt-1 text-sm text-rb-wolf">{activeMode.format}</p>
+              </motion.div>
+            </AnimatePresence>
           </div>
 
           <TactileButton asChild variant="macaw">
@@ -1690,6 +1872,12 @@ function AccessSection() {
 /* --------------------------------------------------------------------- footer */
 
 function Footer() {
+  const footerRef = useRef(null);
+  /* The wordmark rises as the footer is scrolled into, so the last thing on the
+     page settles rather than simply being there. Short travel — it is already
+     24vw tall, and anything more turns a full stop into a swipe. */
+  const wordmarkY = useParallax(footerRef, 34);
+
   const COLUMNS = [
     {
       title: "platform",
@@ -1725,7 +1913,10 @@ function Footer() {
   ];
 
   return (
-    <footer className="overflow-hidden border-t-2 border-rb-swan bg-rb-snow px-5 pt-16 lg:px-8">
+    <footer
+      ref={footerRef}
+      className="overflow-hidden border-t-2 border-rb-swan bg-rb-snow px-5 pt-16 lg:px-8"
+    >
       <div className="mx-auto max-w-[1280px]">
         <div className="grid gap-10 lg:grid-cols-[1.2fr_2fr]">
           <div>
@@ -1766,14 +1957,15 @@ function Footer() {
       </div>
 
       {/* oversized wordmark — the only decorative element on the page */}
-      <div
+      <motion.div
         aria-hidden="true"
+        style={{ y: wordmarkY }}
         className="pointer-events-none flex select-none justify-center overflow-hidden leading-[0.72]"
       >
         <span className="font-rb-display text-[24vw] font-black lowercase tracking-tight text-rb-polar">
           rebyu
         </span>
-      </div>
+      </motion.div>
     </footer>
   );
 }

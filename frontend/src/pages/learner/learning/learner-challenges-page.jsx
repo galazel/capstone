@@ -234,7 +234,7 @@ export default function LearnerChallengesPage() {
       description="Unlock ranked challenges, battles, leaderboards, rewards, and certification-specific practice with Pro or institution access."
     >
     <div
-      className="relative left-1/2 isolate -my-6 min-h-[calc(100dvh-4rem)] w-screen -translate-x-1/2 overflow-hidden bg-[var(--rb-challenges-surface)] px-4 py-8 sm:px-6 lg:px-8"
+      className="relative left-1/2 isolate -my-6 min-h-[calc(100dvh-4rem)] w-screen -translate-x-1/2 overflow-hidden bg-[var(--rb-page-surface)] px-4 py-8 sm:px-6 lg:px-8"
       style={{
         backgroundImage:
           "radial-gradient(circle at 18% 18%, rgba(47,125,211,0.16), transparent 27%), radial-gradient(circle at 82% 22%, rgba(53,169,160,0.12), transparent 28%), radial-gradient(circle at 50% 92%, rgba(226,170,54,0.09), transparent 30%)",

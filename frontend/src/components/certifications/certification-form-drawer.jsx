@@ -29,12 +29,14 @@ import { InlineGenerationMonitor } from "@/components/certifications/inline-gene
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from "@/components/ui/dialog"
+    Drawer,
+    DrawerClose,
+    DrawerContent,
+    DrawerDescription,
+    DrawerHeader,
+    DrawerTitle,
+    DrawerTrigger,
+} from "@/components/ui/drawer"
 import {
     Alert,
     AlertDescription,
@@ -641,59 +643,88 @@ export default function CertificationFormDrawer({
     }
 
     return (
-        <Dialog
+        <Drawer
             open={open}
             onOpenChange={handleModalChange}
+            // Right, not bottom: this panel is tall content -- a form that
+            // scrolls, or a generation transcript that streams -- and a bottom
+            // sheet caps itself at 80vh with a drag handle eating the top of it.
+            direction="right"
         >
-            {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
+            {trigger && <DrawerTrigger asChild>{trigger}</DrawerTrigger>}
 
-            {/* `sm:max-w-none` is load-bearing: DialogContent ships with
-                `sm:max-w-lg` (512px), and an unprefixed `max-w-none` does not
-                override it -- tailwind-merge treats the two breakpoints as
-                separate utilities, so the modal stayed clamped to 512px no
-                matter what width was set. */}
-            <DialogContent
+            {/* The `data-[vaul-drawer-direction=right]:` prefix is load-bearing:
+                DrawerContent ships its right-hand width as
+                `data-[vaul-drawer-direction=right]:sm:max-w-sm` (384px), and a
+                plain `sm:max-w-none` does not override it -- tailwind-merge
+                treats a different variant chain as a separate utility, so the
+                panel stayed clamped no matter what width was set. Same trap the
+                Dialog version hit with `sm:max-w-lg`.
+
+                No explicit height: `direction="right"` pins the panel with
+                `inset-y-0`, so it is already full-height. */}
+            <DrawerContent
                 className={cn(
-                    "flex h-[88vh] w-[96vw] flex-col gap-0 overflow-hidden p-0",
+                    "flex w-[96vw] flex-col gap-0 overflow-hidden p-0",
                     // Editing holds a whole category tree and wants the room.
                     // Creating is a form: three fields and a drop zone, read top
                     // to bottom in one scroll. Sized to a comfortable measure
                     // rather than a share of the screen — at 76vw the name field
                     // was a metre of empty input.
                     isEditing
-                        ? "max-w-none sm:w-[92vw] sm:max-w-none lg:w-[86vw] xl:w-[76vw] 2xl:w-[68vw]"
-                        : "sm:w-[92vw] sm:max-w-[680px]",
+                        ? "data-[vaul-drawer-direction=right]:sm:max-w-none sm:w-[92vw] lg:w-[86vw] xl:w-[76vw] 2xl:w-[68vw]"
+                        : "data-[vaul-drawer-direction=right]:sm:max-w-[680px] sm:w-[92vw]",
                 )}
             >
-                {/* DialogContent renders its own close button, so the drawer's
-                    back-chevron is gone -- two close affordances in one header
-                    is worse than one, and a left-chevron reads as "back" in a
-                    centered modal that has nothing to go back to.
+                {/* Unlike DialogContent, DrawerContent renders no close button
+                    of its own, so the header carries one. It lives inside the
+                    header rather than the panel because the panel's body is the
+                    scroll container -- a key placed on the panel would scroll
+                    away with the content. `pr-14` reserves its column.
 
                     `py-4` rather than `py-5`: the close button is absolutely
                     positioned at `top-4`, so anything else vertically centres
                     the title against it. */}
-                <DialogHeader className="gap-1 border-b border-border px-5 py-4 pr-14 text-left sm:px-6">
-                    <DialogTitle className="text-lg">
+                <DrawerHeader className="relative gap-1 border-b border-border px-5 py-4 pr-14 text-left sm:px-6">
+                    <DrawerTitle className="text-lg">
                         {generatingCertificationId
                             ? "Generating certification"
                             : isEditing
                                 ? "Edit Certification"
                                 : "Create Certification"}
-                    </DialogTitle>
+                    </DrawerTitle>
 
                     {/* No subheading while generating: the step counter is
                         meaningful for the form, but a generation has no steps
-                        to count and the timeline speaks for itself. */}
-                    {/* Only the step counter, and only where there are steps to
-                        count. A sentence restating what the form obviously is
-                        gets read once and skipped forever after. */}
+                        to count and the timeline speaks for itself.
+
+                        Rendered either way, sr-only when there is nothing to
+                        show: vaul is Radix Dialog underneath, which warns when
+                        a panel has no description, and an unlabelled panel is
+                        a real gap for a screen reader rather than just noise
+                        in the console. */}
                     {!generatingCertificationId && isEditing ? (
-                        <p className="text-xs text-muted-foreground">
+                        <DrawerDescription className="text-xs">
                             {`${EDIT_STEP_LABELS[page - 1]} · step ${page} of ${totalSteps}`}
-                        </p>
-                    ) : null}
-                </DialogHeader>
+                        </DrawerDescription>
+                    ) : (
+                        <DrawerDescription className="sr-only">
+                            {generatingCertificationId
+                                ? "Progress of the certification being generated."
+                                : "Certification details and source documents."}
+                        </DrawerDescription>
+                    )}
+
+                    <DrawerClose asChild>
+                        <button
+                            type="button"
+                            aria-label="Close"
+                            className="absolute right-4 top-4 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                        >
+                            <X className="size-4" aria-hidden="true" />
+                        </button>
+                    </DrawerClose>
+                </DrawerHeader>
 
                 {/* The generation transcript owns its own scrolling, header rule,
                     and status bar, so it fills the body edge to edge. The form
@@ -851,7 +882,7 @@ export default function CertificationFormDrawer({
                         </div>
                     </>
                 )}
-            </DialogContent>
+            </DrawerContent>
 
             <AlertDialog
                 open={submissionDialog.open}
@@ -891,6 +922,6 @@ export default function CertificationFormDrawer({
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-        </Dialog>
+        </Drawer>
     )
 }

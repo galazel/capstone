@@ -85,7 +85,7 @@ export default function EnterpriseLayout() {
   }
 
   return (
-    <div className="netacad-portal enterprise-portal flex min-h-screen flex-col bg-background">
+    <div className="netacad-portal enterprise-portal flex min-h-screen flex-col">
       <PortalTopNavigation role={portalRole} organizationName={orgName} enterpriseMemberRole={user?.enterpriseMemberRole} actions={<>
             <NotificationBell
               items={notifications.items}

@@ -28,7 +28,7 @@ export default function DashboardLayout() {
   }
 
   return (
-    <div className="netacad-portal admin-portal flex min-h-screen flex-col bg-background">
+    <div className="netacad-portal admin-portal flex min-h-screen flex-col">
       <PortalTopNavigation
         role="ADMIN"
         actions={

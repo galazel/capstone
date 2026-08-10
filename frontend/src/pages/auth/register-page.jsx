@@ -6,6 +6,7 @@ import { AlertCircle, Loader2, UserPlus } from "@/components/icons"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import {
   Field,
   FieldDescription,
@@ -121,9 +122,8 @@ export default function RegisterPage() {
         </Field>
         <Field>
           <FieldLabel htmlFor="register-password">Password</FieldLabel>
-          <Input
+          <PasswordInput
             id="register-password"
-            type="password"
             autoComplete="new-password"
             required
             minLength={8}
@@ -138,9 +138,8 @@ export default function RegisterPage() {
         </Field>
         <Field>
           <FieldLabel htmlFor="register-confirm">Confirm password</FieldLabel>
-          <Input
+          <PasswordInput
             id="register-confirm"
-            type="password"
             autoComplete="new-password"
             required
             value={form.confirmPassword}

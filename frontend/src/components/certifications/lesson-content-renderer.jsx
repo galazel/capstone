@@ -282,16 +282,45 @@ function LessonTool({ tool, index = 0 }) {
   }
 
   if (tool.type === "unordered-list" || tool.type === "ordered-list") {
-    const Tag = tool.type === "ordered-list" ? "ol" : "ul"
+    const ordered = tool.type === "ordered-list"
+    const Tag = ordered ? "ol" : "ul"
 
+    /* Markers drawn as elements rather than left to `list-disc` /
+       `list-decimal`. A native marker cannot be sized, filled or aligned
+       independently of its line box, so an accent colour was the only thing
+       these lists could express -- and learning objectives, which is what most
+       of them are, ended up looking like a default browser list in the middle
+       of an otherwise designed page.
+
+       `data-marker` is the hook the topic page's dark section tone uses to
+       re-ink these; the accent shades are tuned for a light card. */
     return (
-        <Tag
-            className={`space-y-2.5 pl-6 text-[17px] leading-7 text-foreground marker:font-semibold ${accent.marker} ${
-                tool.type === "ordered-list" ? "list-decimal" : "list-disc"
-            }`}
-        >
-          {(data.items ?? []).map((item) => (
-              <li key={item.id ?? item.text}>{item.text}</li>
+        <Tag className="space-y-3">
+          {(data.items ?? []).map((item, itemIndex) => (
+              <li
+                  key={item.id ?? item.text}
+                  className="flex gap-3 text-[17px] leading-7 text-foreground"
+              >
+                {ordered ? (
+                    <span
+                        data-marker
+                        className={`mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg text-sm font-bold tabular-nums ${accent.bgSoft} ${accent.text}`}
+                    >
+                      {itemIndex + 1}
+                    </span>
+                ) : (
+                    /* `mt-[0.6em]`, not a fixed pixel offset: the dot has to sit
+                       on the first line's optical centre, and that moves with
+                       the body size this block inherits. */
+                    <span
+                        data-marker
+                        aria-hidden="true"
+                        className={`mt-[0.6em] size-2 shrink-0 rounded-full ${accent.bgSolid}`}
+                    />
+                )}
+
+                <span className="min-w-0 flex-1">{item.text}</span>
+              </li>
           ))}
         </Tag>
     )

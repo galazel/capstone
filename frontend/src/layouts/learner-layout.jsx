@@ -34,7 +34,7 @@ import { useNotifications } from "@/hooks/use-notifications.js"
 import { PortalThemeMenuItem } from "@/components/portal-theme-toggle"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useLearnerEntitlements } from "@/hooks/use-learner-entitlements.js"
-import { getCommunityNotifications } from "@/services/communityService.js"
+import { getCommunityNotifications, markCommunityNotificationRead } from "@/services/communityService.js"
 
 function getInitials(name = "", email = "") {
   const source = name || email || "Learner"
@@ -50,11 +50,15 @@ export default function LearnerLayout() {
   usePortalTheme()
   const navigate = useNavigate()
   const location = useLocation()
-  const isChallengesPage = location.pathname === "/learner/challenges"
   // The topic study page is a full-bleed reading surface with its own fixed
   // sidebar — `.rebyu-page`'s 1440px cap would otherwise re-centre it and
   // strand a wide gutter of unused width on large screens.
   const isTopicPage = /^\/learner\/learning\/[^/]+\/topics\/[^/]+$/.test(location.pathname)
+  // The curriculum page opens on a full-bleed ink band, which has to reach both
+  // edges of the window to read as one. It keeps the top nav — unlike the topic
+  // page it is still a portal screen — so it only drops `.rebyu-page`'s cap and
+  // padding and owns its own gutters from there.
+  const isCurriculumPage = /^\/learner\/learning\/[^/]+$/.test(location.pathname)
   const { logout: authLogout } = useAuth()
   const [searchValue, setSearchValue] = useState("")
   const entitlements = useLearnerEntitlements()
@@ -119,7 +123,11 @@ export default function LearnerLayout() {
         href: `/learner/certifications/${enrollment.certificationId}`,
       }
     })
-  const moderationNotifications = (Array.isArray(communityNotificationsQuery.data) ? communityNotificationsQuery.data : []).map((notification) => ({ ...notification, type: "certification" }))
+  // Tagged by source, not by id shape: these ids come from
+  // learner_community_notifications and collide with the inbox table's ids, so
+  // "has a numeric id" is not enough to tell them apart -- opening one used to
+  // mark an unrelated inbox row read and never reach the post.
+  const communityNotifications = (Array.isArray(communityNotificationsQuery.data) ? communityNotificationsQuery.data : []).map((notification) => ({ ...notification, source: "community" }))
   // The persisted feed (the same one admins and enterprises see) was never read
   // here before, so backend-issued notifications never reached learners at all.
   // These are the only ones with a numeric id, and the only ones that can be
@@ -127,12 +135,46 @@ export default function LearnerLayout() {
   const inbox = useNotifications()
   const notifications = [
     ...inbox.items,
-    ...moderationNotifications,
+    ...communityNotifications,
     ...pendingInvitationNotifications,
     ...assignmentNotifications,
   ].sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0))
 
+  // The badge counts every read-tracked feed the bell displays, not just the
+  // inbox. Community notifications are persisted server-side with their own
+  // read flag, so a comment or an upvote that arrived while the learner was
+  // signed out was being listed in the dropdown but never counted -- the bell
+  // sat bare next to "View all notifications (4)".
+  //
+  // `=== false` rather than `!item.read` deliberately: the invitation and
+  // assignment items below are derived from portal data and carry no read
+  // state at all, so a truthiness test would count them forever. Nothing can
+  // mark them read, and a badge that can never reach zero stops being read as
+  // a count of new things.
+  const unreadCount = notifications.filter((item) => item.read === false).length
+
+  // Marking all read has to reach both feeds for the same reason. The
+  // community side has no bulk endpoint, so its unread rows are marked
+  // individually and the list is refetched once at the end.
+  const markAllNotificationsRead = () => {
+    inbox.markAllRead()
+
+    const unreadCommunity = communityNotifications.filter((item) => item.read === false)
+    if (unreadCommunity.length === 0) return
+
+    Promise.allSettled(unreadCommunity.map((item) => markCommunityNotificationRead(item.id)))
+      .then(() => communityNotificationsQuery.refetch())
+      .catch(() => {})
+  }
+
   const openNotification = (item) => {
+    if (item.source === "community") {
+      markCommunityNotificationRead(item.id)
+        .then(() => communityNotificationsQuery.refetch())
+        .catch(() => {})
+      if (item.href) navigate(item.href)
+      return
+    }
     if (typeof item.id === "number") {
       inbox.open(item)
       return
@@ -159,7 +201,7 @@ export default function LearnerLayout() {
   }
 
   return (
-    <div className={`netacad-portal learner-portal flex min-h-screen flex-col ${isChallengesPage ? "!bg-[var(--rb-challenges-surface)]" : "bg-background"}`}>
+    <div className="netacad-portal learner-portal flex min-h-screen flex-col">
       {!isTopicPage ? (
       <PortalTopNavigation role="LEARNER" actions={<>
             {/* Ahead of the action icons: these are what the learner is
@@ -168,11 +210,11 @@ export default function LearnerLayout() {
 
             <NotificationBell
               items={notifications}
-              unreadCount={inbox.unreadCount}
+              unreadCount={unreadCount}
               loading={query.isLoading || invitationsQuery.isLoading}
               emptyMessage="Certification invitations and assignments will appear here."
               onItemOpen={openNotification}
-              onMarkAllRead={inbox.markAllRead}
+              onMarkAllRead={markAllNotificationsRead}
               onDelete={inbox.remove}
             />
 
@@ -242,8 +284,8 @@ export default function LearnerLayout() {
       ) : null}
 
         <main
-          className={`rebyu-page ${isTopicPage ? "" : "pb-24 lg:pb-8"} ${isChallengesPage ? "!bg-[var(--rb-challenges-surface)]" : ""} ${
-            isTopicPage ? "!max-w-none !gap-0 !p-0" : ""
+          className={`rebyu-page ${isTopicPage ? "" : "pb-24 lg:pb-8"} ${
+            isTopicPage || isCurriculumPage ? "!max-w-none !gap-0 !p-0" : ""
           }`}
         >
           {query.isLoading ? (

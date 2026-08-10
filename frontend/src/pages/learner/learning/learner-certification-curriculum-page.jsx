@@ -704,6 +704,63 @@ function MockExamCard({ exam, locked, onLocked, takenExamIds }) {
   )
 }
 
+/**
+ * Certification progress as a ring in the band's bottom-right corner, echoing
+ * the AI tutor's launcher on the topic page — a round white-on-brand object in
+ * the bottom-right of a learning surface reads as the same kind of thing.
+ *
+ * Anchored to the content column rather than the band, so it lines up with the
+ * right edge of the title and chips instead of the window.
+ *
+ * Large screens only: at this size it would land on top of the meta chips on a
+ * narrow band, so the inline pill stays as the small-screen form.
+ */
+function HeroProgressRing({ value }) {
+  const pct = Math.max(0, Math.min(100, Number(value) || 0))
+  const radius = 42
+  const circumference = 2 * Math.PI * radius
+
+  return (
+    <div
+      className="pointer-events-none absolute bottom-0 right-0 hidden size-32 place-items-center lg:grid"
+      role="img"
+      aria-label={`${pct}% of this certification complete`}
+    >
+      {/* -rotate-90 so the arc starts at twelve o'clock rather than three. */}
+      <svg viewBox="0 0 100 100" className="absolute inset-0 size-full -rotate-90" aria-hidden="true">
+        <circle
+          cx="50"
+          cy="50"
+          r={radius}
+          fill="none"
+          stroke="rgb(255 255 255 / 0.2)"
+          strokeWidth="8"
+        />
+        <motion.circle
+          cx="50"
+          cy="50"
+          r={radius}
+          fill="none"
+          stroke="white"
+          strokeWidth="8"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          initial={{ strokeDashoffset: circumference }}
+          animate={{ strokeDashoffset: circumference - (circumference * pct) / 100 }}
+          transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+        />
+      </svg>
+
+      <span className="relative flex flex-col items-center leading-none">
+        <CountUp value={pct} suffix="%" className="rb-numeric !text-white text-2xl" />
+        <span className="mt-1 text-[10px] font-bold uppercase tracking-wide text-white/80">
+          complete
+        </span>
+      </span>
+    </div>
+  )
+}
+
 /* --------------------------------------------------------------------- page */
 
 export default function LearnerCertificationCurriculumPage() {
@@ -906,10 +963,23 @@ export default function LearnerCertificationCurriculumPage() {
   }
 
   return (
-    <div className="rebyu-ds -mx-4 -my-6 min-h-dvh bg-rb-polar pb-20 sm:-mx-6 lg:-mx-8">
+    /* No negative margins: the layout hands this route the full window width
+       (see `isCurriculumPage` in learner-layout), so the band and the unit
+       stack set their own gutters rather than clawing back the page's. */
+    <div className="rebyu-ds min-h-dvh w-full bg-rb-polar pb-20">
       {/* ------------------------------------------------------------ header */}
-      <header className="relative overflow-hidden px-5 py-6 lg:px-8 lg:py-8">
-        <div className="mx-auto max-w-[1600px]">
+      <header className="rb-hero-ink px-5 py-10 lg:px-8 lg:py-16">
+        {/* The product's bubble figure, same as `bubble-card`'s cap and the
+            landing page's tiles: two white/10 circles off opposite corners,
+            scaled from a card to a band. Before the content in the DOM so the
+            copy paints over them without either needing a z-index. */}
+        <div className="pointer-events-none absolute -right-24 -top-24 size-[24rem] rounded-full bg-white/10" />
+        <div className="pointer-events-none absolute -bottom-32 -left-20 size-[30rem] rounded-full bg-white/10" />
+
+        {/* `relative` is what the progress ring anchors to, so it lands on the
+            content column's right edge rather than the window's. */}
+        <div className="relative mx-auto max-w-[1600px]">
+          <HeroProgressRing value={curriculum.progress} />
           <div className="flex items-center gap-3">
             <BackButton asChild label="Back to my learning">
               <Link to="/learner/learning" />
@@ -917,17 +987,26 @@ export default function LearnerCertificationCurriculumPage() {
             <span className="rb-chip">enrolled certification</span>
           </div>
 
-          <h1 className="mt-3 max-w-3xl font-rb-display text-2xl font-extrabold tracking-tight text-rb-eel sm:text-3xl lg:text-4xl">
-            {String(certification.title ?? "certification").toLowerCase()}.
+          {/* Deliberately off the design system's lowercase display rule. A
+              certification is a formal credential with a real name, and the
+              band is the one place it is stated in full — the lowercase voice
+              stays on the wordmark behind it and on the unit cards below, so
+              the idiom is not lost, just not applied to a proper noun.
+
+              `capitalize` rather than a JS transform: it only touches the
+              first letter of each word, so titles already stored in caps
+              (TOPCIT, AWS) pass through untouched. */}
+          <h1 className="mt-6 max-w-4xl font-rb-display text-5xl font-extrabold capitalize leading-[1.05] tracking-tight text-white sm:text-6xl lg:text-7xl">
+            {certification.title ?? "Certification"}
           </h1>
 
           {certification.description ? (
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-rb-wolf">
+            <p className="mt-5 max-w-2xl text-lg leading-8 text-white/80">
               {certification.description}
             </p>
           ) : null}
 
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="mt-8 flex flex-wrap items-center gap-3">
             <div className="rb-chip">
               <BookOpen className="size-4" aria-hidden="true" />
               {curriculum.majors.length} unit{curriculum.majors.length === 1 ? "" : "s"} ·{" "}
@@ -940,19 +1019,23 @@ export default function LearnerCertificationCurriculumPage() {
               </div>
             ) : null}
 
-            <div className="flex items-center gap-3 rounded-full border-2 border-rb-swan bg-rb-polar py-2 pl-4 pr-5">
-              <span className="text-[11px] font-bold uppercase tracking-wide text-rb-wolf">
+            {/* Small-screen form of the ring above, which is hidden below lg
+                because at that size it would sit on top of these chips. */}
+            <div className="flex items-center gap-3 rounded-full bg-white/10 py-2 pl-4 pr-5 lg:hidden">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-white/80">
                 progress
               </span>
-              <div className="h-2 w-24 overflow-hidden rounded-full bg-rb-swan sm:w-32">
+              <div className="h-2 w-24 overflow-hidden rounded-full bg-white/20 sm:w-32">
                 <motion.div
-                  className="h-full rounded-full bg-rb-macaw"
+                  /* White, not Macaw: on a blue band the brand blue lands at
+                     2.81:1 against it and the bar stops reading as filled. */
+                  className="h-full rounded-full bg-white"
                   initial={{ width: 0 }}
                   animate={{ width: `${Math.max(0, Math.min(100, curriculum.progress))}%` }}
                   transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
                 />
               </div>
-              <CountUp value={curriculum.progress} suffix="%" className="rb-numeric text-sm text-rb-eel" />
+              <CountUp value={curriculum.progress} suffix="%" className="rb-numeric !text-white text-sm" />
             </div>
           </div>
 
@@ -965,7 +1048,7 @@ export default function LearnerCertificationCurriculumPage() {
               rather than the row just disappearing. */}
           {diagnosticDone ? (
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-bold uppercase tracking-wide text-rb-wolf">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-white/80">
                 priority focus
               </span>
 

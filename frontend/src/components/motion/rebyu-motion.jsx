@@ -7,6 +7,8 @@ import {
   useInView,
   useMotionValue,
   useReducedMotion,
+  useScroll,
+  useSpring,
   useTransform,
 } from "framer-motion"
 
@@ -234,6 +236,64 @@ export function useShake() {
     shake: { x: [0, -8, 8, -6, 6, -3, 3, 0], transition: { duration: 0.45 } },
     still: { x: 0 },
   }
+}
+
+/**
+ * Hover and press response for a card-shaped target.
+ *
+ * A wrapper rather than a prop on `RebyuCard` because the card is a plain div
+ * that does not forward refs, and because the lift belongs to the whole grid
+ * cell rather than to the card's own surface — nesting keeps the DS card
+ * untouched, and leaves the card's own transform free for the CSS reveal layer.
+ *
+ * The spring is soft on purpose. `SPRING` above is tuned for a tick popping
+ * green; reused on a 400px card it reads as a wobble.
+ */
+export const HOVER_SPRING = { type: "spring", stiffness: 320, damping: 30, mass: 0.8 }
+
+export function HoverLift({ children, lift = -6, scale = 1.015, as = "div", ...props }) {
+  const Component = motion[as] ?? motion.div
+
+  return (
+    <Component
+      whileHover={{ y: lift, scale }}
+      whileTap={{ y: lift / 2, scale: 0.995 }}
+      transition={HOVER_SPRING}
+      {...props}
+    >
+      {children}
+    </Component>
+  )
+}
+
+/**
+ * Scroll-linked vertical parallax for a decorative element.
+ *
+ * Returns a motion value for `style={{ y }}`. It travels from `+distance` to
+ * `-distance` across the window the target spends on screen, so the element
+ * drifts against the scroll instead of riding with it.
+ *
+ * Two things this has to do itself:
+ *
+ * 1. **Reduced motion.** `<MotionConfig reducedMotion="user">` only rewrites
+ *    animations it drives. A motion value piped straight into `style` is not
+ *    an animation as far as that setting is concerned, so it would keep moving.
+ *    Pinned to 0 here instead — the one exception to rule 2 at the top of this
+ *    file, and the reason it is spelled out rather than left implied.
+ *
+ * 2. **Smoothing.** Raw `scrollYProgress` is exact but steps with the scroll
+ *    wheel's own quantisation. A light spring turns those steps into a glide.
+ *
+ * Only pass elements that carry no meaning — a wash blob, an oversized
+ * wordmark. Parallaxing text is how a reader loses their line.
+ */
+export function useParallax(ref, distance = 60, offset = ["start end", "end start"]) {
+  const reduced = useReducedMotion()
+  const { scrollYProgress } = useScroll({ target: ref, offset })
+  const smoothed = useSpring(scrollYProgress, { stiffness: 90, damping: 24, mass: 0.4 })
+  const travel = reduced ? 0 : distance
+
+  return useTransform(smoothed, [0, 1], [travel, -travel])
 }
 
 export { AnimatePresence, motion, useAnimationControls, useReducedMotion }

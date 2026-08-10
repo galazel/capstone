@@ -883,6 +883,46 @@
 }
 
 /* ---------------------------------------------------------------------------
+   INK HERO BAND
+   A full-bleed band that carries a page's identity — title, description and
+   its meta row — above the light content that follows.
+
+   Humpback's lip shade, not black — this palette has no black by design. It is
+   the deepest blue in the system, so the band reads as brand rather than as a
+   borrowed dark chrome, and it sits far enough from Macaw that the bright card
+   faces below still lead the page instead of fighting it.
+
+   Where a marketing hero would put an illustration, this carries the product's
+   bubble decoration — the same two oversized `bg-white/10` circles bleeding off
+   opposite corners that `bubble-card` puts on its cap, the landing page puts on
+   its feature tiles, and the auth shell puts on its panel. Sized up for a band,
+   but the same two-circle figure, so this surface is recognisably kin to them.
+   The circles are markup, not a background-image, because that is how the rest
+   of the product draws them.
+
+   The chips and eyebrows inside are re-inked here rather than at each call
+   site — a chip should not have to know it landed on a dark surface.
+   --------------------------------------------------------------------------- */
+.rebyu-ds .rb-hero-ink {
+    position: relative;
+    overflow: hidden;
+    color: var(--color-rb-snow);
+    background: var(--color-rb-humpback-lip);
+}
+
+.rebyu-ds .rb-hero-ink .rb-chip {
+    background: rgb(255 255 255 / 0.1);
+    color: rgb(255 255 255 / 0.85);
+}
+
+/* 80%, not 60%: Humpback is a mid-dark surface, so white has less room here
+   than on a near-black band. 70% measures 4.27:1 and misses AA for text this
+   small; 80% clears it at 5.04:1. */
+.rebyu-ds .rb-hero-ink .rb-eyebrow {
+    color: rgb(255 255 255 / 0.8);
+}
+
+/* ---------------------------------------------------------------------------
    INPUTS
    --------------------------------------------------------------------------- */
 .rebyu-ds .rb-input {

@@ -510,10 +510,26 @@ function sectionTone(section, index) {
   return index % 2 === 0 ? "plain" : "wash"
 }
 
+/* Each tone also carries the colours for the section's own furniture: the
+   eyebrow above the title, the rule under it, and the ghost numeral in the
+   corner. Kept here rather than derived at the call site so a tone stays one
+   decision -- adding a fourth surface means filling in one object, not
+   hunting four conditionals through the JSX.
+
+   Plain and wash take different accents on purpose. They already alternate,
+   and giving them the same colour would waste the alternation on a background
+   change most people would not consciously register. */
 const SECTION_TONE = {
   statement: {
-    shell: "rounded-rb-card bg-rb-humpback-lip px-6 py-12 sm:px-10",
+    /* Surface only. Geometry -- the bleed, the padding, the full-screen
+       height -- is shared by every section and lives on the element itself;
+       a tone that also carried padding could disagree with its neighbours
+       and shift the copy sideways on every snap. */
+    shell: "bg-rb-humpback-lip",
     heading: "text-white",
+    eyebrow: "text-white/70",
+    rule: "bg-white/30",
+    ghost: "text-white/10",
     /* Reversing the tools out of the panel has to be done from outside them:
        LessonTool renders body copy in `text-foreground`/`text-muted-foreground`
        and knows nothing about sitting on a dark surface, and it is shared with
@@ -528,21 +544,30 @@ const SECTION_TONE = {
       "[&_h2]:text-white [&_h2]:border-white/50 [&_h2]:bg-white/10 " +
       "[&_h3]:text-white [&_p]:text-white/90 [&_li]:text-white/90 " +
       "[&_strong]:text-white [&_a]:text-white [&_a]:underline " +
-      "[&_.text-muted-foreground]:text-white/85",
+      "[&_.text-muted-foreground]:text-white/85 " +
+      /* List bullets and number chips carry a chart accent, which is tuned
+         for a light card and goes muddy on this blue. Same reason as the
+         rules above: the renderer is shared and cannot know it landed here. */
+      "[&_[data-marker]]:!bg-white/25 [&_[data-marker]]:!text-white",
   },
   wash: {
-    shell: "rounded-rb-card bg-rb-polar px-6 py-12 sm:px-10",
+    shell: "bg-rb-polar",
     heading: "text-rb-eel",
+    eyebrow: "text-rb-macaw-lip",
+    rule: "bg-rb-macaw",
+    ghost: "text-rb-macaw/10",
     content: "",
   },
-  /* Same padding as the panels despite having no background of its own. The
-     inset has to match or the body copy shifts sideways on every snap, which
-     is far more noticeable than the colour change it would accompany. The old
-     top hairline is gone with it: alternating surfaces already separate the
-     sections, and a rule between two of them just drew a seam. */
+  /* No background of its own -- it is the page showing through, and that is
+     what makes the alternation read. The old top hairline is gone with it:
+     alternating surfaces already separate the sections, and a rule between
+     two of them just drew a seam. */
   plain: {
-    shell: "rounded-rb-card px-6 py-12 sm:px-10",
+    shell: "",
     heading: "text-rb-eel",
+    eyebrow: "text-rb-fox-lip",
+    rule: "bg-rb-fox",
+    ghost: "text-rb-swan/70",
     content: "",
   },
 }
@@ -702,14 +727,18 @@ function LessonView({
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-6xl">
+      {/* Full width, not capped. The cap moved down onto the things inside it,
+          because the section bands have to reach the column's edges while
+          their copy stays at a readable measure -- a wrapper capping both
+          cannot do that. */}
+      <div className="w-full">
         {loading ? (
-        <div className="mt-10 flex items-center gap-3 text-sm font-bold text-rb-wolf">
+        <div className="mx-auto mt-10 flex w-full max-w-6xl items-center gap-3 text-sm font-bold text-rb-wolf">
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
           Loading lesson content…
         </div>
       ) : sections.length === 0 ? (
-        <div className="mt-10">
+        <div className="mx-auto mt-10 w-full max-w-6xl">
           <LearnerEmptyState
             icon={BookOpen}
             title="No lesson content yet"
@@ -724,7 +753,7 @@ function LessonView({
               appears twice at once. */}
           {showToc ? (
             <nav
-              className="mt-5 rounded-rb-card border-2 border-rb-swan bg-rb-snow p-5"
+              className="mx-auto mt-5 w-full max-w-6xl rounded-rb-card border-2 border-rb-swan bg-rb-snow p-5"
               aria-label="Table of contents"
             >
               <p className="rb-eyebrow">table of contents</p>
@@ -771,11 +800,16 @@ function LessonView({
             </nav>
           ) : null}
 
-          {/* `space-y`, not `divide-y`: a shared divider drew a hairline across
-              the top of every panelled section, which read as a seam on a card
-              rather than a rule between pages. The alternating surfaces are
-              what separate sections now. */}
-          <div className="mt-6 space-y-4">
+          {/* Bled to the column edges with the same negative margins the
+              sticky header and the quick-check band above already use, so a
+              section reads as a full band of the page rather than one more
+              card in the reading column.
+
+              No `space-y`: gaps between full-bleed bands show up as strips of
+              page colour cutting across the run, which is exactly the seam the
+              old `divide-y` was removed for. The alternating surfaces are what
+              separate sections. */}
+          <div className="-mx-4 mt-6 sm:-mx-6 lg:-mx-8">
             {sections.map((section, sectionIndex) => {
               const tone = SECTION_TONE[sectionTone(section, sectionIndex)]
 
@@ -797,13 +831,48 @@ function LessonView({
                      that offset: scroll margin is what the snap position is
                      measured from, so without it a snapped heading lands
                      underneath the header. */
-                  className={`flex min-h-[calc(100dvh-var(--lesson-header-h))] snap-start scroll-mt-[var(--lesson-header-h)] flex-col justify-center ${tone.shell}`}
+                  className={`relative flex min-h-[calc(100dvh-var(--lesson-header-h))] snap-start scroll-mt-[var(--lesson-header-h)] flex-col justify-center overflow-hidden px-4 py-14 sm:px-6 lg:px-8 ${tone.shell}`}
                 >
-                  <h2 className={`font-rb-display text-3xl font-extrabold ${tone.heading}`}>
-                    {section.name}
-                  </h2>
+                  {/* The section's number, set huge and barely-there in the
+                      corner. Same wordmark idiom the unit cards and the
+                      curriculum band use, and it earns its place here: a
+                      section owns a whole screen, so without it the lower half
+                      of a short section is empty surface with nothing saying
+                      where you are. Decorative only -- the eyebrow below
+                      states the same thing in text.
 
-                  <div className={`mt-5 space-y-6 ${tone.content}`}>
+                      Bottom LEFT, not right: the AI tutor's launcher is fixed
+                      at the viewport's `bottom-6 right-6`, and a numeral this
+                      size in the right corner sat underneath it. */}
+                  <span
+                    aria-hidden="true"
+                    className={`pointer-events-none absolute -bottom-8 left-2 select-none font-rb-display text-[10rem] font-black leading-none tabular-nums sm:text-[13rem] ${tone.ghost}`}
+                  >
+                    {String(sectionIndex + 1).padStart(2, "0")}
+                  </span>
+
+                  {/* The band runs edge to edge; its copy does not. */}
+                  <div className="relative mx-auto w-full max-w-6xl">
+                    <p
+                      className={`text-[11px] font-bold uppercase tracking-[0.16em] ${tone.eyebrow}`}
+                    >
+                      section {sectionIndex + 1} of {sections.length}
+                    </p>
+
+                    <h2 className={`mt-2 font-rb-display text-3xl font-extrabold ${tone.heading}`}>
+                      {section.name}
+                    </h2>
+
+                    {/* A short rule rather than a full-width one: it reads as a
+                        mark under the title, not as a divider cutting the
+                        screen in half. */}
+                    <span
+                      aria-hidden="true"
+                      className={`mt-4 block h-1.5 w-14 rounded-full ${tone.rule}`}
+                    />
+                  </div>
+
+                  <div className={`relative mx-auto mt-6 w-full max-w-6xl space-y-6 ${tone.content}`}>
                     {section.tools.map((tool, toolIndex) => (
                       <div key={tool.id ?? toolIndex}>
                         <LessonTool tool={tool} index={toolIndex} />

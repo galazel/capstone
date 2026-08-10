@@ -104,12 +104,13 @@ public class CommunityService {
                 .orElseThrow(() -> new EntityNotFoundException("Post not found: " + postId));
     }
 
-    private void requirePostVisible(Long postId) {
+    private CommunityPost requirePostVisible(Long postId) {
         CommunityPost post = postRepository.findById(postId)
                 .orElseThrow(() -> new EntityNotFoundException("Post not found: " + postId));
         if (!"VISIBLE".equals(post.getModerationStatus())) {
             throw new EntityNotFoundException("This post is not available");
         }
+        return post;
     }
 
     private String getPostStatus(Long postId) {
@@ -309,12 +310,14 @@ public class CommunityService {
 
     @Transactional
     public PostCounts toggleLike(Long learnerId, Long postId) {
-        requirePostVisible(postId);
+        CommunityPost post = requirePostVisible(postId);
         if (postLikeRepository.existsByPost_PostIdAndLearner_LearnerId(postId, learnerId)) {
             postLikeRepository.deleteByPost_PostIdAndLearner_LearnerId(postId, learnerId);
             return counts(postId, false);
         }
         postLikeRepository.addLike(postId, learnerId);
+        notifyAuthor(post, learnerId, "Your post got an upvote",
+                actorName(learnerId) + " upvoted \"" + post.getTitle() + "\".", true);
         return counts(postId, true);
     }
 
@@ -344,7 +347,7 @@ public class CommunityService {
 
     @Transactional
     public Comment addComment(Long learnerId, Long postId, CommentRequest request) {
-        requirePostVisible(postId);
+        CommunityPost post = requirePostVisible(postId);
         requireText(request.body(), "Comment");
         CommunityComment parent = request.parentCommentId() == null ? null : commentRef(request.parentCommentId());
         // The real author, not an id-only stub: the response is rendered straight into
@@ -357,7 +360,46 @@ public class CommunityService {
                 .parentComment(parent)
                 .body(request.body().trim())
                 .build();
-        return mapComment(commentRepository.save(comment), learnerId);
+        Comment saved = mapComment(commentRepository.save(comment), learnerId);
+        // Every comment is its own event, so these are not de-duplicated the way
+        // an upvote is -- two replies are two things worth reading.
+        notifyAuthor(post, learnerId, "New comment on your post",
+                fullName(author) + " commented on \"" + post.getTitle() + "\".", false);
+        return saved;
+    }
+
+    // ------------------------------------------------------------------
+    // Author notifications
+    // ------------------------------------------------------------------
+
+    /**
+     * Tells a post's author that someone engaged with it. Silent when the actor
+     * is the author: nobody needs telling about their own upvote.
+     *
+     * @param deduplicate skip when this exact line already exists for the author,
+     *                    so un-liking and liking again does not notify twice
+     */
+    private void notifyAuthor(CommunityPost post, Long actorLearnerId, String title, String body, boolean deduplicate) {
+        Long authorId = post.getAuthor().getLearnerId();
+        if (authorId.equals(actorLearnerId)) {
+            return;
+        }
+        if (deduplicate && notificationRepository.existsByLearner_LearnerIdAndTitleAndBody(authorId, title, body)) {
+            return;
+        }
+        notificationRepository.save(LearnerCommunityNotification.builder()
+                .learner(post.getAuthor())
+                .title(title)
+                .body(body)
+                .href("/learner/community?post=" + post.getPostId())
+                .build());
+    }
+
+    /** The acting learner's display name, for the notification line. */
+    private String actorName(Long learnerId) {
+        return learnerRepository.findById(learnerId)
+                .map(CommunityService::fullName)
+                .orElse("A learner");
     }
 
     // ------------------------------------------------------------------
