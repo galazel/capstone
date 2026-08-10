@@ -2,8 +2,10 @@ package com.capstone.rebyu.aigateway.client;
 
 import com.capstone.rebyu.aigateway.dto.AnswerGradingRequestDto;
 import com.capstone.rebyu.aigateway.dto.AnswerGradingResultDto;
+import com.capstone.rebyu.aigateway.dto.AppendConversationRequest;
 import com.capstone.rebyu.aigateway.dto.ChatRequest;
 import com.capstone.rebyu.aigateway.dto.ChatResponse;
+import com.capstone.rebyu.aigateway.dto.ConversationResponseDto;
 import com.capstone.rebyu.aigateway.dto.LessonGenerationDraftResponseDto;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ByteArrayResource;
@@ -50,6 +52,34 @@ public class AiServiceClient {
                     .block();
         } catch (Exception e) {
             throw new AiServiceException("Tutor chat request failed", e);
+        }
+    }
+
+    public ConversationResponseDto getConversation(String sessionId) {
+        try {
+            return webClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/tutor/conversation")
+                            .queryParam("sessionId", sessionId)
+                            .build())
+                    .retrieve()
+                    .bodyToMono(ConversationResponseDto.class)
+                    .block();
+        } catch (Exception e) {
+            throw new AiServiceException("Tutor conversation request failed", e);
+        }
+    }
+
+    public ConversationResponseDto appendConversation(AppendConversationRequest request) {
+        try {
+            return webClient.post()
+                    .uri("/tutor/conversation/messages")
+                    .bodyValue(request)
+                    .retrieve()
+                    .bodyToMono(ConversationResponseDto.class)
+                    .block();
+        } catch (Exception e) {
+            throw new AiServiceException("Recording the tutor conversation turn failed", e);
         }
     }
 

@@ -273,7 +273,10 @@ function LessonTool({ tool, index = 0 }) {
   if (tool.type === "description") {
     return (
         <div className="space-y-3">
-          {renderText(data.text, "text-base leading-8 text-muted-foreground")}
+          {/* Body copy is the thing a learner is here to read -- it gets the
+              larger size, and `leading-8` on a 17px body is the tighter of the
+              two ratios, not the looser. */}
+          {renderText(data.text, "text-[17px] leading-8 text-foreground/85")}
         </div>
     )
   }
@@ -283,7 +286,7 @@ function LessonTool({ tool, index = 0 }) {
 
     return (
         <Tag
-            className={`space-y-2 pl-6 text-foreground marker:font-semibold ${accent.marker} ${
+            className={`space-y-2.5 pl-6 text-[17px] leading-7 text-foreground marker:font-semibold ${accent.marker} ${
                 tool.type === "ordered-list" ? "list-decimal" : "list-disc"
             }`}
         >

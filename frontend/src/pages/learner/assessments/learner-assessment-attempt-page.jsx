@@ -12,7 +12,6 @@ import {
   ListIcon,
   Loader2Icon,
   SkipForwardIcon,
-  Zap,
 } from "@/components/icons"
 import { toast } from "sonner"
 
@@ -42,6 +41,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+import { ASSESSMENT_XP } from "@/lib/xp.js"
+import { announceXpAward } from "@/components/learner/xp-award-modal.jsx"
 import DiagramArea from "@/components/challenges/diagram-area.jsx"
 import CodeMirrorProgrammingWorkspace from "@/components/assessments/attempt/code-mirror-programming-workspace.jsx"
 import DiagramQuestionLayout from "@/components/assessments/attempt/diagram-question-layout.jsx"
@@ -705,17 +706,20 @@ export default function LearnerAssessmentAttemptPage() {
       sessionStorage.removeItem(`rebyu-attempt-key-${examId}-${learnerId}`)
       // Submission may complete the certification's diagnostic gate. Remove
       // the pre-attempt portal snapshot so lessons are unlocked on return.
-      await queryClient.invalidateQueries({ queryKey: ["learner-portal-data"] })
+      // Also refetches the portal payload -- which both credits the header's XP
+      // counter and unlocks lessons behind a diagnostic gate this attempt may
+      // have just satisfied -- and reports what the award actually paid.
+      await announceXpAward({
+        queryClient,
+        title: "Assessment submitted",
+        fallback: "You had already earned the XP for this assessment.",
+      })
       // Refresh the analytics view so mastery/scores reflect this attempt
       // without the learner needing to log out or clear cache.
       await queryClient.invalidateQueries({
         queryKey: ["learner-progress-analytics", String(result.certificationId)],
       })
       await queryClient.invalidateQueries({ queryKey: ["learner-streak"] })
-      toast.success("Assessment submitted.", {
-        icon: <Zap className="size-4" aria-hidden="true" />,
-        description: "+300 XP",
-      })
       navigate(`/learner/results/${result.assessmentAttemptId}`, {
         replace: true,
       })
@@ -1075,6 +1079,14 @@ export default function LearnerAssessmentAttemptPage() {
                     </dd>
                     <dt className="text-muted-foreground">Flagged</dt>
                     <dd className="text-right tabular-nums">{flagged.size}</dd>
+                    {/* Outcome-based and topped up across retakes, so the
+                        exact award depends on how this attempt scores -- the
+                        toast after submission reports what was actually
+                        credited. */}
+                    <dt className="text-muted-foreground">XP on completion</dt>
+                    <dd className="text-right tabular-nums">
+                      {ASSESSMENT_XP.attempted}–{ASSESSMENT_XP.perfect} XP
+                    </dd>
                     {remainingSeconds != null ? (
                         <>
                           <dt className="text-muted-foreground">Time remaining</dt>

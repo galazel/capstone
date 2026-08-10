@@ -15,3 +15,5 @@ class TutorState(MessagesState):
     questions: QuestionFormat | None
 
     summary: str | None
+
+    lessonContext: str | None

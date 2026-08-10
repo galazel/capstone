@@ -12,16 +12,13 @@ def build_graph(checkpointer):
 
     graph = StateGraph(TutorState)
 
-    graph.add_node("check_query", check_query)
     graph.add_node("generate_questions", generate)
     graph.add_node("respond_question", answer_question)
     graph.add_node("summarize_conversation", summarize_conversation)
     graph.add_node("trim_conversation", trim)
 
-    graph.add_edge(START, "check_query")
-
     graph.add_conditional_edges(
-        "check_query",
+        START,
         check_query,
         {
             "GENERATE": "generate_questions",

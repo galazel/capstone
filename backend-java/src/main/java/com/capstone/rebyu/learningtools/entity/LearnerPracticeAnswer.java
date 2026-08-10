@@ -11,7 +11,14 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 @Entity
-@Table(name = "learner_practice_answers")
+// Declared here as well as in V30: `ddl-auto: update` never creates a UNIQUE
+// constraint it cannot see on the entity, and the answer upsert's ON CONFLICT
+// needs it to exist. See LearnerRewardLedger for what its absence costs.
+@Table(
+        name = "learner_practice_answers",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uq_practice_answer_item",
+                columnNames = {"attempt_id", "study_item_id"}))
 @Getter
 @Setter
 @NoArgsConstructor

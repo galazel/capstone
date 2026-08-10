@@ -6,6 +6,8 @@ from uuid import uuid4
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from psycopg.rows import dict_row
+from psycopg_pool import AsyncConnectionPool
 
 from app.ai.tasks import profile_for
 from app.core.config import get_settings
@@ -20,55 +22,72 @@ load_dotenv()
 connection_string = (os.getenv("DATABASE_URL") or "").replace("postgresql+psycopg://", "postgresql://")
 
 _checkpointer = None
-_checkpointer_cm = None
+_checkpointer_pool = None
 _checkpointer_lock = asyncio.Lock()
 
 
 async def get_checkpointer():
-    """Async checkpointer, created once per process.
+    """Async checkpointer, backed by a connection pool rather than one
+    connection held for the whole process.
 
-    Two problems with the previous implementation:
+    A single long-lived connection (the previous implementation) has no way
+    to recover once the server drops it -- a managed Postgres suspending its
+    compute on idle (Neon's default behavior), a network blip, a restart,
+    anything. Every checkpoint read/write after that fails with the same
+    `OperationalError: server closed the connection unexpectedly` for the
+    rest of the process's life, which is exactly what took the tutor down:
+    one dropped connection turned into a permanent outage until redeploy.
 
-    1. It used the *sync* `PostgresSaver` inside an async application, so
-       every checkpoint write blocked a threadpool worker. With 8+ HITL
-       checkpoints and a Send() fan-out across dozens of lessons, that is a
-       lot of blocking on the hot path.
-    2. It called `cm.__enter__()` and never `__exit__()`, so the connection
-       was never released for the lifetime of the process.
+    A pool borrows a fresh connection per operation and health-checks it
+    first (`check=AsyncConnectionPool.check_connection`), so a dead
+    connection gets quietly replaced instead of failing every request behind
+    it. `AsyncPostgresSaver` accepts a pool directly in place of a raw
+    connection -- see `langgraph.checkpoint.postgres._ainternal.get_connection`,
+    which already branches on `isinstance(conn, AsyncConnectionPool)`.
 
     The lock matters: without it two concurrent first-requests can both see
-    `None` and each open their own connection, leaking one of them.
+    `None` and each open their own pool, leaking one of them.
     """
-    global _checkpointer, _checkpointer_cm
+    global _checkpointer, _checkpointer_pool
 
     if _checkpointer is not None:
         return _checkpointer
 
     async with _checkpointer_lock:
         if _checkpointer is None:
-            _checkpointer_cm = AsyncPostgresSaver.from_conn_string(connection_string)
-            _checkpointer = await _checkpointer_cm.__aenter__()
-            await _checkpointer.setup()
-            logger.info("Async Postgres checkpointer initialised")
+            pool = AsyncConnectionPool(
+                conninfo=connection_string,
+                kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+                min_size=1,
+                max_size=5,
+                check=AsyncConnectionPool.check_connection,
+                open=False,
+            )
+            await pool.open(wait=True)
+            checkpointer = AsyncPostgresSaver(conn=pool)
+            await checkpointer.setup()
+            _checkpointer_pool = pool
+            _checkpointer = checkpointer
+            logger.info("Async Postgres checkpointer initialised (pooled)")
 
     return _checkpointer
 
 
 async def close_checkpointer() -> None:
-    """Releases the checkpointer connection. Called from the FastAPI
-    lifespan shutdown -- this is the `__exit__` the old code never made."""
-    global _checkpointer, _checkpointer_cm
+    """Closes the checkpointer's connection pool. Called from the FastAPI
+    lifespan shutdown."""
+    global _checkpointer, _checkpointer_pool
 
     async with _checkpointer_lock:
-        if _checkpointer_cm is not None:
+        if _checkpointer_pool is not None:
             try:
-                await _checkpointer_cm.__aexit__(None, None, None)
+                await _checkpointer_pool.close()
             except Exception:
-                logger.exception("Error closing checkpointer")
+                logger.exception("Error closing checkpointer pool")
             finally:
                 _checkpointer = None
-                _checkpointer_cm = None
-                logger.info("Async Postgres checkpointer closed")
+                _checkpointer_pool = None
+                logger.info("Async Postgres checkpointer pool closed")
 
 def create_id():
     return str(uuid4())

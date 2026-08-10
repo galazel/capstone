@@ -19,12 +19,17 @@ public interface LearnerRewardLedgerRepository extends JpaRepository<LearnerRewa
      * The uq_learner_reward_source_currency constraint (V31) is what makes this race-safe
      * under concurrent duplicate requests -- callers must only apply the paired balance
      * change when this returns > 0.
+     *
+     * {@code created_at} is written explicitly rather than left to the column's
+     * DEFAULT. This is the award path for every lesson and assessment, and it
+     * should not be able to fail because a database picked up the column
+     * without its default (see V53) -- the value is the same either way.
      */
     @Modifying
     @Transactional
     @Query(value = """
-            INSERT INTO learner_reward_ledger(learner_id, currency, amount, reason, source_key)
-            VALUES (:learnerId, :currency, :amount, :reason, :sourceKey)
+            INSERT INTO learner_reward_ledger(learner_id, currency, amount, reason, source_key, created_at)
+            VALUES (:learnerId, :currency, :amount, :reason, :sourceKey, now())
             ON CONFLICT (learner_id, source_key, currency) DO NOTHING
             """, nativeQuery = true)
     int insertIfAbsent(@Param("learnerId") Long learnerId, @Param("currency") String currency,
@@ -34,8 +39,8 @@ public interface LearnerRewardLedgerRepository extends JpaRepository<LearnerRewa
     @Modifying
     @Transactional
     @Query(value = """
-            INSERT INTO learner_reward_ledger(learner_id, currency, amount, reason, source_key)
-            SELECT :learnerId, 'AI_CREDITS', :amount, 'AI_GENERATION_REFUND', :refundSourceKey
+            INSERT INTO learner_reward_ledger(learner_id, currency, amount, reason, source_key, created_at)
+            SELECT :learnerId, 'AI_CREDITS', :amount, 'AI_GENERATION_REFUND', :refundSourceKey, now()
             WHERE EXISTS (SELECT 1 FROM learner_reward_ledger WHERE learner_id=:learnerId AND currency='AI_CREDITS' AND source_key=:originalSourceKey)
             ON CONFLICT (learner_id, source_key, currency) DO NOTHING
             """, nativeQuery = true)

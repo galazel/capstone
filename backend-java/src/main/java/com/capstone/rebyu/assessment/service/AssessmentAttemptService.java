@@ -90,7 +90,26 @@ public class AssessmentAttemptService {
     private final RewardService rewardService;
     private final StreakService streakService;
 
-    private static final int ASSESSMENT_COMPLETION_XP = 300;
+    /**
+     * Outcome-based assessment XP: 30 for finishing, 100 for passing, 200 for
+     * a perfect score.
+     *
+     * <p>Paid as three separate one-time awards that TOP UP to those totals
+     * rather than one award whose size depends on the outcome. That matters
+     * because retakes are unlimited: with a single award the first attempt's
+     * result would lock in forever, so a learner who failed, studied, and came
+     * back to ace the exam would keep the 30 and earn nothing for the
+     * improvement -- the opposite of what the retake loop is for. Topping up
+     * pays the difference instead (30, then +70 on a later pass, then +100 on
+     * a later perfect), so the total always reflects the learner's BEST
+     * result while each tier still pays at most once per exam.
+     */
+    private static final int ASSESSMENT_ATTEMPTED_XP = 30;
+    private static final int ASSESSMENT_PASSED_TOPUP_XP = 70;
+    private static final int ASSESSMENT_PERFECT_TOPUP_XP = 100;
+
+    /** Percentage is stored 0-100 (scale 2), so a perfect score is 100.00. */
+    private static final BigDecimal PERFECT_PERCENTAGE = new BigDecimal("100");
 
     private static final int MAX_EXECUTION_HISTORY = 20;
 
@@ -400,12 +419,7 @@ public class AssessmentAttemptService {
                 .between(attempt.getStartedAt(), now).getSeconds());
         attemptRepository.save(attempt);
 
-        // Keyed by examId, not attemptId: unlimited retakes are allowed (see
-        // resolveLockReason), but XP is a one-time reward for finishing an
-        // assessment at all -- keying by attempt would let a learner farm XP
-        // by retaking the same exam repeatedly.
-        rewardService.awardXp(attempt.getLearnerId(), ASSESSMENT_COMPLETION_XP, "ASSESSMENT_COMPLETED",
-                "assessment-completed:" + attempt.getExam().getExamId());
+        awardAssessmentXp(attempt);
         streakService.recordActivity(attempt.getLearnerId());
 
         recordLegacyExamResult(attempt);
@@ -423,6 +437,36 @@ public class AssessmentAttemptService {
         log.info("Attempt {} submitted: {}% ({} / {} points)",
                 attemptId, percentage, earnedPoints, totalPoints);
         return getResult(attemptId, request.learnerId());
+    }
+
+    /**
+     * Pays this attempt's outcome tier, topping up whatever the learner has
+     * already earned on this exam (see the XP constants for why).
+     *
+     * <p>Every award is keyed by examId rather than attemptId: retakes are
+     * unlimited, so an attempt-keyed award would let a learner farm XP by
+     * resubmitting the same exam.
+     */
+    private void awardAssessmentXp(AssessmentAttempt attempt) {
+        Long learnerId = attempt.getLearnerId();
+        Long examId = attempt.getExam().getExamId();
+
+        // Existing key and reason, so learners already paid the previous flat
+        // award are not paid again for simply finishing this exam.
+        rewardService.awardXp(learnerId, ASSESSMENT_ATTEMPTED_XP, "ASSESSMENT_COMPLETED",
+                "assessment-completed:" + examId);
+
+        if (!Boolean.TRUE.equals(attempt.getPassed())) {
+            return;
+        }
+        rewardService.awardXp(learnerId, ASSESSMENT_PASSED_TOPUP_XP, "ASSESSMENT_PASSED",
+                "assessment-passed:" + examId);
+
+        if (attempt.getPercentage() != null
+                && attempt.getPercentage().compareTo(PERFECT_PERCENTAGE) >= 0) {
+            rewardService.awardXp(learnerId, ASSESSMENT_PERFECT_TOPUP_XP, "ASSESSMENT_PERFECT",
+                    "assessment-perfect:" + examId);
+        }
     }
 
     // ------------------------------------------------------------------

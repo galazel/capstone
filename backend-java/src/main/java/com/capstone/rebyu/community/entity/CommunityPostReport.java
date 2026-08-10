@@ -12,7 +12,14 @@ import lombok.Setter;
 import java.time.OffsetDateTime;
 
 @Entity
-@Table(name = "community_post_reports")
+// Declared here as well as in V32: `ddl-auto: update` never creates a UNIQUE
+// constraint it cannot see on the entity, and the report upsert's ON CONFLICT
+// needs it to exist. See LearnerRewardLedger for what its absence costs.
+@Table(
+        name = "community_post_reports",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uq_community_reporter_post",
+                columnNames = {"post_id", "reporter_learner_id"}))
 @Getter
 @Setter
 @NoArgsConstructor

@@ -445,7 +445,10 @@ export default function LearnerProgressPage() {
   const outletContext = useOutletContext()
   const data = outletContext?.data ?? {}
 
-  const publishedCertifications = data.certifications ?? []
+  // Analytics is enrollment-scoped: the backend 404s for a certification the
+  // learner has no active enrollment in. Offering the whole published catalog
+  // here made the page open on a certification it could never load.
+  const publishedCertifications = data.enrolledCertifications ?? []
   const allLessons = data.lessons ?? []
 
   const [selectedCertificationId, setSelectedCertificationId] = useState(
@@ -837,11 +840,11 @@ export default function LearnerProgressPage() {
         {publishedCertifications.length === 0 ? (
             <LearnerEmptyState
                 icon={BookOpen}
-                title="No published certifications yet"
-                description="Published certifications will appear here with your learning analytics and assessment progress."
+                title="No enrolled certifications yet"
+                description="Enroll in a certification -- or accept an organization invitation -- and your mastery, performance trends, and recommended next steps will appear here."
                 action={
-                  <Button onClick={() => navigate("/learner/learning")}>
-                    Go to My Learning
+                  <Button onClick={() => navigate("/learner/certifications")}>
+                    Browse certifications
                   </Button>
                 }
             />

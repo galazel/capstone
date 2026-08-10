@@ -37,6 +37,8 @@ import {
 import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
 import { LessonAiTutor } from "@/components/learner/lesson-ai-tutor.jsx"
 import { PriorityTag } from "@/components/learner/priority-tag.jsx"
+import { ASSESSMENT_MAX_XP, LESSON_COMPLETION_XP } from "@/lib/xp.js"
+import { announceXpAward } from "@/components/learner/xp-award-modal.jsx"
 import { LessonTool } from "@/components/certifications/lesson-content-renderer.jsx"
 import {
   getLessonById,
@@ -456,6 +458,95 @@ function ReadCheck({ done, label, onToggle, pending, size = "size-8" }) {
   )
 }
 
+/* How much *reading* a section holds. Media keys are skipped -- an S3 object
+   key is a long string that represents no reading at all, and counting it made
+   a section with one image look denser than three paragraphs. */
+const MEDIA_KEY = /(Key|Url)$/
+
+function textVolume(value) {
+  if (typeof value === "string") return value.length
+  if (Array.isArray(value)) return value.reduce((total, item) => total + textVolume(item), 0)
+
+  if (value && typeof value === "object") {
+    return Object.entries(value).reduce(
+      (total, [key, item]) => (MEDIA_KEY.test(key) ? total : total + textVolume(item)),
+      0,
+    )
+  }
+
+  return 0
+}
+
+/**
+ * Which surface a section sits on.
+ *
+ * Alternating, not content-derived. One section per screen means two surfaces
+ * are never visible at once, so any scheme keyed on the section's *contents*
+ * cannot be perceived as a scheme -- it just looks arbitrary. Worse, it clumps:
+ * a run of similar sections produces a run of identical screens and the
+ * background stops signalling that you moved at all. Alternating guarantees
+ * every snap lands somewhere visibly different, which is the clearest
+ * transition cue this layout has.
+ *
+ * Both alternates are light. The obvious version of this pairs white with the
+ * deep blue, but that puts half a lesson's prose in reverse -- fine for a line
+ * of emphasis, tiring for eight paragraphs, and body copy is where legibility
+ * matters most.
+ *
+ * The deep blue is kept as an exception for sections short enough that
+ * reversing them out is emphasis rather than endurance. It overrides whichever
+ * alternate its position would otherwise have given it -- a statement should
+ * look like a statement wherever it falls in the order.
+ *
+ * A section carrying an image or video is never a statement however little
+ * text it has: the media is the content, and reversing it onto a saturated
+ * panel fights it.
+ */
+function sectionTone(section, index) {
+  const hasMedia = section.tools.some((tool) => tool.type === "image" || tool.type === "video")
+  const volume = section.tools.reduce((total, tool) => total + textVolume(tool.data ?? {}), 0)
+
+  if (!hasMedia && volume < 420) return "statement"
+  return index % 2 === 0 ? "plain" : "wash"
+}
+
+const SECTION_TONE = {
+  statement: {
+    shell: "rounded-rb-card bg-rb-humpback-lip px-6 py-12 sm:px-10",
+    heading: "text-white",
+    /* Reversing the tools out of the panel has to be done from outside them:
+       LessonTool renders body copy in `text-foreground`/`text-muted-foreground`
+       and knows nothing about sitting on a dark surface, and it is shared with
+       the admin preview and the enterprise viewer, so it cannot be taught about
+       this one place.
+       Scoped to the tools wrapper rather than the whole section on purpose --
+       `[&_h2]` from the section would also catch the section's own title, and
+       the heading tool's accent panel would land a light wash behind it.
+       That accent panel is the reason for the bg/border overrides: left alone
+       it paints a pale block under white text. */
+    content:
+      "[&_h2]:text-white [&_h2]:border-white/50 [&_h2]:bg-white/10 " +
+      "[&_h3]:text-white [&_p]:text-white/90 [&_li]:text-white/90 " +
+      "[&_strong]:text-white [&_a]:text-white [&_a]:underline " +
+      "[&_.text-muted-foreground]:text-white/85",
+  },
+  wash: {
+    shell: "rounded-rb-card bg-rb-polar px-6 py-12 sm:px-10",
+    heading: "text-rb-eel",
+    content: "",
+  },
+  /* Same padding as the panels despite having no background of its own. The
+     inset has to match or the body copy shifts sideways on every snap, which
+     is far more noticeable than the colour change it would accompany. The old
+     top hairline is gone with it: alternating surfaces already separate the
+     sections, and a rule between two of them just drew a seam. */
+  plain: {
+    shell: "rounded-rb-card px-6 py-12 sm:px-10",
+    heading: "text-rb-eel",
+    content: "",
+  },
+}
+
 function LessonView({
   lessonItem,
   sections,
@@ -475,6 +566,30 @@ function LessonView({
   backTo,
 }) {
   const articleRef = useRef(null)
+  const headerRef = useRef(null)
+
+  /* The sticky header's height, published as a custom property the sections
+     below size themselves against.
+     Measured rather than hardcoded: the chip row wraps to two lines on narrow
+     viewports and gains a chip when a lesson has a quiz or a priority tag, so
+     any constant would be right at one width and wrong at the next -- leaving
+     sections either overflowing the screen or snapping their heading under the
+     bar. */
+  useEffect(() => {
+    const header = headerRef.current
+    const article = articleRef.current
+    if (!header || !article) return undefined
+
+    // offsetHeight, not the entry's contentRect: the header carries `py-4` and
+    // a 2px bottom border, and the content box excludes both -- sizing against
+    // it would leave every section 34px too tall.
+    const observer = new ResizeObserver(() => {
+      article.style.setProperty("--lesson-header-h", `${header.offsetHeight}px`)
+    })
+
+    observer.observe(header)
+    return () => observer.disconnect()
+  }, [])
 
   /* Sentinels sit at the *end* of each section and at the end of the lesson, so
      a section ticks once you have scrolled past its last paragraph rather than
@@ -522,8 +637,14 @@ function LessonView({
   const readCount = sections.filter((section) => readSections.has(section.key)).length
 
   return (
-    <article ref={articleRef} className="w-full px-5 pb-10 sm:px-8 lg:px-12">
-      <div className="sticky top-0 z-10 -mx-5 border-b-2 border-rb-swan bg-rb-snow/95 px-5 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)] backdrop-blur supports-[backdrop-filter]:bg-rb-snow/80 sm:-mx-8 sm:px-8 lg:-mx-12 lg:px-12">
+    <article
+      ref={articleRef}
+      // Fallback until the ResizeObserver above reports the real height, so the
+      // first paint is close rather than full-viewport-plus-a-header tall.
+      style={{ "--lesson-header-h": "116px" }}
+      className="w-full px-4 pb-10 sm:px-6 lg:px-8"
+    >
+      <div ref={headerRef} className="sticky top-0 z-10 -mx-4 border-b-2 border-rb-swan bg-rb-snow/95 px-4 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)] backdrop-blur supports-[backdrop-filter]:bg-rb-snow/80 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <p className="rb-eyebrow">
@@ -564,13 +685,24 @@ function LessonView({
             {lessonDone ? "lesson complete" : `${readCount} of ${sections.length} sections read`}
           </span>
 
+          {/* What finishing this lesson is worth. Paid once -- re-marking a
+              lesson complete is a no-op server-side -- so the chip reads as a
+              receipt rather than a standing offer once it has been earned. */}
+          <span
+            className={`rb-chip ${lessonDone ? "" : "bg-rb-bee-wash text-rb-bee-lip"}`}
+            title={lessonDone ? "Already earned" : "Earned the first time you finish this lesson"}
+          >
+            <Zap className="size-3.5" aria-hidden="true" />
+            {lessonDone ? `${LESSON_COMPLETION_XP} XP earned` : `+${LESSON_COMPLETION_XP} XP`}
+          </span>
+
           {!lessonDone && lessonItem.priorityTag ? (
             <PriorityTag tag={lessonItem.priorityTag} size="sm" />
           ) : null}
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-4xl">
+      <div className="mx-auto w-full max-w-6xl">
         {loading ? (
         <div className="mt-10 flex items-center gap-3 text-sm font-bold text-rb-wolf">
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -592,7 +724,7 @@ function LessonView({
               appears twice at once. */}
           {showToc ? (
             <nav
-              className="mt-6 rounded-rb-card border-2 border-rb-swan bg-rb-snow p-6"
+              className="mt-5 rounded-rb-card border-2 border-rb-swan bg-rb-snow p-5"
               aria-label="Table of contents"
             >
               <p className="rb-eyebrow">table of contents</p>
@@ -639,11 +771,14 @@ function LessonView({
             </nav>
           ) : null}
 
-          <div className="mt-10 divide-y-2 divide-rb-swan">
-            {/* Plain document flow, netacad-style: sections read as one
-                continuous page separated by hairlines, not a stack of
-                individually boxed, colour-banded cards. */}
-            {sections.map((section) => {
+          {/* `space-y`, not `divide-y`: a shared divider drew a hairline across
+              the top of every panelled section, which read as a seam on a card
+              rather than a rule between pages. The alternating surfaces are
+              what separate sections now. */}
+          <div className="mt-6 space-y-4">
+            {sections.map((section, sectionIndex) => {
+              const tone = SECTION_TONE[sectionTone(section, sectionIndex)]
+
               return (
                 /* Each section rises as it is reached. `once` matters here more
                    than anywhere: re-animating body copy on the way back up
@@ -653,13 +788,22 @@ function LessonView({
                   key={section.key}
                   id={section.key}
                   amount={0.05}
-                  className="flex min-h-dvh scroll-mt-8 flex-col justify-center py-8 first:pt-0"
+                  /* One section per screen, snapping into place, its content
+                     centred in the screen it occupies.
+                     `min-h` is measured against the space *below* the sticky
+                     lesson header, not the whole viewport, so a section fills
+                     the screen exactly instead of overflowing it by the height
+                     of the bar sitting on top of it. The scroll margin matches
+                     that offset: scroll margin is what the snap position is
+                     measured from, so without it a snapped heading lands
+                     underneath the header. */
+                  className={`flex min-h-[calc(100dvh-var(--lesson-header-h))] snap-start scroll-mt-[var(--lesson-header-h)] flex-col justify-center ${tone.shell}`}
                 >
-                  <h2 className="font-rb-display text-2xl font-extrabold text-rb-eel">
+                  <h2 className={`font-rb-display text-3xl font-extrabold ${tone.heading}`}>
                     {section.name}
                   </h2>
 
-                  <div className="mt-4 space-y-5">
+                  <div className={`mt-5 space-y-6 ${tone.content}`}>
                     {section.tools.map((tool, toolIndex) => (
                       <div key={tool.id ?? toolIndex}>
                         <LessonTool tool={tool} index={toolIndex} />
@@ -682,7 +826,7 @@ function LessonView({
           reads as a change of activity rather than one more card in the
           reading column. */}
       {lessonItem.quiz ? (
-        <div className="-mx-5 mt-14 sm:-mx-8 lg:-mx-12">
+        <div className="-mx-4 mt-10 sm:-mx-6 lg:-mx-8">
           <QuizBand quiz={lessonItem.quiz} />
         </div>
       ) : null}
@@ -690,7 +834,7 @@ function LessonView({
       {/* End of the lesson. The tick goes green on its own when you get here —
           the sentinel below it is what the scroll check watches — and can also
           be pressed, so a learner who jumped to the end can still set it. */}
-      <div className="mx-auto w-full max-w-4xl">
+      <div className="mx-auto w-full max-w-6xl">
       <motion.div
         aria-live="polite"
         // A single settle when the lesson lands, so finishing registers as an
@@ -773,11 +917,12 @@ function QuizBand({ quiz }) {
               "A short check on what this lesson covered. Answer it while the lesson is fresh — it is scored, and you can retake it."}
           </p>
 
-          <ul className="mt-6 grid gap-3 sm:grid-cols-3">
+          <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
               [CircleHelp, `${quiz.totalQuestions} questions`],
               [CheckCircle2, `${Math.round(Number(quiz.passingScore ?? 0))}% to pass`],
               [Clock, quiz.durationMinutes ? `${quiz.durationMinutes} minutes` : "Self-paced"],
+              [Zap, `up to ${ASSESSMENT_MAX_XP} XP`],
             ].map(([Icon, label]) => (
               <li
                 key={label}
@@ -999,11 +1144,11 @@ export default function LearnerTopicPage() {
       }),
     onSuccess: async (_result, lessonId) => {
       setLocallyDone((current) => new Set(current).add(lessonId))
-      toast.success("Lesson completed", {
-        icon: <Zap className="size-4" aria-hidden="true" />,
-        description: "+100 XP · Your certification progress has been updated.",
+      await announceXpAward({
+        queryClient,
+        title: "Lesson complete",
+        fallback: "You had already earned the XP for this lesson.",
       })
-      await queryClient.invalidateQueries({ queryKey: ["learner-portal-data"] })
       await queryClient.invalidateQueries({ queryKey: ["learner-streak"] })
     },
     onError: (error) => {
@@ -1055,6 +1200,25 @@ export default function LearnerTopicPage() {
     },
     [activeLessonId, readSections],
   )
+
+  /* The snap container has to be the element that actually scrolls, and on this
+     page that is the document -- the sidebars are `sticky`, the centre column
+     is not its own scrollport. So the property goes on <html>, scoped to this
+     page's lifetime rather than living in the stylesheet where it would snap
+     every other page too.
+
+     `proximity`, not `mandatory`: a section longer than the screen still has to
+     be scrollable to its end, and mandatory snapping fights a learner trying to
+     read the bottom of one by yanking them to the next. */
+  useEffect(() => {
+    const root = document.documentElement
+    const previous = root.style.scrollSnapType
+    root.style.scrollSnapType = "y proximity"
+
+    return () => {
+      root.style.scrollSnapType = previous
+    }
+  }, [])
 
   const alreadyDone = activeLessonId ? isDone(activeLessonId) : false
   const completing = completeMutation.isPending
@@ -1258,6 +1422,7 @@ export default function LearnerTopicPage() {
                 lessonId={activeLessonId}
                 lessonName={active?.name}
                 learnerName={data?.user?.firstName ?? data?.learner?.firstName ?? "Learner"}
+                learnerId={data?.learnerId}
                 onClose={() => setTutorOpen(false)}
               />
             </div>
@@ -1331,6 +1496,7 @@ export default function LearnerTopicPage() {
             lessonId={activeLessonId}
             lessonName={active?.name}
             learnerName={data?.user?.firstName ?? data?.learner?.firstName ?? "Learner"}
+            learnerId={data?.learnerId}
             onClose={() => setTutorOpen(false)}
           />
         </SheetContent>

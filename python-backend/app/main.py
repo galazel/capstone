@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.api.routes import certification as certification_routes
 from app.api.routes import question_bank as question_bank_routes
+from app.api.routes import study_aids as study_aid_routes
 from app.api.routes import tutor as tutor_routes
 from app.api.routes import workflow_stream as workflow_stream_routes
 from app.api.routes import workflows as workflow_routes
@@ -83,6 +84,7 @@ def create_app() -> FastAPI:
     # prefix baked into api_router.
     app.include_router(certification_routes.router, prefix="/api/v1/ai")
     app.include_router(question_bank_routes.router, prefix="/api/v1/ai")
+    app.include_router(study_aid_routes.router, prefix="/api/v1/ai")
     app.include_router(tutor_routes.router, prefix="/api/v1/ai")
     # Run registry: what is running, what is paused for review, what happened.
     app.include_router(workflow_routes.router, prefix="/api/v1/ai")

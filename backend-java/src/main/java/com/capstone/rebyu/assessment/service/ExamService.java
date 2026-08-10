@@ -283,8 +283,11 @@ public class ExamService {
             return;
         }
         String scope = dto.getTargetScope();
+        // Ignores AI-tutor-generated practice quizzes (GeneratedAssessmentService)
+        // -- a learner generating one for themselves must never block an admin
+        // from later authoring the lesson's real, official quiz.
         if ("LESSON".equals(scope) && dto.getLessonId() != null
-                && examRepository.existsByLesson_LessonId(dto.getLessonId())) {
+                && examRepository.existsOfficialByLessonId(dto.getLessonId())) {
             throw new BusinessRuleException.AssessmentAlreadyExistsException(
                     "A quiz already exists for this lesson. Edit the existing one instead.");
         }

@@ -49,12 +49,24 @@ async def answer_question(state: TutorState):
 
     messages = []
 
+    if state.get("lessonContext"):
+        messages.append(
+            SystemMessage(
+                content=f"""
+            The learner is currently studying this lesson. Ground your answer in it,
+            and if the question is about "this lesson", assume it means the one below:
+
+            {state["lessonContext"]}
+            """
+            )
+        )
+
     if state.get("summary"):
         messages.append(
             SystemMessage(
                 content=f"""
             Previous conversation summary:
-            
+
             {state["summary"]}
             """
             )

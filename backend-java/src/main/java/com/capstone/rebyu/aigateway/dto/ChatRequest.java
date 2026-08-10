@@ -20,4 +20,8 @@ public class ChatRequest {
     // Boxed so @NotNull applies correctly; @NotBlank is invalid on numeric types.
     @NotNull
     private String lessonName;
+
+    // Nullable: older callers (or a tutor opened outside a lesson) still work,
+    // just without the AI grounding its answer in the lesson's content.
+    private Long lessonId;
 }

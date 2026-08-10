@@ -72,6 +72,15 @@ def mark_generation_request_failed(session: Session, generation_request_id: int,
     session.commit()
 
 
+def get_lesson(session: Session, lesson_id: int) -> dict[str, Any] | None:
+    row = session.execute(
+        select(lessons.c.lesson_id, lessons.c.name, lessons.c.lesson_component_structure).where(
+            lessons.c.lesson_id == lesson_id
+        )
+    ).mappings().first()
+    return dict(row) if row else None
+
+
 def get_certification(session: Session, certification_id: int) -> dict[str, Any] | None:
     row = session.execute(
         select(certifications).where(certifications.c.certification_id == certification_id)

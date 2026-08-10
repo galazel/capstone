@@ -20,6 +20,8 @@ import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 
 import { cn } from "@/lib/utils"
+import { LESSON_COMPLETION_XP } from "@/lib/xp.js"
+import { announceXpAward } from "@/components/learner/xp-award-modal.jsx"
 import {
   getCertificationModules,
   getLessonById,
@@ -560,18 +562,21 @@ export default function LearnerLessonPage() {
         markLessonComplete({
           learnerId: data?.learnerId,
           lessonId: Number(lessonId),
-          completedAt: new Date().toISOString(),
+          // `completedAt` is a LocalDateTime server-side and rejects the
+          // trailing `Z` an ISO string carries -- sending it made every
+          // completion from this page 400, so no XP was ever awarded.
+          completedAt: new Date().toISOString().slice(0, 19),
         }),
 
     onSuccess: async () => {
       setLocallyCompleted(true)
-      toast.success("Lesson completed", {
-        description: "Your certification progress has been updated.",
-      })
 
-      await queryClient.invalidateQueries({
-        queryKey: ["learner-portal-data"],
+      await announceXpAward({
+        queryClient,
+        title: "Lesson complete",
+        fallback: "You had already earned the XP for this lesson.",
       })
+      await queryClient.invalidateQueries({ queryKey: ["learner-streak"] })
     },
 
     onError: (error) => {
@@ -766,8 +771,8 @@ export default function LearnerLessonPage() {
                         </p>
                         <p className="mt-0.5 text-xs opacity-80">
                           {completed
-                              ? "This lesson is checked off in your course outline."
-                              : "Completion is saved automatically when you reach the end."}
+                              ? `This lesson is checked off in your course outline. ${LESSON_COMPLETION_XP} XP earned.`
+                              : `Completion is saved automatically when you reach the end — worth +${LESSON_COMPLETION_XP} XP.`}
                         </p>
                       </div>
                     </div>
@@ -808,6 +813,7 @@ export default function LearnerLessonPage() {
                       lessonId={lessonId}
                       lessonName={currentLesson.name}
                       learnerName={learnerName}
+                      learnerId={data?.learnerId}
                       onClose={() => setCoachOpen(false)}
                   />
                 </div>
@@ -857,6 +863,7 @@ export default function LearnerLessonPage() {
                 lessonId={lessonId}
                 lessonName={currentLesson.name}
                 learnerName={learnerName}
+                learnerId={data?.learnerId}
                 onClose={() => setCoachOpen(false)}
             />
           </SheetContent>

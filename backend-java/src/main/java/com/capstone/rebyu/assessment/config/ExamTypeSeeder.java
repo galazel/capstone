@@ -54,7 +54,12 @@ public class ExamTypeSeeder implements ApplicationRunner {
             "MOCK_EXAM",
             "MAJOR_EXAM",
             "MIDDLE_EXAM",
-            "LESSON_QUIZ");
+            "LESSON_QUIZ",
+            // The AI tutor's "generate a quiz/flashcards" action
+            // (LearnerToolsController#generate) writes real exams/questions
+            // under these types instead of the bespoke practice-set tables.
+            "GENERATED_QUIZ",
+            "GENERATED_FLASHCARD");
 
     private final ExamTypeRepository examTypeRepository;
 

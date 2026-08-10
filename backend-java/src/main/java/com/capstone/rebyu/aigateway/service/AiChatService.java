@@ -1,8 +1,10 @@
 package com.capstone.rebyu.aigateway.service;
 
 import com.capstone.rebyu.aigateway.client.AiServiceClient;
+import com.capstone.rebyu.aigateway.dto.AppendConversationRequest;
 import com.capstone.rebyu.aigateway.dto.ChatRequest;
 import com.capstone.rebyu.aigateway.dto.ChatResponse;
+import com.capstone.rebyu.aigateway.dto.ConversationResponseDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -15,5 +17,13 @@ public class AiChatService {
 
     public ChatResponse chat(ChatRequest request) {
         return aiServiceClient.chat(request);
+    }
+
+    public ConversationResponseDto getConversation(String sessionId) {
+        return aiServiceClient.getConversation(sessionId);
+    }
+
+    public ConversationResponseDto appendConversation(AppendConversationRequest request) {
+        return aiServiceClient.appendConversation(request);
     }
 }

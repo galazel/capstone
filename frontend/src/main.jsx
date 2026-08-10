@@ -7,6 +7,7 @@ import { BrowserRouter } from "react-router-dom"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { Toaster } from "@/components/ui/sonner"
+import { XpAwardModal } from "@/components/learner/xp-award-modal.jsx"
 import { configureAmplify } from "@/lib/amplify.js"
 import { AuthProvider } from "@/context/auth-context.jsx"
 import { MotionConfig } from "framer-motion"
@@ -32,6 +33,11 @@ createRoot(rootElement).render(
               <AuthProvider>
                 <App />
                 <Toaster />
+                {/* Hosted here, not inside a page: submitting an assessment
+                    navigates to the results page straight after awarding, and
+                    a modal owned by the submitting page would unmount with
+                    it. */}
+                <XpAwardModal />
               </AuthProvider>
             </QueryClientProvider>
           </TooltipProvider>

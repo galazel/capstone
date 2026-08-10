@@ -1,6 +1,6 @@
 package com.capstone.rebyu.bkt.controller;
 
-import com.capstone.rebyu.auth.dto.CurrentUserDto;
+import com.capstone.rebyu.auth.service.CognitoAuthService;
 import com.capstone.rebyu.bkt.dto.ConfidenceView;
 import com.capstone.rebyu.bkt.dto.LearnerMasteryView;
 import com.capstone.rebyu.bkt.dto.LessonPriorityView;
@@ -9,6 +9,8 @@ import com.capstone.rebyu.bkt.service.LearnerMasteryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -26,6 +28,7 @@ import java.util.Map;
 public class BKTController {
 
   private final LearnerMasteryService learnerMasteryService;
+  private final CognitoAuthService auth;
 
   /**
    * Get learner's overall confidence/mastery in a certification
@@ -35,7 +38,8 @@ public class BKTController {
   @PreAuthorize("hasRole('LEARNER')")
   public ResponseEntity<ConfidenceView> getMyConfidence(
       @PathVariable Long certificationId,
-      @RequestAttribute CurrentUserDto currentUser) {
+      @AuthenticationPrincipal Jwt jwt) {
+    var currentUser = auth.syncCurrentUser(jwt, jwt.getTokenValue());
     var result = learnerMasteryService.getConfidenceForAnalytics(currentUser.getLearnerId(), certificationId);
     return result.available() && result.confidence() != null
         ? ResponseEntity.ok(result.confidence())
@@ -50,7 +54,8 @@ public class BKTController {
   @PreAuthorize("hasRole('LEARNER')")
   public ResponseEntity<List<LessonPriorityView>> getMyLessonPriorities(
       @PathVariable Long certificationId,
-      @RequestAttribute CurrentUserDto currentUser) {
+      @AuthenticationPrincipal Jwt jwt) {
+    var currentUser = auth.syncCurrentUser(jwt, jwt.getTokenValue());
     var result = learnerMasteryService.getLessonPrioritiesForAnalytics(currentUser.getLearnerId(), certificationId);
     return ResponseEntity.ok(result.lessons());
   }
@@ -63,7 +68,8 @@ public class BKTController {
   @PreAuthorize("hasRole('LEARNER')")
   public ResponseEntity<List<MasteryHistoryView>> getMyMasteryHistory(
       @PathVariable Long certificationId,
-      @RequestAttribute CurrentUserDto currentUser) {
+      @AuthenticationPrincipal Jwt jwt) {
+    var currentUser = auth.syncCurrentUser(jwt, jwt.getTokenValue());
     var result = learnerMasteryService.getMasteryHistoryForAnalytics(currentUser.getLearnerId(), certificationId);
     return ResponseEntity.ok(result.history());
   }
@@ -75,7 +81,8 @@ public class BKTController {
   @PreAuthorize("hasRole('LEARNER')")
   public ResponseEntity<LearnerMasteryView> getMyMastery(
       @RequestParam(required = false) List<Long> lessonIds,
-      @RequestAttribute CurrentUserDto currentUser) {
+      @AuthenticationPrincipal Jwt jwt) {
+    var currentUser = auth.syncCurrentUser(jwt, jwt.getTokenValue());
     LearnerMasteryView mastery = learnerMasteryService.getMastery(currentUser.getLearnerId(), lessonIds);
     return mastery.items().isEmpty()
         ? ResponseEntity.noContent().build()
@@ -89,7 +96,8 @@ public class BKTController {
   @PreAuthorize("hasRole('LEARNER')")
   public ResponseEntity<Map<String, Object>> getMyConfidenceMap(
       @PathVariable Long certificationId,
-      @RequestAttribute CurrentUserDto currentUser) {
+      @AuthenticationPrincipal Jwt jwt) {
+    var currentUser = auth.syncCurrentUser(jwt, jwt.getTokenValue());
     Map<String, Object> confidenceMap = learnerMasteryService.getConfidence(currentUser.getLearnerId(), certificationId);
     return ResponseEntity.ok(confidenceMap);
   }

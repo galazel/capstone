@@ -192,8 +192,13 @@ export async function getLearnerPortalData() {
   const userId = learner?.userId ?? identity.userId
   const user = portal.user ?? null
 
-  const purchaseEnrollments = asArray(learnerCertifications).filter((item) =>
-    isSameId(item.learnerId, learnerId)
+  // Expired/revoked rows are not access. The backend only ever honours an
+  // `active` enrollment, so counting the others here just produced UI that
+  // offered a certification every scoped endpoint would then 404 on.
+  const purchaseEnrollments = asArray(learnerCertifications).filter(
+    (item) =>
+      isSameId(item.learnerId, learnerId) &&
+      String(item.status ?? "active").toLowerCase() === "active"
   )
 
   // Enterprise-assigned access: map this learner's active
@@ -351,6 +356,12 @@ export async function getLearnerPortalData() {
     performancePoints,
     recentExamResults,
     resources,
+    // Server-authoritative gamification balances, passed straight through from
+    // `learners/me/portal`. Dropping them here is why the header's XP counter
+    // read 0 no matter how much XP the ledger had actually awarded.
+    totalXp: Number(portal.totalXp) || 0,
+    coinBalance: Number(portal.coinBalance) || 0,
+    aiCreditsRemaining: Number(portal.aiCreditsRemaining) || 0,
     stats: {
       totalLessons,
       completedCount,

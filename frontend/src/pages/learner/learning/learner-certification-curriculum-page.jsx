@@ -14,6 +14,7 @@ import {
   Loader2,
   Lock,
   Trophy,
+  Zap,
 } from "@/components/icons"
 
 import {
@@ -38,6 +39,7 @@ import {
 } from "@/components/motion/rebyu-motion.jsx"
 import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
 import { PRIORITY_CONFIG, PriorityTag } from "@/components/learner/priority-tag.jsx"
+import { ASSESSMENT_MAX_XP, LESSON_COMPLETION_XP } from "@/lib/xp.js"
 import { getExams, getExamTypes } from "@/services/assessmentService.js"
 import { getProgressAnalytics } from "@/services/learnerAnalyticsService.js"
 import { buildCurriculum, hasSatDiagnostic } from "./curriculum-model.js"
@@ -137,7 +139,43 @@ const PRIORITY_SUMMARY_LABEL = {
  *
  *  A div, not an li: the `<StaggerItem>` around it supplies the list item, and
  *  an li inside an li is invalid. */
-function ItemRow({ icon: Icon, label, meta, done, priorityTag, historyHref }) {
+/**
+ * What finishing this row pays, in the row itself.
+ *
+ * Awards are idempotent server-side, so once a row is done the pill switches
+ * from a promise ("+100 XP") to a receipt and drops its saturated fill -- a
+ * banked reward should not keep advertising itself as available.
+ *
+ * `upTo` marks a variable award (assessments pay by outcome: 30 finished,
+ * 100 passed, 200 perfect). There the number is a ceiling rather than a
+ * figure, and once earned the pill drops it entirely rather than quoting a
+ * total the learner may not have reached.
+ */
+function XpPill({ amount, earned, upTo = false }) {
+  const label = earned
+    ? (upTo ? "XP earned" : `${amount} XP`)
+    : (upTo ? `up to ${amount} XP` : `+${amount} XP`)
+
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-extrabold tabular-nums ${
+        earned ? "bg-rb-swan text-rb-wolf" : "bg-rb-bee-wash text-rb-bee-lip"
+      }`}
+      title={
+        earned
+          ? "Already earned"
+          : upTo
+            ? "30 XP for finishing, 100 for passing, 200 for a perfect score"
+            : "Earned once, the first time you finish this"
+      }
+    >
+      <Zap className="size-3" aria-hidden="true" />
+      {label}
+    </span>
+  )
+}
+
+function ItemRow({ icon: Icon, label, meta, done, priorityTag, historyHref, xp, xpUpTo = false }) {
   // Critical is the one tag that means "you are behind here" -- everything
   // else on this row is informational, so it is the only one that earns a
   // red highlight and a pulse instead of just its usual pill.
@@ -182,6 +220,8 @@ function ItemRow({ icon: Icon, label, meta, done, priorityTag, historyHref }) {
 
       {meta ? <span className="shrink-0 text-xs font-bold text-rb-wolf">{meta}</span> : null}
 
+      {xp ? <XpPill amount={xp} earned={Boolean(done)} upTo={xpUpTo} /> : null}
+
       {/* Every non-diagnostic assessment allows unlimited retakes -- this is
           the quick way to see every past attempt without going through a
           fresh attempt's result page first. */}
@@ -197,7 +237,7 @@ function ItemRow({ icon: Icon, label, meta, done, priorityTag, historyHref }) {
   )
 }
 
-function MiddleRow({ middle, tone, index, onStudy }) {
+function MiddleRow({ middle, tone, index, onStudy, takenExamIds }) {
   const [open, setOpen] = useState(false)
 
   const lessons = middle.lessons
@@ -280,6 +320,7 @@ function MiddleRow({ middle, tone, index, onStudy }) {
                     label={lesson.name}
                     done={lesson.completed}
                     priorityTag={lesson.priorityTag}
+                    xp={LESSON_COMPLETION_XP}
                   />
                 </StaggerItem>
               ))}
@@ -296,6 +337,9 @@ function MiddleRow({ middle, tone, index, onStudy }) {
                         label={lesson.quiz.title}
                       meta={`${lesson.quiz.totalQuestions} questions`}
                       historyHref={`/learner/assessments/${lesson.quiz.examId}/history`}
+                      xp={ASSESSMENT_MAX_XP}
+                      xpUpTo
+                      done={takenExamIds?.has(String(lesson.quiz.examId))}
                     />
                   </StaggerItem>
                 ))}
@@ -309,6 +353,9 @@ function MiddleRow({ middle, tone, index, onStudy }) {
                       Number(middle.assessment.passingScore ?? 0),
                     )}% to pass`}
                     historyHref={`/learner/assessments/${middle.assessment.examId}/history`}
+                    xp={ASSESSMENT_MAX_XP}
+                    xpUpTo
+                    done={takenExamIds?.has(String(middle.assessment.examId))}
                   />
                 </StaggerItem>
               ) : null}
@@ -320,11 +367,52 @@ function MiddleRow({ middle, tone, index, onStudy }) {
   )
 }
 
-function MajorCard({ major, locked, onLocked, onStudy }) {
+/**
+ * How badly this unit needs attention: the worst priority sitting on any
+ * *unfinished* lesson inside it. A finished lesson keeps whatever tag it was
+ * given, so counting those would leave a unit agitating over work already
+ * done.
+ */
+function urgencyOf(major) {
+  let high = false
+
+  for (const middle of major.middles) {
+    for (const lesson of middle.lessons) {
+      if (lesson.completed) continue
+      if (lesson.priorityTag === "CRITICAL_PRIORITY") return "CRITICAL_PRIORITY"
+      if (lesson.priorityTag === "HIGH_PRIORITY") high = true
+    }
+  }
+
+  return high ? "HIGH_PRIORITY" : null
+}
+
+/* A unit with urgent work in it does not sit still.
+   Two tiers, because one shake for everything would flatten the difference the
+   priority tags exist to draw: critical shudders harder and comes back around
+   twice as often as high. Both pause between bursts -- a permanently vibrating
+   card stops reading as urgent within about ten seconds and just becomes
+   noise you scroll past. The rotation is what makes it read as a temper rather
+   than a slider: pure x-translation reads mechanical. */
+const URGENCY_SHAKE = {
+  CRITICAL_PRIORITY: {
+    x: [0, -7, 7, -5, 5, -2.5, 2.5, 0],
+    rotate: [0, -1.1, 1.1, -0.7, 0.7, -0.3, 0.3, 0],
+    transition: { duration: 0.6, repeat: Infinity, repeatDelay: 2.2, ease: "easeInOut" },
+  },
+  HIGH_PRIORITY: {
+    x: [0, -4, 4, -2.5, 2.5, 0],
+    rotate: [0, -0.6, 0.6, -0.3, 0.3, 0],
+    transition: { duration: 0.5, repeat: Infinity, repeatDelay: 4.4, ease: "easeInOut" },
+  },
+}
+
+function MajorCard({ major, locked, onLocked, onStudy, takenExamIds }) {
   const [open, setOpen] = useState(false)
   const shake = useAnimationControls()
   const tone = TONE[major.tone]
   const Icon = major.icon
+  const urgency = useMemo(() => urgencyOf(major), [major])
 
   function toggle() {
     if (locked) {
@@ -339,6 +427,18 @@ function MajorCard({ major, locked, onLocked, onStudy }) {
   }
 
   return (
+    /* The urgency loop rides on a wrapper rather than sharing the article's
+       `animate` with the lock shake. One element cannot hold both a declarative
+       loop and imperative controls -- whichever ran last would own `x`, and
+       pressing a locked unit would kill its agitation for good. Nested, the two
+       transforms simply compose. */
+    <motion.div
+      // Never while locked. Priorities only exist after the diagnostic, so this
+      // should not arise -- but a unit demanding attention it will not let you
+      // give is the one version of this that would just be irritating.
+      animate={urgency && !locked ? URGENCY_SHAKE[urgency] : undefined}
+      className="rounded-rb-card"
+    >
     <motion.article
       // The dialog explains the lock, but it opens elsewhere on the screen. The
       // shake answers where the finger already is.
@@ -385,7 +485,16 @@ function MajorCard({ major, locked, onLocked, onStudy }) {
             </span>
           ) : null}
 
-          <p className={`rb-eyebrow ${tone.ink}`}>unit {major.index}</p>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <p className={`rb-eyebrow ${tone.ink}`}>unit {major.index}</p>
+
+            {/* The shake is the attention-getter, but it cannot be the only
+                carrier: MotionConfig honours prefers-reduced-motion app-wide,
+                which reduces the whole loop to nothing for the learners most
+                likely to need the warning. The tag says the same thing in
+                text. */}
+            {urgency && !locked ? <PriorityTag tag={urgency} size="sm" /> : null}
+          </div>
 
           <p className="rb-body mt-3 max-w-3xl pr-24">
             {major.middles.length} topic{major.middles.length === 1 ? "" : "s"} in this unit
@@ -449,6 +558,7 @@ function MajorCard({ major, locked, onLocked, onStudy }) {
                   tone={major.tone}
                   index={`${major.index}.${index + 1}`}
                   onStudy={onStudy}
+                  takenExamIds={takenExamIds}
                 />
               </StaggerItem>
             ))}
@@ -471,6 +581,11 @@ function MajorCard({ major, locked, onLocked, onStudy }) {
               </div>
 
               <div className="flex shrink-0 items-center gap-3">
+                <XpPill
+                  amount={ASSESSMENT_MAX_XP}
+                  upTo
+                  earned={Boolean(takenExamIds?.has(String(major.assessment.examId)))}
+                />
                 <Link
                   to={`/learner/assessments/${major.assessment.examId}/history`}
                   className="text-xs font-bold text-rb-fox-lip underline decoration-dotted underline-offset-2 hover:text-rb-fox"
@@ -490,12 +605,14 @@ function MajorCard({ major, locked, onLocked, onStudy }) {
         </div>
       </Collapse>
     </motion.article>
+    </motion.div>
   )
 }
 
-function MockExamCard({ exam, locked, onLocked }) {
+function MockExamCard({ exam, locked, onLocked, takenExamIds }) {
   const tone = TONE.fox
   const passMark = Math.round(Number(exam.passingScore ?? 0))
+  const taken = Boolean(takenExamIds?.has(String(exam.examId)))
 
   return (
     <article className="overflow-hidden rounded-rb-card border-2 border-rb-swan bg-rb-snow shadow-[0_5px_0_var(--color-rb-swan)]">
@@ -551,6 +668,9 @@ function MockExamCard({ exam, locked, onLocked }) {
             </li>
             <li className={`rounded-rb-pill px-3.5 py-2 text-sm font-bold ${tone.chip}`}>
               all units
+            </li>
+            <li className={`rounded-rb-pill px-3.5 py-2 text-sm font-bold ${tone.chip}`}>
+              {taken ? "XP earned" : `up to ${ASSESSMENT_MAX_XP} XP`}
             </li>
           </ul>
 
@@ -687,6 +807,20 @@ export default function LearnerCertificationCurriculumPage() {
       certificationId,
     })
   }, [curriculum, data?.examResults, certificationId])
+
+  // Assessment XP is paid once per exam, however many times it is retaken (see
+  // AssessmentAttemptService, which keys the award by examId). A learner who
+  // has a result for an exam has already banked it, so the row shows what they
+  // earned rather than dangling XP they cannot earn twice.
+  const takenExamIds = useMemo(
+    () =>
+      new Set(
+        (data?.examResults ?? [])
+          .map((result) => (result.examId == null ? null : String(result.examId)))
+          .filter(Boolean),
+      ),
+    [data?.examResults],
+  )
 
   const [skippedMasteryWait, setSkippedMasteryWait] = useState(false)
   const masteryReady =
@@ -826,40 +960,53 @@ export default function LearnerCertificationCurriculumPage() {
               worst tag first, so the learner knows before opening a unit
               whether anything here is urgent. Only shown once the diagnostic
               has produced a priority order; before that every lesson's tag
-              is null and the row would just be empty. */}
-          {diagnosticDone && PRIORITY_SUMMARY_ORDER.some((tag) => priorityCounts[tag]) ? (
+              is null and the row would be meaningless. Stays visible even
+              when nothing is pending, so "all caught up" reads as a result
+              rather than the row just disappearing. */}
+          {diagnosticDone ? (
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <span className="text-[11px] font-bold uppercase tracking-wide text-rb-wolf">
                 priority focus
               </span>
 
-              {PRIORITY_SUMMARY_ORDER.map((tag) => {
-                const count = priorityCounts[tag]
-                if (!count) return null
+              {PRIORITY_SUMMARY_ORDER.some((tag) => priorityCounts[tag]) ? (
+                PRIORITY_SUMMARY_ORDER.map((tag) => {
+                  const count = priorityCounts[tag]
+                  if (!count) return null
 
-                const config = PRIORITY_CONFIG[tag]
-                const Icon = config.icon
-                const isCritical = tag === "CRITICAL_PRIORITY"
+                  const config = PRIORITY_CONFIG[tag]
+                  const Icon = config.icon
+                  const isCritical = tag === "CRITICAL_PRIORITY"
+                  const isHigh = tag === "HIGH_PRIORITY"
+                  const isUrgent = isCritical || isHigh
 
-                return (
-                  <motion.span
-                    key={tag}
-                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-bold ${config.bgColor} ${config.textColor} ${
-                      isCritical ? "ring-2 ring-rb-cardinal/40" : ""
-                    }`}
-                    animate={isCritical ? { scale: [1, 1.06, 1] } : undefined}
-                    transition={
-                      isCritical
-                        ? { duration: 1.6, repeat: Infinity, ease: "easeInOut" }
-                        : undefined
-                    }
-                  >
-                    <Icon className="size-4" aria-hidden="true" />
-                    <CountUp value={count} className="rb-numeric" />
-                    {PRIORITY_SUMMARY_LABEL[tag]}
-                  </motion.span>
-                )
-              })}
+                  return (
+                    <motion.span
+                      key={tag}
+                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-bold ${
+                        isUrgent
+                          ? "bg-rb-cardinal-wash text-rb-cardinal-lip"
+                          : `${config.bgColor} ${config.textColor}`
+                      } ${isUrgent ? "ring-2 ring-rb-cardinal/40" : ""}`}
+                      animate={isUrgent ? { scale: [1, 1.06, 1] } : undefined}
+                      transition={
+                        isUrgent
+                          ? { duration: 1.6, repeat: Infinity, ease: "easeInOut" }
+                          : undefined
+                      }
+                    >
+                      <Icon className="size-4" aria-hidden="true" />
+                      <CountUp value={count} className="rb-numeric" />
+                      {PRIORITY_SUMMARY_LABEL[tag]}
+                    </motion.span>
+                  )
+                })
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-rb-feather-wash px-3 py-1.5 text-sm font-bold text-rb-feather-ink">
+                  <CheckCircle2 className="size-4" aria-hidden="true" />
+                  all caught up
+                </span>
+              )}
             </div>
           ) : null}
 
@@ -920,6 +1067,7 @@ export default function LearnerCertificationCurriculumPage() {
                   locked={!diagnosticDone}
                   onLocked={() => setDialogOpen(true)}
                   onStudy={openTopic}
+                  takenExamIds={takenExamIds}
                 />
               </StaggerItem>
             ))}
@@ -930,6 +1078,7 @@ export default function LearnerCertificationCurriculumPage() {
                   exam={curriculum.mockExam}
                   locked={!diagnosticDone}
                   onLocked={() => setDialogOpen(true)}
+                  takenExamIds={takenExamIds}
                 />
               </StaggerItem>
             ) : null}
