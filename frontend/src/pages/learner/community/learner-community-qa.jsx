@@ -685,9 +685,14 @@ export default function Community() {
 
     return (
         <div className="space-y-6">
-            {/* pb clears the 4px tactile lip under "Create a circle" — at py-3 the
-                lip landed on the strip's bottom border */}
-            <div className="sticky top-16 z-20 -mx-4 border-b-2 border-border bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+            {/* The horizontal strip is the SMALL-SCREEN form of the left rail
+                below: same filters, same "create a circle" action. Hidden from
+                lg up, where the rail itself is on screen and showing both
+                would be two competing copies of one navigation.
+
+                pb clears the 4px tactile lip under "Create a circle" — at py-3
+                the lip landed on the strip's bottom border. */}
+            <div className="sticky top-16 z-20 -mx-4 border-b-2 border-border bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:-mx-6 sm:px-6 lg:hidden">
                 <div className="mx-auto flex w-full max-w-[1200px] items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                             {FEED_TABS.map((tab, index) => {
                                     const Icon = index === 0
@@ -742,7 +747,128 @@ export default function Community() {
                 </div>
             </div>
 
-            <div className="mx-auto grid w-full max-w-[1200px] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+            {/* Three columns: filters/circles rail, the feed, then the
+                community's own panels -- the feed keeps the middle so it is
+                what the eye lands on, and each rail collapses independently
+                (circles at lg, panels at xl) rather than the whole layout
+                snapping to one column at a single breakpoint. */}
+            <div className="mx-auto grid w-full max-w-[1400px] items-start gap-6 lg:grid-cols-[232px_minmax(0,1fr)] xl:grid-cols-[232px_minmax(0,1fr)_300px]">
+
+                <aside className="sticky top-24 hidden lg:block">
+                    <nav className="space-y-1">
+                        <p className="px-3 pb-1 font-rb-display text-xs font-extrabold lowercase text-muted-foreground">
+                            feed
+                        </p>
+
+                        {FEED_TABS.map((tab, index) => {
+                            const Icon = index === 0
+                                ? Home
+                                : tab.value === "circle"
+                                    ? UsersRound
+                                    : tab.value === "discussion"
+                                        ? MessageCircle
+                                        : tab.value === "quiz"
+                                            ? BookOpen
+                                            : FileText
+                            const active = !showSavedOnly && activeTab === tab.value
+
+                            return (
+                                <button
+                                    key={tab.value}
+                                    type="button"
+                                    onClick={() => selectFeedTab(tab.value)}
+                                    className={`flex w-full items-center gap-3 rounded-rb-tile px-3 py-2 text-left text-sm font-bold transition-colors ${
+                                        active
+                                            ? "bg-rb-macaw-wash text-rb-macaw-lip"
+                                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                    }`}
+                                >
+                                    <Icon className="size-4 shrink-0" />
+                                    <span className="min-w-0 truncate">{tab.label}</span>
+                                </button>
+                            )
+                        })}
+
+                        <button
+                            type="button"
+                            onClick={() => setShowSavedOnly((current) => !current)}
+                            className={`flex w-full items-center gap-3 rounded-rb-tile px-3 py-2 text-left text-sm font-bold transition-colors ${
+                                showSavedOnly
+                                    ? "bg-rb-macaw-wash text-rb-macaw-lip"
+                                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                            }`}
+                        >
+                            <Bookmark className={`size-4 shrink-0 ${showSavedOnly ? "fill-current" : ""}`} />
+                            <span className="min-w-0 flex-1 truncate">Saved</span>
+                            {savedCount > 0 ? (
+                                <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-extrabold text-muted-foreground">
+                                    {savedCount}
+                                </span>
+                            ) : null}
+                        </button>
+                    </nav>
+
+                    <div className="mt-5 border-t-2 border-border pt-4">
+                        <div className="flex items-center justify-between gap-2 px-3 pb-1">
+                            <p className="font-rb-display text-xs font-extrabold lowercase text-muted-foreground">
+                                study circles
+                            </p>
+
+                            <button
+                                type="button"
+                                onClick={() => setCreateCircleOpen(true)}
+                                aria-label="Create study circle"
+                                className="grid size-6 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                            >
+                                <Plus className="size-4" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-0.5">
+                            {circles.map((circle) => (
+                                <div
+                                    key={circle.circleId}
+                                    className="group flex items-center gap-3 rounded-rb-tile px-3 py-2 transition-colors hover:bg-accent"
+                                >
+                                    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-rb-bee-wash font-rb-display text-[0.625rem] font-extrabold lowercase text-rb-bee-lip">
+                                        {circle.initials}
+                                    </span>
+
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-bold text-foreground">{circle.name}</p>
+                                        <p className="truncate text-[11px] font-semibold text-muted-foreground">
+                                            {circle.members?.toLocaleString?.() ?? 0} members
+                                        </p>
+                                    </div>
+
+                                    {circle.owner ? (
+                                        <span className="shrink-0 text-[10px] font-extrabold uppercase tracking-wide text-muted-foreground">
+                                            owner
+                                        </span>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleJoinCircle(circle.circleId)}
+                                            className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-extrabold uppercase tracking-wide transition-colors ${
+                                                circle.joined
+                                                    ? "text-muted-foreground hover:text-foreground"
+                                                    : "bg-rb-macaw-wash text-rb-macaw-lip hover:bg-rb-macaw hover:text-white"
+                                            }`}
+                                        >
+                                            {circle.joined ? "joined" : "join"}
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+
+                            {circles.length === 0 ? (
+                                <p className="px-3 py-2 text-xs text-muted-foreground">
+                                    No study circles yet. Create the first one.
+                                </p>
+                            ) : null}
+                        </div>
+                    </div>
+                </aside>
 
                 <main className="min-w-0 space-y-4">
                     <PanelCard className="p-4">
@@ -752,10 +878,21 @@ export default function Community() {
                                 Start a discussion or share a review resource...
                             </div>
                         </button>
-                        <div className="mt-4 grid gap-1 border-t-2 border-border pt-3 sm:grid-cols-3">
-                            <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => openComposer("discussion")}><MessageCircle className="mr-2 size-4 text-rb-macaw-lip" />Discussion</Button>
-                            <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => openComposer("quiz")}><BookOpen className="mr-2 size-4 text-rb-feather-lip" />Share quiz</Button>
-                            <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => openComposer("flashcard")}><Sparkles className="mr-2 size-4 text-rb-beetle-lip" />Share flashcards</Button>
+                        {/* Attachment-style actions on the left, the primary
+                            action on the right. The labels stay visible from sm
+                            up: "share a quiz" is not something an icon alone
+                            communicates, unlike the photo/emoji icons this
+                            shape usually carries elsewhere. */}
+                        <div className="mt-3 flex items-center justify-between gap-2 border-t-2 border-border pt-3">
+                            <div className="flex min-w-0 items-center gap-0.5">
+                                <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => openComposer("discussion")} title="Start a discussion"><MessageCircle className="size-4 text-rb-macaw-lip sm:mr-2" /><span className="hidden sm:inline">Discussion</span></Button>
+                                <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => openComposer("quiz")} title="Share a quiz"><BookOpen className="size-4 text-rb-feather-lip sm:mr-2" /><span className="hidden sm:inline">Quiz</span></Button>
+                                <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => openComposer("flashcard")} title="Share flashcards"><Sparkles className="size-4 text-rb-beetle-lip sm:mr-2" /><span className="hidden sm:inline">Flashcards</span></Button>
+                            </div>
+
+                            <Button type="button" size="sm" className="shrink-0 rounded-full" onClick={() => openComposer("discussion")}>
+                                Post
+                            </Button>
                         </div>
                     </PanelCard>
 
@@ -811,36 +948,25 @@ export default function Community() {
                         </section>
                     ) : null}
 
-                    <div className="flex flex-col gap-3 border-b-2 border-border pb-3 xl:hidden sm:flex-row sm:items-center sm:justify-between">
+                    {/* Heading only -- the filters themselves live in the top
+                        strip below lg and in the left rail above it, so a
+                        third copy here was redundant at every width. */}
+                    <div className="flex items-center justify-between gap-3 border-b-2 border-border pb-3">
                         <h2 className="font-rb-display text-sm font-extrabold lowercase">
-                            {showSavedOnly ? "Saved posts" : "Community news feed"}
+                            {showSavedOnly
+                                ? "Saved posts"
+                                : activeTab === "for-you"
+                                    ? "Community news feed"
+                                    : FEED_TABS.find((tab) => tab.value === activeTab)?.label ?? "Community news feed"}
                         </h2>
 
-                        <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
-                            {FEED_TABS.map((tab) => (
-                                <Button
-                                    key={tab.value}
-                                    type="button"
-                                    variant={!showSavedOnly && activeTab === tab.value ? "secondary" : "ghost"}
-                                    size="sm"
-                                    onClick={() => selectFeedTab(tab.value)}
-                                    className="shrink-0 rounded-full"
-                                >
-                                    {tab.label}
-                                </Button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {showSavedOnly ? (
-                        <div className="hidden items-center justify-between border-b-2 border-border pb-3 xl:flex">
-                            <h2 className="font-rb-display text-sm font-extrabold lowercase">Saved posts</h2>
-                            <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => setShowSavedOnly(false)}>
+                        {showSavedOnly ? (
+                            <Button type="button" variant="ghost" size="sm" className="shrink-0 rounded-full" onClick={() => setShowSavedOnly(false)}>
                                 <X className="mr-2 h-4 w-4" />
                                 Back to feed
                             </Button>
-                        </div>
-                    ) : null}
+                        ) : null}
+                    </div>
 
                     {visiblePosts.length > 0 ? (
                         <div className="space-y-3">
@@ -876,7 +1002,10 @@ export default function Community() {
                     )}
                 </main>
 
-                <aside className="sticky top-24 hidden space-y-4 lg:block">
+                {/* xl, not lg: at lg the left rail already takes 232px, and
+                    keeping this one too squeezed the feed below a comfortable
+                    reading width. */}
+                <aside className="sticky top-24 hidden space-y-4 xl:block">
                     <PanelCard className="p-4">
                         <PanelHeading icon={Sparkles} tone="bg-rb-fox-wash text-rb-fox-lip" title="Community ranking" />
                         <p className="mt-2 text-xs text-muted-foreground">XP earned from shared quiz practice.</p>
@@ -886,63 +1015,9 @@ export default function Community() {
                         </div>
                     </PanelCard>
 
-                    <PanelCard className="p-4">
-                        <div className="flex items-center justify-between gap-3">
-                            <PanelHeading icon={UsersRound} tone="bg-rb-bee-wash text-rb-bee-lip" title="Study circles" />
-
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="size-8 shrink-0 rounded-full"
-                                onClick={() => setCreateCircleOpen(true)}
-                                aria-label="Create study circle"
-                            >
-                                <Plus className="h-4 w-4" />
-                            </Button>
-                        </div>
-
-                        <p className="mt-2 text-xs text-muted-foreground">
-                            Join or create focused review groups.
-                        </p>
-
-                        <div className="mt-3 space-y-2">
-                            {circles.map((circle) => (
-                                <div key={circle.circleId} className="rounded-rb-tile border-2 border-border bg-muted/30 p-3">
-                                    <div className="flex items-start gap-3">
-                                        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-rb-bee-wash font-rb-display text-xs font-extrabold lowercase text-rb-bee-lip">
-                                            {circle.initials}
-                                        </span>
-
-                                        <div className="min-w-0 flex-1">
-                                            <p className="truncate text-sm font-bold text-foreground">{circle.name}</p>
-                                            <p className="mt-0.5 text-[11px] font-semibold text-muted-foreground">
-                                                {circle.members?.toLocaleString?.() ?? 0} members
-                                                {circle.owner ? " · you own this" : ""}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        variant={circle.joined ? "outline" : "default"}
-                                        className="mt-2.5 w-full rounded-full"
-                                        onClick={() => toggleJoinCircle(circle.circleId)}
-                                        disabled={circle.owner}
-                                    >
-                                        {circle.owner ? "Owner" : circle.joined ? "Joined" : "Join circle"}
-                                    </Button>
-                                </div>
-                            ))}
-
-                            {circles.length === 0 ? (
-                                <p className="py-3 text-xs text-muted-foreground">
-                                    No study circles yet. Create the first one.
-                                </p>
-                            ) : null}
-                        </div>
-                    </PanelCard>
+                    {/* Study circles live in the left rail now -- one list, one
+                        place to join from, rather than the same circles in two
+                        columns of the same screen. */}
 
                     <PanelCard className="border-rb-fox/40 bg-rb-fox-wash p-4">
                         <PanelHeading icon={Sparkles} tone="bg-rb-snow text-rb-fox-lip" title="Community reminder" />
