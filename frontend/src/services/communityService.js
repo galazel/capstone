@@ -23,6 +23,19 @@ const postView = (post) => ({
   } : null,
 })
 
+/** Applies a {reactions, saves, active} count payload to one post in a list. */
+export const applyPostCounts = (posts, postId, counts, field) =>
+  posts.map((post) =>
+    post.postId === postId
+      ? {
+          ...post,
+          reactions: counts.reactions ?? post.reactions,
+          saves: counts.saves ?? post.saves,
+          ...(field ? { [field]: counts.active } : {}),
+        }
+      : post
+  )
+
 export async function getCommunityPosts({ type, search, saved } = {}) {
   const params = new URLSearchParams()
   if (type) params.set("type", type)
@@ -46,6 +59,8 @@ export const markCommunityNotificationRead = (notificationId) =>
 export const toggleCommunityLike = (id) => base(`community/posts/${id}/like`, { method: "POST" })
 export const toggleCommunitySave = (id) => base(`community/posts/${id}/save`, { method: "POST" })
 export const toggleCircleMembership = (id) => base(`community/circles/${id}/membership`, { method: "POST" })
+/** Owner-only; also removes the posts written in the circle. */
+export const deleteCommunityCircle = (id) => base(`community/circles/${id}`, { method: "DELETE" })
 export const getCommunityComments = (id) => base(`community/posts/${id}/comments`)
 export const addCommunityComment = (id, body, parentCommentId = null) => base(`community/posts/${id}/comments`, { method: "POST", data: { body, parentCommentId } })
 export const deleteCommunityPost = (id) => base(`community/posts/${id}`, { method: "DELETE" })

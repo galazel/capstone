@@ -2,14 +2,10 @@ package com.capstone.rebyu.community;
 
 import com.capstone.rebyu.certification.service.S3StorageService;
 import com.capstone.rebyu.community.entity.CommunityCircle;
-import com.capstone.rebyu.community.entity.CommunityCircleMember;
 import com.capstone.rebyu.community.entity.CommunityCircleMemberId;
 import com.capstone.rebyu.community.entity.CommunityComment;
 import com.capstone.rebyu.community.entity.CommunityPost;
-import com.capstone.rebyu.community.entity.CommunityPostLike;
-import com.capstone.rebyu.community.entity.CommunityPostMemberId;
 import com.capstone.rebyu.community.entity.CommunityPostReport;
-import com.capstone.rebyu.community.entity.CommunitySavedPost;
 import com.capstone.rebyu.community.entity.LearnerCommunityNotification;
 import com.capstone.rebyu.community.repository.CommunityCircleMemberRepository;
 import com.capstone.rebyu.community.repository.CommunityCircleRepository;
@@ -24,6 +20,7 @@ import com.capstone.rebyu.community.repository.LearnerCommunityNotificationRepos
 import com.capstone.rebyu.learningtools.entity.LearnerLibraryItem;
 import com.capstone.rebyu.learningtools.repository.LearnerLibraryItemRepository;
 import com.capstone.rebyu.user.entity.Learner;
+import com.capstone.rebyu.user.repository.LearnerRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -32,6 +29,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 /**
@@ -55,11 +53,12 @@ public class CommunityService {
     private final CommunityPostReportRepository reportRepository;
     private final LearnerCommunityNotificationRepository notificationRepository;
     private final LearnerLibraryItemRepository libraryItemRepository;
+    private final LearnerRepository learnerRepository;
     private final S3StorageService s3StorageService;
 
     public record PostRequest(
             String postType, String title, String description, Long circleId,
-            String attachmentName, String attachmentType, String attachmentKey) {}
+            String attachmentName, String attachmentType, String attachmentKey, Long attachmentSize) {}
 
     public record CircleRequest(String name, String description, String topic) {}
 
@@ -73,8 +72,9 @@ public class CommunityService {
     public record Post(
             Long postId, String authorName, String initials, String community, OffsetDateTime createdAt,
             String title, String description, String postType, Long circleId,
-            String attachmentName, String attachmentType, String attachmentKey,
-            long reactions, long comments, boolean liked, boolean saved, boolean ownedByMe) {}
+            String attachmentName, String attachmentType, String attachmentKey, Long attachmentSize,
+            long reactions, long comments, long saves,
+            boolean liked, boolean saved, boolean ownedByMe) {}
 
     public record Circle(
             Long circleId, String initials, String name, String description, String topic,
@@ -133,7 +133,7 @@ public class CommunityService {
 
         CommunityCircle circle = request.circleId() == null ? null : circleRef(request.circleId());
         CommunityPost post = CommunityPost.builder()
-                .author(Learner.builder().learnerId(learnerId).build())
+                .author(learnerRef(learnerId))
                 .circle(circle)
                 .postType(type)
                 .title(request.title().trim())
@@ -141,6 +141,7 @@ public class CommunityService {
                 .attachmentName(blankToNull(request.attachmentName()))
                 .attachmentType(blankToNull(request.attachmentType()))
                 .attachmentKey(blankToNull(request.attachmentKey()))
+                .attachmentSize(request.attachmentSize())
                 .build();
         CommunityPost saved = postRepository.save(post);
         return postById(learnerId, saved.getPostId());
@@ -154,7 +155,7 @@ public class CommunityService {
                 .orElseThrow(() -> new IllegalArgumentException("Generated quiz or flashcards not found"));
         CommunityCircle circle = circleId == null ? null : circleRef(circleId);
         CommunityPost post = CommunityPost.builder()
-                .author(Learner.builder().learnerId(learnerId).build())
+                .author(learnerRef(learnerId))
                 .circle(circle)
                 .postType(item.getItemType())
                 .title(item.getTitle())
@@ -165,7 +166,12 @@ public class CommunityService {
         return postById(learnerId, saved.getPostId());
     }
 
-    /** Resolves a post's structured study set without disclosing it directly to the client. */
+    /**
+     * Resolves a post's structured study set without disclosing it directly to the client.
+     * Transactional because it walks the lazy sharedLibraryItem association -- outside a
+     * session that walk throws instead of returning the set.
+     */
+    @Transactional(readOnly = true)
     public Long sharedStudySetId(Long postId) {
         CommunityPost post = postRepository.findById(postId)
                 .orElseThrow(() -> new IllegalArgumentException("This post does not contain an answerable study set"));
@@ -197,11 +203,17 @@ public class CommunityService {
         return postById(learnerId, saved.getPostId());
     }
 
+    @Transactional
     public void deletePost(Long learnerId, Long postId) {
-        long deleted = postRepository.deleteByPostIdAndAuthor_LearnerId(postId, learnerId);
-        if (deleted == 0) {
+        // Authorise first: deletePostWithEngagement clears the post's comments and
+        // reactions unconditionally, so it must never run for a post the caller
+        // does not own.
+        CommunityPost post = postRepository.findById(postId)
+                .orElseThrow(() -> new EntityNotFoundException("Post not found: " + postId));
+        if (!post.getAuthor().getLearnerId().equals(learnerId)) {
             throw new IllegalArgumentException("You can only delete your own post");
         }
+        postRepository.deletePostWithEngagement(postId);
     }
 
     @Transactional
@@ -213,6 +225,8 @@ public class CommunityService {
         reportRepository.upsertReport(postId, learnerId, request.reason(), blankToNull(request.details()));
     }
 
+    /** Read-only transaction: the view walks each report's lazy post and reporter. */
+    @Transactional(readOnly = true)
     public List<ReportView> reports(String status) {
         String normalized = status == null || status.isBlank() ? "OPEN" : status.toUpperCase();
         if (!List.of("OPEN", "RESOLVED", "DISMISSED").contains(normalized)) throw new IllegalArgumentException("Invalid report status");
@@ -282,39 +296,45 @@ public class CommunityService {
     }
 
     // ------------------------------------------------------------------
-    // Likes / saves
+    // Upvotes / saves
     // ------------------------------------------------------------------
 
-    public boolean toggleLike(Long learnerId, Long postId) {
+    /** Counts shown under a post, recomputed after the viewer changes one of them. */
+    public record PostCounts(long reactions, long saves, boolean active) {}
+
+    private PostCounts counts(Long postId, boolean active) {
+        return new PostCounts(postLikeRepository.countByPost_PostId(postId),
+                savedPostRepository.countByPost_PostId(postId), active);
+    }
+
+    @Transactional
+    public PostCounts toggleLike(Long learnerId, Long postId) {
         requirePostVisible(postId);
         if (postLikeRepository.existsByPost_PostIdAndLearner_LearnerId(postId, learnerId)) {
             postLikeRepository.deleteByPost_PostIdAndLearner_LearnerId(postId, learnerId);
-            return false;
+            return counts(postId, false);
         }
-        postLikeRepository.save(CommunityPostLike.builder()
-                .id(new CommunityPostMemberId(postId, learnerId))
-                .post(postRef(postId)).learner(Learner.builder().learnerId(learnerId).build())
-                .build());
-        return true;
+        postLikeRepository.addLike(postId, learnerId);
+        return counts(postId, true);
     }
 
-    public boolean toggleSave(Long learnerId, Long postId) {
+    @Transactional
+    public PostCounts toggleSave(Long learnerId, Long postId) {
         requirePostVisible(postId);
         if (savedPostRepository.existsByPost_PostIdAndLearner_LearnerId(postId, learnerId)) {
             savedPostRepository.deleteByPost_PostIdAndLearner_LearnerId(postId, learnerId);
-            return false;
+            return counts(postId, false);
         }
-        savedPostRepository.save(CommunitySavedPost.builder()
-                .id(new CommunityPostMemberId(postId, learnerId))
-                .post(postRef(postId)).learner(Learner.builder().learnerId(learnerId).build())
-                .build());
-        return true;
+        savedPostRepository.addSave(postId, learnerId);
+        return counts(postId, true);
     }
 
     // ------------------------------------------------------------------
     // Comments
     // ------------------------------------------------------------------
 
+    /** Read-only transaction: mapComment reads each author's name through a lazy proxy. */
+    @Transactional(readOnly = true)
     public List<Comment> comments(Long learnerId, Long postId) {
         requirePostVisible(postId);
         return commentRepository.findByPost_PostIdOrderByCreatedAtAsc(postId).stream()
@@ -322,13 +342,18 @@ public class CommunityService {
                 .toList();
     }
 
+    @Transactional
     public Comment addComment(Long learnerId, Long postId, CommentRequest request) {
         requirePostVisible(postId);
         requireText(request.body(), "Comment");
         CommunityComment parent = request.parentCommentId() == null ? null : commentRef(request.parentCommentId());
+        // The real author, not an id-only stub: the response is rendered straight into
+        // the thread, and a stub has no name to show until the page is reloaded.
+        Learner author = learnerRepository.findById(learnerId)
+                .orElseThrow(() -> new EntityNotFoundException("Learner not found: " + learnerId));
         CommunityComment comment = CommunityComment.builder()
                 .post(postRef(postId))
-                .author(Learner.builder().learnerId(learnerId).build())
+                .author(author)
                 .parentComment(parent)
                 .body(request.body().trim())
                 .build();
@@ -356,20 +381,17 @@ public class CommunityService {
         requireText(request.topic(), "Topic");
 
         CommunityCircle circle = CommunityCircle.builder()
-                .owner(Learner.builder().learnerId(learnerId).build())
+                .owner(learnerRef(learnerId))
                 .name(request.name().trim())
                 .description(request.description().trim())
                 .topic(request.topic().trim())
                 .build();
         CommunityCircle saved = circleRepository.save(circle);
 
-        circleMemberRepository.save(CommunityCircleMember.builder()
-                .id(new CommunityCircleMemberId(saved.getCircleId(), learnerId))
-                .circle(saved).learner(Learner.builder().learnerId(learnerId).build())
-                .build());
+        circleMemberRepository.addMember(saved.getCircleId(), learnerId);
 
         postRepository.save(CommunityPost.builder()
-                .author(Learner.builder().learnerId(learnerId).build())
+                .author(learnerRef(learnerId))
                 .circle(saved)
                 .postType("circle")
                 .title(request.name().trim() + " is now open")
@@ -377,6 +399,25 @@ public class CommunityService {
                 .build());
 
         return circleById(learnerId, saved.getCircleId());
+    }
+
+    /**
+     * Deletes a circle the caller owns, along with the posts written in it.
+     * The posts go explicitly: the circle_id FK is ON DELETE SET NULL (V24), so
+     * without this the circle's announcement and discussions would survive as
+     * orphans in the global feed after the circle they belong to is gone.
+     * Members cascade with the circle.
+     */
+    @Transactional
+    public void deleteCircle(Long learnerId, Long circleId) {
+        CommunityCircle circle = circleRepository.findById(circleId)
+                .orElseThrow(() -> new EntityNotFoundException("Study circle not found: " + circleId));
+        if (!circle.getOwner().getLearnerId().equals(learnerId)) {
+            throw new IllegalArgumentException("Only the circle owner can delete it");
+        }
+        postRepository.findPostIdsByCircleId(circleId).forEach(postRepository::deletePostWithEngagement);
+        circleMemberRepository.deleteMembersOfCircle(circleId);
+        circleRepository.delete(circle);
     }
 
     /** Owners are always members and cannot leave their own circle. Returns the joined state. */
@@ -391,10 +432,7 @@ public class CommunityService {
             circleMemberRepository.deleteById(new CommunityCircleMemberId(circleId, learnerId));
             return false;
         }
-        circleMemberRepository.save(CommunityCircleMember.builder()
-                .id(new CommunityCircleMemberId(circleId, learnerId))
-                .circle(circle).learner(Learner.builder().learnerId(learnerId).build())
-                .build());
+        circleMemberRepository.addMember(circleId, learnerId);
         return true;
     }
 
@@ -410,9 +448,12 @@ public class CommunityService {
 
     private static Post mapPostRow(CommunityPostRow row) {
         return new Post(row.getPostId(), row.getAuthorName(), initials(row.getAuthorName()), row.getCommunity(),
-                row.getCreatedAt(), row.getTitle(), row.getBody(), row.getPostType(), row.getCircleId(),
-                row.getAttachmentName(), row.getAttachmentType(), row.getAttachmentKey(), row.getReactions(),
-                row.getComments(), row.getLiked(), row.getSaved(), row.getOwnedByMe());
+                row.getCreatedAt() == null ? null : row.getCreatedAt().atOffset(ZoneOffset.UTC),
+                row.getTitle(), row.getBody(), row.getPostType(), row.getCircleId(),
+                row.getAttachmentName(), row.getAttachmentType(), row.getAttachmentKey(), row.getAttachmentSize(),
+                row.getReactions(),
+                row.getComments(), row.getSaves(),
+                row.getLiked(), row.getSaved(), row.getOwnedByMe());
     }
 
     private static Circle mapCircleRow(CommunityCircleRow row) {
@@ -431,6 +472,15 @@ public class CommunityService {
     private static String fullName(Learner learner) {
         return (learner.getFirstName() == null ? "" : learner.getFirstName())
                 + " " + (learner.getLastName() == null ? "" : learner.getLastName());
+    }
+
+    /**
+     * A managed reference, not a hand-built stub: an id-only entity instance is a
+     * detached object as far as Hibernate is concerned, and writing one into an
+     * association is a persistence hazard rather than a shortcut.
+     */
+    private Learner learnerRef(Long learnerId) {
+        return learnerRepository.getReferenceById(learnerId);
     }
 
     private CommunityPost postRef(Long postId) {

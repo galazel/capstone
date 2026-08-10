@@ -9,6 +9,9 @@ import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminCreate
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminCreateUserResponse;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AttributeType;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.DeliveryMediumType;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminDeleteUserRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.ListUsersRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.UserNotFoundException;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.UsernameExistsException;
 
 import java.util.List;
@@ -37,6 +40,49 @@ public class CognitoAdminService {
 
     /** Outcome of an enterprise account provisioning attempt. */
     public record ProvisionResult(boolean emailed, String cognitoSub, String note) {
+    }
+
+    /**
+     * Removes the sign-in behind a Cognito subject, so a deleted account cannot
+     * come back. Without this, CognitoAuthService re-provisions a User and
+     * Learner for any still-valid token whose subject it does not recognise.
+     *
+     * <p>Best effort by design: the database rows are already gone by the time
+     * this runs, and an unreachable Cognito must not undo that. A missing user
+     * is the desired end state, not a failure.
+     */
+    public void deleteAccount(String cognitoSub) {
+        try {
+            String username = usernameForSubject(cognitoSub);
+            if (username == null) {
+                log.warn("No Cognito user for subject {}; nothing to delete", cognitoSub);
+                return;
+            }
+            adminClient.adminDeleteUser(AdminDeleteUserRequest.builder()
+                    .userPoolId(userPoolId)
+                    .username(username)
+                    .build());
+            log.info("Deleted Cognito account for subject {}", cognitoSub);
+        } catch (UserNotFoundException alreadyGone) {
+            log.info("Cognito account for subject {} was already removed", cognitoSub);
+        } catch (Exception ex) {
+            log.error("Cognito account for subject {} could not be deleted: {}. "
+                    + "The learner's data is gone, but this sign-in must be removed by hand "
+                    + "or the account will be re-provisioned on next login.", cognitoSub, ex.getMessage());
+        }
+    }
+
+    /** AdminDeleteUser takes a username; the token only carries the subject. */
+    private String usernameForSubject(String cognitoSub) {
+        return adminClient.listUsers(ListUsersRequest.builder()
+                        .userPoolId(userPoolId)
+                        .filter("sub = \"" + cognitoSub + "\"")
+                        .limit(1)
+                        .build())
+                .users().stream()
+                .findFirst()
+                .map(user -> user.username())
+                .orElse(null);
     }
 
     public ProvisionResult createEnterpriseAccount(

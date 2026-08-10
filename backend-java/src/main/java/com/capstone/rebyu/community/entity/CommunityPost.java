@@ -53,6 +53,10 @@ public class CommunityPost {
     @Column(name = "attachment_key", length = 500)
     private String attachmentKey;
 
+    /** Byte size of the uploaded reviewer, for the feed's "PDF · 1.2 MB" label (V57). */
+    @Column(name = "attachment_size")
+    private Long attachmentSize;
+
     /** Set when this post shares a generated quiz/flashcard set (V29). */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "shared_library_item_id")

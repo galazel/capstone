@@ -21,6 +21,16 @@ export async function currentAccessToken() {
   }
 }
 
+/**
+ * The server's own explanation for a failed request. Our API returns
+ * {status, message, fieldErrors}, and swallowing that in favour of a generic
+ * "could not do X" turns a diagnosable failure into a guessing game.
+ */
+export function apiMessage(error, fallback) {
+  const message = error?.response?.data?.message
+  return typeof message === "string" && message.trim() ? message : fallback
+}
+
 export async function base(endpoint, options = {}) {
   const headers = { ...(options.headers ?? {}) }
   if (!headers.Authorization) {

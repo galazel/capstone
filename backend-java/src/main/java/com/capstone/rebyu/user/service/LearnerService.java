@@ -43,6 +43,7 @@ public class LearnerService {
     private final OrganizationCertificateRepository organizationCertificateRepository;
     private final InvitationTokenService invitationTokenService;
     private final EnterpriseGroupAssigneeRepository enterpriseGroupAssigneeRepository;
+    private final LearnerDeletionService learnerDeletionService;
     private final EnterpriseGroupRepository enterpriseGroupRepository;
     private final NotificationService notificationService;
 
@@ -295,8 +296,13 @@ public class LearnerService {
         organizationCertificateRepository.save(orgCert);
     }
 
+    /**
+     * Deleting a learner erases everything of theirs -- posts, attempts, files,
+     * account and sign-in -- rather than just the row. See LearnerDeletionService.
+     */
     public void delete(Long id) {
-        learnerRepository.delete(findEntity(id));
+        findEntity(id); // 404 for an unknown id, before anything is removed
+        learnerDeletionService.deleteLearner(id);
     }
 
     private Learner findEntity(Long id) {

@@ -68,10 +68,10 @@ public class CommunityController {
 
     /** Upload a PDF/DOCX before creating a post; the returned key is passed as attachmentKey. */
     @PostMapping(value = "/posts/attachment", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Map<String, String> uploadAttachment(
+    public Map<String, Object> uploadAttachment(
             @AuthenticationPrincipal Jwt jwt, @RequestParam("file") MultipartFile file) {
         me(jwt); // require an authenticated learner even though the upload itself is stateless
-        return Map.of("attachmentKey", service.uploadAttachment(file));
+        return Map.of("attachmentKey", service.uploadAttachment(file), "attachmentSize", file.getSize());
     }
 
     @PutMapping("/posts/{id}")
@@ -88,13 +88,13 @@ public class CommunityController {
     }
 
     @PostMapping("/posts/{id}/like")
-    public Map<String, Boolean> like(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
-        return Map.of("active", service.toggleLike(me(jwt), id));
+    public CommunityService.PostCounts like(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
+        return service.toggleLike(me(jwt), id);
     }
 
     @PostMapping("/posts/{id}/save")
-    public Map<String, Boolean> save(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
-        return Map.of("active", service.toggleSave(me(jwt), id));
+    public CommunityService.PostCounts save(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
+        return service.toggleSave(me(jwt), id);
     }
 
     @GetMapping("/posts/{id}/comments")
@@ -120,6 +120,12 @@ public class CommunityController {
     public CommunityService.Circle createCircle(
             @AuthenticationPrincipal Jwt jwt, @RequestBody CommunityService.CircleRequest request) {
         return service.createCircle(me(jwt), request);
+    }
+
+    @DeleteMapping("/circles/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteCircle(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
+        service.deleteCircle(me(jwt), id);
     }
 
     @PostMapping("/circles/{id}/membership")

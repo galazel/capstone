@@ -13,6 +13,7 @@ import com.capstone.rebyu.community.repository.LearnerCommunityNotificationRepos
 import com.capstone.rebyu.learningtools.entity.LearnerLibraryItem;
 import com.capstone.rebyu.learningtools.repository.LearnerLibraryItemRepository;
 import com.capstone.rebyu.user.entity.Learner;
+import com.capstone.rebyu.user.repository.LearnerRepository;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,6 +46,7 @@ class CommunityServiceTest {
     private CommunityPostReportRepository reportRepository;
     private LearnerCommunityNotificationRepository notificationRepository;
     private LearnerLibraryItemRepository libraryItemRepository;
+    private LearnerRepository learnerRepository;
     private S3StorageService s3StorageService;
     private CommunityService service;
 
@@ -59,10 +61,11 @@ class CommunityServiceTest {
         reportRepository = mock(CommunityPostReportRepository.class);
         notificationRepository = mock(LearnerCommunityNotificationRepository.class);
         libraryItemRepository = mock(LearnerLibraryItemRepository.class);
+        learnerRepository = mock(LearnerRepository.class);
         s3StorageService = mock(S3StorageService.class);
         service = new CommunityService(postRepository, circleRepository, circleMemberRepository, commentRepository,
                 postLikeRepository, savedPostRepository, reportRepository, notificationRepository,
-                libraryItemRepository, s3StorageService);
+                libraryItemRepository, learnerRepository, s3StorageService);
 
         when(postRepository.save(any(CommunityPost.class))).thenAnswer(inv -> inv.getArgument(0));
     }
@@ -84,6 +87,10 @@ class CommunityServiceTest {
                 .build();
         post.setModerationStatus(moderationStatus);
         return post;
+    }
+
+    private CommunityPost visiblePost() {
+        return sharedQuizPost("VISIBLE");
     }
 
     // ---- hidePost ----
@@ -141,24 +148,28 @@ class CommunityServiceTest {
 
     @Test
     void toggleLike_notPreviouslyLiked_addsLikeAndReturnsTrue() {
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(visiblePost()));
         when(postLikeRepository.existsByPost_PostIdAndLearner_LearnerId(POST_ID, LEARNER_ID)).thenReturn(false);
+        when(postLikeRepository.countByPost_PostId(POST_ID)).thenReturn(4L);
 
-        boolean result = service.toggleLike(LEARNER_ID, POST_ID);
+        CommunityService.PostCounts result = service.toggleLike(LEARNER_ID, POST_ID);
 
-        assertTrue(result);
-        verify(postLikeRepository).save(any());
+        assertTrue(result.active());
+        assertEquals(4L, result.reactions());
+        verify(postLikeRepository).addLike(POST_ID, LEARNER_ID);
         verify(postLikeRepository, never()).deleteByPost_PostIdAndLearner_LearnerId(any(), any());
     }
 
     @Test
     void toggleLike_previouslyLiked_removesLikeAndReturnsFalse() {
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(visiblePost()));
         when(postLikeRepository.existsByPost_PostIdAndLearner_LearnerId(POST_ID, LEARNER_ID)).thenReturn(true);
 
-        boolean result = service.toggleLike(LEARNER_ID, POST_ID);
+        CommunityService.PostCounts result = service.toggleLike(LEARNER_ID, POST_ID);
 
-        assertFalse(result);
+        assertFalse(result.active());
         verify(postLikeRepository).deleteByPost_PostIdAndLearner_LearnerId(POST_ID, LEARNER_ID);
-        verify(postLikeRepository, never()).save(any());
+        verify(postLikeRepository, never()).addLike(any(), any());
     }
 
     // ---- deletePost / reportPost guards ----

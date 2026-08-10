@@ -1,18 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import {
+    ArrowUp,
     Bookmark,
     BookOpen,
-    Download,
     FileArchive,
     FileText,
     Home,
-    Heart,
-    ImageIcon,
+    Layers,
     Loader2,
     MessageCircle,
     MoreHorizontal,
     Plus,
+    Search,
     Send,
     Share2,
     Sparkles,
@@ -48,14 +48,16 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { getFileDownloadUrl } from "@/services/fileService"
+import { apiMessage } from "@/services/base"
+import { fetchFileBlob } from "@/services/fileService"
 import { getAllCertifications } from "@/services/certificationService"
 import { getLibraryItems } from "@/services/learnerToolsService"
-import { getLeaderboard } from "@/services/gamificationService"
 import {
     addCommunityComment,
+    applyPostCounts,
     createCommunityCircle,
     createCommunityPost,
+    deleteCommunityCircle,
     deleteCommunityPost,
     getCommunityCircles,
     getCommunityComments,
@@ -74,8 +76,12 @@ const FEED_TABS = [
     { value: "discussion", label: "Discussions" },
     { value: "quiz", label: "Quizzes" },
     { value: "flashcard", label: "Flashcards" },
+    { value: "reviewer", label: "Reviewers" },
     { value: "circle", label: "Study circles" },
 ]
+
+/** Uploaded reviewer files: one feed tab, two post types (PDF and Word). */
+const REVIEWER_TYPES = ["notes", "docx"]
 
 /* The feed follows the landing page's community section: a post is a tactile
    card whose point is the thing attached to it — a set you can attempt, a file
@@ -86,19 +92,17 @@ const POST_TYPE_STYLES = {
     quiz: "bg-rb-feather-wash text-rb-feather-lip",
     flashcard: "bg-rb-beetle-wash text-rb-beetle-lip",
     circle: "bg-rb-bee-wash text-rb-bee-lip",
-    image: "bg-rb-fox-wash text-rb-fox-lip",
     notes: "bg-rb-fox-wash text-rb-fox-lip",
     docx: "bg-rb-fox-wash text-rb-fox-lip",
 }
 
 const POST_TYPE_LABELS = {
     discussion: "discussion",
-    quiz: "quiz",
+    quiz: "practice set",
     flashcard: "flashcards",
     circle: "study circle",
-    image: "photo",
-    notes: "notes",
-    docx: "document",
+    notes: "material",
+    docx: "material",
 }
 
 /** Avatar washes rotate per author so a busy feed still reads as many voices. */
@@ -116,8 +120,13 @@ function avatarTone(seed = "") {
     return AVATAR_TONES[total % AVATAR_TONES.length]
 }
 
-/** Post types where the composer offers an optional real file attachment. */
-const ATTACHABLE_TYPES = new Set(["image", "notes", "docx"])
+/** "1.2 MB" for the reviewer tile; blank when an older post has no recorded size. */
+function formatBytes(size) {
+    if (!size || size < 0) return null
+    if (size < 1024) return `${size} B`
+    if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
 
 function CommunityAvatar({ initials, tone, className = "" }) {
     return (
@@ -132,16 +141,54 @@ function CommunityAvatar({ initials, tone, className = "" }) {
     )
 }
 
-function AttachmentIcon({ type }) {
-    if (type === "QUIZ") return <BookOpen className="size-5" />
-    if (type === "DOCX") return <FileArchive className="size-5" />
-    return <FileText className="size-5" />
-}
-
 function attachmentTone(type) {
     if (type === "QUIZ") return "bg-rb-feather-wash text-rb-feather-lip"
     if (type === "DOCX") return "bg-rb-bee-wash text-rb-bee-lip"
     return "bg-rb-cardinal-wash text-rb-cardinal-lip"
+}
+
+/**
+ * The payload tile: the thing the post is actually about — a set you can attempt
+ * or a file you can open — sitting in its own bordered slab under the text, with
+ * a single pill action on the right.
+ */
+function PayloadTile({ icon: Icon, tone, name, meta, actionLabel, onAction }) {
+    return (
+        <div className="mt-4 flex items-center gap-3 rounded-rb-tile border-2 border-border bg-muted/40 p-3">
+            <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${tone}`}>
+                <Icon className="size-5" aria-hidden="true" />
+            </span>
+
+            <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold text-foreground">{name}</p>
+                <p className="mt-0.5 truncate text-xs font-semibold text-muted-foreground">{meta}</p>
+            </div>
+
+            {onAction ? (
+                <Button type="button" size="sm" variant="outline" className="shrink-0 rounded-full" onClick={onAction}>
+                    {actionLabel}
+                </Button>
+            ) : null}
+        </div>
+    )
+}
+
+/** One count in the footer row: icon, number, and a screen-reader-only noun. */
+function CountAction({ icon: Icon, count, label, active, activeClassName = "", onClick, className = "" }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            aria-pressed={active}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-colors hover:bg-accent hover:text-foreground ${
+                active ? activeClassName : ""
+            } ${className}`}
+        >
+            <Icon className={`size-4 ${active ? "fill-current" : ""}`} />
+            {Number(count ?? 0).toLocaleString()}
+            <span className="sr-only"> {label}</span>
+        </button>
+    )
 }
 
 function PostTypeBadge({ type }) {
@@ -153,6 +200,77 @@ function PostTypeBadge({ type }) {
         >
             {POST_TYPE_LABELS[type] ?? "post"}
         </span>
+    )
+}
+
+/**
+ * A circle's own header, the way a subreddit banner works — except the backdrop
+ * is the circle's name set huge and faint rather than an uploaded image, so a
+ * brand-new circle looks finished without anyone having to design anything.
+ */
+function CircleHeader({ circle, onToggleJoin, onDelete, onBack }) {
+    return (
+        <PanelCard className="overflow-hidden">
+            <div className="relative h-24 bg-rb-bee-wash">
+                <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute -bottom-3 left-3 select-none whitespace-nowrap font-rb-display text-[4rem] font-extrabold lowercase leading-none text-rb-bee-lip opacity-[0.14]"
+                >
+                    {circle.name}
+                </span>
+
+                <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="absolute left-3 top-3 rounded-full"
+                    onClick={onBack}
+                >
+                    <X className="mr-2 size-4" />
+                    Back to feed
+                </Button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 p-4">
+                <span className="-mt-10 grid size-16 shrink-0 place-items-center rounded-full border-4 border-card bg-rb-bee-wash font-rb-display text-lg font-extrabold lowercase text-rb-bee-lip">
+                    {circle.initials}
+                </span>
+
+                <div className="min-w-0 flex-1">
+                    <h1 className="truncate font-rb-display text-xl font-extrabold lowercase text-foreground">
+                        {circle.name}
+                    </h1>
+                    <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
+                        {(circle.members ?? 0).toLocaleString()} members · {circle.topic}
+                    </p>
+                </div>
+
+                {circle.owner ? (
+                    <>
+                        <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-muted-foreground">
+                            owner
+                        </span>
+                        <Button type="button" variant="outline" size="sm" className="rounded-full text-destructive" onClick={onDelete}>
+                            Delete circle
+                        </Button>
+                    </>
+                ) : (
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant={circle.joined ? "outline" : "default"}
+                        className="rounded-full"
+                        onClick={() => onToggleJoin(circle.circleId)}
+                    >
+                        {circle.joined ? "Joined" : "Join circle"}
+                    </Button>
+                )}
+            </div>
+
+            <p className="border-t-2 border-border px-4 py-3 text-sm leading-6 text-muted-foreground">
+                {circle.description}
+            </p>
+        </PanelCard>
     )
 }
 
@@ -180,20 +298,43 @@ function PanelHeading({ icon: Icon, tone = "bg-rb-macaw-wash text-rb-macaw-lip",
 function CommunityPost({
                            post,
                            circles,
-                           onToggleLike,
+                           onToggleUpvote,
                            onToggleSave,
-                           onOpenComments,
+                           onToggleComments,
                            onJoinCircle,
                            onDelete,
                            onStartPractice,
                            onReport,
+                           onOpenAttachment,
+                           onOpenCircle,
+                           threadOpen,
+                           threadComments,
+                           draft,
+                           onDraftChange,
+                           onSubmitComment,
                        }) {
     const linkedCircle = post.circleId
         ? circles.find((circle) => circle.circleId === post.circleId)
         : null
 
+    const isStudySet = ["quiz", "flashcard"].includes(post.postType)
+    const fileSize = formatBytes(post.attachmentSize)
+    const cardRef = useRef(null)
+
+    /* An open thread closes when attention moves off the post, the way a
+       comment box does elsewhere. The draft survives in the page's draft map,
+       so reopening the thread brings back whatever was half-typed. */
+    useEffect(() => {
+        if (!threadOpen) return undefined
+        function handlePointerDown(event) {
+            if (!cardRef.current?.contains(event.target)) onToggleComments(post.postId)
+        }
+        document.addEventListener("mousedown", handlePointerDown)
+        return () => document.removeEventListener("mousedown", handlePointerDown)
+    }, [threadOpen, onToggleComments, post.postId])
+
     return (
-        <article className="overflow-hidden rounded-rb-card border-2 border-border bg-card transition-colors hover:border-rb-macaw/60">
+        <article ref={cardRef} className="overflow-hidden rounded-rb-card border-2 border-border bg-card transition-colors hover:border-rb-macaw/60">
             <div className="p-4 sm:p-5">
                 <div className="flex items-start gap-3">
                     <CommunityAvatar initials={post.initials} tone={avatarTone(post.authorName ?? "")} />
@@ -202,16 +343,17 @@ function CommunityPost({
                         <div className="flex flex-wrap items-center gap-2">
                             <span className="font-bold text-foreground">{post.authorName}</span>
 
-                            <Badge
-                                variant="outline"
-                                className={`h-5 rounded-full px-1.5 text-[10px] ${post.badgeClass}`}
-                            >
-                                {post.badge}
-                            </Badge>
+                            {/* Only the viewer's own posts carry a badge -- on every
+                                other post "Learner" was true of everyone and said nothing. */}
+                            {post.ownedByMe ? (
+                                <Badge variant="outline" className={`h-5 rounded-full px-1.5 text-[10px] ${post.badgeClass}`}>
+                                    You
+                                </Badge>
+                            ) : null}
                         </div>
 
-                        <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
-                            {post.community} · {post.createdAt}
+                        <p className="mt-0.5 truncate text-xs font-semibold text-muted-foreground">
+                            {[post.community, linkedCircle?.topic, post.createdAt].filter(Boolean).join(" · ")}
                         </p>
                     </div>
 
@@ -266,64 +408,65 @@ function CommunityPost({
                 </div>
 
                 <div className="mt-4">
-                    <h2 className="font-rb-display text-lg font-extrabold leading-6 text-foreground">
-                        {post.title}
-                    </h2>
+                    {/* A shared set's title is the name on its tile below -- printing
+                        it here too said the same thing twice in two type sizes. */}
+                    {isStudySet ? null : (
+                        <h2 className="font-rb-display text-lg font-extrabold leading-6 text-foreground">
+                            {post.title}
+                        </h2>
+                    )}
 
-                    <p className="mt-2 text-[0.9375rem] leading-6 text-muted-foreground">
+                    <p className={`text-[0.9375rem] leading-6 text-muted-foreground ${isStudySet ? "" : "mt-2"}`}>
                         {post.description}
                     </p>
                 </div>
 
-                {post.attachment?.type === "IMAGE" && post.attachment.key ? (
-                    <figure className="mt-4 overflow-hidden rounded-rb-tile border-2 border-border bg-muted/30">
-                        <img src={getFileDownloadUrl(post.attachment.key)} alt={post.attachment.name || "Community post attachment"} className="max-h-[560px] w-full object-contain" loading="lazy" />
-                    </figure>
+                {/* the attachment is the point of the post — give it a tile of its own */}
+                {post.attachment ? (
+                    <PayloadTile
+                        icon={post.attachment.type === "DOCX" ? FileArchive : FileText}
+                        tone={attachmentTone(post.attachment.type)}
+                        name={post.attachment.name}
+                        meta={post.attachment.key
+                            ? [post.attachment.type, fileSize, "shared reviewer"].filter(Boolean).join(" · ")
+                            : "No file attached"}
+                        actionLabel="open"
+                        onAction={post.attachment.key ? () => onOpenAttachment(post) : null}
+                    />
                 ) : null}
 
-                {/* the attachment is the point of the post — give it a tile of its own */}
-                {post.attachment && post.attachment.type !== "IMAGE" ? (
-                    <div className="mt-4 flex items-center gap-3 rounded-rb-tile border-2 border-border bg-muted/40 p-3">
-                        <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${attachmentTone(post.attachment.type)}`}>
-                            <AttachmentIcon type={post.attachment.type} />
-                        </span>
-
-                        <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-bold text-foreground">
-                                {post.attachment.name}
-                            </p>
-
-                            <p className="mt-0.5 truncate text-xs font-semibold text-muted-foreground">
-                                {post.attachment.key ? post.attachment.meta : "No file attached"}
-                            </p>
-                        </div>
-
-                        {post.attachment.key ? (
-                            <Button asChild size="sm" variant="outline" className="shrink-0 rounded-full">
-                                <a href={getFileDownloadUrl(post.attachment.key)}>
-                                    <Download className="mr-2 h-4 w-4" />
-                                    Download
-                                </a>
-                            </Button>
-                        ) : null}
-                    </div>
+                {isStudySet ? (
+                    <PayloadTile
+                        icon={post.postType === "quiz" ? BookOpen : Layers}
+                        tone={post.postType === "quiz" ? "bg-rb-feather-wash text-rb-feather-lip" : "bg-rb-beetle-wash text-rb-beetle-lip"}
+                        name={post.title}
+                        meta={`${POST_TYPE_LABELS[post.postType]} · generated in REBYU`}
+                        actionLabel="attempt"
+                        onAction={() => onStartPractice(post.postId)}
+                    />
                 ) : null}
 
                 {linkedCircle ? (
                     <div className="mt-4 flex flex-col gap-3 rounded-rb-tile border-2 border-border bg-muted/40 p-3 sm:flex-row sm:items-center">
-                        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-rb-bee-wash font-rb-display text-xs font-extrabold lowercase text-rb-bee-lip">
-                            {linkedCircle.initials}
-                        </span>
+                        <button
+                            type="button"
+                            onClick={() => onOpenCircle(linkedCircle.circleId)}
+                            className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                        >
+                            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-rb-bee-wash font-rb-display text-xs font-extrabold lowercase text-rb-bee-lip">
+                                {linkedCircle.initials}
+                            </span>
 
-                        <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-bold text-foreground">
-                                {linkedCircle.name}
-                            </p>
+                            <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-bold text-foreground">
+                                    {linkedCircle.name}
+                                </p>
 
-                            <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
-                                {linkedCircle.members?.toLocaleString?.() ?? 0} members
-                            </p>
-                        </div>
+                                <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
+                                    {linkedCircle.members?.toLocaleString?.() ?? 0} members
+                                </p>
+                            </div>
+                        </button>
 
                         <Button
                             type="button"
@@ -337,62 +480,104 @@ function CommunityPost({
                     </div>
                 ) : null}
 
-                {["quiz", "flashcard"].includes(post.postType) ? (
-                    <Button type="button" className="mt-4 rounded-full" onClick={() => onStartPractice(post.postId)}>
-                        <BookOpen className="mr-2 h-4 w-4" />Start practice
-                    </Button>
-                ) : null}
             </div>
 
-            {/* one quiet row, the way the landing feed shows it: counts are the action */}
+            {/* one quiet row: every number here is also the button that changes it */}
             <div className="flex items-center gap-1 border-t-2 border-border px-3 py-2 text-sm font-bold text-muted-foreground">
-                <button
-                    type="button"
-                    className="flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-colors hover:bg-accent hover:text-foreground"
-                    onClick={() => onToggleLike(post.postId)}
-                    aria-pressed={post.liked}
-                >
-                    <Heart className={`size-4 ${post.liked ? "fill-rb-cardinal text-rb-cardinal" : ""}`} />
-                    {post.reactions + (post.liked ? 1 : 0)}
-                    <span className="sr-only"> reactions</span>
-                </button>
+                <CountAction
+                    icon={ArrowUp}
+                    count={post.reactions}
+                    label="upvotes"
+                    active={post.liked}
+                    activeClassName="text-rb-macaw-lip"
+                    onClick={() => onToggleUpvote(post.postId)}
+                />
 
-                <button
-                    type="button"
-                    className="flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-colors hover:bg-accent hover:text-foreground"
-                    onClick={() => onOpenComments(post.postId)}
-                >
-                    <MessageCircle className="size-4" />
-                    {post.comments}
-                    <span className="sr-only"> comments</span>
-                </button>
+                <CountAction
+                    icon={MessageCircle}
+                    count={post.comments}
+                    label="comments"
+                    active={threadOpen}
+                    activeClassName="text-rb-macaw-lip"
+                    onClick={() => onToggleComments(post.postId)}
+                />
 
-                <button
-                    type="button"
-                    className="ml-auto flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-colors hover:bg-accent hover:text-foreground"
-                    onClick={() => {
-                        navigator.clipboard?.writeText(
-                            `${window.location.origin}/learner/community?post=${post.postId}`
-                        )
-                        toast.success("Post link copied.")
-                    }}
-                >
-                    <Share2 className="size-4" />
-                    share
-                </button>
-
-                <button
-                    type="button"
-                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-colors hover:bg-accent hover:text-foreground ${
-                        post.saved ? "text-rb-macaw-lip" : ""
-                    }`}
+                <CountAction
+                    icon={Bookmark}
+                    count={post.saves}
+                    label="saves"
+                    active={post.saved}
+                    activeClassName="text-rb-macaw-lip"
                     onClick={() => onToggleSave(post.postId)}
-                    aria-pressed={post.saved}
-                >
-                    <Bookmark className={`size-4 ${post.saved ? "fill-current" : ""}`} />
-                    {post.saved ? "saved" : "save"}
-                </button>
+                    className="ml-auto"
+                />
             </div>
+
+            {/* The thread lives in the post, the way every social feed does it --
+                reading a reply should never mean losing sight of what it replies to. */}
+            {threadOpen ? (
+                <div className="border-t-2 border-border bg-muted/20 px-3 py-2.5 sm:px-4">
+                    {threadComments === undefined ? (
+                        <p className="py-2 text-center text-xs font-semibold text-muted-foreground">Loading comments...</p>
+                    ) : (
+                        /* Comments are secondary to the post, so they run at a
+                           smaller scale: name and body share one bubble, and a
+                           long thread scrolls instead of pushing the next post
+                           off the screen. */
+                        <div className="max-h-60 space-y-1.5 overflow-y-auto pr-1">
+                            {threadComments.map((comment) => (
+                                <div key={comment.commentId} className="flex gap-2">
+                                    <CommunityAvatar
+                                        initials={comment.initials}
+                                        tone={avatarTone(comment.authorName ?? "")}
+                                        className="!size-7 !text-[0.625rem]"
+                                    />
+                                    <div className="min-w-0 rounded-2xl bg-muted px-3 py-1.5">
+                                        <p className="text-xs font-bold text-foreground">{comment.authorName}</p>
+                                        <p className="whitespace-pre-wrap text-[0.8125rem] leading-5 text-muted-foreground">
+                                            {comment.body}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+
+                            {threadComments.length === 0 ? (
+                                <p className="py-1.5 text-center text-xs font-semibold text-muted-foreground">
+                                    No comments yet. Start the conversation.
+                                </p>
+                            ) : null}
+                        </div>
+                    )}
+
+                    <div className="mt-2 flex items-center gap-2">
+                        <CommunityAvatar initials="GG" className="!size-7 !text-[0.625rem]" />
+                        <Input
+                            value={draft ?? ""}
+                            onChange={(event) => onDraftChange(post.postId, event.target.value)}
+                            onKeyDown={(event) => {
+                                if (event.key === "Enter" && !event.shiftKey) {
+                                    event.preventDefault()
+                                    onSubmitComment(post.postId)
+                                }
+                            }}
+                            placeholder="Write a comment..."
+                            aria-label={`Comment on ${post.title}`}
+                            className="h-8 rounded-full bg-muted text-[0.8125rem]"
+                        />
+                        <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="size-8 shrink-0 rounded-full"
+                            onClick={() => onSubmitComment(post.postId)}
+                            disabled={!draft?.trim()}
+                            aria-label="Post comment"
+                        >
+                            <Send className="h-4 w-4" />
+                        </Button>
+                    </div>
+                </div>
+            ) : null}
         </article>
     )
 }
@@ -403,7 +588,6 @@ export default function Community() {
     const [circles, setCircles] = useState([])
     const [certifications, setCertifications] = useState([])
     const [studyItems, setStudyItems] = useState([])
-    const [communityLeaderboard, setCommunityLeaderboard] = useState([])
     const [selectedStudyItemId, setSelectedStudyItemId] = useState("")
     const [activeTab, setActiveTab] = useState("for-you")
     const [showSavedOnly, setShowSavedOnly] = useState(false)
@@ -416,20 +600,30 @@ export default function Community() {
     const [shareCommunity, setShareCommunity] = useState("")
     const [attachedFile, setAttachedFile] = useState(null)
     const [isUploadingAttachment, setIsUploadingAttachment] = useState(false)
+    const [isPublishing, setIsPublishing] = useState(false)
     const fileInputRef = useRef(null)
 
     const [createCircleOpen, setCreateCircleOpen] = useState(false)
+    const [isCreatingCircle, setIsCreatingCircle] = useState(false)
+    /** When set, the middle column becomes that circle's own page. */
+    const [activeCircleId, setActiveCircleId] = useState(null)
+    const [confirmDeleteCircleId, setConfirmDeleteCircleId] = useState(null)
     const [circleName, setCircleName] = useState("")
     const [circleDescription, setCircleDescription] = useState("")
     const [circleTopic, setCircleTopic] = useState("General Study")
 
-    const [commentsOpen, setCommentsOpen] = useState(false)
-    const [commentPost, setCommentPost] = useState(null)
-    const [comments, setComments] = useState([])
-    const [commentBody, setCommentBody] = useState("")
+    // Threads are per post and stay mounted in the feed: openThreads holds which
+    // cards are expanded, commentsByPost caches what each one has loaded.
+    const [openThreads, setOpenThreads] = useState([])
+    const [commentsByPost, setCommentsByPost] = useState({})
+    const [commentDrafts, setCommentDrafts] = useState({})
     const [reportPostId, setReportPostId] = useState(null)
     const [reportReason, setReportReason] = useState("SPAM")
     const [reportDetails, setReportDetails] = useState("")
+    /* Blob URLs stay alive for as long as the tab that opened them needs, so
+       they are revoked when this page unmounts rather than after the open. */
+    const objectUrlsRef = useRef([])
+    useEffect(() => () => objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url)), [])
 
     useEffect(() => {
         Promise.all([getCommunityPosts(), getCommunityCircles(), getAllCertifications(), getLibraryItems()])
@@ -440,11 +634,7 @@ export default function Community() {
                 setStudyItems((Array.isArray(nextStudyItems) ? nextStudyItems : []).filter((item) => ["quiz", "flashcard"].includes(item.kind)))
                 if (nextCircles[0]) setShareCommunity(String(nextCircles[0].circleId))
             })
-            .catch(() => toast.error("The community could not be loaded."))
-    }, [])
-
-    useEffect(() => {
-        getLeaderboard("community").then((entries) => setCommunityLeaderboard(Array.isArray(entries) ? entries : [])).catch(() => {})
+            .catch((error) => toast.error(apiMessage(error, "The community could not be loaded.")))
     }, [])
 
     const topicOptions = useMemo(() => {
@@ -454,13 +644,31 @@ export default function Community() {
         return [...new Set(["General Study", ...titles])]
     }, [certifications])
 
+    /** Circles you can actually post into — the only ones worth offering. */
+    const joinedCircles = useMemo(
+        () => circles.filter((circle) => circle.joined || circle.owner),
+        [circles]
+    )
+
+    const activeCircle = useMemo(
+        () => circles.find((circle) => circle.circleId === activeCircleId) ?? null,
+        [circles, activeCircleId]
+    )
+
     const visiblePosts = useMemo(() => {
         const query = searchValue.trim().toLowerCase()
 
         const filtered = posts.filter((post) => {
+            // Inside a circle the feed is that circle's posts only; the tab
+            // filters and the saved view belong to the global feed.
+            if (activeCircleId) return post.circleId === activeCircleId
             if (showSavedOnly && !post.saved) return false
             const matchesTab =
-                showSavedOnly || activeTab === "for-you" || post.postType === activeTab
+                showSavedOnly ||
+                activeTab === "for-you" ||
+                (activeTab === "reviewer"
+                    ? REVIEWER_TYPES.includes(post.postType)
+                    : post.postType === activeTab)
 
             const matchesSearch =
                 !query ||
@@ -473,11 +681,13 @@ export default function Community() {
         })
 
         return filtered
-    }, [activeTab, posts, searchValue, showSavedOnly])
+    }, [activeCircleId, activeTab, posts, searchValue, showSavedOnly])
 
     function openComposer(type) {
         setShareType(type)
         setAttachedFile(null)
+        // Posting from inside a circle should land in that circle by default.
+        if (activeCircleId) setShareCommunity(String(activeCircleId))
         setSelectedStudyItemId("")
         setComposerOpen(true)
     }
@@ -487,18 +697,35 @@ export default function Community() {
         setActiveTab(value)
     }
 
-    async function toggleLike(postId) {
+    async function toggleUpvote(postId) {
         try {
-            const result = await toggleCommunityLike(postId)
-            setPosts((current) =>
-                current.map((post) =>
-                    post.postId === postId
-                        ? { ...post, liked: result.active, reactions: post.reactions + (result.active ? 1 : -1) }
-                        : post
-                )
-            )
-        } catch {
-            toast.error("Could not update your reaction.")
+            const counts = await toggleCommunityLike(postId)
+            setPosts((current) => applyPostCounts(current, postId, counts, "liked"))
+        } catch (error) {
+            toast.error(apiMessage(error, "Could not update your upvote."))
+        }
+    }
+
+    /**
+     * Opens a shared reviewer in its own tab. The file is fetched with the
+     * learner's token and handed over as a blob URL -- /api/files/view requires
+     * auth, so pointing a tab straight at it would load nothing.
+     */
+    async function openAttachment(post) {
+        const key = post?.attachment?.key
+        if (!key) return
+        // Opened before the await on purpose: a tab opened in an async
+        // continuation is treated as an unrequested popup and blocked.
+        const tab = window.open("", "_blank")
+        try {
+            const blob = await fetchFileBlob(key)
+            const url = URL.createObjectURL(blob)
+            objectUrlsRef.current.push(url)
+            if (tab) tab.location.href = url
+            else window.open(url, "_blank")
+        } catch (error) {
+            tab?.close()
+            toast.error(apiMessage(error, "This file could not be opened."))
         }
     }
 
@@ -506,8 +733,8 @@ export default function Community() {
         try {
             const attempt = await startSharedCommunityPractice(postId)
             navigate(`/learner/practice/${attempt.studySetId}`)
-        } catch {
-            toast.error("This shared study item is not ready for practice yet.")
+        } catch (error) {
+            toast.error(apiMessage(error, "This shared study item is not ready for practice yet."))
         }
     }
 
@@ -518,21 +745,17 @@ export default function Community() {
             setReportPostId(null)
             setReportDetails("")
             toast.success("Post reported. Our team can review it.")
-        } catch {
-            toast.error("This post could not be reported.")
+        } catch (error) {
+            toast.error(apiMessage(error, "This post could not be reported."))
         }
     }
 
     async function toggleSave(postId) {
         try {
-            const result = await toggleCommunitySave(postId)
-            setPosts((current) =>
-                current.map((post) =>
-                    post.postId === postId ? { ...post, saved: result.active } : post
-                )
-            )
-        } catch {
-            toast.error("Could not update saved posts.")
+            const counts = await toggleCommunitySave(postId)
+            setPosts((current) => applyPostCounts(current, postId, counts, "saved"))
+        } catch (error) {
+            toast.error(apiMessage(error, "Could not update saved posts."))
         }
     }
 
@@ -550,8 +773,8 @@ export default function Community() {
                         : circle
                 )
             )
-        } catch {
-            toast.error("Could not update circle membership.")
+        } catch (error) {
+            toast.error(apiMessage(error, "Could not update circle membership."))
         }
     }
 
@@ -561,10 +784,10 @@ export default function Community() {
 
         setIsUploadingAttachment(true)
         try {
-            const { attachmentKey } = await uploadCommunityAttachment(file)
-            setAttachedFile({ name: file.name, key: attachmentKey })
-        } catch {
-            toast.error("The file could not be uploaded.")
+            const { attachmentKey, attachmentSize } = await uploadCommunityAttachment(file)
+            setAttachedFile({ name: file.name, key: attachmentKey, size: attachmentSize ?? file.size })
+        } catch (error) {
+            toast.error(apiMessage(error, "The file could not be uploaded."))
         } finally {
             setIsUploadingAttachment(false)
             if (fileInputRef.current) fileInputRef.current.value = ""
@@ -572,6 +795,18 @@ export default function Community() {
     }
 
     async function publishPost() {
+        // Same in-flight guard as circle creation: the composer stays open for
+        // the whole round trip, and a second click would publish a second post.
+        if (isPublishing) return
+        setIsPublishing(true)
+        try {
+            await publishPostRequest()
+        } finally {
+            setIsPublishing(false)
+        }
+    }
+
+    async function publishPostRequest() {
         if (["quiz", "flashcard"].includes(shareType)) {
             if (!selectedStudyItemId) {
                 toast.error("Choose a generated study item to share.")
@@ -583,8 +818,8 @@ export default function Community() {
                 setSelectedStudyItemId("")
                 setComposerOpen(false)
                 toast.success("Study item shared with the community.")
-            } catch {
-                toast.error("The study item could not be shared.")
+            } catch (error) {
+                toast.error(apiMessage(error, "The study item could not be shared."))
             }
             return
         }
@@ -592,16 +827,26 @@ export default function Community() {
             toast.error("Add a title and description.")
             return
         }
+        if (shareType === "reviewer" && !attachedFile) {
+            toast.error("Attach the PDF or Word reviewer you want to share.")
+            return
+        }
+
+        // One "Reviewer" composer tab, two post types: the file's own extension
+        // decides which, so the learner never has to pick PDF vs Word twice.
+        const isWordFile = /\.docx$/i.test(attachedFile?.name ?? "")
+        const postType = shareType === "reviewer" ? (isWordFile ? "docx" : "notes") : shareType
 
         try {
             const nextPost = await createCommunityPost({
                 title: shareTitle.trim(),
                 description: shareDescription.trim(),
-                postType: shareType,
+                postType,
                 circleId: shareCommunity ? Number(shareCommunity) : null,
                 attachmentName: attachedFile?.name ?? null,
-                attachmentType: shareType === "image" ? "IMAGE" : shareType === "notes" ? "PDF" : shareType === "docx" ? "DOCX" : null,
+                attachmentType: shareType === "reviewer" ? (isWordFile ? "DOCX" : "PDF") : null,
                 attachmentKey: attachedFile?.key ?? null,
+                attachmentSize: attachedFile?.size ?? null,
             })
 
             setPosts((current) => [nextPost, ...current])
@@ -610,10 +855,10 @@ export default function Community() {
             setAttachedFile(null)
             setComposerOpen(false)
             toast.success(
-                shareType === "discussion" ? "Discussion posted." : "Resource shared with the community."
+                shareType === "discussion" ? "Discussion posted." : "Reviewer shared with the community."
             )
-        } catch {
-            toast.error("The post could not be published.")
+        } catch (error) {
+            toast.error(apiMessage(error, "The post could not be published."))
         }
     }
 
@@ -622,8 +867,8 @@ export default function Community() {
             await deleteCommunityPost(postId)
             setPosts((current) => current.filter((post) => post.postId !== postId))
             toast.success("Post deleted.")
-        } catch {
-            toast.error("The post could not be deleted.")
+        } catch (error) {
+            toast.error(apiMessage(error, "The post could not be deleted."))
         }
     }
 
@@ -632,6 +877,11 @@ export default function Community() {
             toast.error("Add a circle name and description.")
             return
         }
+        // The dialog stays open for the whole round trip, so without this guard a
+        // second click during the await creates a second circle -- and a second
+        // announcement post with it.
+        if (isCreatingCircle) return
+        setIsCreatingCircle(true)
 
         try {
             const newCircle = await createCommunityCircle({
@@ -648,36 +898,58 @@ export default function Community() {
             selectFeedTab("for-you")
 
             toast.success("Study circle created and posted to the news feed.")
-        } catch {
-            toast.error("The study circle could not be created.")
+        } catch (error) {
+            toast.error(apiMessage(error, "The study circle could not be created."))
+        } finally {
+            setIsCreatingCircle(false)
         }
     }
 
-    async function openComments(postId) {
-        setCommentPost(posts.find((post) => post.postId === postId) ?? null)
-        setCommentsOpen(true)
+    async function removeCircle(circleId) {
         try {
-            setComments(await getCommunityComments(postId))
-        } catch {
-            toast.error("Comments could not be loaded.")
+            await deleteCommunityCircle(circleId)
+            setCircles((current) => current.filter((circle) => circle.circleId !== circleId))
+            setPosts(await getCommunityPosts())
+            setActiveCircleId(null)
+            toast.success("Study circle deleted.")
+        } catch (error) {
+            toast.error(apiMessage(error, "The study circle could not be deleted."))
         }
     }
 
-    async function submitComment() {
-        if (!commentBody.trim() || !commentPost) return
+    async function toggleComments(postId) {
+        if (openThreads.includes(postId)) {
+            setOpenThreads((current) => current.filter((id) => id !== postId))
+            return
+        }
+        setOpenThreads((current) => [...current, postId])
+        if (commentsByPost[postId]) return
         try {
-            const comment = await addCommunityComment(commentPost.postId, commentBody.trim())
-            setComments((current) => [...current, comment])
+            const loaded = await getCommunityComments(postId)
+            setCommentsByPost((current) => ({ ...current, [postId]: loaded }))
+        } catch (error) {
+            // Leave the cache empty so reopening the thread retries the load.
+            setOpenThreads((current) => current.filter((id) => id !== postId))
+            toast.error(apiMessage(error, "Comments could not be loaded."))
+        }
+    }
+
+    function setDraft(postId, value) {
+        setCommentDrafts((current) => ({ ...current, [postId]: value }))
+    }
+
+    async function submitComment(postId) {
+        const body = (commentDrafts[postId] ?? "").trim()
+        if (!body) return
+        try {
+            const comment = await addCommunityComment(postId, body)
+            setCommentsByPost((current) => ({ ...current, [postId]: [...(current[postId] ?? []), comment] }))
             setPosts((current) =>
-                current.map((post) =>
-                    post.postId === commentPost.postId
-                        ? { ...post, comments: post.comments + 1 }
-                        : post
-                )
+                current.map((post) => (post.postId === postId ? { ...post, comments: post.comments + 1 } : post))
             )
-            setCommentBody("")
-        } catch {
-            toast.error("Your comment could not be posted.")
+            setDraft(postId, "")
+        } catch (error) {
+            toast.error(apiMessage(error, "Your comment could not be posted."))
         }
     }
 
@@ -828,18 +1100,28 @@ export default function Community() {
                             {circles.map((circle) => (
                                 <div
                                     key={circle.circleId}
-                                    className="group flex items-center gap-3 rounded-rb-tile px-3 py-2 transition-colors hover:bg-accent"
+                                    className={`group flex items-center gap-3 rounded-rb-tile px-3 py-2 transition-colors hover:bg-accent ${
+                                        circle.circleId === activeCircleId ? "bg-rb-bee-wash" : ""
+                                    }`}
                                 >
-                                    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-rb-bee-wash font-rb-display text-[0.625rem] font-extrabold lowercase text-rb-bee-lip">
-                                        {circle.initials}
-                                    </span>
+                                    {/* The name and avatar open the circle's page; the
+                                        join control stays a separate target beside it. */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveCircleId(circle.circleId)}
+                                        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                                    >
+                                        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-rb-bee-wash font-rb-display text-[0.625rem] font-extrabold lowercase text-rb-bee-lip">
+                                            {circle.initials}
+                                        </span>
 
-                                    <div className="min-w-0 flex-1">
-                                        <p className="truncate text-sm font-bold text-foreground">{circle.name}</p>
-                                        <p className="truncate text-[11px] font-semibold text-muted-foreground">
-                                            {circle.members?.toLocaleString?.() ?? 0} members
-                                        </p>
-                                    </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-sm font-bold text-foreground">{circle.name}</p>
+                                            <p className="truncate text-[11px] font-semibold text-muted-foreground">
+                                                {circle.members?.toLocaleString?.() ?? 0} members
+                                            </p>
+                                        </div>
+                                    </button>
 
                                     {circle.owner ? (
                                         <span className="shrink-0 text-[10px] font-extrabold uppercase tracking-wide text-muted-foreground">
@@ -871,6 +1153,19 @@ export default function Community() {
                 </aside>
 
                 <main className="min-w-0 space-y-4">
+                    {activeCircle ? (
+                        <CircleHeader
+                            circle={activeCircle}
+                            onToggleJoin={toggleJoinCircle}
+                            onDelete={() => setConfirmDeleteCircleId(activeCircle.circleId)}
+                            onBack={() => setActiveCircleId(null)}
+                        />
+                    ) : null}
+
+                    {/* The collapsed prompt and the open composer are two states
+                        of one control. Rendering both showed the type buttons and
+                        a Post button twice, stacked. */}
+                    {composerOpen ? null : (
                     <PanelCard className="p-4">
                         <button type="button" className="flex w-full items-center gap-3" onClick={() => openComposer("discussion")}>
                             <CommunityAvatar initials="GG" />
@@ -878,30 +1173,29 @@ export default function Community() {
                                 Start a discussion or share a review resource...
                             </div>
                         </button>
-                        {/* Attachment-style actions on the left, the primary
-                            action on the right. The labels stay visible from sm
-                            up: "share a quiz" is not something an icon alone
-                            communicates, unlike the photo/emoji icons this
-                            shape usually carries elsewhere. */}
-                        <div className="mt-3 flex items-center justify-between gap-2 border-t-2 border-border pt-3">
-                            <div className="flex min-w-0 items-center gap-0.5">
+                        {/* Each button opens the composer on that type. There is no
+                            separate "Post" here: it opened the same composer the row
+                            already opens, so it was a second door to one room. The
+                            labels stay visible from sm up -- "share a quiz" is not
+                            something an icon alone communicates. */}
+                        <div className="mt-3 flex items-center gap-2 border-t-2 border-border pt-3">
+                            <div className="flex min-w-0 flex-wrap items-center gap-0.5">
                                 <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => openComposer("discussion")} title="Start a discussion"><MessageCircle className="size-4 text-rb-macaw-lip sm:mr-2" /><span className="hidden sm:inline">Discussion</span></Button>
                                 <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => openComposer("quiz")} title="Share a quiz"><BookOpen className="size-4 text-rb-feather-lip sm:mr-2" /><span className="hidden sm:inline">Quiz</span></Button>
                                 <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => openComposer("flashcard")} title="Share flashcards"><Sparkles className="size-4 text-rb-beetle-lip sm:mr-2" /><span className="hidden sm:inline">Flashcards</span></Button>
+                                <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => openComposer("reviewer")} title="Share a PDF or Word reviewer"><FileText className="size-4 text-rb-cardinal-lip sm:mr-2" /><span className="hidden sm:inline">Reviewer</span></Button>
                             </div>
 
-                            <Button type="button" size="sm" className="shrink-0 rounded-full" onClick={() => openComposer("discussion")}>
-                                Post
-                            </Button>
                         </div>
                     </PanelCard>
+                    )}
 
                     {composerOpen ? (
                         <section className="rounded-rb-card border-2 border-rb-macaw bg-card p-4 sm:p-5">
                             <div className="flex items-center justify-between gap-3 border-b-2 border-border pb-4">
                                 <div>
                                     <h2 className="font-rb-display text-sm font-extrabold lowercase">Create a post</h2>
-                                    <p className="mt-0.5 text-xs text-muted-foreground">Share a question, resource, quiz, photo, or screenshot.</p>
+                                    <p className="mt-0.5 text-xs text-muted-foreground">Ask a question, or share a generated quiz, flashcard set, or PDF/Word reviewer.</p>
                                 </div>
                                 <Button type="button" variant="ghost" size="icon-sm" onClick={() => { setComposerOpen(false); setAttachedFile(null) }} aria-label="Close post editor"><X /></Button>
                             </div>
@@ -911,6 +1205,7 @@ export default function Community() {
                                     { value: "discussion", label: "Discussion", icon: MessageCircle },
                                     { value: "quiz", label: "Quiz", icon: BookOpen },
                                     { value: "flashcard", label: "Flashcards", icon: Sparkles },
+                                    { value: "reviewer", label: "Reviewer", icon: FileText },
                                 ].map((type) => {
                                     const Icon = type.icon
                                     return <Button key={type.value} type="button" variant={shareType === type.value ? "secondary" : "ghost"} size="sm" className="shrink-0 rounded-full" onClick={() => { setShareType(type.value); setAttachedFile(null) }}><Icon className="mr-1.5 size-4" />{type.label}</Button>
@@ -918,10 +1213,12 @@ export default function Community() {
                             </div>
 
                             <div className="mt-4 grid gap-3">
-                                <Select value={shareCommunity} onValueChange={setShareCommunity}>
-                                    <SelectTrigger><SelectValue placeholder="Choose a study circle (optional)" /></SelectTrigger>
-                                    <SelectContent>{circles.filter((circle) => circle.joined || circle.owner).map((circle) => <SelectItem key={circle.circleId} value={String(circle.circleId)}>{circle.name}</SelectItem>)}</SelectContent>
-                                </Select>
+                                {joinedCircles.length > 0 ? (
+                                    <Select value={shareCommunity} onValueChange={setShareCommunity}>
+                                        <SelectTrigger><SelectValue placeholder="Choose a study circle (optional)" /></SelectTrigger>
+                                        <SelectContent>{joinedCircles.map((circle) => <SelectItem key={circle.circleId} value={String(circle.circleId)}>{circle.name}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                ) : null}
                                 {["quiz", "flashcard"].includes(shareType) ? (
                                     <Select value={selectedStudyItemId} onValueChange={setSelectedStudyItemId}>
                                         <SelectTrigger><SelectValue placeholder={`Choose generated ${shareType === "quiz" ? "quiz" : "flashcards"}`} /></SelectTrigger>
@@ -929,13 +1226,13 @@ export default function Community() {
                                     </Select>
                                 ) : <><Input value={shareTitle} onChange={(event) => setShareTitle(event.target.value)} placeholder="An interesting title" /><Textarea value={shareDescription} onChange={(event) => setShareDescription(event.target.value)} placeholder="What do you want to discuss?" className="min-h-32 resize-y" /></>}
 
-                                {ATTACHABLE_TYPES.has(shareType) ? (
+                                {shareType === "reviewer" ? (
                                     <div>
-                                        <input ref={fileInputRef} type="file" accept={shareType === "image" ? "image/png,image/jpeg,image/webp,image/gif" : shareType === "docx" ? ".docx" : ".pdf"} className="hidden" onChange={handleAttachmentSelected} />
+                                        <input ref={fileInputRef} type="file" accept=".pdf,.docx" className="hidden" onChange={handleAttachmentSelected} />
                                         <button type="button" disabled={isUploadingAttachment} onClick={() => fileInputRef.current?.click()} className="flex w-full items-center gap-3 rounded-rb-tile border-2 border-dashed border-border px-4 py-3 text-left hover:border-rb-macaw disabled:opacity-60">
-                                            {isUploadingAttachment ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : shareType === "image" ? <ImageIcon className="size-5 text-primary" /> : <FileText className="size-5 text-primary" />}
-                                            <span className="min-w-0 flex-1 truncate text-sm">{attachedFile?.name ?? `Add ${shareType === "image" ? "a photo or screenshot" : shareType === "docx" ? "a DOCX file" : "a PDF file"}`}</span>
-                                            {attachedFile ? <span className="text-xs font-medium text-primary">Change</span> : null}
+                                            {isUploadingAttachment ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : <FileText className="size-5 text-primary" />}
+                                            <span className="min-w-0 flex-1 truncate text-sm">{attachedFile?.name ?? "Add a PDF or Word reviewer"}</span>
+                                            {attachedFile ? <span className="shrink-0 text-xs font-medium text-primary">{formatBytes(attachedFile.size) ?? "Change"}</span> : null}
                                         </button>
                                     </div>
                                 ) : null}
@@ -943,7 +1240,7 @@ export default function Community() {
 
                             <div className="mt-4 flex justify-end gap-2 border-t-2 border-border pt-4">
                                 <Button type="button" variant="ghost" className="rounded-full" onClick={() => { setComposerOpen(false); setAttachedFile(null) }}>Cancel</Button>
-                                <Button type="button" className="rounded-full" onClick={publishPost} disabled={isUploadingAttachment || (["quiz", "flashcard"].includes(shareType) ? !selectedStudyItemId : !shareTitle.trim() || !shareDescription.trim())}><Send className="mr-2 size-4" />Post</Button>
+                                <Button type="button" className="rounded-full" onClick={publishPost} disabled={isPublishing || isUploadingAttachment || (["quiz", "flashcard"].includes(shareType) ? !selectedStudyItemId : !shareTitle.trim() || !shareDescription.trim() || (shareType === "reviewer" && !attachedFile))}><Send className="mr-2 size-4" />Post</Button>
                             </div>
                         </section>
                     ) : null}
@@ -951,21 +1248,38 @@ export default function Community() {
                     {/* Heading only -- the filters themselves live in the top
                         strip below lg and in the left rail above it, so a
                         third copy here was redundant at every width. */}
-                    <div className="flex items-center justify-between gap-3 border-b-2 border-border pb-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-border pb-3">
                         <h2 className="font-rb-display text-sm font-extrabold lowercase">
-                            {showSavedOnly
-                                ? "Saved posts"
-                                : activeTab === "for-you"
-                                    ? "Community news feed"
-                                    : FEED_TABS.find((tab) => tab.value === activeTab)?.label ?? "Community news feed"}
+                            {activeCircle
+                                ? `posts in ${activeCircle.name}`
+                                : showSavedOnly
+                                    ? "Saved posts"
+                                    : activeTab === "for-you"
+                                        ? "Community news feed"
+                                        : FEED_TABS.find((tab) => tab.value === activeTab)?.label ?? "Community news feed"}
                         </h2>
 
-                        {showSavedOnly ? (
-                            <Button type="button" variant="ghost" size="sm" className="shrink-0 rounded-full" onClick={() => setShowSavedOnly(false)}>
-                                <X className="mr-2 h-4 w-4" />
-                                Back to feed
-                            </Button>
-                        ) : null}
+                        <div className="flex items-center gap-2">
+                            {/* Searches whatever the current tab is showing, saved
+                                posts included -- one field, not one per view. */}
+                            <div className="relative">
+                                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    value={searchValue}
+                                    onChange={(event) => setSearchValue(event.target.value)}
+                                    placeholder="Search posts, authors, circles..."
+                                    aria-label="Search community posts"
+                                    className="h-9 w-full rounded-full pl-9 sm:w-64"
+                                />
+                            </div>
+
+                            {showSavedOnly ? (
+                                <Button type="button" variant="ghost" size="sm" className="shrink-0 rounded-full" onClick={() => setShowSavedOnly(false)}>
+                                    <X className="mr-2 h-4 w-4" />
+                                    Back to feed
+                                </Button>
+                            ) : null}
+                        </div>
                     </div>
 
                     {visiblePosts.length > 0 ? (
@@ -975,13 +1289,20 @@ export default function Community() {
                                     key={post.postId}
                                     post={post}
                                     circles={circles}
-                                    onToggleLike={toggleLike}
+                                    onToggleUpvote={toggleUpvote}
                                     onToggleSave={toggleSave}
                                     onJoinCircle={toggleJoinCircle}
-                                    onOpenComments={openComments}
+                                    onToggleComments={toggleComments}
                                     onDelete={removePost}
                                     onStartPractice={startPractice}
                                     onReport={setReportPostId}
+                                    onOpenAttachment={openAttachment}
+                                    onOpenCircle={setActiveCircleId}
+                                    threadOpen={openThreads.includes(post.postId)}
+                                    threadComments={commentsByPost[post.postId]}
+                                    draft={commentDrafts[post.postId]}
+                                    onDraftChange={setDraft}
+                                    onSubmitComment={submitComment}
                                 />
                             ))}
                         </div>
@@ -1006,15 +1327,6 @@ export default function Community() {
                     keeping this one too squeezed the feed below a comfortable
                     reading width. */}
                 <aside className="sticky top-24 hidden space-y-4 xl:block">
-                    <PanelCard className="p-4">
-                        <PanelHeading icon={Sparkles} tone="bg-rb-fox-wash text-rb-fox-lip" title="Community ranking" />
-                        <p className="mt-2 text-xs text-muted-foreground">XP earned from shared quiz practice.</p>
-                        <div className="mt-3 space-y-1.5">
-                            {communityLeaderboard.map((entry) => <div key={entry.learnerId} className={`flex items-center gap-2 rounded-rb-tile px-2.5 py-2 text-xs ${entry.currentLearner ? "border-2 border-rb-macaw bg-rb-macaw-wash font-bold text-rb-macaw-lip" : "border-2 border-transparent"}`}><span className="grid size-5 shrink-0 place-items-center rounded-full bg-muted font-rb-display text-[0.625rem] font-extrabold text-muted-foreground">{entry.rank}</span><span className="min-w-0 flex-1 truncate font-semibold">{entry.learnerName}</span><span className="shrink-0 font-bold">{Number(entry.xp).toLocaleString()} XP</span></div>)}
-                            {communityLeaderboard.length === 0 ? <p className="py-2 text-xs text-muted-foreground">Complete a shared quiz to begin the ranking.</p> : null}
-                        </div>
-                    </PanelCard>
-
                     {/* Study circles live in the left rail now -- one list, one
                         place to join from, rather than the same circles in two
                         columns of the same screen. */}
@@ -1093,58 +1405,43 @@ export default function Community() {
                             Cancel
                         </Button>
 
-                        <Button type="button" onClick={createStudyCircle}>
-                            <UsersRound className="mr-2 h-4 w-4" />
-                            Create study circle
+                        <Button type="button" onClick={createStudyCircle} disabled={isCreatingCircle}>
+                            {isCreatingCircle ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                                <UsersRound className="mr-2 h-4 w-4" />
+                            )}
+                            {isCreatingCircle ? "Creating..." : "Create study circle"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
 
-            <Dialog open={commentsOpen} onOpenChange={setCommentsOpen}>
-                <DialogContent className="sm:max-w-xl">
+            <Dialog open={confirmDeleteCircleId != null} onOpenChange={(open) => { if (!open) setConfirmDeleteCircleId(null) }}>
+                <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                        <DialogTitle>Comments</DialogTitle>
-                        <DialogDescription>{commentPost?.title || "Join the discussion"}</DialogDescription>
+                        <DialogTitle>Delete this study circle?</DialogTitle>
+                        <DialogDescription>
+                            The circle, its members, and every post written in it are removed. This cannot be undone.
+                        </DialogDescription>
                     </DialogHeader>
 
-                    <div className="max-h-[360px] space-y-3 overflow-y-auto pr-1">
-                        {comments.length ? (
-                            comments.map((comment) => (
-                                <div key={comment.commentId} className="flex gap-3 rounded-rb-tile border-2 border-border p-3">
-                                    <CommunityAvatar initials={comment.initials} tone={avatarTone(comment.authorName ?? "")} className="!size-8 !text-xs" />
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-bold">{comment.authorName}</p>
-                                        <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
-                                            {comment.body}
-                                        </p>
-                                    </div>
-                                </div>
-                            ))
-                        ) : (
-                            <p className="py-8 text-center text-sm text-muted-foreground">
-                                No comments yet. Start the conversation.
-                            </p>
-                        )}
-                    </div>
-
-                    <div className="flex items-end gap-2">
-                        <Textarea
-                            value={commentBody}
-                            onChange={(event) => setCommentBody(event.target.value)}
-                            placeholder="Write a helpful comment..."
-                            className="min-h-20"
-                        />
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => setConfirmDeleteCircleId(null)}>
+                            Cancel
+                        </Button>
                         <Button
                             type="button"
-                            size="icon"
-                            onClick={submitComment}
-                            disabled={!commentBody.trim()}
-                            aria-label="Post comment"
+                            variant="destructive"
+                            onClick={() => {
+                                const id = confirmDeleteCircleId
+                                setConfirmDeleteCircleId(null)
+                                removeCircle(id)
+                            }}
                         >
-                            <Send className="h-4 w-4" />
+                            Delete circle
                         </Button>
-                    </div>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 
