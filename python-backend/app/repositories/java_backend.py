@@ -193,6 +193,41 @@ def list_certification_lessons(session: Session, certification_id: int) -> list[
     return [dict(row) for row in rows]
 
 
+def list_certification_major_categories(
+    session: Session, certification_id: int
+) -> list[dict[str, Any]]:
+    """All major categories under a certification, for resolving a generated
+    major quiz's category *name* back to the FK the publish checklist reads."""
+    rows = session.execute(
+        select(
+            major_categories.c.major_category_id,
+            major_categories.c.title.label("name"),
+        ).where(major_categories.c.certification_id == certification_id)
+    ).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def list_certification_middle_categories(
+    session: Session, certification_id: int
+) -> list[dict[str, Any]]:
+    """All middle categories under a certification, with their parent major."""
+    rows = session.execute(
+        select(
+            middle_categories.c.middle_category_id,
+            middle_categories.c.title.label("name"),
+            middle_categories.c.major_category_id,
+        )
+        .select_from(
+            middle_categories.join(
+                major_categories,
+                major_categories.c.major_category_id == middle_categories.c.major_category_id,
+            )
+        )
+        .where(major_categories.c.certification_id == certification_id)
+    ).mappings().all()
+    return [dict(row) for row in rows]
+
+
 def get_exam_type_id(session: Session, exam_type_text: str) -> int | None:
     return session.execute(
         select(exam_types.c.exam_type_id).where(exam_types.c.exam_type_text == exam_type_text)

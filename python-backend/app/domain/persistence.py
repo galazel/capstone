@@ -71,6 +71,36 @@ def build_lesson_index(lessons: Iterable[dict[str, Any]]) -> dict[str, int]:
     return index
 
 
+def build_name_index(rows: Iterable[dict[str, Any]], id_key: str) -> dict[str, int]:
+    """Maps normalized `name` -> `row[id_key]`, for major/middle categories.
+
+    Same first-wins rule as `build_lesson_index`.
+    """
+    index: dict[str, int] = {}
+    for row in rows:
+        key = normalize_lesson_name(row.get("name", ""))
+        if key and key not in index:
+            index[key] = row[id_key]
+    return index
+
+
+def resolve_category_id(name: str, index: dict[str, int]) -> int | None:
+    """Resolves a generated category name to its id, exact then unambiguous
+    substring -- the same two-step `resolve_lesson` uses for `lesson_ref`.
+
+    Returns None rather than guessing: an exam pinned to the *wrong* category
+    would satisfy one publish requirement while leaving another unsatisfiable,
+    which is worse than leaving the FK null.
+    """
+    key = normalize_lesson_name(name)
+    if not key:
+        return None
+    if key in index:
+        return index[key]
+    candidates = [candidate for candidate in index if key in candidate or candidate in key]
+    return index[candidates[0]] if len(candidates) == 1 else None
+
+
 def resolve_lesson(
     question: dict[str, Any],
     lesson_index: dict[str, int],
@@ -143,6 +173,64 @@ def plan_question_rows(
             f"{len(plan.unresolved)} question(s) had no resolvable lesson and were not saved."
         )
     return plan
+
+
+#: A generated block whose text becomes the *name* of the section it opens,
+#: rather than a block rendered inside one. Only `heading` -- `subheading` is
+#: a real block that lives inside a section's content.
+_SECTION_BREAK_TYPE = "heading"
+
+
+def _is_section(entry: Any) -> bool:
+    """True when an entry is already an editor section, not a content block.
+
+    Sections carry `content`/`sectionName`; blocks carry `type`/`data`. The
+    two are unambiguous, so a mixed or already-converted list round-trips.
+    """
+    return isinstance(entry, dict) and ("content" in entry or "sectionName" in entry)
+
+
+def build_lesson_sections(entries: Iterable[Any]) -> list[dict[str, Any]]:
+    """Wraps a generated lesson's flat block list into editor sections.
+
+    The lesson agent's `sections` field is misnamed: it is a FLAT list of
+    content blocks. Both the admin editor and the learner viewer read the
+    stored jsonb as a list of *sections* and render `section.content` -- so a
+    flat list renders as N empty "Untitled section" cards and the lesson
+    looks blank everywhere. Storing the flat list is therefore a data-shape
+    bug, not a rendering one, and it belongs here rather than in either
+    reader.
+
+    Each `heading` block opens a section and supplies its name; the blocks
+    after it become that section's content. Blocks before the first heading
+    get an unnamed leading section so nothing is dropped. A list that is
+    already section-shaped passes through untouched.
+    """
+    entries = [entry for entry in entries or [] if isinstance(entry, dict)]
+    if not entries:
+        return []
+
+    # Already sections (hand-authored in the editor, or converted by an
+    # earlier run) -- do not re-wrap.
+    if any(_is_section(entry) for entry in entries):
+        return entries
+
+    sections: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+
+    for block in entries:
+        if block.get("type") == _SECTION_BREAK_TYPE:
+            current = {"sectionName": (block.get("data") or {}).get("text") or "", "content": []}
+            sections.append(current)
+            continue
+
+        if current is None:
+            current = {"sectionName": "", "content": []}
+            sections.append(current)
+
+        current["content"].append(block)
+
+    return sections
 
 
 def exam_type_for_scope(scope: str) -> str:

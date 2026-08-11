@@ -9,10 +9,13 @@ import pytest
 
 from app.domain.persistence import (
     build_lesson_index,
+    build_lesson_sections,
+    build_name_index,
     checking_method_for,
     exam_type_for_scope,
     normalize_lesson_name,
     plan_question_rows,
+    resolve_category_id,
     resolve_lesson,
 )
 from app.domain.validation import Severity, find_duplicates, validate_question_batch
@@ -103,6 +106,82 @@ def test_plan_sets_aside_unresolvable_questions():
     assert plan.questions == []
     assert len(plan.unresolved) == 1
     assert "not saved" in plan.warnings[-1]
+
+
+CATEGORIES = [
+    {"major_category_id": 7, "name": "Development Technology"},
+    {"major_category_id": 8, "name": "Management"},
+]
+
+
+def test_category_index_keys_on_normalized_name():
+    index = build_name_index(CATEGORIES, "major_category_id")
+
+    assert index == {"development technology": 7, "management": 8}
+
+
+def test_category_name_resolves_exactly_and_by_unique_substring():
+    index = build_name_index(CATEGORIES, "major_category_id")
+
+    assert resolve_category_id("Development Technology", index) == 7
+    assert resolve_category_id("  management  ", index) == 8
+    # "Technology" appears in exactly one category.
+    assert resolve_category_id("Technology", index) == 7
+
+
+def test_ambiguous_or_unknown_category_resolves_to_none():
+    index = build_name_index(
+        [
+            {"middle_category_id": 1, "name": "Network Security"},
+            {"middle_category_id": 2, "name": "Network Design"},
+        ],
+        "middle_category_id",
+    )
+
+    # Pinning to the wrong category would satisfy one requirement and strand
+    # the other, so an ambiguous match must stay null.
+    assert resolve_category_id("Network", index) is None
+    assert resolve_category_id("Databases", index) is None
+    assert resolve_category_id("", index) is None
+
+
+def test_flat_blocks_are_grouped_into_sections_by_heading():
+    sections = build_lesson_sections([
+        {"type": "heading", "data": {"text": "Introduction"}},
+        {"type": "description", "data": {"text": "Intro body"}},
+        {"type": "heading", "data": {"text": "Testing"}},
+        {"type": "subheading", "data": {"text": "Unit tests"}},
+        {"type": "description", "data": {"text": "Testing body"}},
+    ])
+
+    assert [s["sectionName"] for s in sections] == ["Introduction", "Testing"]
+    assert [b["type"] for b in sections[0]["content"]] == ["description"]
+    # `subheading` stays a content block -- only `heading` breaks a section.
+    assert [b["type"] for b in sections[1]["content"]] == ["subheading", "description"]
+
+
+def test_blocks_before_the_first_heading_get_an_unnamed_section():
+    sections = build_lesson_sections([
+        {"type": "description", "data": {"text": "Orphan"}},
+        {"type": "heading", "data": {"text": "Real section"}},
+    ])
+
+    assert sections[0]["sectionName"] == ""
+    assert sections[0]["content"][0]["data"]["text"] == "Orphan"
+    assert sections[1]["sectionName"] == "Real section"
+
+
+def test_already_sectioned_content_passes_through_unchanged():
+    authored = [{"id": "a", "sectionName": "Hand-authored", "content": [
+        {"id": "b", "type": "heading", "data": {"text": "Inner heading"}},
+    ]}]
+
+    assert build_lesson_sections(authored) == authored
+
+
+def test_empty_lesson_content_stays_empty():
+    assert build_lesson_sections([]) == []
+    assert build_lesson_sections(None) == []
 
 
 def test_exam_type_mapping_matches_javas_seeded_types():

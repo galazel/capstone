@@ -17,10 +17,13 @@ from sqlalchemy.orm import Session
 
 from app.domain.persistence import (
     build_lesson_index,
+    build_lesson_sections,
+    build_name_index,
     normalize_lesson_name,
     checking_method_for,
     exam_type_for_scope,
     plan_question_rows,
+    resolve_category_id,
 )
 from app.repositories import java_backend as repo
 
@@ -167,24 +170,50 @@ def persist_lesson_content(
 ) -> tuple[int, list[str]]:
     """Writes each generated lesson's blocks onto its curriculum row.
 
-    Lesson *content* was the third thing being discarded with the
-    checkpoint: `insert_lesson` always wrote an empty structure, so an
-    authored, admin-approved lesson never reached the learner app.
+    If a generated lesson name does not match an existing curriculum lesson,
+    create a new lesson row under the certification's first middle category
+    so generated content is not lost. This behaviour avoids dropping AI-
+    authored lesson bodies when the curriculum is missing matching rows.
     """
     if not lessons_generated:
         return 0, []
 
-    lesson_index = build_lesson_index(repo.list_certification_lessons(session, certification_id))
+    # Fetch existing lessons and build an index for name -> lesson_id lookups.
+    existing_lessons = repo.list_certification_lessons(session, certification_id)
+    lesson_index = build_lesson_index(existing_lessons)
+
+    # Default to the first middle_category_id when inserting new lessons.
+    default_middle_category_id = (
+        existing_lessons[0]["middle_category_id"] if existing_lessons else None
+    )
+
     written = 0
     warnings: list[str] = []
 
     for lesson in lessons_generated:
         name = lesson.get("name") or lesson.get("title") or ""
-        lesson_id = lesson_index.get(normalize_lesson_name(name))
+        key = normalize_lesson_name(name)
+        lesson_id = lesson_index.get(key)
+        # The generator emits a flat block list; the editor and the learner
+        # viewer both render sections. Convert before writing, or the lesson
+        # renders as a stack of empty untitled sections.
+        blocks = build_lesson_sections(lesson.get("blocks") or lesson.get("sections") or [])
+
         if lesson_id is None:
-            warnings.append(f"Generated lesson '{name}' matched no curriculum lesson; content not saved.")
+            if default_middle_category_id is None:
+                warnings.append(
+                    f"Generated lesson '{name}' matched no curriculum lesson; content not saved."
+                )
+                continue
+
+            # Create a new lesson under the default middle category and write blocks.
+            lesson_id = repo.insert_lesson(session, default_middle_category_id, name, blocks)
+            # Update local index so subsequent resolutions use the newly-created lesson.
+            lesson_index[key] = lesson_id
+            logger.info("Inserted new lesson '%s' (id %s) into middle_category %s", name, lesson_id, default_middle_category_id)
+            written += 1
             continue
-        blocks = lesson.get("blocks") or lesson.get("sections") or []
+
         repo.update_lesson_content(session, lesson_id, blocks)
         written += 1
 
@@ -212,6 +241,18 @@ def persist_generated_assessments(
     lesson_index = build_lesson_index(lessons)
     default_lesson_id = lessons[0]["lesson_id"]
 
+    # A middle/major exam is only *seen* by the publish checklist through its
+    # category FK: `buildPublishRequirements` derives coverage from
+    # `exam.getMiddleCategory()`/`getMajorCategory()`, so an exam saved with a
+    # null FK reads as "not created yet" no matter how many questions it has.
+    # The generator names its category rather than keying it, so resolve here.
+    major_index = build_name_index(
+        repo.list_certification_major_categories(session, certification_id), "major_category_id"
+    )
+    middle_index = build_name_index(
+        repo.list_certification_middle_categories(session, certification_id), "middle_category_id"
+    )
+
     created: list[int] = []
     warnings: list[str] = []
 
@@ -238,19 +279,35 @@ def persist_generated_assessments(
         ))
 
     for quiz in result.get("middle_quizzes") or []:
+        middle_name = quiz.get("middleCategory") or "Middle Category"
+        middle_category_id = resolve_category_id(middle_name, middle_index)
+        if middle_category_id is None:
+            warnings.append(
+                f"Middle exam '{middle_name}' matched no middle category; it will not "
+                f"satisfy that category's publishing requirement."
+            )
         _record(*persist_exam(
             session, certification_id=certification_id, scope="MIDDLE",
-            title=f"{quiz.get('middleCategory', 'Middle Category')} Exam",
+            title=f"{middle_name} Exam",
             questions=quiz.get("questions") or [],
             lesson_index=lesson_index, fallback_lesson_id=default_lesson_id,
+            middle_category_id=middle_category_id,
         ))
 
     for quiz in result.get("major_quizzes") or []:
+        major_name = quiz.get("majorCategory") or "Major Category"
+        major_category_id = resolve_category_id(major_name, major_index)
+        if major_category_id is None:
+            warnings.append(
+                f"Major exam '{major_name}' matched no major category; it will not "
+                f"satisfy that category's publishing requirement."
+            )
         _record(*persist_exam(
             session, certification_id=certification_id, scope="MAJOR",
-            title=f"{quiz.get('majorCategory', 'Major Category')} Exam",
+            title=f"{major_name} Exam",
             questions=quiz.get("questions") or [],
             lesson_index=lesson_index, fallback_lesson_id=default_lesson_id,
+            major_category_id=major_category_id,
         ))
 
     diagnostic = result.get("diagnostic_exam") or {}
