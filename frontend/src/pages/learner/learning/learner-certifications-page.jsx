@@ -6,7 +6,7 @@ import { Award, GraduationCap } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { BubbleCard } from "@/components/commons/bubble-card.jsx"
+import { BUBBLE_TONES, BubbleCard } from "@/components/commons/bubble-card.jsx"
 import { LearnerEmptyState, ProgressBar, toneForCertification } from "@/components/learner/learner-ui.jsx"
 
 const INITIAL_VISIBLE_COUNT = 8
@@ -58,17 +58,20 @@ function CertificationCard({
           : 0
 
   const category = getCertificationCategory(certification)
+  const tone = toneForCertification(certification)
+  // Same tone the cap uses, so the button and the bar belong to this card.
+  const palette = BUBBLE_TONES[tone] ?? BUBBLE_TONES.macaw
 
   return (
       <BubbleCard
-          tone={toneForCertification(certification)}
+          tone={tone}
           icon={GraduationCap}
           eyebrow={category}
           title={
             <button
                 type="button"
                 onClick={onOpen}
-                className="rounded-sm text-left hover:underline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-rb-macaw"
+                className="rounded-sm text-left hover:underline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--bubble-tone)]"
             >
               {getCertificationTitle(certification)}
             </button>
@@ -80,7 +83,11 @@ function CertificationCard({
                 : []),
           ]}
           footer={
-            <Button className="w-full rounded-full" onClick={onAction}>
+            <Button
+                className="w-full rounded-full text-white hover:opacity-90"
+                style={{ background: palette.solid }}
+                onClick={onAction}
+            >
               {enrolled ? "Continue Learning" : "View Certification"}
             </Button>
           }
@@ -99,7 +106,7 @@ function CertificationCard({
               </span>
               </div>
 
-              <ProgressBar value={progress} />
+              <ProgressBar value={progress} color={palette.solid} />
             </div>
         )}
       </BubbleCard>
@@ -379,7 +386,12 @@ export default function LearnerCertificationsPage() {
                 />
             ) : (
                 <>
-                  <section className="grid grid-cols-1 items-stretch gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {/* A fourth column past 1536px. Three across a wide desktop gave each
+                      card ~530px under a fixed 128px cap, which reads as a stretched
+                      banner rather than a card -- the arena card is designed around a
+                      roughly square cap. Capping the width by adding a column keeps the
+                      proportion instead of letting the card grow to fill the row. */}
+                  <section className="grid grid-cols-1 items-stretch gap-6 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                     {visibleCertifications.map((certification, index) => {
                       const certificationId = getCertificationId(certification)
 

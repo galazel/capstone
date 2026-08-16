@@ -48,6 +48,26 @@ export const GRADING_MESSAGES = [
   { tag: "score", text: "Totalling your score...", tone: "bee" },
 ]
 
+/**
+ * Copy for the wait before an attempt opens.
+ *
+ * Starting one is not free either: the server creates the attempt, snapshots
+ * every question learner-safe so a later edit to the bank cannot change a paper
+ * mid-sitting, picks the question set (a retake's set is chosen against what
+ * was missed last time), and hands back any answers already autosaved.
+ *
+ * This replaces three grey blocks. A skeleton is a promise about layout —
+ * "text goes here, a box goes there" — which is the right shape for a list
+ * arriving, and the wrong one for a paper being built: nothing on this screen
+ * is laid out until the server has said what the questions are.
+ */
+export const ATTEMPT_MESSAGES = [
+  { tag: "paper", text: "Setting out your paper...", tone: "macaw" },
+  { tag: "questions", text: "Picking your questions...", tone: "beetle" },
+  { tag: "answers", text: "Restoring any answers you saved...", tone: "bee" },
+  { tag: "ready", text: "Almost ready...", tone: "fox" },
+]
+
 const TAG_TONE = {
   macaw: "bg-rb-macaw-wash text-rb-macaw-lip",
   bee: "bg-rb-bee-wash text-rb-bee-ink",

@@ -227,12 +227,40 @@ function NextUpTile({
      A certification with no published assessments is judged on lessons alone,
      rather than being made permanently unfinishable. */
   const lessonsDone = totalLessons > 0 && completedLessons >= totalLessons
-  const assessmentsDone = totalAssessments === 0 || passedAssessments >= totalAssessments
+  /* Zero counted assessments is not the same claim as "you passed them all",
+     and the tile used to make the second one out of the first. It is the more
+     dangerous direction of the two to be wrong in: a certification whose
+     assessments are not reaching this count -- unpublished, targeting content
+     outside the official curriculum, filtered as a tutor-generated practice
+     set -- reads as finished while mock exams sit unsat. Kept as a separate
+     flag so the copy below can say which of the two it actually knows. */
+  const noAssessmentsKnown = totalAssessments === 0
+  const assessmentsDone = noAssessmentsKnown || passedAssessments >= totalAssessments
   const done = lessonsDone && assessmentsDone
   // Lessons finished but assessments outstanding: the tile has no next lesson
   // to offer, and the honest next action is to go and sit them.
   const awaitingAssessments = lessonsDone && !assessmentsDone
-  const percent = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0
+
+  /* Progress over everything the certification requires, not just the reading.
+     Lessons read, quizzes passed and exams passed are each one unit, and the
+     bar is the share of those units done.
+
+     Weighted evenly on purpose. A lesson and a mock exam are obviously not the
+     same amount of work, but any other weighting would have to be invented
+     here -- nothing in the payload says what an assessment is worth relative
+     to a lesson -- and an invented weight that makes the bar move faster or
+     slower than the work is worse than an even one the learner can predict.
+
+     Each side is clamped before it is added, so a stale count (more passes
+     recorded than assessments currently published, which happens when an exam
+     is unpublished after being passed) cannot push the bar past 100%. */
+  const lessonUnits = Math.max(0, totalLessons)
+  const assessmentUnits = Math.max(0, totalAssessments)
+  const totalUnits = lessonUnits + assessmentUnits
+  const doneUnits =
+    Math.min(Math.max(0, completedLessons), lessonUnits) +
+    Math.min(Math.max(0, passedAssessments), assessmentUnits)
+  const percent = totalUnits > 0 ? Math.round((doneUnits / totalUnits) * 100) : 0
 
   return (
     <BentoTile tone="macaw" col={4} row={2}>
@@ -257,7 +285,9 @@ function NextUpTile({
 
         <p className="mt-1 font-rb-display text-xl font-extrabold leading-tight sm:text-2xl">
           {done
-            ? "Certification complete."
+            ? noAssessmentsKnown
+              ? "All lessons complete."
+              : "Certification complete."
             : awaitingAssessments
               ? `${totalAssessments - passedAssessments} assessment${
                   totalAssessments - passedAssessments === 1 ? "" : "s"
@@ -267,7 +297,13 @@ function NextUpTile({
 
         <p className="mt-1.5 text-sm text-rb-macaw-lip">
           {done
-            ? "Every lesson read and every assessment passed."
+            ? noAssessmentsKnown
+              ? /* Says what was actually checked. If this reads "no assessments"
+                   on a certification that plainly has a mock exam, the count is
+                   wrong -- and that is worth showing rather than papering over
+                   with a claim about assessments nobody counted. */
+                "Every lesson is read. No assessments are listed for this certification."
+              : "Every lesson read and every assessment passed."
             : awaitingAssessments
               ? "Every lesson is read. Sit the remaining assessments to finish the certification."
               : (nextLesson?.middleCategoryTitle ?? "Continue studying to raise your mastery.")}

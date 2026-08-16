@@ -595,6 +595,7 @@ function LessonView({
   onPrev,
   onNext,
   backTo,
+  takenExamIds,
 }) {
   const articleRef = useRef(null)
   const headerRef = useRef(null)
@@ -902,7 +903,10 @@ function LessonView({
           reading column. */}
       {lessonItem.quiz ? (
         <div className="-mx-4 mt-10 sm:-mx-6 lg:-mx-8">
-          <QuizBand quiz={lessonItem.quiz} />
+          <QuizBand
+            quiz={lessonItem.quiz}
+            taken={Boolean(takenExamIds?.has(String(lessonItem.quiz.examId)))}
+          />
         </div>
       ) : null}
 
@@ -971,7 +975,7 @@ function LessonView({
  * is what the attempt engine already does. Rendering our own radio buttons here
  * would produce a score the backend never sees.
  */
-function QuizBand({ quiz }) {
+function QuizBand({ quiz, taken }) {
   return (
     <section id={`quiz-${quiz.examId}`} className="scroll-mt-8 bg-rb-bee px-5 py-12 sm:px-10 lg:px-14">
       <div className="w-full">
@@ -1009,13 +1013,29 @@ function QuizBand({ quiz }) {
             ))}
           </ul>
 
-          <div className="mt-8 flex justify-center">
+          {/* "start" is a lie once there is an attempt behind it, and the
+              learner is the one person who knows it -- they sat this quiz and
+              the page offered to start it as though nothing had happened.
+
+              The history link appears only alongside a retake: with no attempts
+              yet it would lead to an empty page, and offering it would suggest
+              there was something to see. */}
+          <div className="mt-8 flex flex-col items-center gap-3">
             <TactileButton asChild variant="macaw">
               <Link to={`/learner/assessments/${quiz.examId}`}>
-                start quiz
+                {taken ? "retake quiz" : "start quiz"}
                 <ArrowRight className="size-4" />
               </Link>
             </TactileButton>
+
+            {taken ? (
+              <Link
+                to={`/learner/assessments/${quiz.examId}/history`}
+                className="text-sm font-bold text-rb-macaw-lip underline decoration-dotted underline-offset-4 hover:text-rb-macaw"
+              >
+                view past attempts
+              </Link>
+            ) : null}
           </div>
         </Reveal>
       </div>
@@ -1024,7 +1044,7 @@ function QuizBand({ quiz }) {
 }
 
 /** The unit assessment splash: what it takes to pass, and one key. */
-function AssessmentView({ exam, position, total, backTo }) {
+function AssessmentView({ exam, position, total, backTo, taken }) {
   const passMark = Math.round(Number(exam.passingScore ?? 0))
 
   return (
@@ -1104,12 +1124,23 @@ function AssessmentView({ exam, position, total, backTo }) {
           ))}
         </ul>
 
-        <TactileButton asChild variant="fox" className="mt-9 w-fit">
-          <Link to={`/learner/assessments/${exam.examId}`}>
-            start quiz
-            <ArrowRight className="size-4" />
-          </Link>
-        </TactileButton>
+        <div className="mt-9 flex flex-wrap items-center gap-4">
+          <TactileButton asChild variant="fox" className="w-fit">
+            <Link to={`/learner/assessments/${exam.examId}`}>
+              {taken ? "retake exam" : "start exam"}
+              <ArrowRight className="size-4" />
+            </Link>
+          </TactileButton>
+
+          {taken ? (
+            <Link
+              to={`/learner/assessments/${exam.examId}/history`}
+              className="text-sm font-bold text-rb-fox-lip underline decoration-dotted underline-offset-4 hover:text-rb-fox"
+            >
+              view past attempts
+            </Link>
+          ) : null}
+        </div>
       </Reveal>
       </div>
     </div>
@@ -1158,6 +1189,21 @@ export default function LearnerTopicPage() {
   const lessonById = useMemo(
     () => new Map((data?.lessons ?? []).map((lesson) => [String(lesson.lessonId), lesson])),
     [data?.lessons],
+  )
+
+  /* Which exams this learner has already sat -- one entry per exam, however
+     many attempts are behind it. Read off `examResults` exactly as the
+     curriculum page does, so the two screens cannot disagree about whether
+     something has been taken. "Taken", note, not "passed": a failed attempt
+     still means the launcher must offer a retake rather than a first go. */
+  const takenExamIds = useMemo(
+    () =>
+      new Set(
+        (data?.examResults ?? [])
+          .map((result) => (result.examId == null ? null : String(result.examId)))
+          .filter(Boolean),
+      ),
+    [data?.examResults],
   )
 
   // Same per-lesson priority tags the curriculum page shows -- fetched here
@@ -1527,6 +1573,7 @@ export default function LearnerTopicPage() {
               onToggleSection={toggleSection}
               onReadLesson={readLesson}
               onToggleLesson={readLesson}
+              takenExamIds={takenExamIds}
               onPrev={
                 prev
                   ? () => {
@@ -1551,6 +1598,7 @@ export default function LearnerTopicPage() {
               position={activeIndex + 1}
               total={track.length}
               backTo={backTo}
+              taken={Boolean(takenExamIds.has(String(active.exam.examId)))}
             />
           )}
             </motion.div>

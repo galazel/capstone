@@ -5,7 +5,6 @@ import {
   CalendarDays,
   LogOutIcon,
   FilesIcon,
-  NotebookPenIcon,
   SettingsIcon,
   UserIcon,
 } from "@/components/icons"
@@ -63,14 +62,6 @@ export default function LearnerLayout() {
   const { logout: authLogout } = useAuth()
   const [searchValue, setSearchValue] = useState("")
   const entitlements = useLearnerEntitlements()
-
-  const openMistakeNotebook = () => {
-    if (entitlements.isLoading) return
-    if (!entitlements.hasPremium) {
-      return
-    }
-    navigate("/learner/mistakes")
-  }
 
   const query = useQuery({
     queryKey: ["learner-portal-data"],
@@ -260,16 +251,6 @@ export default function LearnerLayout() {
                 <DropdownMenuItem onClick={() => navigate("/learner/library")}>
                   <FilesIcon />
                   Library
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={(event) => {
-                    if (!entitlements.hasPremium) event.preventDefault()
-                    openMistakeNotebook()
-                  }}
-                >
-                  <NotebookPenIcon />
-                  <span className="flex-1">Mistake Notebook</span>
-                  {!entitlements.hasPremium ? <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-primary">PRO</span> : null}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate("/learner/subscription")}>
                   <SettingsIcon />

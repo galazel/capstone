@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button"
 import { useStudyPlanGate } from "@/components/learner/use-study-plan-gate.jsx"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { BubbleCard } from "@/components/commons/bubble-card.jsx"
+import { BUBBLE_TONES, BubbleCard } from "@/components/commons/bubble-card.jsx"
 import { achievementBadge } from "@/lib/achievements.js"
 import {
   LearnerEmptyState,
@@ -236,17 +236,20 @@ function CourseCard({ course, onOpen }) {
   const status = getCourseStatus(progress, completedLessons)
   const needsDiagnostic = !diagnosticCompleted
   const completed = progress >= 100
+  const tone = toneForCertification(certification)
+  // Same tone the cap uses, so the button and the bar belong to this card.
+  const palette = BUBBLE_TONES[tone] ?? BUBBLE_TONES.macaw
 
   return (
       <BubbleCard
-          tone={toneForCertification(certification)}
+          tone={tone}
           icon={needsDiagnostic ? LockKeyhole : completed ? Award : CirclePlay}
           eyebrow="REBYU Certification Review"
           title={
             <button
                 type="button"
                 onClick={onOpen}
-                className="rounded-sm text-left hover:underline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-rb-macaw"
+                className="rounded-sm text-left hover:underline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--bubble-tone)]"
             >
               {getCertificationTitle(certification)}
             </button>
@@ -256,7 +259,11 @@ function CourseCard({ course, onOpen }) {
           ]}
           footer={
             <div className="w-full space-y-2">
-              <Button className="w-full rounded-full" onClick={onOpen}>
+              <Button
+                  className="w-full rounded-full text-white hover:opacity-90"
+                  style={{ background: palette.solid }}
+                  onClick={onOpen}
+              >
                 {needsDiagnostic ? (
                     <ClipboardCheck className="mr-2 size-3.5" />
                 ) : null}
@@ -280,7 +287,7 @@ function CourseCard({ course, onOpen }) {
             </span>
           </div>
 
-          <ProgressBar value={progress} />
+          <ProgressBar value={progress} color={palette.solid} />
         </div>
 
         <p className="mt-4 truncate border-t border-border pt-3 text-xs text-muted-foreground">
@@ -531,7 +538,14 @@ export default function LearnerLearningPage() {
                     <div
                         className={
                           viewMode === "GRID"
-                              ? "grid gap-4 sm:grid-cols-2 2xl:grid-cols-3"
+                              /* Three from xl, four from 2xl. This column already
+                                 gives 280px to the achievements rail beside it, so
+                                 holding two-up until 1536px left each card near
+                                 600px wide under a 128px cap -- the same stretched
+                                 banner the certifications grid had, worse. These
+                                 breakpoints land both pages on a similar card
+                                 width, which matters because it is the same card. */
+                              ? "grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
                               : "grid gap-4"
                         }
                     >

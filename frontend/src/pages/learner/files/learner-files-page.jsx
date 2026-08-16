@@ -1,38 +1,24 @@
-import React, { useEffect, useMemo, useRef, useState } from "react"
+import React, { useEffect, useMemo, useState } from "react"
 import {
   BookOpenCheck,
   BrainCircuit,
-  Download,
-  Eye,
-  FileText,
   Layers3,
   LibraryBig,
   Loader2,
   Search,
-  Share2,
-  UsersRound,
-  Plus,
   Trash2,
   Link,
   StickyNote,
-  History,
 } from "@/components/icons"
 import { useNavigate } from "react-router-dom"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "sonner"
-import {
-  addLibraryItem,
-  deleteLibraryItem,
-  getLibraryItems,
-  uploadLibraryFile,
-} from "@/services/learnerToolsService"
-import { getFileDownloadUrl, getFileViewUrl } from "@/services/fileService"
+import { deleteLibraryItem, getLibraryItems } from "@/services/learnerToolsService"
 import { getAllCertifications } from "@/services/certificationService"
 import {
   LearnerEmptyState,
@@ -40,6 +26,9 @@ import {
 } from "@/components/learner/learner-ui.jsx"
 
 const ALL_VALUE = "all"
+
+/** What the library is: the study aids the tutor generated for this learner. */
+const LIBRARY_KINDS = new Set(["quiz", "flashcard"])
 
 const libraryTypeMeta = {
   quiz: {
@@ -53,18 +42,6 @@ const libraryTypeMeta = {
     icon: Layers3,
     badge:
         "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300",
-  },
-  file: {
-    label: "File",
-    icon: FileText,
-    badge:
-        "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
-  },
-  community: {
-    label: "Community",
-    icon: UsersRound,
-    badge:
-        "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
   },
   link: {
     label: "Link",
@@ -94,22 +71,12 @@ function formatDate(value) {
   }).format(date)
 }
 
-/** "file" items carry a raw S3 key in route/downloadUrl; everything else already has a usable URL/path. */
+/* Every kind the library still carries holds a usable URL or in-app path
+   already. The S3-key resolution that used to live here existed only for
+   uploaded files and saved community attachments, neither of which the
+   library shows any more. */
 function resolveOpenUrl(item) {
-  if (item.kind === "file" && item.route) {
-    return getFileViewUrl(item.route)
-  }
   return item.route
-}
-
-function resolveDownloadUrl(item) {
-  if (item.kind === "file" && item.downloadUrl) {
-    return getFileDownloadUrl(item.downloadUrl)
-  }
-  if (item.kind === "community" && item.downloadUrl) {
-    return getFileDownloadUrl(item.downloadUrl)
-  }
-  return null
 }
 
 export default function LearnerFilesPage() {
@@ -122,15 +89,6 @@ export default function LearnerFilesPage() {
   const [certifications, setCertifications] = useState([])
   const [isLoading, setIsLoading] = useState(true)
 
-  const [addOpen, setAddOpen] = useState(false)
-  const [newType, setNewType] = useState("link")
-  const [newTitle, setNewTitle] = useState("")
-  const [newDescription, setNewDescription] = useState("")
-  const [newUrl, setNewUrl] = useState("")
-  const [uploadedFile, setUploadedFile] = useState(null)
-  const [isUploadingFile, setIsUploadingFile] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
-  const fileInputRef = useRef(null)
 
   const [viewItem, setViewItem] = useState(null)
 
@@ -144,67 +102,6 @@ export default function LearnerFilesPage() {
         .finally(() => setIsLoading(false))
   }, [])
 
-  function resetAddForm() {
-    setNewType("link")
-    setNewTitle("")
-    setNewDescription("")
-    setNewUrl("")
-    setUploadedFile(null)
-  }
-
-  async function handleFileSelected(event) {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    setIsUploadingFile(true)
-    try {
-      const { resourceUrl } = await uploadLibraryFile(file)
-      setUploadedFile({ name: file.name, key: resourceUrl })
-    } catch {
-      toast.error("The file could not be uploaded.")
-    } finally {
-      setIsUploadingFile(false)
-      if (fileInputRef.current) fileInputRef.current.value = ""
-    }
-  }
-
-  async function saveResource() {
-    if (!newTitle.trim()) {
-      toast.error("Add a title.")
-      return
-    }
-    if (newType === "file" && !uploadedFile) {
-      toast.error("Upload a file first.")
-      return
-    }
-    if (newType === "link" && !newUrl.trim()) {
-      toast.error("Add a resource URL.")
-      return
-    }
-
-    setIsSaving(true)
-    try {
-      const item = await addLibraryItem({
-        itemType: newType,
-        title: newTitle.trim(),
-        description: newDescription.trim(),
-        resourceUrl: newType === "file"
-            ? uploadedFile.key
-            : newType === "note"
-                ? null
-                : newUrl.trim(),
-      })
-      setItems((current) => [item, ...current])
-      resetAddForm()
-      setAddOpen(false)
-      toast.success("Resource added to your library.")
-    } catch {
-      toast.error("The resource could not be saved.")
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
   async function removeResource(item) {
     try {
       await deleteLibraryItem(item.id)
@@ -216,7 +113,7 @@ export default function LearnerFilesPage() {
   }
 
   const counts = useMemo(() => {
-    const result = { quiz: 0, flashcard: 0, file: 0, community: 0 }
+    const result = { quiz: 0, flashcard: 0 }
     for (const item of items) {
       if (result[item.kind] != null) result[item.kind] += 1
     }
@@ -228,6 +125,14 @@ export default function LearnerFilesPage() {
   const visibleItems = useMemo(
       () =>
           items.filter((item) => {
+            /* Uploaded files and saved community posts are still returned by
+               the endpoint and still belong to the learner -- they are simply
+               not what this page is for any more, so they are filtered here
+               rather than deleted server-side. */
+            if (!LIBRARY_KINDS.has(item.kind)) {
+              return false
+            }
+
             const matchesCategory = category === ALL_VALUE || item.kind === category
 
             const matchesCertification =
@@ -264,8 +169,7 @@ export default function LearnerFilesPage() {
 
   return (
       <div className="space-y-6">
-        <LearnerPageHeader title="Library" subtitle="Access your generated quizzes, flashcards, study files, and saved community resources.">
-          <div className="flex gap-2"><Button type="button" variant="outline" onClick={() => navigate("/learner/practice-history")}><History className="mr-2 h-4 w-4" />Practice history</Button><Button type="button" onClick={() => setAddOpen(true)}><Plus className="mr-2 h-4 w-4" />Add resource</Button></div>
+        <LearnerPageHeader title="Library" subtitle="Every quiz and flashcard deck the tutor has generated for you.">
         </LearnerPageHeader>
 
         <div className="flex flex-wrap items-center gap-2 border-b border-zinc-200 pb-4">
@@ -273,8 +177,6 @@ export default function LearnerFilesPage() {
             { value: ALL_VALUE, label: `All (${items.length})` },
             { value: "quiz", label: `Quizzes (${counts.quiz})` },
             { value: "flashcard", label: `Flashcards (${counts.flashcard})` },
-            { value: "file", label: `Files (${counts.file})` },
-            { value: "community", label: `Community (${counts.community})` },
           ].map((tab) => (
               <Button
                   key={tab.value}
@@ -295,7 +197,7 @@ export default function LearnerFilesPage() {
             <Input
                 value={localSearch}
                 onChange={(event) => setLocalSearch(event.target.value)}
-                placeholder="Search quizzes, flashcards, files, or community resources"
+                placeholder="Search your quizzes and flashcards"
                 className="pl-10"
             />
           </label>
@@ -354,7 +256,6 @@ export default function LearnerFilesPage() {
                 {visibleItems.map((item) => {
                   const meta = libraryTypeMeta[item.kind] ?? libraryTypeMeta.note
                   const Icon = meta.icon
-                  const downloadUrl = resolveDownloadUrl(item)
 
                   return (
                       <tr
@@ -405,45 +306,32 @@ export default function LearnerFilesPage() {
 
                         <td className="px-4 py-4">
                           <div className="flex justify-end gap-2">
-                            {item.kind === "quiz" ? (
-                                <Button type="button" size="sm" onClick={() => openItem(item)}>
+                            {/* Only two kinds reach this table, so the verb is
+                                the kind: a quiz is opened, a deck is studied. */}
+                            <Button type="button" size="sm" onClick={() => openItem(item)}>
+                              {item.kind === "quiz" ? (
                                   <BrainCircuit className="mr-2 h-4 w-4" />
-                                  Open
-                                </Button>
-                            ) : item.kind === "flashcard" ? (
-                                <Button type="button" size="sm" onClick={() => openItem(item)}>
+                              ) : (
                                   <BookOpenCheck className="mr-2 h-4 w-4" />
-                                  Study
-                                </Button>
-                            ) : (
-                                <>
-                                  <Button type="button" size="sm" variant="outline" onClick={() => openItem(item)}>
-                                    <Eye className="mr-2 h-4 w-4" />
-                                    View
-                                  </Button>
+                              )}
+                              {item.kind === "quiz" ? "Open" : "Study"}
+                            </Button>
 
-                                  {downloadUrl ? (
-                                      <Button asChild size="sm">
-                                        <a href={downloadUrl}>
-                                          <Download className="mr-2 h-4 w-4" />
-                                          Download
-                                        </a>
-                                      </Button>
-                                  ) : null}
-                                </>
-                            )}
-
-                            {item.kind === "community" ? (
+                            {/* Where this came from. A generated deck is built
+                                from one lesson, and until now the page could
+                                name that lesson but not open it. */}
+                            {item.lessonId ? (
                                 <Button
                                     type="button"
                                     size="sm"
-                                    variant="ghost"
-                                    onClick={() => navigate("/learner/community")}
+                                    variant="outline"
+                                    onClick={() => navigate(`/learner/lessons/${item.lessonId}`)}
                                 >
-                                  <Share2 className="mr-2 h-4 w-4" />
+                                  <BookOpenCheck className="mr-2 h-4 w-4" />
                                   Source
                                 </Button>
                             ) : null}
+
                             {item.ownedByMe ? (
                                 <Button type="button" size="icon" variant="ghost" onClick={() => removeResource(item)} aria-label="Remove from library">
                                   <Trash2 className="h-4 w-4" />
@@ -458,65 +346,6 @@ export default function LearnerFilesPage() {
               </table>
             </div>
         )}
-
-        <Dialog
-            open={addOpen}
-            onOpenChange={(open) => {
-              setAddOpen(open)
-              if (!open) resetAddForm()
-            }}
-        >
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader><DialogTitle>Add to library</DialogTitle><DialogDescription>Save a useful link, a real file, or a personal note.</DialogDescription></DialogHeader>
-            <div className="grid gap-4">
-              <Select value={newType} onValueChange={(value) => { setNewType(value); setUploadedFile(null) }}>
-                <SelectTrigger className="w-full"><SelectValue placeholder="Resource type" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="link">Link</SelectItem>
-                  <SelectItem value="file">File upload</SelectItem>
-                  <SelectItem value="note">Note</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input value={newTitle} onChange={(event) => setNewTitle(event.target.value)} placeholder="Resource title" />
-
-              {newType === "link" ? (
-                  <Input type="url" value={newUrl} onChange={(event) => setNewUrl(event.target.value)} placeholder="https://..." />
-              ) : null}
-
-              {newType === "file" ? (
-                  <div>
-                    <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelected} />
-                    {uploadedFile ? (
-                        <div className="flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm">
-                          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                          <span className="min-w-0 flex-1 truncate">{uploadedFile.name}</span>
-                        </div>
-                    ) : (
-                        <Button
-                            type="button"
-                            variant="outline"
-                            className="w-full"
-                            disabled={isUploadingFile}
-                            onClick={() => fileInputRef.current?.click()}
-                        >
-                          {isUploadingFile ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                          {isUploadingFile ? "Uploading..." : "Choose a file"}
-                        </Button>
-                    )}
-                  </div>
-              ) : null}
-
-              <Textarea value={newDescription} onChange={(event) => setNewDescription(event.target.value)} placeholder={newType === "note" ? "Write your study note..." : "Why is this resource useful?"} className="min-h-28" />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-              <Button type="button" onClick={saveResource} disabled={isSaving || isUploadingFile}>
-                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Save resource
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
         <Dialog open={Boolean(viewItem)} onOpenChange={(open) => !open && setViewItem(null)}>
           <DialogContent className="sm:max-w-lg">

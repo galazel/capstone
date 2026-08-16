@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -248,22 +249,20 @@ public class AdaptiveRetakeQuestionSelectionService {
         }
 
         // --- 5. Fill each cell: unseen, then older, then last attempt -----
-        List<Question> selected = new ArrayList<>();
-        Set<Long> usedQuestionIds = new LinkedHashSet<>();
+        Picked picked = new Picked();
         for (Map.Entry<Cell, Integer> entry : targetCounts.entrySet()) {
             fillCell(entry.getKey(), entry.getValue(), poolByCell, seenQuestionIds,
-                    previousAttemptQuestionIds, usedQuestionIds, selected);
+                    previousAttemptQuestionIds, picked);
         }
 
         // --- 6. Last resort: top up from the exam's own baseline questions -
-        if (selected.size() < targetTotal) {
+        if (picked.size() < targetTotal) {
             for (Question question : baselineQuestions) {
-                if (selected.size() >= targetTotal) break;
-                if (usedQuestionIds.add(question.getQuestionId())) {
-                    selected.add(question);
-                }
+                if (picked.size() >= targetTotal) break;
+                picked.add(question);
             }
         }
+        List<Question> selected = picked.questions();
         if (selected.size() > targetTotal) {
             selected = selected.subList(0, targetTotal);
         }
@@ -279,6 +278,78 @@ public class AdaptiveRetakeQuestionSelectionService {
         return new Selection(selected, basisJson);
     }
 
+    /**
+     * The questions chosen so far, and both things that make another one a repeat.
+     *
+     * The id set alone was not enough. The question bank holds the same question
+     * under more than one id — a lesson regenerated adds a second copy of what
+     * is already there rather than recognising it — so two ids can carry one
+     * question, and a paper drawing both showed the learner the same question
+     * twice. Deduplicating on the text as well means the selector cannot serve
+     * a repeat however the bank got into that state.
+     */
+    private static final class Picked {
+        private final List<Question> questions = new ArrayList<>();
+        private final Set<Long> ids = new LinkedHashSet<>();
+        private final Set<String> stems = new HashSet<>();
+
+        /** @return false when this question (or its twin) is already picked. */
+        boolean add(Question question) {
+            Long id = question.getQuestionId();
+            String stem = stemOf(question);
+            if ((id != null && ids.contains(id)) || (!stem.isEmpty() && stems.contains(stem))) {
+                return false;
+            }
+            if (id != null) {
+                ids.add(id);
+            }
+            if (!stem.isEmpty()) {
+                stems.add(stem);
+            }
+            questions.add(question);
+            return true;
+        }
+
+        boolean contains(Question question) {
+            Long id = question.getQuestionId();
+            String stem = stemOf(question);
+            return (id != null && ids.contains(id)) || (!stem.isEmpty() && stems.contains(stem));
+        }
+
+        int size() {
+            return questions.size();
+        }
+
+        List<Question> questions() {
+            return new ArrayList<>(questions);
+        }
+    }
+
+    /**
+     * A question's text reduced to what makes it the same question.
+     *
+     * Case and punctuation only — deliberately not fuzzy. Near-duplicate
+     * detection already exists for the admin reviewing generated questions,
+     * and guessing at similarity here would silently drop a question a learner
+     * was meant to be asked. This catches the copies that are genuinely
+     * identical, which is what the bank actually contains.
+     */
+    private static String stemOf(Question question) {
+        String text = question.getQuestionText();
+        if (text == null) {
+            return "";
+        }
+        StringBuilder cleaned = new StringBuilder(text.length());
+        for (char character : text.toLowerCase().toCharArray()) {
+            if (Character.isLetterOrDigit(character)) {
+                cleaned.append(character);
+            } else if (Character.isWhitespace(character)) {
+                cleaned.append(' ');
+            }
+        }
+        return String.join(" ", cleaned.toString().trim().split("\\s+"));
+    }
+
     /** Preference order when drawing from a cell, best first. */
     private enum Tier {
         /** Never shown to this learner on this exam. */
@@ -291,7 +362,7 @@ public class AdaptiveRetakeQuestionSelectionService {
 
     private void fillCell(
             Cell cell, int count, Map<Cell, List<Question>> poolByCell, Set<Long> seenQuestionIds,
-            Set<Long> previousAttemptQuestionIds, Set<Long> usedQuestionIds, List<Question> selected) {
+            Set<Long> previousAttemptQuestionIds, Picked picked) {
         if (count <= 0) {
             return;
         }
@@ -299,7 +370,7 @@ public class AdaptiveRetakeQuestionSelectionService {
         for (Tier tier : Tier.values()) {
             if (remaining <= 0) break;
             remaining -= takeFromCell(cell, remaining, poolByCell, seenQuestionIds,
-                    previousAttemptQuestionIds, usedQuestionIds, selected, tier);
+                    previousAttemptQuestionIds, picked, tier);
         }
         // Scaffold: fall back to progressively easier tiers in the same
         // lesson, then progressively harder ones, before giving up on this
@@ -312,7 +383,7 @@ public class AdaptiveRetakeQuestionSelectionService {
                 for (Tier tier : Tier.values()) {
                     if (remaining <= 0) break;
                     remaining -= takeFromCell(easier, remaining, poolByCell, seenQuestionIds,
-                            previousAttemptQuestionIds, usedQuestionIds, selected, tier);
+                            previousAttemptQuestionIds, picked, tier);
                 }
             }
             int harderIndex = difficultyIndex + step;
@@ -321,7 +392,7 @@ public class AdaptiveRetakeQuestionSelectionService {
                 for (Tier tier : Tier.values()) {
                     if (remaining <= 0) break;
                     remaining -= takeFromCell(harder, remaining, poolByCell, seenQuestionIds,
-                            previousAttemptQuestionIds, usedQuestionIds, selected, tier);
+                            previousAttemptQuestionIds, picked, tier);
                 }
             }
         }
@@ -330,8 +401,7 @@ public class AdaptiveRetakeQuestionSelectionService {
     /** @return how many questions were actually taken. */
     private int takeFromCell(
             Cell cell, int need, Map<Cell, List<Question>> poolByCell, Set<Long> seenQuestionIds,
-            Set<Long> previousAttemptQuestionIds, Set<Long> usedQuestionIds,
-            List<Question> selected, Tier tier) {
+            Set<Long> previousAttemptQuestionIds, Picked picked, Tier tier) {
         if (need <= 0) {
             return 0;
         }
@@ -343,7 +413,9 @@ public class AdaptiveRetakeQuestionSelectionService {
         for (Question question : pool) {
             if (taken >= need) break;
             Long questionId = question.getQuestionId();
-            if (usedQuestionIds.contains(questionId)) continue;
+            // Skips a question already picked *or* one whose text is already on
+            // the paper under a different id.
+            if (picked.contains(question)) continue;
 
             boolean onPrevious = previousAttemptQuestionIds.contains(questionId);
             boolean seen = seenQuestionIds.contains(questionId);
@@ -354,8 +426,7 @@ public class AdaptiveRetakeQuestionSelectionService {
             };
             if (!matchesTier) continue;
 
-            usedQuestionIds.add(questionId);
-            selected.add(question);
+            if (!picked.add(question)) continue;
             taken++;
         }
         return taken;

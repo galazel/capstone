@@ -38,12 +38,11 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
-import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { ASSESSMENT_XP } from "@/lib/xp.js"
 import { announceRewards, snapshotRewards } from "@/components/learner/xp-award-modal.jsx"
-import { GRADING_MESSAGES, LoadingScreen } from "@/components/loading-screen.jsx"
+import { ATTEMPT_MESSAGES, GRADING_MESSAGES, LoadingScreen } from "@/components/loading-screen.jsx"
 import DiagramArea from "@/components/challenges/diagram-area.jsx"
 import CodeMirrorProgrammingWorkspace from "@/components/assessments/attempt/code-mirror-programming-workspace.jsx"
 import DiagramQuestionLayout from "@/components/assessments/attempt/diagram-question-layout.jsx"
@@ -790,14 +789,13 @@ export default function LearnerAssessmentAttemptPage() {
     )
   }
 
+  /* Opening an attempt gets the same screen as submitting one, for the same
+     reason: the wait is the server doing real work, not a list arriving. The
+     skeleton this replaces outlined a heading, a box and a bar — a layout the
+     page does not have until the questions are known, so it promised the wrong
+     shape and then rearranged itself into the real one. */
   if (!attempt) {
-    return (
-        <div className="mx-auto max-w-4xl space-y-4 p-6">
-          <Skeleton className="h-10 w-2/3" />
-          <Skeleton className="h-64 w-full" />
-          <Skeleton className="h-10 w-full" />
-        </div>
-    )
+    return <LoadingScreen messages={ATTEMPT_MESSAGES} />
   }
 
   const currentQuestion = questions[currentIndex]

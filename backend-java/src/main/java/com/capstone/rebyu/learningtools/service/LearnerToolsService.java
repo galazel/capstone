@@ -32,10 +32,17 @@ public class LearnerToolsService {
             String itemType, String title, String description, String resourceUrl,
             Long certificationId, Long lessonId) {}
 
+    /**
+     * {@code lessonId} accompanies {@code lessonTitle} so the library can link
+     * back to where an item came from. The title alone only ever let the page
+     * *name* the lesson a generated quiz was built from; opening it needed the
+     * id, and the row already carries one.
+     */
     public record LibraryItem(
             Long id, String kind, String title, String description, String route,
             String downloadUrl, Long certificationId, String certificationTitle,
-            String lessonTitle, String details, OffsetDateTime createdAt, boolean ownedByMe) {}
+            Long lessonId, String lessonTitle, String details,
+            OffsetDateTime createdAt, boolean ownedByMe) {}
 
     public record Mistake(
             Long mistakeId, Long questionId, String question, String questionType, String difficulty,
@@ -199,6 +206,7 @@ public class LearnerToolsService {
                 isFile ? resourceUrl : null,
                 (Long) row.getObject("certification_id"),
                 row.getString("certification_title"),
+                (Long) row.getObject("lesson_id"),
                 row.getString("lesson_title"),
                 capitalize(kind),
                 row.getObject("created_at", OffsetDateTime.class),
@@ -217,6 +225,7 @@ public class LearnerToolsService {
                 attachmentKey, // raw S3 key; frontend resolves via getFileViewUrl
                 null,
                 row.getString("circle_name"),
+                null,
                 null,
                 attachmentName != null ? attachmentName : "Saved community post",
                 row.getObject("created_at", OffsetDateTime.class),

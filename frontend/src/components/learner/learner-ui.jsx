@@ -37,7 +37,7 @@ import {
   RadialGauge,
   TrendLineChart,
 } from "@/components/charts/rebyu-charts.jsx"
-import { BubbleCard, toneForIndex } from "@/components/commons/bubble-card.jsx"
+import { BUBBLE_TONES, BubbleCard } from "@/components/commons/bubble-card.jsx"
 
 const mainItems = [
   { label: "Progress", href: "/learner/progress", icon: BarChart3 },
@@ -360,13 +360,18 @@ export function LearnerStatCard({ icon: Icon = Award, label, value, helper, tone
   )
 }
 
-export function ProgressBar({ value = 0 }) {
+/**
+ * @param color  fill colour; defaults to the app primary. Cards pass their own
+ *               tone so the bar belongs to the card it sits in rather than
+ *               being the one blue thing on a violet card.
+ */
+export function ProgressBar({ value = 0, color }) {
   const width = Math.max(0, Math.min(100, Number(value) || 0))
   return (
     <div className="h-2.5 overflow-hidden rounded-full bg-muted">
       <div
-        className="h-full rounded-full bg-primary transition-all"
-        style={{ width: `${width}%` }}
+        className={`h-full rounded-full transition-all ${color ? "" : "bg-primary"}`}
+        style={{ width: `${width}%`, ...(color ? { background: color } : null) }}
       />
     </div>
   )
@@ -382,6 +387,12 @@ export function CertificationProgressCard({ certification, lessons, onContinue, 
   /* Same bubble card the challenge arenas use — the certification is the
      entity, so it keeps one tone wherever it appears. */
   const tone = toneForCertification(certification)
+  /* The card's own colour, reused by the call to action and the bar. A blue
+     button on a violet card was the one element that had not been told which
+     card it belonged to. `solid` is a darkened shade of the tone, not the cap
+     colour: white label text on the cap's own blue/violet/cyan sits between
+     2.4:1 and 2.5:1, well under the 4.5:1 a button label needs. */
+  const palette = BUBBLE_TONES[tone] ?? BUBBLE_TONES.macaw
 
   return (
     <BubbleCard
@@ -392,8 +403,19 @@ export function CertificationProgressCard({ certification, lessons, onContinue, 
       chips={[{ label: `${percent}%`, side: "right" }]}
       footer={
         <div className="flex flex-wrap gap-2">
-          <Button className="rounded-full" onClick={onContinue}>Continue Learning</Button>
-          <Button variant="outline" className="rounded-full" onClick={onProgress}>
+          <Button
+            className="rounded-full text-white hover:opacity-90"
+            style={{ background: palette.solid }}
+            onClick={onContinue}
+          >
+            Continue Learning
+          </Button>
+          <Button
+            variant="outline"
+            className="rounded-full bg-card"
+            style={{ color: palette.solid, borderColor: palette.solid }}
+            onClick={onProgress}
+          >
             View Progress
           </Button>
         </div>
@@ -404,7 +426,7 @@ export function CertificationProgressCard({ certification, lessons, onContinue, 
       </p>
 
       <div className="mt-4 space-y-2">
-        <ProgressBar value={percent} />
+        <ProgressBar value={percent} color={palette.solid} />
         <p className="text-xs font-semibold text-muted-foreground">
           {completed} of {related.length} lessons completed
         </p>
@@ -413,14 +435,40 @@ export function CertificationProgressCard({ certification, lessons, onContinue, 
   )
 }
 
-/** Stable per certification, so a track is the same colour on every page. */
+/**
+ * The tones a certification card can wear — cool hues only.
+ *
+ * Deliberately not the full rota. Red, orange and green carry meaning
+ * everywhere else in the portal: the mastery bands, the priority seals, a
+ * wrong answer. A certification wearing orange would be the one place hue said
+ * nothing, and a learner cannot tell a decorative colour from a diagnostic one
+ * by looking. Restricting identity to the cool half keeps the warm half
+ * readable as status.
+ *
+ * Four is enough to separate a grid at a glance without the set turning into
+ * a swatch book.
+ */
+const CERTIFICATION_TONES = ["macaw", "feather", "beetle", "bee"]
+
+/**
+ * Stable per certification, so a track is the same colour on every page.
+ *
+ * Hashed rather than assigned in order: a list's index shifts the moment a
+ * certification is added, unenrolled or re-sorted, and a card that changes
+ * colour between visits is worse than no colour at all.
+ *
+ * The card itself is the arena card from the challenges page — gradient cap,
+ * bubbles, icon medallion, matching wash below — so a certification and a
+ * challenge read as the same object in the same product rather than as two
+ * card designs that happen to share a grid.
+ */
 export function toneForCertification(certification) {
   const seed = String(
     certification?.certificationId ?? certification?.title ?? certification?.name ?? ""
   )
   let total = 0
   for (let index = 0; index < seed.length; index += 1) total += seed.charCodeAt(index)
-  return toneForIndex(total)
+  return CERTIFICATION_TONES[total % CERTIFICATION_TONES.length]
 }
 
 export function LessonRow({ lesson, onOpen }) {

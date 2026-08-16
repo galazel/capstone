@@ -39,6 +39,7 @@ import {
   useAnimationControls,
 } from "@/components/motion/rebyu-motion.jsx"
 import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
+import { useStudyPlanGate } from "@/components/learner/use-study-plan-gate.jsx"
 import { PRIORITY_CONFIG, PriorityTag } from "@/components/learner/priority-tag.jsx"
 import { ASSESSMENT_MAX_XP, LESSON_COMPLETION_XP } from "@/lib/xp.js"
 import { getExams, getExamTypes } from "@/services/assessmentService.js"
@@ -687,7 +688,7 @@ function MockExamCard({ exam, locked, onLocked, takenExamIds }) {
                 <TactileButton asChild variant="fox" size="sm" className="w-fit">
                   <Link to={`/learner/assessments/${exam.examId}`}>
                     <Trophy className="size-4" />
-                    start mock exam
+                    {taken ? "retake mock exam" : "start mock exam"}
                   </Link>
                 </TactileButton>
 
@@ -954,6 +955,10 @@ export default function LearnerCertificationCurriculumPage() {
     staleTime: 30_000,
   })
   const hasPlan = Boolean(planQuery.data?.planId)
+  /* The same generator the My Learning and Certifications pages open, so a
+     plan built from the gate below is built exactly like one built from a
+     card -- one dialog, one save path, no second implementation to drift. */
+  const { openStudyPlanFor, studyPlanDialog } = useStudyPlanGate()
 
   if (!certification) {
     return (
@@ -1010,6 +1015,61 @@ export default function LearnerCertificationCurriculumPage() {
             Taking too long? Continue without waiting
           </button>
         </div>
+      </div>
+    )
+  }
+
+  /* No study plan yet: build one before the curriculum opens.
+   *
+   * `useStudyPlanGate` already asks this at every click that leads here, but a
+   * click is not the only way in -- a bookmark, a typed URL, a back button or
+   * the browser restoring the tab all land on this page directly, and none of
+   * them passed through the gate. So the same rule is enforced where the page
+   * is, next to the diagnostic and mastery gates, rather than only at the door
+   * somebody might not have used.
+   *
+   * `isSuccess`, not `!hasPlan`: while the lookup is in flight there is no
+   * answer yet, and gating on the absence of one would show this screen to
+   * every learner for a moment, including those who have a plan. If the lookup
+   * *fails*, the learner is let through -- the hook takes the same view, and a
+   * plan the app cannot read must not lock somebody out of what they paid for.
+   */
+  if (diagnosticDone && masteryReady && planQuery.isSuccess && !hasPlan) {
+    return (
+      <div className="rebyu-ds flex min-h-[calc(100dvh-4rem)] items-center justify-center bg-rb-polar px-5">
+        <div className="w-full max-w-md rounded-rb-card border-2 border-rb-swan bg-rb-snow p-8 text-center shadow-[0_5px_0_var(--color-rb-swan)]">
+          <span className="mx-auto grid size-16 place-items-center rounded-2xl bg-rb-macaw-wash text-rb-macaw-lip">
+            <CalendarDays className="size-7" aria-hidden="true" />
+          </span>
+
+          <h1 className="mt-5 font-rb-display text-xl font-extrabold text-rb-eel">
+            Build your study plan
+          </h1>
+
+          <p className="mt-2 text-sm leading-6 text-rb-wolf">
+            Your diagnostic is in, so we can schedule {certification.title} around what
+            you already know. Build the plan and the curriculum opens.
+          </p>
+
+          <TactileButton
+            variant="macaw"
+            className="mt-6 w-full"
+            onClick={() => openStudyPlanFor(certification)}
+          >
+            Build a study plan
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </TactileButton>
+
+          <button
+            type="button"
+            onClick={() => navigate("/learner/learning")}
+            className="mt-4 text-xs font-bold text-rb-hare underline decoration-dotted underline-offset-4 hover:text-rb-wolf"
+          >
+            Back to my learning
+          </button>
+        </div>
+
+        {studyPlanDialog}
       </div>
     )
   }

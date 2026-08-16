@@ -27,6 +27,7 @@ import com.capstone.rebyu.enrollment.entity.OrganizationCertificationLearner;
 import com.capstone.rebyu.enrollment.repository.LearnerCertificationRepository;
 import com.capstone.rebyu.enrollment.repository.OrganizationCertificationLearnerRepository;
 import com.capstone.rebyu.gamification.service.StreakService;
+import com.capstone.rebyu.learningtools.service.GeneratedAssessmentService;
 import com.capstone.rebyu.progress.entity.LearnerCompletedLesson;
 import com.capstone.rebyu.progress.repository.LearnerCompletedLessonRepository;
 import com.capstone.rebyu.progress.analytics.dto.ProgressAnalyticsDtos.CategoryMasteryRow;
@@ -39,6 +40,7 @@ import com.capstone.rebyu.progress.analytics.dto.ProgressAnalyticsDtos.ScoreTren
 import com.capstone.rebyu.progress.analytics.dto.ProgressAnalyticsDtos.TopicRow;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -64,6 +66,7 @@ import java.util.stream.Collectors;
  * analytics view. No field is ever fabricated: absent data comes back as null,
  * zero, or an empty list rather than a placeholder value.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ProgressAnalyticsService {
@@ -286,42 +289,41 @@ public class ProgressAnalyticsService {
                 .map(MajorCategory::getMajorCategoryId)
                 .collect(Collectors.toSet());
 
-        List<Exam> certExams = examRepository.findByCertification_CertificationId(certificationId)
-                .stream()
-                .filter(exam -> exam.effectiveStatus() == Exam.Status.PUBLISHED)
-                /* Not the AI tutor's practice quizzes and flashcard decks.
-                   Those are saved as published exams on the certification too
-                   (see GeneratedAssessmentService), but they belong to one
-                   learner, are made on demand, and are not work the
-                   certification requires -- counting them meant generating a
-                   deck quietly added an assessment the learner then had to
-                   "pass" to finish, so the target moved every time they asked
-                   the tutor for practice. */
-                .filter(exam -> !exam.isGenerated())
-                /* Nor the diagnostic. It places the learner rather than
-                   certifying them, the curriculum page pulls it out separately
-                   and never shows it as unit work, and counting it here left
-                   the tile disagreeing with the curriculum by one. */
-                .filter(exam -> exam.getExamType() == null
-                        || !"DIAGNOSTIC".equals(bktEventFactory.normalizeAssessmentType(
-                                exam.getExamType().getExamTypeText())))
-                .filter(exam -> {
-                    if (exam.getLesson() != null) {
-                        return officialLessonIds.contains(exam.getLesson().getLessonId());
-                    }
-                    if (exam.getMiddleCategory() != null) {
-                        return officialMiddleIds.contains(
-                                exam.getMiddleCategory().getMiddleCategoryId());
-                    }
-                    if (exam.getMajorCategory() != null) {
-                        return officialMajorIds.contains(
-                                exam.getMajorCategory().getMajorCategoryId());
-                    }
-                    // Certification-level: a mock exam, open to everyone enrolled.
-                    return true;
-                })
-                .toList();
+        /* Written as a loop rather than a filter chain so every exclusion can
+           say why. The chain it replaces dropped exams silently, and a
+           certification whose exams all fell out reported "0 assessments" --
+           which the dashboard then presented to the learner as a finished
+           certification. Nothing anywhere recorded which predicate had done
+           it, so the only way to find out was to re-derive the whole filter by
+           hand against the database. */
+        List<Exam> allCertExams = examRepository.findByCertification_CertificationId(certificationId);
+        List<Exam> certExams = new ArrayList<>();
+        List<String> exclusions = new ArrayList<>();
+        for (Exam exam : allCertExams) {
+            String reason = assessmentExclusionReason(
+                    exam, officialLessonIds, officialMiddleIds, officialMajorIds);
+            if (reason == null) {
+                certExams.add(exam);
+            } else {
+                exclusions.add("#" + exam.getExamId() + " '" + exam.getTitle() + "' (" + reason + ")");
+            }
+        }
         int totalAssessmentCount = certExams.size();
+
+        if (!exclusions.isEmpty()) {
+            log.debug("Certification {}: {} of {} exam(s) excluded from the assessment total -- {}",
+                    certificationId, exclusions.size(), allCertExams.size(),
+                    String.join(", ", exclusions));
+        }
+        /* Loud, because of what the learner is shown when it happens: a
+           certification that plainly has exams reports none, and the dashboard
+           reads that as nothing left to do. Warned rather than left to a debug
+           log nobody has switched on. */
+        if (certExams.isEmpty() && !allCertExams.isEmpty()) {
+            log.warn("Certification {} has {} exam(s) but none count toward its assessment total, "
+                            + "so the learner is told it has no assessments. Excluded: {}",
+                    certificationId, allCertExams.size(), String.join(", ", exclusions));
+        }
 
         Set<Long> passedExamIds = attempts.stream()
                 .filter(attempt -> Boolean.TRUE.equals(attempt.getPassed()))
@@ -465,6 +467,112 @@ public class ProgressAnalyticsService {
      * because a 90-day streak is not three times more ready than a 30-day one.
      */
     private static final int STREAK_TARGET_DAYS = 14;
+
+    /**
+     * Why an exam does not count as work this certification requires, or null
+     * when it does.
+     *
+     * The rules are unchanged from the filter chain this replaces; only the
+     * reporting is new. In order:
+     *
+     * <ul>
+     *   <li><b>Not published.</b> A draft or archived exam is not something
+     *       anyone can sit, so counting it would leave the certification
+     *       permanently unfinishable.</li>
+     *   <li><b>Tutor-generated practice.</b> The AI tutor saves its quizzes and
+     *       flashcard decks as published exams on the certification too (see
+     *       {@code GeneratedAssessmentService}), but they belong to one learner
+     *       and are made on demand — counting them moved the target every time
+     *       the tutor was asked for practice.</li>
+     *   <li><b>The diagnostic.</b> It places the learner rather than certifying
+     *       them, and the curriculum page pulls it out separately.</li>
+     *   <li><b>Targets content outside the official curriculum.</b> The
+     *       certification's exam list includes exams aimed at lessons and
+     *       categories private to an Enterprise group — content this learner
+     *       cannot see, let alone attempt. An exam that targets nothing is
+     *       certification-level (a mock) and always qualifies.</li>
+     * </ul>
+     */
+    /**
+     * What marks an exam as one learner's tutor practice, or null if nothing does.
+     *
+     * Deliberately not {@code isGenerated()}. That flag reads as "an AI wrote
+     * this", and the AI backend sets it on every exam it authors — including
+     * the certification's own quizzes, unit exams and mock exam (see
+     * {@code app/repositories/java_backend.py:insert_exam}). Excluding on it
+     * therefore excluded the entire curriculum: a live certification with five
+     * published exams counted zero assessments, and the dashboard told the
+     * learner it was finished.
+     *
+     * These three are set only by {@code GeneratedAssessmentService} and never
+     * by the curriculum pipeline, so each one is on its own sufficient — and
+     * unlike the flag, none of them can be produced by simply having been
+     * authored by a model.
+     */
+    private String tutorPracticeMarker(Exam exam) {
+        // The strongest of the three: a curriculum exam belongs to the
+        // certification, never to one learner.
+        if (exam.getLearner() != null) {
+            return "belongs to a single learner";
+        }
+        if (GeneratedAssessmentService.GENERATED_TARGET_SCOPE.equals(exam.getTargetScope())) {
+            return "target scope " + exam.getTargetScope();
+        }
+        String typeText = exam.getExamType() == null ? null : exam.getExamType().getExamTypeText();
+        if (GeneratedAssessmentService.QUIZ_EXAM_TYPE.equals(typeText)
+                || GeneratedAssessmentService.FLASHCARD_EXAM_TYPE.equals(typeText)) {
+            return "type " + typeText;
+        }
+        return null;
+    }
+
+    // Package-private so ProgressAnalyticsAssessmentCountTest can drive the
+    // rules directly. Every predicate here decides whether a learner is told
+    // their certification still has work in it, which is worth testing without
+    // standing up the fifteen repositories the enclosing method needs.
+    String assessmentExclusionReason(
+            Exam exam,
+            Set<Long> officialLessonIds,
+            Set<Long> officialMiddleIds,
+            Set<Long> officialMajorIds) {
+
+        if (exam.effectiveStatus() != Exam.Status.PUBLISHED) {
+            // Names the effective status, not the column: a null status reads
+            // as DRAFT here, and "status is null" is the more useful thing to
+            // learn when an exam that looks published in the database is not.
+            return "not published, effective status " + exam.effectiveStatus()
+                    + (exam.getStatus() == null ? " because its status column is null" : "");
+        }
+        String practice = tutorPracticeMarker(exam);
+        if (practice != null) {
+            return "tutor practice (" + practice + ")";
+        }
+        if (exam.getExamType() != null
+                && "DIAGNOSTIC".equals(bktEventFactory.normalizeAssessmentType(
+                        exam.getExamType().getExamTypeText()))) {
+            return "diagnostic, type " + exam.getExamType().getExamTypeText();
+        }
+        if (exam.getLesson() != null) {
+            Long lessonId = exam.getLesson().getLessonId();
+            return officialLessonIds.contains(lessonId) ? null
+                    : "targets lesson " + lessonId + ", which is not in the official curriculum "
+                            + officialLessonIds;
+        }
+        if (exam.getMiddleCategory() != null) {
+            Long middleId = exam.getMiddleCategory().getMiddleCategoryId();
+            return officialMiddleIds.contains(middleId) ? null
+                    : "targets middle category " + middleId
+                            + ", which is not in the official curriculum " + officialMiddleIds;
+        }
+        if (exam.getMajorCategory() != null) {
+            Long majorId = exam.getMajorCategory().getMajorCategoryId();
+            return officialMajorIds.contains(majorId) ? null
+                    : "targets major category " + majorId
+                            + ", which is not in the official curriculum " + officialMajorIds;
+        }
+        // Certification-level: a mock exam, open to everyone enrolled.
+        return null;
+    }
 
     private Double computeReadiness(
             Long learnerId,

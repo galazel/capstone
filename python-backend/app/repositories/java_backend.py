@@ -337,9 +337,19 @@ def insert_exam(
             certification_id=certification_id,
             exam_type_id=exam_type_id,
             title=title,
-            # AI-authored, and DRAFT so nothing reaches learners until an
-            # admin publishes it.
-            is_generated=True,
+            # NOT `is_generated`. That column does not mean "an AI wrote this"
+            # -- Java reads it as "this is one learner's on-demand tutor
+            # practice deck", set only by GeneratedAssessmentService, which
+            # also stamps a learner_id and targetScope="GENERATED".
+            #
+            # Setting it here marked every AI-authored *curriculum* exam as
+            # throwaway practice, and the places that filter practice out then
+            # filtered out the real curriculum with it: a certification's
+            # assessment count came back 0, so the learner dashboard reported
+            # "no assessments" and called a certification complete with its
+            # quizzes, unit exams and mock exam all unsat.
+            is_generated=False,
+            # DRAFT so nothing reaches learners until an admin publishes it.
             status="DRAFT",
             total_questions=total_questions,
             passing_score=passing_score,

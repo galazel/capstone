@@ -49,6 +49,14 @@ public class GeneratedAssessmentService {
     public static final String QUIZ_EXAM_TYPE = "GENERATED_QUIZ";
     public static final String FLASHCARD_EXAM_TYPE = "GENERATED_FLASHCARD";
 
+    /**
+     * The target scope stamped on a practice exam. Named so the readers that
+     * need to tell practice from curriculum can key off this constant rather
+     * than repeat the literal — see
+     * {@code ProgressAnalyticsService#tutorPracticeMarker}.
+     */
+    public static final String GENERATED_TARGET_SCOPE = "GENERATED";
+
     private final LessonRepository lessons;
     private final ExamTypeRepository examTypes;
     private final ExamRepository exams;
@@ -121,7 +129,7 @@ public class GeneratedAssessmentService {
                 .totalQuestions(items.size())
                 .passingScore(new BigDecimal("70.00"))
                 .status(Exam.Status.PUBLISHED)
-                .targetScope("GENERATED")
+                .targetScope(GENERATED_TARGET_SCOPE)
                 .publishedAt(now)
                 .updatedAt(now)
                 .releaseAnswersAfterSubmit(true)

@@ -617,6 +617,11 @@ export default function Community() {
     const [openThreads, setOpenThreads] = useState([])
     const [commentsByPost, setCommentsByPost] = useState({})
     const [commentDrafts, setCommentDrafts] = useState({})
+    /* Scoped to the feed, not the page. The header, the circle rail and the
+       composer are all rendered from state this page already has, so blanking
+       them out while the posts arrive would replace a usable screen with a
+       placeholder of itself. Only the part that is actually waiting says so. */
+    const [isLoading, setIsLoading] = useState(true)
     const [reportPostId, setReportPostId] = useState(null)
     const [reportReason, setReportReason] = useState("SPAM")
     const [reportDetails, setReportDetails] = useState("")
@@ -626,6 +631,7 @@ export default function Community() {
     useEffect(() => () => objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url)), [])
 
     useEffect(() => {
+        setIsLoading(true)
         Promise.all([getCommunityPosts(), getCommunityCircles(), getAllCertifications(), getLibraryItems()])
             .then(([nextPosts, nextCircles, nextCertifications, nextStudyItems]) => {
                 setPosts(nextPosts)
@@ -635,6 +641,10 @@ export default function Community() {
                 if (nextCircles[0]) setShareCommunity(String(nextCircles[0].circleId))
             })
             .catch((error) => toast.error(apiMessage(error, "The community could not be loaded.")))
+            /* `finally`, so a failed load stops loading too. Without it the
+               toast fires and the feed spins forever, which reads as "still
+               working" when nothing is. */
+            .finally(() => setIsLoading(false))
     }, [])
 
     const topicOptions = useMemo(() => {
@@ -1282,7 +1292,19 @@ export default function Community() {
                         </div>
                     </div>
 
-                    {visiblePosts.length > 0 ? (
+                    {isLoading ? (
+                        <div className="flex flex-col items-center justify-center rounded-rb-card border-2 border-dashed border-border py-16 text-center">
+                            <span className="grid size-12 place-items-center rounded-2xl bg-rb-macaw-wash text-rb-macaw-lip">
+                                <Loader2 className="size-6 animate-spin" aria-hidden="true" />
+                            </span>
+                            <p className="mt-3 font-rb-display text-sm font-extrabold lowercase">
+                                loading the feed
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                Fetching posts, circles and your study items.
+                            </p>
+                        </div>
+                    ) : visiblePosts.length > 0 ? (
                         <div className="space-y-3">
                             {visiblePosts.map((post) => (
                                 <CommunityPost
