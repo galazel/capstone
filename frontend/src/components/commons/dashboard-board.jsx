@@ -43,9 +43,14 @@ const ROW_HEIGHT = 176
 const MARGIN = [20, 20]
 
 /**
- * Packs the default tile table into rows six columns wide, left to right, the
- * way the CSS grid used to. Only used until the learner arranges the board
- * themselves.
+ * Places the default tile table on the six-column board. Only used until the
+ * learner arranges the board themselves.
+ *
+ * A tile may name its own default spot with `x`/`y`, which is how the shipped
+ * board is composed -- packing left to right can only ever produce full bands,
+ * and the default arrangement deliberately leaves a short tile beside a tall
+ * one. Tiles without coordinates still pack into the next free run, so a tile
+ * added later lands somewhere sensible without anyone placing it by hand.
  */
 function defaultLayout(tiles) {
   let x = 0
@@ -55,6 +60,15 @@ function defaultLayout(tiles) {
   return tiles.map((tile) => {
     const w = Math.min(tile.col ?? 2, COLS.lg)
     const h = tile.row ?? 1
+
+    if (Number.isInteger(tile.x) && Number.isInteger(tile.y)) {
+      // Packing continues below anything explicitly placed, so a coordinate-less
+      // tile never lands on top of one.
+      y = Math.max(y, tile.y + h)
+      rowHeight = 0
+      x = 0
+      return { i: tile.id, x: Math.min(tile.x, COLS.lg - w), y: tile.y, w, h }
+    }
 
     if (x + w > COLS.lg) {
       x = 0

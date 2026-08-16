@@ -5,6 +5,7 @@ import { Award, Zap } from "@/components/icons"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { TactileButton } from "@/components/rebyu/rebyu-ui.jsx"
 import { CountUp, motion } from "@/components/motion/rebyu-motion.jsx"
+import { Confetti } from "@/components/motion/confetti.jsx"
 import { achievementBadge, achievementKey, earnedAchievementKeys } from "@/lib/achievements.js"
 import { getLearnerPortalData } from "@/services/learnerService.js"
 
@@ -59,7 +60,20 @@ function XpAwardModal() {
   const card = queue[0] ?? null
   const dismiss = () => setQueue((current) => current.slice(1))
 
+  /* Achievements only. XP is the ordinary outcome of finishing anything --
+     every lesson and every attempt pays it -- and paper for the ordinary case
+     leaves nothing to mark the rare one. The identity of the badges is what
+     re-fires the burst, so a second achievement card in the queue gets its own
+     rather than sitting under the first one's. */
+  const confettiKey =
+    card?.kind === "achievement"
+      ? (card.achievements ?? []).map(achievementKey).join("|")
+      : null
+
   return (
+    <>
+    <Confetti fire={confettiKey} />
+
     <Dialog open={card != null} onOpenChange={(next) => (next ? null : dismiss())}>
       {/* `rebyu-ds` on the content, not an ancestor: the dialog renders through
           a portal at <body>, outside whatever page opened it, and the design
@@ -91,6 +105,7 @@ function XpAwardModal() {
         ) : null}
       </DialogContent>
     </Dialog>
+    </>
   )
 }
 

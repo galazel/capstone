@@ -6,6 +6,11 @@ import { AlertCircle, TrendingUp, Zap, BookOpen, CheckCircle, Clock } from "@/co
 export const PRIORITY_CONFIG = {
   CRITICAL_PRIORITY: {
     label: '🔴 Critical',
+    // Descriptions say what the tag measures, not just what to do about it.
+    // "Strong" beside "Critical" in a list headed "priority" read as *strong
+    // priority* -- the most urgent thing on the page -- when it means the
+    // opposite: the lesson BKT is most confident you know.
+    mastery: 'Lowest mastery',
     bgColor: 'bg-rb-cardinal-wash',
     textColor: 'text-rb-cardinal-lip',
     icon: AlertCircle,
@@ -13,6 +18,7 @@ export const PRIORITY_CONFIG = {
   },
   HIGH_PRIORITY: {
     label: '🟠 High Priority',
+    mastery: 'Low mastery',
     bgColor: 'bg-rb-fox-wash',
     textColor: 'text-rb-fox-lip',
     icon: Zap,
@@ -20,6 +26,7 @@ export const PRIORITY_CONFIG = {
   },
   MEDIUM_PRIORITY: {
     label: '🟡 Medium',
+    mastery: 'Middling mastery',
     bgColor: 'bg-rb-bee-wash',
     textColor: 'text-rb-bee-ink',
     icon: BookOpen,
@@ -27,17 +34,19 @@ export const PRIORITY_CONFIG = {
   },
   LOW_PRIORITY: {
     label: '🔵 Low',
+    mastery: 'Good mastery',
     bgColor: 'bg-rb-macaw-wash',
     textColor: 'text-rb-macaw-lip',
     icon: TrendingUp,
     description: 'Optional review',
   },
   STRONG: {
-    label: '✅ Strong',
+    label: '✅ Mastered',
+    mastery: 'Highest mastery',
     bgColor: 'bg-rb-feather-wash',
     textColor: 'text-rb-feather-ink',
     icon: CheckCircle,
-    description: 'Well mastered',
+    description: 'Nothing to review here',
   },
   ON_TRACK: {
     label: '⭐ On Track',
@@ -99,7 +108,7 @@ const SEAL_CONFIG = {
   HIGH_PRIORITY: { fill: "var(--color-rb-fox)", short: "high" },
   MEDIUM_PRIORITY: { fill: "var(--color-rb-bee)", short: "medium" },
   LOW_PRIORITY: { fill: "var(--color-rb-macaw)", short: "low" },
-  STRONG: { fill: "var(--color-rb-feather)", short: "strong" },
+  STRONG: { fill: "var(--color-rb-feather)", short: "mastered" },
   ON_TRACK: { fill: "var(--color-rb-macaw)", short: "on track" },
   NOT_ENOUGH_DATA: { fill: "var(--color-rb-hare)", short: "no data" },
   NEEDS_REASSESSMENT: { fill: "var(--color-rb-beetle)", short: "reassess" },
@@ -112,6 +121,96 @@ const SEAL_CONFIG = {
   HIGHEST_PRIORITY: { fill: "var(--color-rb-cardinal)", short: "highest" },
   REPEATED_MISTAKE: { fill: "var(--color-rb-fox)", short: "missed" },
   UNASSESSED: { fill: "var(--color-rb-hare)", short: "new" },
+}
+
+/**
+ * A lesson's priority as a bookmark ribbon.
+ *
+ * The pill (`PriorityTag`) states the priority in words, which is right where
+ * there is a line to spare; in a list of lessons there is not, and a stack of
+ * coloured pills reads as chatter rather than as an order to study in. A
+ * bookmark is the mark you leave on a page you have to come back to, so a row
+ * carrying one is a row asking for attention -- and the colour says how badly,
+ * on the same Cardinal -> Fox -> Bee -> Macaw -> Feather ramp the pills use.
+ *
+ * Colour is the whole message, so it is never the only one: the label goes to
+ * screen readers through `role="img"` + `aria-label`, and to everyone else
+ * through the native tooltip, which also carries the mastery behind the tag
+ * when it is known.
+ *
+ * Fills come from SEAL_CONFIG rather than a second table -- the two marks
+ * showing different colours for the same tag is exactly the sort of drift a
+ * shared module exists to prevent.
+ */
+export function PriorityBookmark({ tag, masteryProbability, size = 16 }) {
+  if (!tag) return null
+
+  const config = SEAL_CONFIG[tag]
+  if (!config) return null
+
+  const mastery =
+    typeof masteryProbability === "number" && Number.isFinite(masteryProbability)
+      ? ` — ${Math.round(masteryProbability * 100)}% mastered`
+      : ""
+
+  /* "mastered priority" is not a thing. The bottom two tags describe a state
+     rather than a call to review, so they are read as one, and only the urgency
+     tags take the word. */
+  const label = ["mastered", "on track", "no data"].includes(config.short)
+    ? config.short
+    : `${config.short} priority`
+
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size * 1.25}
+      className="shrink-0"
+      role="img"
+      aria-label={`${label}${mastery}`}
+    >
+      <title>{`${label}${mastery}`}</title>
+      {/* A ribbon with a notched foot: full width to the shoulders, then in to
+          the notch and back out, so it reads as a bookmark at 16px rather than
+          as a rounded rectangle. */}
+      <path
+        d="M5 2h14a1 1 0 0 1 1 1v19l-8-5.2L4 22V3a1 1 0 0 1 1-1z"
+        fill={config.fill}
+      />
+    </svg>
+  )
+}
+
+/**
+ * The priority as one more chip in a meta row.
+ *
+ * `PriorityTag` is a pill of its own design -- emoji, its own padding, its own
+ * radius -- which is fine where it stands alone, and wrong beside a row of
+ * `rb-chip`s: the lesson header had four chips with line icons and then one
+ * pill with a coloured circle emoji in it, at a different height. This is the
+ * same badge in the row's own clothes: chip geometry, the tag's wash and ink,
+ * and the bookmark mark instead of the emoji so the two places a learner meets
+ * a priority use one glyph.
+ */
+export function PriorityChip({ tag, masteryProbability }) {
+  if (!tag) return null
+
+  const config = PRIORITY_CONFIG[tag]
+  const seal = SEAL_CONFIG[tag]
+  if (!config || !seal) return null
+
+  // The emoji is decoration on a label that already has a colour and a mark.
+  const words = config.label.replace(/^[^\p{L}]+/u, "")
+
+  return (
+    <span
+      className={`rb-chip ${config.bgColor} ${config.textColor}`}
+      title={config.mastery ? `${words} — ${config.mastery}` : words}
+    >
+      <PriorityBookmark tag={tag} masteryProbability={masteryProbability} size={11} />
+      {words}
+    </span>
+  )
 }
 
 /** A 20-point zigzag ring, computed once at module load. */

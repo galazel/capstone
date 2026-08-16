@@ -23,11 +23,19 @@ import { getLearnerPortalData } from "@/services/learnerService.js"
  */
 
 /* Blade fills stay saturated: they are the one bold moment on a light page,
-   and white type needs the depth to stay legible over the full panel. */
+   and white type needs the depth to stay legible over the full panel.
+ *
+ * Two rules hold these together. Each blade STARTS on its own hue — teal, sky,
+ * purple — so three tracks read as three choices rather than one wash; and each
+ * one LANDS on a deep blue, because the track name is set in white at the foot
+ * and a gradient that brightens on the way down puts white type on its own
+ * lightest pixel. Running them left-to-right into a pale lilac did both wrongs
+ * at once: the blades became interchangeable and the label sat on the lightest
+ * corner of the panel. */
 const BLADE_TONE = {
-  bee: { bg: "bg-gradient-to-b from-rb-bee to-rb-bee-lip" },
-  macaw: { bg: "bg-gradient-to-b from-rb-macaw to-rb-macaw-lip" },
-  beetle: { bg: "bg-gradient-to-b from-rb-beetle to-rb-beetle-lip" },
+  bee: { bg: "bg-gradient-to-b from-rb-bee via-rb-macaw to-rb-humpback-lip" },
+  macaw: { bg: "bg-gradient-to-b from-rb-macaw via-rb-feather to-rb-feather-lip" },
+  beetle: { bg: "bg-gradient-to-b from-rb-beetle via-rb-humpback to-rb-humpback-lip" },
 }
 
 const TRACK_TONE = {
@@ -414,30 +422,45 @@ export default function WorldCupPage() {
                   >
                     <span className="rb-blade-ghost">{item.short}</span>
 
-                    {/* darkened foot keeps the label legible over the colour */}
+                    {/* Darkened foot keeps the copy legible over the colour.
+                        Lighter than it was: the fill now lands on a deep blue
+                        by itself, so a 65% black on top of that was crushing
+                        the bottom third of every blade to near-black and
+                        throwing away the hue it had just arrived at. */}
                     <span
                       aria-hidden="true"
-                      className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/65 to-transparent"
+                      className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/45 to-transparent"
                     />
 
                     <span
                       className={`rb-blade-inner flex flex-col justify-end p-6 text-left lg:p-8 ${edge}`}
                     >
-                      <span className="block font-rb-display text-3xl font-extrabold lowercase leading-none tracking-tight text-white drop-shadow lg:text-5xl">
+                      {/* Everything down to the blurb is on the blade at rest.
+                          The name alone left each panel a bare gradient with a
+                          word at the bottom, which is a lot of screen saying
+                          nothing — and a learner choosing a track has to hover
+                          all three to find out what they are. Only the CTA is
+                          held back now, since a chip that appears under the
+                          cursor is what marks the blade as armed. */}
+                      <span className="flex items-center gap-2 text-[0.6875rem] font-extrabold uppercase tracking-[0.14em] text-white/75">
+                        <Trophy className="size-3.5" aria-hidden="true" />
+                        8-player bracket
+                      </span>
+
+                      <span className="mt-3 block font-rb-display text-3xl font-extrabold lowercase leading-none tracking-tight text-white drop-shadow lg:text-5xl">
                         {item.name}
                       </span>
 
-                      <span className="rb-blade-detail mt-4 block">
-                        <span className="block max-w-xs text-sm leading-6 text-white/90">
-                          {item.blurb}
-                        </span>
-                        {/* No "N in queue" chip. The tracks are real
-                            certifications now, and a made-up queue count
-                            attached to one reads as live matchmaking data. */}
-                        <span className="mt-5 flex flex-wrap items-center gap-3">
-                          <span className="inline-flex items-center rounded-rb-pill bg-white px-4 py-2 text-xs font-extrabold lowercase tracking-wide text-rb-eel">
-                            enter queue
-                          </span>
+                      <span className="mt-4 line-clamp-3 block max-w-xs text-sm leading-6 text-white/85">
+                        {item.blurb}
+                      </span>
+
+                      {/* No "N in queue" chip. The tracks are real
+                          certifications now, and a made-up queue count
+                          attached to one reads as live matchmaking data. */}
+                      <span className="rb-blade-detail mt-5 flex flex-wrap items-center gap-3">
+                        <span className="inline-flex items-center rounded-rb-pill bg-white px-4 py-2 text-xs font-extrabold lowercase tracking-wide text-rb-eel">
+                          enter queue
                         </span>
                       </span>
                     </span>

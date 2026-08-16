@@ -30,6 +30,7 @@ import com.capstone.rebyu.gamification.service.StreakService;
 import com.capstone.rebyu.learningtools.service.GeneratedAssessmentService;
 import com.capstone.rebyu.progress.entity.LearnerCompletedLesson;
 import com.capstone.rebyu.progress.repository.LearnerCompletedLessonRepository;
+import com.capstone.rebyu.progress.analytics.dto.CertificationProgressDto;
 import com.capstone.rebyu.progress.analytics.dto.ProgressAnalyticsDtos.CategoryMasteryRow;
 import com.capstone.rebyu.progress.analytics.dto.ProgressAnalyticsDtos.MasteryTrendPoint;
 import com.capstone.rebyu.progress.analytics.dto.ProgressAnalyticsDtos.PerformanceBucket;
@@ -92,6 +93,76 @@ public class ProgressAnalyticsService {
     private final LearnerCompletedLessonRepository learnerCompletedLessonRepository;
     private final LearnerMasteryService learnerMasteryService;
     private final BktEventFactory bktEventFactory;
+
+    /**
+     * The lesson and assessment counts behind a certification's progress, with
+     * none of the analytics board's other work.
+     *
+     * <p>The same counting rules as {@link #getProgressAnalytics} -- the same
+     * official-curriculum lesson query, the same exam exclusions via
+     * {@link #assessmentExclusionReason}, the same "passed" test -- reached
+     * without the three BKT round trips, the readiness call, the mastery rows
+     * or the recommendation build. That matters because the learner portal asks
+     * for this once per enrolled certification on every load.
+     *
+     * <p>It exists because the My Learning cards were counting progress
+     * themselves, in the browser, as completed lessons over total lessons. A
+     * certification whose lessons were read but whose quizzes and exams were
+     * all unsat therefore showed 100% on the cards and 20% on the analytics
+     * board at the same moment. There is now one implementation of what counts,
+     * here, and both surfaces read it.
+     */
+    @Transactional(readOnly = true)
+    public CertificationProgressDto progressFor(Long learnerId, Long certificationId) {
+        List<Lesson> certLessons = lessonRepository
+                .findByMiddleCategory_MajorCategory_Certification_CertificationIdAndMiddleCategory_MajorCategory_OwnerGroupIsNull(
+                        certificationId);
+        int totalLessonCount = certLessons.size();
+        int completedLessonCount = learnerCompletedLessonRepository
+                .findByLearner_LearnerIdAndLesson_MiddleCategory_MajorCategory_Certification_CertificationId(
+                        learnerId, certificationId)
+                .size();
+
+        Set<Long> officialLessonIds = certLessons.stream()
+                .map(Lesson::getLessonId)
+                .collect(Collectors.toSet());
+        Set<Long> officialMiddleIds = certLessons.stream()
+                .map(Lesson::getMiddleCategory)
+                .filter(Objects::nonNull)
+                .map(MiddleCategory::getMiddleCategoryId)
+                .collect(Collectors.toSet());
+        Set<Long> officialMajorIds = certLessons.stream()
+                .map(Lesson::getMiddleCategory)
+                .filter(Objects::nonNull)
+                .map(MiddleCategory::getMajorCategory)
+                .filter(Objects::nonNull)
+                .map(MajorCategory::getMajorCategoryId)
+                .collect(Collectors.toSet());
+
+        List<Exam> certExams = examRepository.findByCertification_CertificationId(certificationId).stream()
+                .filter(exam -> assessmentExclusionReason(
+                        exam, officialLessonIds, officialMiddleIds, officialMajorIds) == null)
+                .toList();
+
+        Set<Long> passedExamIds = assessmentAttemptRepository
+                .findByLearnerIdAndExam_Certification_CertificationIdAndStatus(
+                        learnerId, certificationId, AssessmentAttempt.Status.SUBMITTED)
+                .stream()
+                .filter(attempt -> Boolean.TRUE.equals(attempt.getPassed()))
+                .map(attempt -> attempt.getExam() == null ? null : attempt.getExam().getExamId())
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        int passedAssessmentCount = (int) certExams.stream()
+                .filter(exam -> passedExamIds.contains(exam.getExamId()))
+                .count();
+
+        return new CertificationProgressDto(
+                certificationId,
+                completedLessonCount,
+                totalLessonCount,
+                passedAssessmentCount,
+                certExams.size());
+    }
 
     @Transactional(readOnly = true)
     public ProgressAnalyticsResponse getProgressAnalytics(Long learnerId, Long certificationId) {
@@ -588,7 +659,7 @@ public class ProgressAnalyticsService {
             if (attempt.getPercentage() == null || attempt.getExam() == null || attempt.getExam().getExamType() == null) {
                 continue;
             }
-            String normalized = bktEventFactory.normalizeAssessmentType(attempt.getExam().getExamType().getExamTypeText());
+            String normalized = normalizeReadinessType(attempt.getExam().getExamType().getExamTypeText());
             scoresByNormalizedType.computeIfAbsent(normalized, k -> new ArrayList<>())
                     .add(attempt.getPercentage().doubleValue());
         }
@@ -599,6 +670,7 @@ public class ProgressAnalyticsService {
         putIfPresent(request, "diagnostic_score", average(scoresByNormalizedType.get("DIAGNOSTIC")));
         putIfPresent(request, "lesson_quiz_score", average(scoresByNormalizedType.get("LESSON_QUIZ")));
         putIfPresent(request, "middle_exam_score", average(scoresByNormalizedType.get("MIDDLE_EXAM")));
+        putIfPresent(request, "major_exam_score", average(scoresByNormalizedType.get("MAJOR_EXAM")));
         putIfPresent(request, "mock_exam_score", average(scoresByNormalizedType.get("MOCK_EXAM")));
 
         /* Two inputs that are always computable, and are sent unconditionally
@@ -628,6 +700,34 @@ public class ProgressAnalyticsService {
         }
         Object score = response.get("readiness_score");
         return score instanceof Number number ? number.doubleValue() : null;
+    }
+
+    /**
+     * Buckets an exam type for readiness, which grades on five assessment
+     * classes where BKT grades on four.
+     *
+     * BKT's class set is fixed at DIAGNOSTIC/LESSON_QUIZ/MIDDLE_EXAM/MOCK_EXAM
+     * by a Pydantic {@code Literal} on the mastery-event endpoint, and
+     * {@link BktEventFactory#normalizeAssessmentType} exists to satisfy it --
+     * so it folds MAJOR_EXAM into MOCK_EXAM. Adding a fifth class there would
+     * make every major-exam evidence event fail validation and take the BKT
+     * spine down with it.
+     *
+     * Readiness has no such constraint, and has good reason to separate them: a
+     * major exam covers one major category, a mock exam simulates the whole
+     * certification, and averaging the two together let a strong showing on a
+     * section stand in for never having sat a full paper. So this delegates for
+     * everything except the MAJOR_* aliases, which it peels off into their own
+     * bucket. Every other type keeps exactly the classification it had.
+     */
+    private String normalizeReadinessType(String rawExamType) {
+        if (rawExamType != null) {
+            String value = rawExamType.trim().toUpperCase().replace("-", "_").replace(" ", "_");
+            if ("MAJOR_EXAM".equals(value) || "MAJOR_CATEGORY_QUIZ".equals(value)) {
+                return "MAJOR_EXAM";
+            }
+        }
+        return bktEventFactory.normalizeAssessmentType(rawExamType);
     }
 
     private void putIfPresent(Map<String, Object> request, String key, Double value) {

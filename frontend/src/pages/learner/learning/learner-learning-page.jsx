@@ -16,6 +16,10 @@ import {
 } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
+import {
+  certificationProgressPercent,
+  findCertificationProgress,
+} from "@/lib/certification-progress.js"
 import { useStudyPlanGate } from "@/components/learner/use-study-plan-gate.jsx"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -374,13 +378,32 @@ export default function LearnerLearningPage() {
               String(certification.certificationId)
       )
 
-      const completedLessons = lessons.filter((lesson) => lesson.completed).length
-      const totalLessons = lessons.length
+      /* Progress comes from the server's count, not from this list of lessons.
+         Dividing completed lessons by total lessons here reported a
+         certification as 100% done while every quiz and exam on it was still
+         unsat -- the same certification the analytics board, which counts
+         assessments too, was reporting at 20%. The server row also counts what
+         the browser cannot see: which exams are published, official, and
+         actually part of this curriculum.
 
-      const progress =
-          totalLessons > 0
-              ? Math.round((completedLessons / totalLessons) * 100)
-              : 0
+         The lesson list is still used for the counts under the bar and for
+         picking the next lesson, so a certification the portal did not return a
+         row for (not an active enrollment) falls back to lessons alone rather
+         than showing a bar that says nothing. */
+      const progressRow = findCertificationProgress(
+          data?.certificationProgress,
+          certification.certificationId,
+      )
+
+      const completedLessons = progressRow?.completedLessons ?? lessons.filter((lesson) => lesson.completed).length
+      const totalLessons = progressRow?.totalLessons ?? lessons.length
+
+      const progress = certificationProgressPercent({
+        completedLessons,
+        totalLessons,
+        passedAssessments: progressRow?.passedAssessments ?? 0,
+        totalAssessments: progressRow?.totalAssessments ?? 0,
+      })
 
       const nextLesson =
           lessons.find((lesson) => !lesson.completed) ?? lessons[0] ?? null

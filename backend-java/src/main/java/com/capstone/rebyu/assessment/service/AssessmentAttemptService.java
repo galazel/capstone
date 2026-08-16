@@ -36,6 +36,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -120,6 +121,22 @@ public class AssessmentAttemptService {
 
     private static final int MAX_EXECUTION_HISTORY = 20;
 
+    /**
+     * TEMPORARY: whether a mock exam still requires MOCK_EXAM_ACCESS.
+     *
+     * Off by default, so mock exams are open to every enrolled learner. The
+     * gates are left in place and read this flag rather than being deleted --
+     * mock exams are a paid feature in the revenue model, and the way back is
+     * `rebyu.assessment.mock-exam-requires-entitlement: true` (or the
+     * MOCK_EXAM_REQUIRES_ENTITLEMENT environment variable), not a re-implementation.
+     *
+     * Both gates read it: the lock badge the learner sees before starting, and
+     * the hard 403 at start. Turning one on without the other would either
+     * advertise a lock that does not bite or bite without warning.
+     */
+    @Value("${rebyu.assessment.mock-exam-requires-entitlement:false}")
+    private boolean mockExamRequiresEntitlement;
+
     // ------------------------------------------------------------------
     // Learner-safe assessment listing
     // ------------------------------------------------------------------
@@ -176,7 +193,7 @@ public class AssessmentAttemptService {
         // Mock exams are a premium feature: require personal Pro or an
         // institution-sponsored MOCK_EXAM_ACCESS entitlement for this
         // certification before an attempt can be created (structured 403).
-        if (TYPE_MOCK.equals(exam.getExamType().getExamTypeText())) {
+        if (mockExamRequiresEntitlement && TYPE_MOCK.equals(exam.getExamType().getExamTypeText())) {
             learnerEntitlementService.requireLearnerEntitlement(
                     learnerId, Entitlements.MOCK_EXAM_ACCESS,
                     exam.getCertification().getCertificationId());
@@ -554,6 +571,28 @@ public class AssessmentAttemptService {
                             .filter(c -> c.getChoiceId().equals(answer.getSelectedChoiceId()))
                             .map(Choice::getChoiceText).findFirst().orElse(null);
                 }
+            } else if (source != null && "SHORT_ANSWER".equals(source.getQuestionType()) && releaseAnswers) {
+                /* The reference answer for a typed question.
+                 *
+                 * Only multiple choice filled this in, so a learner who got a
+                 * short answer wrong was shown their own wrong string and
+                 * nothing else -- no answer key, no explanation, on a review
+                 * screen whose entire purpose is to say what the answer was.
+                 * The key is on the question's text config (it is what
+                 * `matchesTextAnswer` grades against), for both checking
+                 * methods: EXACT_MATCH marks against it directly and
+                 * AI_SEMANTIC marks meaning against it as the reference.
+                 *
+                 * Accepted variations are deliberately not listed. They are
+                 * spellings of the same answer, and a review that answered
+                 * "what should I have written?" with six near-identical
+                 * strings reads as six different answers.
+                 */
+                correctChoiceText = textQuestionConfigRepository
+                        .findByQuestion_QuestionId(source.getQuestionId())
+                        .map(TextQuestionConfig::getCorrectAnswer)
+                        .filter(text -> text != null && !text.isBlank())
+                        .orElse(null);
             }
 
             if (answer == null) {
@@ -697,22 +736,63 @@ public class AssessmentAttemptService {
         // Mock exams are premium: lock them for learners without personal Pro or
         // an eligible institution-sponsored entitlement (shown as locked upfront;
         // startAttempt also hard-blocks with a structured 403).
-        if (TYPE_MOCK.equals(type)
+        if (mockExamRequiresEntitlement
+                && TYPE_MOCK.equals(type)
                 && !learnerEntitlementService.hasLearnerEntitlement(
                         learnerId, Entitlements.MOCK_EXAM_ACCESS, certificationId)) {
             return "This mock exam requires REBYU Pro or an eligible institutional license.";
         }
+        boolean diagnosticSat = diagnosticSat(enrollment.get(), learnerId, certificationId);
+
         // The diagnostic is a one-time placement check, not a retakeable quiz:
         // once it has completed the enrollment's gate, block starting another.
-        if (TYPE_DIAGNOSTIC.equals(type) && enrollment.get().getDiagnosticCompletedAt() != null) {
+        if (TYPE_DIAGNOSTIC.equals(type) && diagnosticSat) {
             return "You have already completed the diagnostic assessment for this certification.";
         }
         if (!TYPE_DIAGNOSTIC.equals(type)
-                && enrollment.get().getDiagnosticCompletedAt() == null
+                && !diagnosticSat
                 && publishedDiagnosticExists(certificationId)) {
             return "Complete the diagnostic assessment before studying lessons.";
         }
         return null;
+    }
+
+    /**
+     * Whether this learner has actually sat this certification's diagnostic.
+     *
+     * `diagnostic_completed_at` on the enrollment is the fast answer, but it is
+     * not the only evidence and it is not always there. The flag is stamped on
+     * the enrollment row that was active when the diagnostic was submitted, so
+     * anything that produces a *different* active row afterwards -- unenrolling
+     * and re-enrolling, an organization re-issuing a seat, a self-enrollment
+     * added alongside a sponsored one -- leaves a learner who has demonstrably
+     * sat the diagnostic looking, to this gate, like they never did. Every
+     * assessment on the certification then refuses to start, while the
+     * curriculum page (which reads their submitted results, not this flag)
+     * shows the whole thing unlocked. That divergence is what a learner
+     * experiences as "start quiz does nothing but say I have not done the
+     * diagnostic".
+     *
+     * So the submitted attempt is treated as the fact and the flag as a cache
+     * of it. Read-only on purpose: this runs inside `getLearnerAssessment`,
+     * which is a `readOnly` transaction, and a gate is not the place to be
+     * repairing rows. `completeDiagnosticGateIfApplicable` still writes the
+     * flag on submit, which keeps the common path a single field read.
+     */
+    private boolean diagnosticSat(LearnerCertification enrollment, Long learnerId, Long certificationId) {
+        if (enrollment.getDiagnosticCompletedAt() != null) {
+            return true;
+        }
+        return attemptRepository
+                .findByLearnerIdAndExam_Certification_CertificationIdAndStatus(
+                        learnerId, certificationId, AssessmentAttempt.Status.SUBMITTED)
+                .stream()
+                .anyMatch(attempt -> attempt.getExam() != null
+                        // Same scope as the gate itself: only the official
+                        // diagnostic counts, never a group's own copy.
+                        && attempt.getExam().getOwnerGroup() == null
+                        && attempt.getExam().getExamType() != null
+                        && TYPE_DIAGNOSTIC.equals(attempt.getExam().getExamType().getExamTypeText()));
     }
 
     private boolean publishedDiagnosticExists(Long certificationId) {

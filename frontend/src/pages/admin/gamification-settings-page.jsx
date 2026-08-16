@@ -25,8 +25,6 @@ const SECTIONS = [
     fields: [
       { key: "tutorQuizXp", label: "Tutor quiz XP" },
       { key: "tutorQuizCoins", label: "Tutor quiz coins" },
-      { key: "communityQuizXp", label: "Community quiz XP" },
-      { key: "communityQuizCoins", label: "Community quiz coins" },
       { key: "flashcardXp", label: "Flashcard XP" },
       { key: "flashcardCoins", label: "Flashcard coins" },
     ],
@@ -52,6 +50,11 @@ const SECTIONS = [
 
 const NUMERIC_KEYS = SECTIONS.flatMap((section) => section.fields.map((f) => f.key))
 
+/* Community rewards are no longer editable here, but the update DTO still marks
+   them @NotNull -- omitting them from the payload fails validation and the whole
+   save 400s. They are carried through unchanged instead. */
+const PASSTHROUGH_KEYS = ["communityQuizXp", "communityQuizCoins"]
+
 export default function GamificationSettings() {
   const client = useQueryClient()
   const settingsQuery = useQuery({
@@ -65,6 +68,7 @@ export default function GamificationSettings() {
     if (settingsQuery.data) {
       const next = {}
       for (const key of NUMERIC_KEYS) next[key] = settingsQuery.data[key] ?? 0
+      for (const key of PASSTHROUGH_KEYS) next[key] = settingsQuery.data[key] ?? 0
       setForm(next)
     }
   }, [settingsQuery.data])
@@ -88,6 +92,7 @@ export default function GamificationSettings() {
     event.preventDefault()
     const payload = {}
     for (const key of NUMERIC_KEYS) payload[key] = Number(form[key])
+    for (const key of PASSTHROUGH_KEYS) payload[key] = Number(form[key])
     saveMutation.mutate(payload)
   }
 

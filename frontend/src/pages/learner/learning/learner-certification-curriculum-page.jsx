@@ -40,8 +40,12 @@ import {
 } from "@/components/motion/rebyu-motion.jsx"
 import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
 import { useStudyPlanGate } from "@/components/learner/use-study-plan-gate.jsx"
-import { PRIORITY_CONFIG, PriorityTag } from "@/components/learner/priority-tag.jsx"
-import { ASSESSMENT_MAX_XP, LESSON_COMPLETION_XP } from "@/lib/xp.js"
+import { PRIORITY_CONFIG } from "@/components/learner/priority-tag.jsx"
+import { ASSESSMENT_MAX_XP } from "@/lib/xp.js"
+import {
+  certificationProgressPercent,
+  findCertificationProgress,
+} from "@/lib/certification-progress.js"
 import { getExams, getExamTypes } from "@/services/assessmentService.js"
 import { getProgressAnalytics } from "@/services/learnerAnalyticsService.js"
 import { STUDY_PLAN_QUERY_KEY, getActiveStudyPlan } from "@/services/studyPlanService.js"
@@ -50,28 +54,31 @@ import { buildCurriculum, hasSatDiagnostic } from "./curriculum-model.js"
 /**
  * The curriculum a learner lands on after opening an enrolled certification.
  *
- * Card shape is the admin arena card's colour language on the landing page's
- * *band* geometry: a saturated identity panel on the left with the unit's
- * wordmark bled off it, and the body running the full width beside it. A unit
- * has a topic list, counts, and a progress bar; in a 3-up grid that content
- * wraps to six lines and the units stop being scannable. Long horizontal bands
- * give each unit one line of the page and let the stack read as the order of
- * study.
+ * A road, not a table of contents.
  *
- * Two levels of accordion, because that is what the curriculum is: the unit
- * opens to its middle categories, and a middle category opens to the lessons,
- * quizzes, and assessment inside it. Only the middle category is actionable —
- * lessons and quizzes are shown so the learner can see what a topic contains,
- * but they are entered through the topic surface, not from here.
+ * This was a stack of unit bands, each opening an accordion of topics, each
+ * opening a list of lessons -- three levels of disclosure between arriving and
+ * pressing the thing you came to press, and no answer at all to "where was I?"
+ * without opening them. The curriculum is a sequence, so it is drawn as one:
+ * every topic and exam is a stop on a dotted trail that swings down the page,
+ * a sticky banner names the unit whose stretch you are in, and the first
+ * unfinished stop carries a start bubble.
  *
- * Until the diagnostic is sat, every unit carries a lock and opens the
- * diagnostic dialog instead of expanding. The lock is on the card rather than
- * on a banner above the list so it cannot be scrolled past.
+ * A stop is a single target with a single action -- a topic opens the topic
+ * surface, an exam opens the attempt. The lessons and quizzes inside a topic
+ * are not repeated here: the topic page is where they live, and listing them
+ * twice is what made this page a directory in the first place.
+ *
+ * Ordering is not gating. Once the diagnostic is sat every stop is open, just
+ * as every unit card was; the road states the order of study without enforcing
+ * it. Before the diagnostic every stop is locked, shakes when pressed, and
+ * opens the dialog that explains why.
  */
 
 const TONE = {
   macaw: {
     face: "bg-rb-macaw",
+    lipVar: "var(--color-rb-macaw-lip)",
     wash: "bg-rb-macaw-wash",
     chip: "bg-rb-macaw-wash text-rb-macaw-lip",
     ink: "text-rb-macaw-lip",
@@ -80,6 +87,7 @@ const TONE = {
   },
   bee: {
     face: "bg-rb-bee",
+    lipVar: "var(--color-rb-bee-lip)",
     wash: "bg-rb-bee-wash",
     chip: "bg-rb-bee-wash text-rb-bee-ink",
     ink: "text-rb-bee-ink",
@@ -88,6 +96,7 @@ const TONE = {
   },
   beetle: {
     face: "bg-rb-beetle",
+    lipVar: "var(--color-rb-beetle-lip)",
     wash: "bg-rb-beetle-wash",
     chip: "bg-rb-beetle-wash text-rb-beetle-lip",
     ink: "text-rb-beetle-lip",
@@ -96,6 +105,7 @@ const TONE = {
   },
   cardinal: {
     face: "bg-rb-cardinal",
+    lipVar: "var(--color-rb-cardinal-lip)",
     wash: "bg-rb-cardinal-wash",
     chip: "bg-rb-cardinal-wash text-rb-cardinal-lip",
     ink: "text-rb-cardinal-lip",
@@ -104,6 +114,7 @@ const TONE = {
   },
   feather: {
     face: "bg-rb-feather",
+    lipVar: "var(--color-rb-feather-lip)",
     wash: "bg-rb-feather-wash",
     chip: "bg-rb-feather-wash text-rb-feather-ink",
     ink: "text-rb-feather-ink",
@@ -112,6 +123,7 @@ const TONE = {
   },
   fox: {
     face: "bg-rb-fox",
+    lipVar: "var(--color-rb-fox-lip)",
     wash: "bg-rb-fox-wash",
     chip: "bg-rb-fox-wash text-rb-fox-lip",
     ink: "text-rb-fox-lip",
@@ -178,591 +190,479 @@ function XpPill({ amount, earned, upTo = false }) {
   )
 }
 
-function ItemRow({ icon: Icon, label, meta, done, priorityTag, historyHref, xp, xpUpTo = false }) {
-  // Critical is the one tag that means "you are behind here" -- everything
-  // else on this row is informational, so it is the only one that earns a
-  // red highlight and a pulse instead of just its usual pill.
-  const isCritical = !done && priorityTag === "CRITICAL_PRIORITY"
+/* ---------------------------------------------------------------- the path */
 
-  return (
-    <div
-      className={`flex items-center gap-3 py-2 ${
-        isCritical ? "-mx-2 rounded-xl bg-rb-cardinal-wash/50 px-2 ring-2 ring-rb-cardinal/30" : ""
-      }`}
-    >
-      <span
-        className={`relative grid size-8 shrink-0 place-items-center rounded-full ${
-          done
-            ? "bg-rb-feather text-white"
-            : isCritical
-              ? "bg-rb-cardinal text-white"
-              : "bg-rb-swan text-rb-wolf"
-        }`}
-      >
-        {done ? (
-          <Check className="size-4" aria-hidden="true" />
-        ) : (
-          <Icon className="size-4" aria-hidden="true" />
-        )}
+/**
+ * The trail's geometry.
+ *
+ * Fixed numbers rather than a fluid column: the nodes are a fixed size, so a
+ * column that stretched with the viewport would stretch the curve between them
+ * and the road would wander differently on every screen. A fixed-width column,
+ * centred, is also what makes the swing read as a road at all -- the eye needs
+ * the same amplitude every time it comes back around.
+ */
+const PATH_WIDTH = 440
+/* Tall enough for the worst case under a node: a two-line topic name, its
+   counts, and (on an exam) the XP pill -- all of which hang below the node into
+   the row's lower half. Tighter than this and a long name reached the next
+   node. */
+const PATH_ROW = 208
+const NODE_SIZE = 116
 
-        {isCritical ? (
-          <motion.span
-            className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-rb-cardinal ring-2 ring-rb-snow"
-            animate={{ scale: [1, 1.35, 1], opacity: [1, 0.6, 1] }}
-            transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
-            aria-hidden="true"
-          />
-        ) : null}
-      </span>
+/* One period of the swing. Out, further out, back to centre, and the mirror of
+   that on the other side -- eight steps, so a unit of any length keeps moving
+   instead of settling into a zigzag of two positions. Scaled with the node: the
+   swing has to clear a node's own width or the road stops looking like it
+   goes anywhere. */
+const PATH_OFFSETS = [0, 66, 104, 66, 0, -66, -104, -66]
 
-      <span className="min-w-0 flex-1 truncate text-sm font-bold text-rb-eel">{label}</span>
-
-      {/* Nothing to prioritize once it's done -- the tag is about where to
-          spend study time next, not a permanent label on the lesson. */}
-      {!done && priorityTag ? <PriorityTag tag={priorityTag} size="sm" /> : null}
-
-      {meta ? <span className="shrink-0 text-xs font-bold text-rb-wolf">{meta}</span> : null}
-
-      {xp ? <XpPill amount={xp} earned={Boolean(done)} upTo={xpUpTo} /> : null}
-
-      {/* Every non-diagnostic assessment allows unlimited retakes -- this is
-          the quick way to see every past attempt without going through a
-          fresh attempt's result page first. */}
-      {historyHref ? (
-        <Link
-          to={historyHref}
-          className="shrink-0 text-xs font-bold text-rb-macaw-lip underline decoration-dotted underline-offset-2 hover:text-rb-macaw"
-        >
-          attempts
-        </Link>
-      ) : null}
-    </div>
-  )
+function offsetAt(index) {
+  return PATH_OFFSETS[index % PATH_OFFSETS.length]
 }
 
-function MiddleRow({ middle, tone, index, onStudy, takenExamIds }) {
-  const [open, setOpen] = useState(false)
+/**
+ * The dotted road behind the nodes.
+ *
+ * Drawn from the same offsets the nodes are placed with, so the two can never
+ * disagree: each segment is a vertical-tangent cubic, which is what gives the
+ * road its S-bends rather than the corners a polyline would put between them.
+ * Round caps on a mostly-gap dash array turn the stroke into a line of dots.
+ */
+function PathTrail({ count }) {
+  if (count < 2) return null
 
-  const lessons = middle.lessons
-  const empty = lessons.length === 0
+  const points = Array.from({ length: count }, (_, index) => [
+    PATH_WIDTH / 2 + offsetAt(index),
+    PATH_ROW * index + PATH_ROW / 2,
+  ])
+
+  const d = points
+    .map(([x, y], index) => {
+      if (index === 0) return `M ${x} ${y}`
+      const [px, py] = points[index - 1]
+      const midY = (py + y) / 2
+      return `C ${px} ${midY}, ${x} ${midY}, ${x} ${y}`
+    })
+    .join(" ")
 
   return (
-    <li className="overflow-hidden rounded-rb-card border-2 border-rb-swan bg-rb-snow">
-      {/* The header is the accordion toggle; the key beside it is the only
-          thing that leaves the page. Splitting them means opening a topic to
-          look inside never costs you your place. */}
-      <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
-        <button
-          type="button"
-          onClick={() => setOpen((value) => !value)}
-          aria-expanded={open}
-          className="flex min-w-0 flex-1 items-center gap-3 text-left"
-        >
-          <span
-            className={`grid size-11 shrink-0 place-items-center rounded-2xl font-rb-display text-base font-extrabold ${TONE[tone].chip}`}
-          >
-            {index}
-          </span>
-
-          <span className="min-w-0 flex-1">
-            <span className="block truncate font-rb-display text-base font-extrabold text-rb-eel">
-              {middle.name}
-            </span>
-            <span className="mt-0.5 block truncate text-xs font-medium text-rb-wolf">
-              {middle.summary}
-            </span>
-          </span>
-
-          <motion.span
-            animate={{ rotate: open ? 180 : 0 }}
-            transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
-            className="shrink-0"
-          >
-            <ChevronDown className="size-4 text-rb-hare" aria-hidden="true" />
-          </motion.span>
-        </button>
-
-        <div className="flex shrink-0 items-center gap-3 sm:pl-2">
-          <span className="hidden text-xs font-bold text-rb-wolf sm:block">
-            {middle.done} of {lessons.length} lessons
-          </span>
-
-          <TactileButton
-            variant={TONE[tone].btn}
-            size="sm"
-            onClick={() => onStudy(middle)}
-            disabled={empty}
-            className="shrink-0"
-          >
-            {empty
-              ? "no lessons"
-              : middle.done === 0
-                ? "start"
-                : middle.done === lessons.length
-                  ? "review"
-                  : "continue"}
-            {empty ? null : <ArrowRight className="size-4" />}
-          </TactileButton>
-        </div>
-      </div>
-
-      <Collapse open={open}>
-        <div className={`border-t-2 border-rb-swan px-4 py-3 ${TONE[tone].wash}`}>
-          {empty ? (
-            <p className="py-2 text-sm font-medium text-rb-wolf">
-              No lessons have been published in this topic yet.
-            </p>
-          ) : (
-            /* `amount: 0` — the panel is already on screen when it opens, so
-               waiting for it to scroll into view would leave the rows blank. */
-            <StaggerList as="ul" className="divide-y divide-black/5" stagger={0.04} amount={0}>
-              {lessons.map((lesson) => (
-                <StaggerItem as="li" key={lesson.id} variants={fadeUp}>
-                  <ItemRow
-                    icon={BookOpen}
-                    label={lesson.name}
-                    done={lesson.completed}
-                    priorityTag={lesson.priorityTag}
-                    xp={LESSON_COMPLETION_XP}
-                  />
-                </StaggerItem>
-              ))}
-
-              {/* Quizzes after the lessons rather than interleaved: reading
-                  "lesson, quiz, lesson, quiz" made the topic look twice as
-                  long as it is. */}
-              {lessons
-                .filter((lesson) => lesson.quiz)
-                .map((lesson) => (
-                  <StaggerItem as="li" key={`quiz-${lesson.quiz.examId}`} variants={fadeUp}>
-                    <ItemRow
-                      icon={CircleHelp}
-                        label={lesson.quiz.title}
-                      meta={`${lesson.quiz.totalQuestions} questions`}
-                      historyHref={`/learner/assessments/${lesson.quiz.examId}/history`}
-                      xp={ASSESSMENT_MAX_XP}
-                      xpUpTo
-                      done={takenExamIds?.has(String(lesson.quiz.examId))}
-                    />
-                  </StaggerItem>
-                ))}
-
-              {middle.assessment ? (
-                <StaggerItem as="li" variants={fadeUp}>
-                  <ItemRow
-                    icon={ClipboardCheck}
-                    label={middle.assessment.title}
-                    meta={`${middle.assessment.totalQuestions} questions · ${Math.round(
-                      Number(middle.assessment.passingScore ?? 0),
-                    )}% to pass`}
-                    historyHref={`/learner/assessments/${middle.assessment.examId}/history`}
-                    xp={ASSESSMENT_MAX_XP}
-                    xpUpTo
-                    done={takenExamIds?.has(String(middle.assessment.examId))}
-                  />
-                </StaggerItem>
-              ) : null}
-            </StaggerList>
-          )}
-        </div>
-      </Collapse>
-    </li>
+    <svg
+      className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2"
+      width={PATH_WIDTH}
+      height={PATH_ROW * count}
+      aria-hidden="true"
+    >
+      {/* Swan is the border grey and disappeared against the page at this
+          size; mixed with Hare it reads as a road without competing with the
+          nodes standing on it. */}
+      <path
+        d={d}
+        fill="none"
+        stroke="color-mix(in oklab, var(--color-rb-hare) 45%, var(--color-rb-swan))"
+        strokeWidth="16"
+        strokeLinecap="round"
+        strokeDasharray="0.1 30"
+      />
+    </svg>
   )
 }
 
 /**
- * How badly this unit needs attention: the worst priority sitting on any
- * *unfinished* lesson inside it. A finished lesson keeps whatever tag it was
- * given, so counting those would leave a unit agitating over work already
- * done.
+ * "start" over the node the learner is on.
+ *
+ * The one node out of a whole certification that answers "where was I?", so it
+ * is the only one that gets a label of its own. It hops rather than pulses:
+ * a pulse is what every other alert on this page does, and the point is that
+ * this one is an invitation.
  */
-function urgencyOf(major) {
-  let high = false
+function StartBubble({ tone, side }) {
+  const right = side === "right"
 
-  for (const middle of major.middles) {
-    for (const lesson of middle.lessons) {
-      if (lesson.completed) continue
-      if (lesson.priorityTag === "CRITICAL_PRIORITY") return "CRITICAL_PRIORITY"
-      if (lesson.priorityTag === "HIGH_PRIORITY") high = true
-    }
-  }
+  return (
+    <motion.span
+      className={`pointer-events-none absolute top-1/2 z-10 -translate-y-1/2 ${
+        right ? "left-full ml-3" : "right-full mr-3"
+      }`}
+      animate={{ x: right ? [0, 4, 0] : [0, -4, 0] }}
+      transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+      aria-hidden="true"
+    >
+      <span
+        className={`block whitespace-nowrap rounded-rb-pill border-2 border-rb-swan bg-rb-snow px-4 py-2 font-rb-display text-sm font-extrabold uppercase tracking-wide shadow-[0_4px_0_var(--color-rb-swan)] ${tone.ink}`}
+      >
+        start
+      </span>
 
-  return high ? "HIGH_PRIORITY" : null
+      {/* The tail, pointing back at the node. Two stacked triangles so the
+          bubble's border reads through it. */}
+      <span
+        className={`absolute top-1/2 size-0 -translate-y-1/2 border-y-8 border-y-transparent ${
+          right
+            ? "right-full border-r-8 border-r-rb-swan"
+            : "left-full border-l-8 border-l-rb-swan"
+        }`}
+      />
+      <span
+        className={`absolute top-1/2 size-0 -translate-y-1/2 border-y-[6px] border-y-transparent ${
+          right
+            ? "right-full border-r-[6px] border-r-rb-snow"
+            : "left-full border-l-[6px] border-l-rb-snow"
+        }`}
+      />
+    </motion.span>
+  )
 }
 
-/* A unit with urgent work in it does not sit still.
-   Two tiers, because one shake for everything would flatten the difference the
-   priority tags exist to draw: critical shudders harder and comes back around
-   twice as often as high. Both pause between bursts -- a permanently vibrating
-   card stops reading as urgent within about ten seconds and just becomes
-   noise you scroll past. The rotation is what makes it read as a temper rather
-   than a slider: pure x-translation reads mechanical. */
-const URGENCY_SHAKE = {
-  CRITICAL_PRIORITY: {
-    x: [0, -7, 7, -5, 5, -2.5, 2.5, 0],
-    rotate: [0, -1.1, 1.1, -0.7, 0.7, -0.3, 0.3, 0],
-    transition: { duration: 0.6, repeat: Infinity, repeatDelay: 2.2, ease: "easeInOut" },
-  },
-  HIGH_PRIORITY: {
-    x: [0, -4, 4, -2.5, 2.5, 0],
-    rotate: [0, -0.6, 0.6, -0.3, 0.3, 0],
-    transition: { duration: 0.5, repeat: Infinity, repeatDelay: 4.4, ease: "easeInOut" },
-  },
+/** How far through a topic the learner is, as a ring around its node. */
+function NodeRing({ value }) {
+  const pct = Math.max(0, Math.min(100, value))
+  const radius = NODE_SIZE / 2 - 3
+  const circumference = 2 * Math.PI * radius
+
+  return (
+    <svg
+      className="pointer-events-none absolute -inset-[6px] -rotate-90"
+      viewBox={`0 0 ${NODE_SIZE + 12} ${NODE_SIZE + 12}`}
+      aria-hidden="true"
+    >
+      <circle
+        cx={(NODE_SIZE + 12) / 2}
+        cy={(NODE_SIZE + 12) / 2}
+        r={radius}
+        fill="none"
+        stroke="var(--color-rb-swan)"
+        strokeWidth="7"
+      />
+      <motion.circle
+        cx={(NODE_SIZE + 12) / 2}
+        cy={(NODE_SIZE + 12) / 2}
+        r={radius}
+        fill="none"
+        stroke="var(--color-rb-bee)"
+        strokeWidth="7"
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        initial={{ strokeDashoffset: circumference }}
+        animate={{ strokeDashoffset: circumference - (circumference * pct) / 100 }}
+        transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+      />
+    </svg>
+  )
 }
 
-function MajorCard({ major, locked, onLocked, onStudy, takenExamIds }) {
-  const [open, setOpen] = useState(false)
+/**
+ * One stop on the road: a topic, a unit exam, or the final mock.
+ *
+ * Four states, and the difference between them is carried by the face rather
+ * than by a badge: done is the unit's colour with a check, current is the
+ * unit's colour under a "start" bubble, open is a white key with the colour on
+ * its rim, locked is grey. A learner scanning the column should be able to see
+ * where they stopped without reading a word.
+ *
+ * The key physics are the design system's: 2px rim, a solid lip under the face,
+ * and the whole thing travelling down onto the lip when pressed.
+ */
+function PathNode({ node, index, onSelect, onLocked }) {
   const shake = useAnimationControls()
-  const tone = TONE[major.tone]
-  const Icon = major.icon
-  const urgency = useMemo(() => urgencyOf(major), [major])
+  const tone = TONE[node.tone]
+  const Icon = node.icon
+  const { state } = node
 
-  function toggle() {
+  const locked = state === "locked"
+  const done = state === "done"
+  const current = state === "current"
+
+  function press() {
     if (locked) {
-      // Imperative rather than a declarative `animate` prop: the same refusal
-      // has to replay every time it is pressed, and a prop holding the same
-      // keyframes twice in a row does not re-fire.
+      // The dialog explains the lock, but it opens elsewhere on screen. The
+      // shake answers where the finger already is.
       shake.start({ x: [0, -8, 8, -6, 6, -3, 3, 0], transition: { duration: 0.45 } })
       onLocked()
       return
     }
-    setOpen((value) => !value)
+    onSelect(node)
   }
 
-  return (
-    /* The urgency loop rides on a wrapper rather than sharing the article's
-       `animate` with the lock shake. One element cannot hold both a declarative
-       loop and imperative controls -- whichever ran last would own `x`, and
-       pressing a locked unit would kill its agitation for good. Nested, the two
-       transforms simply compose. */
-    <motion.div
-      // Never while locked. Priorities only exist after the diagnostic, so this
-      // should not arise -- but a unit demanding attention it will not let you
-      // give is the one version of this that would just be irritating.
-      animate={urgency && !locked ? URGENCY_SHAKE[urgency] : undefined}
-      className="rounded-rb-card"
-    >
-    <motion.article
-      // The dialog explains the lock, but it opens elsewhere on the screen. The
-      // shake answers where the finger already is.
-      animate={shake}
-      className="overflow-hidden rounded-rb-card border-2 border-rb-swan bg-rb-snow shadow-[0_5px_0_var(--color-rb-swan)]"
-    >
-      <div className="grid lg:grid-cols-[300px_1fr]">
-        {/* Identity panel — the wordmark bleeds off it the way it does on the
-            landing page's certification bands. */}
-        <div className={`relative overflow-hidden p-7 ${tone.face}`}>
-          <span className="pointer-events-none absolute -bottom-7 -right-3 select-none font-rb-display text-[5rem] font-black lowercase leading-none text-white/20">
-            {major.wordmark}
-          </span>
-
-          <Icon className="relative size-9 text-white" aria-hidden="true" />
-
-          <h3 className="relative mt-4 font-rb-display text-3xl font-extrabold lowercase leading-none text-white">
-            {major.name}
-          </h3>
-
-          <div className="relative mt-5 flex gap-4 text-white">
-            <span className="text-sm font-bold">
-              <span className="rb-numeric block text-xl text-white">{major.lessonCount}</span>
-              lessons
-            </span>
-            <span className="text-sm font-bold">
-              <span className="rb-numeric block text-xl text-white">{major.quizCount}</span>
-              quizzes
-            </span>
-            <span className="text-sm font-bold">
-              <span className="rb-numeric block text-xl text-white">
-                {major.assessmentCount}
-              </span>
-              exams
-            </span>
-          </div>
-        </div>
-
-        <div className="relative flex flex-col p-7">
-          {locked ? (
-            <span className="absolute right-5 top-5 flex items-center gap-1.5 rounded-rb-pill bg-rb-swan px-3 py-1.5 font-rb-display text-[10px] font-extrabold uppercase tracking-wide text-rb-wolf">
-              <Lock className="size-3" aria-hidden="true" />
-              locked
-            </span>
-          ) : null}
-
-          <div className="flex flex-wrap items-center gap-2.5">
-            <p className={`rb-eyebrow ${tone.ink}`}>unit {major.index}</p>
-
-            {/* The shake is the attention-getter, but it cannot be the only
-                carrier: MotionConfig honours prefers-reduced-motion app-wide,
-                which reduces the whole loop to nothing for the learners most
-                likely to need the warning. The tag says the same thing in
-                text. */}
-            {urgency && !locked ? <PriorityTag tag={urgency} size="sm" /> : null}
-          </div>
-
-          <p className="rb-body mt-3 max-w-3xl pr-24">
-            {major.middles.length} topic{major.middles.length === 1 ? "" : "s"} in this unit
-            {major.lessonCount > 0
-              ? `, ${major.lessonCount} lesson${major.lessonCount === 1 ? "" : "s"} in total.`
-              : "."}
-          </p>
-
-          <ul className="mt-5 flex flex-wrap gap-2">
-            {major.middles.map((middle) => (
-              <li
-                key={middle.id}
-                className={`rounded-rb-pill px-3.5 py-2 text-sm font-bold ${tone.chip}`}
-              >
-                {middle.name}
-              </li>
-            ))}
-          </ul>
-
-          <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center">
-            <div className="min-w-0 flex-1">
-              <span className="text-xs font-bold text-rb-wolf">
-                {major.doneCount} of {major.lessonCount} lessons
-              </span>
-            </div>
-
-            <TactileButton
-              variant={locked ? "snow" : tone.btn}
-              size="sm"
-              onClick={toggle}
-              aria-expanded={locked ? undefined : open}
-              className="shrink-0"
-            >
-              {locked ? (
-                <>
-                  <Lock className="size-4" />
-                  unlock unit
-                </>
-              ) : (
-                <>
-                  {open ? "hide topics" : "view topics"}
-                  <ChevronDown
-                    className={`size-4 transition-transform ${open ? "rotate-180" : ""}`}
-                  />
-                </>
-              )}
-            </TactileButton>
-          </div>
-        </div>
-      </div>
-
-      <Collapse open={open && !locked}>
-        <div className="border-t-2 border-rb-swan bg-rb-polar p-5">
-          <p className="rb-eyebrow">topics in this unit</p>
-
-          <StaggerList as="ul" className="mt-4 space-y-3" stagger={0.06} amount={0}>
-            {major.middles.map((middle, index) => (
-              <StaggerItem as="li" key={middle.id} variants={fadeUp}>
-                <MiddleRow
-                  middle={middle}
-                  tone={major.tone}
-                  index={`${major.index}.${index + 1}`}
-                  onStudy={onStudy}
-                  takenExamIds={takenExamIds}
-                />
-              </StaggerItem>
-            ))}
-          </StaggerList>
-
-          {major.assessment ? (
-            <div className="mt-4 flex flex-col gap-3 rounded-rb-card border-2 border-rb-swan bg-rb-snow p-4 sm:flex-row sm:items-center">
-              <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-rb-fox-wash text-rb-fox-lip">
-                <ClipboardCheck className="size-5" aria-hidden="true" />
-              </span>
-
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-rb-display text-base font-extrabold text-rb-eel">
-                  {major.assessment.title}
-                </p>
-                <p className="mt-0.5 text-xs font-medium text-rb-wolf">
-                  Unit exam · {major.assessment.totalQuestions} questions ·{" "}
-                  {Math.round(Number(major.assessment.passingScore ?? 0))}% to pass
-                </p>
-              </div>
-
-              <div className="flex shrink-0 items-center gap-3">
-                <XpPill
-                  amount={ASSESSMENT_MAX_XP}
-                  upTo
-                  earned={Boolean(takenExamIds?.has(String(major.assessment.examId)))}
-                />
-                <Link
-                  to={`/learner/assessments/${major.assessment.examId}/history`}
-                  className="text-xs font-bold text-rb-fox-lip underline decoration-dotted underline-offset-2 hover:text-rb-fox"
-                >
-                  view attempts
-                </Link>
-
-                <TactileButton asChild variant="fox" size="sm">
-                  <Link to={`/learner/assessments/${major.assessment.examId}`}>
-                    start unit exam
-                    <ArrowRight className="size-4" />
-                  </Link>
-                </TactileButton>
-              </div>
-            </div>
-          ) : null}
-        </div>
-      </Collapse>
-    </motion.article>
-    </motion.div>
-  )
-}
-
-function MockExamCard({ exam, locked, onLocked, takenExamIds }) {
-  const tone = TONE.fox
-  const passMark = Math.round(Number(exam.passingScore ?? 0))
-  const taken = Boolean(takenExamIds?.has(String(exam.examId)))
+  /* The lip travels with the face, so it is one variable rather than a class
+     per state: pressing a node has to sink it onto its own lip, and a fixed
+     `active:` shadow would have every node sink onto a grey one. */
+  const filled = done || current
+  const face = locked
+    ? "border-rb-swan bg-rb-polar text-rb-hare"
+    : filled
+      ? `border-black/10 text-white ${tone.face}`
+      : `border-rb-swan bg-rb-snow ${tone.ink}`
+  const lip = filled && !locked ? tone.lipVar : "var(--color-rb-swan)"
 
   return (
-    <article className="overflow-hidden rounded-rb-card border-2 border-rb-swan bg-rb-snow shadow-[0_5px_0_var(--color-rb-swan)]">
-      <div className="grid lg:grid-cols-[300px_1fr]">
-        <div className={`relative overflow-hidden p-7 ${tone.face}`}>
-          <span className="pointer-events-none absolute -bottom-7 -right-3 select-none font-rb-display text-[5rem] font-black lowercase leading-none text-white/20">
-            final
-          </span>
+    <div className="relative" style={{ height: PATH_ROW }}>
+      {/* Sized to the node and nothing else. The label hangs off it absolutely
+          rather than sitting under it in flow: in flow the *column* is what
+          gets centred on the row, so a long topic name pushed the node up off
+          the trail the dots are drawn along -- and by a different amount for
+          every node, depending on how long its name was.
 
-          <Trophy className="relative size-9 text-white" aria-hidden="true" />
+          Both axes in one inline transform rather than mixing a utility with
+          it: an inline `transform` replaces the class's outright, so a
+          `-translate-y-1/2` here would simply be dropped. */}
+      <div
+        className="absolute left-1/2 top-1/2"
+        style={{
+          width: NODE_SIZE,
+          height: NODE_SIZE,
+          transform: `translate(calc(-50% + ${offsetAt(index)}px), -50%)`,
+        }}
+      >
+        <motion.div animate={shake} className="relative">
+          {/* Beside the node, on whichever side has room -- a node sitting
+              left of centre gets its bubble on the right, and vice versa.
+              Above the node (where Duolingo puts it) it landed straight on the
+              previous stop's name, because the labels here hang below their
+              nodes and the two met in the gap. */}
+          {current ? <StartBubble tone={tone} side={offsetAt(index) <= 0 ? "right" : "left"} /> : null}
 
-          <h3 className="relative mt-4 font-rb-display text-3xl font-extrabold lowercase leading-none text-white">
-            {exam.title}
-          </h3>
-
-          <div className="relative mt-5 flex gap-4 text-white">
-            <span className="text-sm font-bold">
-              <span className="rb-numeric block text-xl text-white">{exam.totalQuestions}</span>
-              questions
-            </span>
-            {exam.durationMinutes ? (
-              <span className="text-sm font-bold">
-                <span className="rb-numeric block text-xl text-white">
-                  {exam.durationMinutes}
-                </span>
-                minutes
-              </span>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="relative flex flex-col p-7">
-          {locked ? (
-            <span className="absolute right-5 top-5 flex items-center gap-1.5 rounded-rb-pill bg-rb-swan px-3 py-1.5 font-rb-display text-[10px] font-extrabold uppercase tracking-wide text-rb-wolf">
-              <Lock className="size-3" aria-hidden="true" />
-              locked
-            </span>
+          {/* Only where it says something: a topic part-way through. A ring at
+              0% or 100% is the state the face already carries. */}
+          {node.progress != null && node.progress > 0 && node.progress < 100 ? (
+            <NodeRing value={node.progress} />
           ) : null}
 
-          <p className={`rb-eyebrow ${tone.ink}`}>final</p>
+          {/* The one node that has to be found before anything else can happen
+              gets a halo. Never on a locked board -- a beacon on something that
+              will not open is just irritating. */}
+          {current ? (
+            <motion.span
+              className={`pointer-events-none absolute -inset-3 rounded-full ${tone.face} opacity-25`}
+              animate={{ scale: [1, 1.16, 1], opacity: [0.28, 0, 0.28] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+              aria-hidden="true"
+            />
+          ) : null}
 
-          <p className="rb-body mt-3 max-w-3xl pr-24">
-            {exam.description ??
-              "One full-length attempt under exam conditions, drawn from every unit above."}
-          </p>
-
-          <ul className="mt-5 flex flex-wrap gap-2">
-            <li className={`rounded-rb-pill px-3.5 py-2 text-sm font-bold ${tone.chip}`}>
-              {passMark}% to pass
-            </li>
-            <li className={`rounded-rb-pill px-3.5 py-2 text-sm font-bold ${tone.chip}`}>
-              exam conditions
-            </li>
-            <li className={`rounded-rb-pill px-3.5 py-2 text-sm font-bold ${tone.chip}`}>
-              all units
-            </li>
-            <li className={`rounded-rb-pill px-3.5 py-2 text-sm font-bold ${tone.chip}`}>
-              {taken ? "XP earned" : `up to ${ASSESSMENT_MAX_XP} XP`}
-            </li>
-          </ul>
-
-          <div className="mt-auto pt-6">
+          <button
+            type="button"
+            onClick={press}
+            aria-label={`${node.label}${locked ? " (locked)" : ""}`}
+            className={`relative grid place-items-center rounded-full border-[3px] shadow-[0_9px_0_var(--node-lip)] transition-[transform,box-shadow] duration-100 active:translate-y-[5px] active:shadow-[0_4px_0_var(--node-lip)] ${face}`}
+            style={{ width: NODE_SIZE, height: NODE_SIZE, "--node-lip": lip }}
+          >
             {locked ? (
-              <TactileButton variant="snow" size="sm" onClick={onLocked} className="w-fit">
-                <Lock className="size-4" />
-                unlock mock exam
-              </TactileButton>
+              <Lock className="size-10" aria-hidden="true" />
+            ) : done ? (
+              <Check className="size-12" aria-hidden="true" />
             ) : (
-              <div className="flex flex-wrap items-center gap-3">
-                <TactileButton asChild variant="fox" size="sm" className="w-fit">
-                  <Link to={`/learner/assessments/${exam.examId}`}>
-                    <Trophy className="size-4" />
-                    {taken ? "retake mock exam" : "start mock exam"}
-                  </Link>
-                </TactileButton>
-
-                <Link
-                  to={`/learner/assessments/${exam.examId}/history`}
-                  className="text-xs font-bold text-rb-fox-lip underline decoration-dotted underline-offset-2 hover:text-rb-fox"
-                >
-                  view attempts
-                </Link>
-              </div>
+              <Icon className="size-11" aria-hidden="true" />
             )}
-          </div>
+
+            {/* A topic the plan says is urgent -- finished or not. The
+                same red dot the old list used, kept because it is the one
+                thing on a node that priority order has to be able to say. */}
+            {node.urgent && !locked ? (
+              <motion.span
+                className="absolute -right-1 -top-1 size-5 rounded-full bg-rb-cardinal ring-4 ring-rb-polar"
+                animate={{ scale: [1, 1.3, 1] }}
+                transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+                aria-hidden="true"
+              />
+            ) : null}
+          </button>
+        </motion.div>
+
+        {/* The name under the node, not on it. Duolingo can leave its nodes
+            unlabelled because every one of them is the same kind of thing;
+            here a stop can be a topic, a unit exam or the final, and which one
+            it is decides whether the learner has ten minutes or an hour.
+
+            `pointer-events-none` so a two-line name never covers the node
+            below it as a click target -- the node is the control, the label
+            only says what it is. */}
+        <div className="pointer-events-none absolute left-1/2 top-full w-[230px] -translate-x-1/2 pt-2.5 text-center">
+          <p className="font-rb-display text-[15px] font-extrabold leading-tight text-rb-eel">
+            {node.label}
+          </p>
+
+          {node.meta ? (
+            <p className="mt-1 text-[12px] font-bold text-rb-wolf">{node.meta}</p>
+          ) : null}
+
+          {/* Only on the exams. A topic pays per lesson, which is a number that
+              belongs on the lessons themselves; an exam is one sitting for one
+              award, so the road can state it. */}
+          {node.xp && !locked ? (
+            <span className="mt-1 inline-flex">
+              <XpPill amount={node.xp} earned={done} upTo />
+            </span>
+          ) : null}
         </div>
       </div>
-    </article>
+    </div>
   )
 }
 
 /**
- * Certification progress as a ring beside the title.
+ * The banner that opens a unit's stretch of road -- and the control that opens
+ * the unit itself.
  *
- * In the band's flex row rather than absolutely pinned to its corner. Pinned,
- * it floated free of everything it described — it drifted with the height of
- * the copy, sat level with whichever row happened to be last, and left a
- * corner of the band that nothing else could use. In flow it reads as the
- * band's second column: the certification on the left, how far through it you
- * are on the right.
+ * A certification with six units is six roads, and all of them unrolled at once
+ * is a page you scroll for a minute to reach unit four. So the banner is the
+ * accordion header: pressed, it reveals that unit's topics. The unit the
+ * learner is up to is the one open when the page arrives, which is the only
+ * one they asked for.
  *
- * Large screens only; the inline pill below is the small-screen form.
+ * Sticky while its section is open, the way a section header is on Duolingo:
+ * once the road is longer than the viewport the learner loses which unit the
+ * nodes belong to about four stops in. The offset clears the two sticky things
+ * above it -- the portal nav (`top-0`, 4rem) and this page's header bar.
+ *
+ * The unit's colour lives here rather than on a card behind every node: one
+ * saturated band per section, with the road on the page's own ground. That is
+ * what stops a certification with six units reading as six posters.
  */
-function HeroProgressRing({ value }) {
-  const pct = Math.max(0, Math.min(100, Number(value) || 0))
-  const radius = 42
-  const circumference = 2 * Math.PI * radius
+function UnitBanner({ major, locked, exam, open, onToggle, onLocked, takenExamIds }) {
+  const tone = TONE[major.tone]
+  const examTaken = Boolean(exam && takenExamIds?.has(String(exam.examId)))
+  const shake = useAnimationControls()
+
+  function press() {
+    if (locked) {
+      shake.start({ x: [0, -8, 8, -6, 6, -3, 3, 0], transition: { duration: 0.45 } })
+      onLocked()
+      return
+    }
+    onToggle()
+  }
 
   return (
-    <div
-      className="pointer-events-none relative hidden size-28 shrink-0 place-items-center lg:grid"
-      role="img"
-      aria-label={`${pct}% of this certification complete`}
-    >
-      {/* -rotate-90 so the arc starts at twelve o'clock rather than three. */}
-      <svg viewBox="0 0 100 100" className="absolute inset-0 size-full -rotate-90" aria-hidden="true">
-        <circle
-          cx="50"
-          cy="50"
-          r={radius}
-          fill="none"
-          stroke="rgb(255 255 255 / 0.2)"
-          strokeWidth="8"
-        />
-        <motion.circle
-          cx="50"
-          cy="50"
-          r={radius}
-          fill="none"
-          stroke="white"
-          strokeWidth="8"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          initial={{ strokeDashoffset: circumference }}
-          animate={{ strokeDashoffset: circumference - (circumference * pct) / 100 }}
-          transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
-        />
-      </svg>
+    /* 7.5rem = the portal nav (4rem) plus this page's header bar (a 40px
+       control in 12px padding, so 4rem), less the padding below -- so the card
+       itself lands half a rem under the header with air above it.
 
-      <span className="relative flex flex-col items-center leading-none">
-        <CountUp value={pct} suffix="%" className="rb-numeric !text-white text-2xl" />
-        <span className="mt-1 text-[10px] font-bold uppercase tracking-wide text-white/80">
-          complete
+       That air is painted in the page's own colour rather than left
+       transparent. A bare offset showed the road sliding through the gap above
+       the banner, which reads as the card floating over a leak; painted, the
+       nodes disappear cleanly behind the header as they scroll up.
+
+       Only sticky while open -- a stack of collapsed banners would otherwise
+       pile up against the top of the window, each one pinning the next. */
+    <motion.div
+      animate={shake}
+      className={open ? "sticky top-[7.5rem] z-20 bg-rb-polar pb-1 pt-3" : ""}
+    >
+      <button
+        type="button"
+        onClick={press}
+        aria-expanded={locked ? undefined : open}
+        className={`flex w-full flex-wrap items-center gap-x-5 gap-y-3 rounded-rb-card border-[3px] border-black/10 px-7 py-6 text-left text-white shadow-[0_6px_0_rgb(0_0_0/0.16)] transition-[transform,box-shadow] duration-100 active:translate-y-[3px] active:shadow-[0_3px_0_rgb(0_0_0/0.16)] ${tone.face}`}
+      >
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-white/75">
+            unit {major.index}
+          </p>
+          <h2 className="mt-1 truncate font-rb-display text-2xl font-extrabold lowercase leading-tight text-white sm:text-3xl">
+            {major.name}
+          </h2>
+        </div>
+
+        {/* One status, stated once. Lessons done while the unit is open, the
+            lock while it is not -- they are answers to the same question. */}
+        <span className="flex shrink-0 items-center gap-2 rounded-rb-pill bg-white/15 px-4 py-2 text-sm font-extrabold text-white">
+          {locked ? (
+            <>
+              <Lock className="size-4" aria-hidden="true" />
+              locked
+            </>
+          ) : (
+            <>
+              {major.doneCount}/{major.lessonCount} lessons
+              {examTaken ? " · exam sat" : ""}
+            </>
+          )}
         </span>
-      </span>
-    </div>
+
+        {/* How many stops are behind this banner, so a collapsed unit still
+            says how much is in it. */}
+        {!locked ? (
+          <span className="hidden shrink-0 text-sm font-extrabold text-white/80 sm:block">
+            {major.middles.length} topic{major.middles.length === 1 ? "" : "s"}
+            {exam ? " · unit exam" : ""}
+          </span>
+        ) : null}
+
+        <motion.span
+          animate={{ rotate: open && !locked ? 180 : 0 }}
+          transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+          className="grid size-11 shrink-0 place-items-center rounded-full bg-white/15"
+        >
+          <ChevronDown className="size-5" aria-hidden="true" />
+        </motion.span>
+      </button>
+
+      {/* Outside the button: a link inside a button is not a control anyone can
+          reach with a keyboard, and pressing it would toggle the unit too. */}
+      {exam && !locked && open ? (
+        <div className="flex justify-end pt-2">
+          <Link
+            to={`/learner/assessments/${exam.examId}/history`}
+            className="rounded-rb-pill px-2 text-xs font-bold text-rb-macaw-lip underline decoration-dotted underline-offset-4 hover:text-rb-macaw"
+          >
+            unit exam attempts
+          </Link>
+        </div>
+      ) : null}
+    </motion.div>
   )
+}
+
+/**
+ * Every stop on a unit's road, in study order: its topics, then its unit exam.
+ *
+ * A topic is done when every lesson in it is; an exam when the learner has a
+ * result for it. `current` is decided by the caller across the whole
+ * certification, because there is only ever one place you are up to.
+ */
+function unitNodes(major, takenExamIds) {
+  const nodes = major.middles.map((middle, index) => {
+    const total = middle.lessons.length
+    const done = total > 0 && middle.done === total
+
+    return {
+      key: `topic-${middle.id}`,
+      kind: "topic",
+      middle,
+      tone: major.tone,
+      icon: BookOpen,
+      label: middle.name,
+      meta: total === 0 ? "no lessons yet" : `${middle.done}/${total} lessons`,
+      progress: total === 0 ? null : (middle.done / total) * 100,
+      done,
+      empty: total === 0,
+      /* Completion is not part of this test. A topic whose lessons are all
+         read can still be the weakest thing on the certification -- mastery
+         moves with every answered question, and a bad unit exam turns a
+         finished topic critical. Excluding completed lessons meant the road
+         went quiet exactly when it had something to say. */
+      urgent: middle.lessons.some(
+        (lesson) => lesson.priorityTag === "CRITICAL_PRIORITY",
+      ),
+      index,
+    }
+  })
+
+  if (major.assessment) {
+    nodes.push({
+      key: `exam-${major.assessment.examId}`,
+      kind: "exam",
+      exam: major.assessment,
+      tone: "fox",
+      icon: ClipboardCheck,
+      label: major.assessment.title,
+      meta: `unit exam · ${major.assessment.totalQuestions} questions`,
+      xp: ASSESSMENT_MAX_XP,
+      done: Boolean(takenExamIds?.has(String(major.assessment.examId))),
+    })
+  }
+
+  return nodes
 }
 
 /* --------------------------------------------------------------------- page */
@@ -777,49 +677,41 @@ function HeroProgressRing({ value }) {
  * one icon, centred in an otherwise blank box, with the page's real shape
  * nowhere in sight.
  *
- * This draws the shape instead -- the header band, then unit cards -- so the
- * layout is already there and only the content arrives. Nothing pretends to be
- * data: no titles, no counts, just the blocks they will occupy.
+ * This draws the shape instead -- the header bar, a unit banner, then the road
+ * itself -- so the layout is already there and only the content arrives.
+ * Nothing pretends to be data: no titles, no counts, just the blocks and the
+ * circles they will occupy.
  */
 function CurriculumSkeleton() {
   return (
-    <div className="space-y-6" role="status" aria-label="Loading curriculum">
-      {/* The ink band the page opens on. */}
-      <div className="rounded-rb-card bg-rb-eel/10 p-6 sm:p-8">
-        <div className="h-3 w-28 animate-pulse rounded bg-rb-eel/20" />
-        <div className="mt-4 h-8 w-2/3 animate-pulse rounded-lg bg-rb-eel/20 sm:h-10" />
-        <div className="mt-3 h-3 w-1/2 animate-pulse rounded bg-rb-eel/15" />
-
-        <div className="mt-6 flex gap-3">
-          <div className="h-10 w-36 animate-pulse rounded-rb-pill bg-rb-eel/20" />
-          <div className="h-10 w-28 animate-pulse rounded-rb-pill bg-rb-eel/15" />
-        </div>
+    <div role="status" aria-label="Loading curriculum">
+      {/* The header bar. */}
+      <div className="flex items-center gap-4 border-b-2 border-rb-swan bg-rb-snow px-5 py-3 lg:px-8">
+        <div className="size-10 shrink-0 animate-pulse rounded-full bg-rb-swan" />
+        <div className="h-5 w-52 animate-pulse rounded bg-rb-swan" />
+        <div className="ml-auto h-2.5 w-40 animate-pulse rounded-full bg-rb-swan" />
       </div>
 
-      {/* Two unit cards. Two rather than one so the page reads as a list, and
-          not so many that the skeleton claims a length the course may not have. */}
-      {[0, 1].map((unit) => (
-        <div
-          key={unit}
-          className="grid overflow-hidden rounded-rb-card border-2 border-rb-swan bg-rb-snow lg:grid-cols-[260px_1fr]"
-        >
-          <div className="space-y-3 bg-rb-polar p-6">
-            <div className="h-9 w-9 animate-pulse rounded-xl bg-rb-swan" />
-            <div className="h-5 w-32 animate-pulse rounded bg-rb-swan" />
-            <div className="h-3 w-24 animate-pulse rounded bg-rb-swan" />
-          </div>
+      <div className="mx-auto max-w-[720px] px-5 py-10">
+        <div className="h-16 animate-pulse rounded-rb-card bg-rb-swan" />
 
-          <div className="space-y-3 p-6">
-            {[0, 1, 2].map((row) => (
-              <div key={row} className="flex items-center gap-3">
-                <div className="size-8 shrink-0 animate-pulse rounded-full bg-rb-swan" />
-                <div className="h-4 flex-1 animate-pulse rounded bg-rb-swan" />
-                <div className="h-4 w-16 shrink-0 animate-pulse rounded bg-rb-swan" />
-              </div>
-            ))}
-          </div>
+        {/* Four stops, on the same swing the road uses -- so the circles land
+            where the nodes will, and nothing jumps when they arrive. */}
+        <div className="relative mx-auto mt-6" style={{ width: PATH_WIDTH, height: PATH_ROW * 4 }}>
+          {[0, 1, 2, 3].map((index) => (
+            <div key={index} className="relative" style={{ height: PATH_ROW }}>
+              <div
+                className="absolute left-1/2 top-1/2 animate-pulse rounded-full bg-rb-swan"
+                style={{
+                  width: NODE_SIZE,
+                  height: NODE_SIZE,
+                  transform: `translate(calc(-50% + ${offsetAt(index)}px), -50%)`,
+                }}
+              />
+            </div>
+          ))}
         </div>
-      ))}
+      </div>
     </div>
   )
 }
@@ -939,6 +831,97 @@ export default function LearnerCertificationCurriculumPage() {
       ),
     [data?.examResults],
   )
+
+  /* ------------------------------------------------------------------ road
+   *
+   * The whole certification as one ordered list of stops -- each unit's topics
+   * followed by its exam, and the mock at the end -- so "where am I up to" can
+   * be answered once, across the whole thing, rather than per unit. The first
+   * unfinished stop is `current`, and it is the only node that gets the start
+   * bubble; everything else is done, open, or (before the diagnostic) locked.
+   *
+   * Nothing here gates access. Once the diagnostic is sat every stop is open,
+   * exactly as the unit cards were -- the road describes the order of study, it
+   * does not enforce it. A learner who wants to jump to unit three still can.
+   */
+  const { sections, finalNode, currentUnitId } = useMemo(() => {
+    const built = (curriculum?.majors ?? []).map((major) => ({
+      major,
+      nodes: unitNodes(major, takenExamIds),
+    }))
+
+    const mock = curriculum?.mockExam
+      ? {
+          key: `mock-${curriculum.mockExam.examId}`,
+          kind: "exam",
+          exam: curriculum.mockExam,
+          tone: "fox",
+          icon: Trophy,
+          label: curriculum.mockExam.title,
+          meta: `final · ${curriculum.mockExam.totalQuestions} questions`,
+          xp: ASSESSMENT_MAX_XP,
+          done: Boolean(takenExamIds?.has(String(curriculum.mockExam.examId))),
+        }
+      : null
+
+    const ordered = [...built.flatMap((section) => section.nodes), ...(mock ? [mock] : [])]
+
+    let currentTaken = false
+    for (const node of ordered) {
+      if (!diagnosticDone) {
+        node.state = "locked"
+        continue
+      }
+      if (node.done) {
+        node.state = "done"
+        continue
+      }
+      // An empty topic cannot be the stop you are on -- there is nothing in it
+      // to do, so marking it current would strand the learner on a dead end.
+      if (!currentTaken && !node.empty) {
+        node.state = "current"
+        currentTaken = true
+        continue
+      }
+      node.state = "open"
+    }
+
+    const currentSection = built.find((section) =>
+      section.nodes.some((node) => node.state === "current"),
+    )
+
+    return { sections: built, finalNode: mock, currentUnitId: currentSection?.major.id ?? null }
+  }, [curriculum, takenExamIds, diagnosticDone])
+
+  /* Which units are unrolled.
+   *
+   * `null` means "nobody has chosen yet", which is not the same as "none are
+   * open" -- it is what lets the unit the learner is up to be open on arrival
+   * while still letting them close it. Storing the default as a real set on
+   * first render would freeze whichever unit was current when the page mounted,
+   * and it moves as they finish topics.
+   */
+  const [openUnitIds, setOpenUnitIds] = useState(null)
+  const openUnits = openUnitIds ?? new Set(currentUnitId ? [currentUnitId] : [])
+
+  function toggleUnit(id) {
+    setOpenUnitIds(() => {
+      const next = new Set(openUnits)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  /* The same figure the My Learning card and the analytics board show: lessons
+     read and assessments passed, over what the certification requires. The
+     curriculum model's own `progress` counts lessons alone, so this header used
+     to read 100% for a learner the board had at 20%. Falls back to it only when
+     the portal returned no row for this certification. */
+  const progressRow = findCertificationProgress(data?.certificationProgress, certificationId)
+  const headerProgress = progressRow
+    ? certificationProgressPercent(progressRow)
+    : (curriculum?.progress ?? 0)
 
   const [skippedMasteryWait, setSkippedMasteryWait] = useState(false)
   const masteryReady =
@@ -1078,6 +1061,18 @@ export default function LearnerCertificationCurriculumPage() {
     navigate(`/learner/learning/${certificationId}/topics/${middle.id}`)
   }
 
+  /* One target per stop. A topic opens the topic surface -- the lessons,
+     quizzes and exam inside it live there, which is why the road does not
+     repeat them -- and an exam node goes straight into the attempt. */
+  function openNode(node) {
+    if (node.kind === "exam") {
+      navigate(`/learner/assessments/${node.exam.examId}`)
+      return
+    }
+    if (node.empty) return
+    openTopic(node.middle)
+  }
+
   function openDiagnostic() {
     setDialogOpen(false)
     navigate(
@@ -1093,208 +1088,130 @@ export default function LearnerCertificationCurriculumPage() {
        (see `isCurriculumPage` in learner-layout), so the band and the unit
        stack set their own gutters rather than clawing back the page's. */
     <div className="rebyu-ds min-h-dvh w-full bg-rb-polar pb-20">
-      {/* ------------------------------------------------------------ header */}
-      <header className="rb-hero-ink px-5 py-8 lg:px-8 lg:py-11">
-        {/* The product's bubble figure, same as `bubble-card`'s cap and the
-            landing page's tiles: two white/10 circles off opposite corners,
-            scaled from a card to a band. Before the content in the DOM so the
-            copy paints over them without either needing a z-index.
+      {/* ------------------------------------------------------------ header
+          A bar, not a billboard. This was a full-bleed ink slab carrying a
+          5xl title, a description, a chip row and a 112px progress ring --
+          most of a screen spent restating the name of the thing the learner
+          just clicked, before any of the road was visible. The road is the
+          page; the header only has to say which certification it belongs to
+          and how far along it is. */}
+      <header className="sticky top-16 z-30 border-b-2 border-rb-swan bg-rb-snow/95 backdrop-blur">
+        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 lg:px-8">
+          <BackButton asChild label="Back to my learning">
+            <Link to="/learner/learning" />
+          </BackButton>
 
-            Sized off the band now rather than fixed at 24/30rem — on a band
-            this much shorter, a 30rem circle was most of the surface and the
-            figure stopped reading as a motif. */}
-        <div className="pointer-events-none absolute -right-20 -top-28 size-[20rem] rounded-full bg-white/10" />
-        <div className="pointer-events-none absolute -bottom-28 -left-16 size-[22rem] rounded-full bg-white/10" />
-
-        {/* Two columns: the certification on the left, how far through it you
-            are on the right. `items-start` so the ring holds the top of the
-            band instead of centring against copy of unpredictable length. */}
-        <div className="relative mx-auto flex max-w-[1600px] items-start gap-10">
-          <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-3">
-            <BackButton asChild label="Back to my learning">
-              <Link to="/learner/learning" />
-            </BackButton>
-            <span className="rb-chip">enrolled certification</span>
-          </div>
-
-          {/* Deliberately off the design system's lowercase display rule. A
-              certification is a formal credential with a real name, and the
-              band is the one place it is stated in full — the lowercase voice
-              stays on the wordmark behind it and on the unit cards below, so
-              the idiom is not lost, just not applied to a proper noun.
-
-              `capitalize` rather than a JS transform: it only touches the
-              first letter of each word, so titles already stored in caps
-              (TOPCIT, AWS) pass through untouched. */}
-          {/* Down from 7xl. At that size a two-word certification title was
-              taller than every unit card below it and the learner had to
-              scroll past the name of the thing they had just opened to reach
-              the curriculum they came for. */}
-          <h1 className="mt-5 max-w-3xl font-rb-display text-4xl font-extrabold capitalize leading-[1.05] tracking-tight text-white sm:text-5xl">
+          {/* `capitalize` rather than a JS transform: it only touches the first
+              letter of each word, so titles already stored in caps (TOPCIT,
+              AWS) pass through untouched. */}
+          <h1 className="min-w-0 truncate font-rb-display text-xl font-extrabold capitalize text-rb-eel">
             {certification.title ?? "Certification"}
           </h1>
 
-          {/* Clamped: descriptions are author-entered and unbounded, and a long
-              one pushed the entire curriculum below the fold. */}
-          {certification.description ? (
-            <p className="mt-3 line-clamp-2 max-w-2xl leading-7 text-white/75">
-              {certification.description}
-            </p>
-          ) : null}
+          <span className="hidden text-xs font-bold text-rb-wolf sm:inline">
+            {curriculum.majors.length} unit{curriculum.majors.length === 1 ? "" : "s"} ·{" "}
+            {curriculum.lessonTotal} lessons
+            {curriculum.mockExam ? " · 1 mock exam" : ""}
+          </span>
 
-          {/* One meta row. The counts, the mock-exam marker and the priority
-              summary were three separately-spaced rows of small chips saying
-              small things; stacked, they read as three sections rather than as
-              one line of facts about this certification. */}
-          <div className="mt-6 flex flex-wrap items-center gap-2.5">
-            <div className="rb-chip">
-              <BookOpen className="size-4" aria-hidden="true" />
-              {curriculum.majors.length} unit{curriculum.majors.length === 1 ? "" : "s"} ·{" "}
-              {curriculum.lessonTotal} lessons
+          {/* Progress as a bar in the flow of the row rather than a ring in a
+              corner of a band: it is one number, and it was taking a column. */}
+          <div className="ml-auto flex shrink-0 items-center gap-2.5">
+            <div className="h-2.5 w-24 overflow-hidden rounded-full bg-rb-swan sm:w-40">
+              <motion.div
+                className="h-full rounded-full bg-rb-feather"
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.max(0, Math.min(100, headerProgress))}%` }}
+                transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+              />
             </div>
+            <CountUp
+              value={headerProgress}
+              suffix="%"
+              className="rb-numeric text-sm text-rb-eel"
+            />
+          </div>
 
-            {curriculum.mockExam ? (
-              <div className="rb-chip">
-                <Trophy className="size-4" aria-hidden="true" />1 mock exam
-              </div>
-            ) : null}
-
-            {/* Small-screen form of the ring above, which is hidden below lg
-                because at that size it would sit on top of these chips. */}
-            <div className="flex items-center gap-3 rounded-full bg-white/10 py-2 pl-4 pr-5 lg:hidden">
-              <span className="text-[11px] font-bold uppercase tracking-wide text-white/80">
-                progress
-              </span>
-              <div className="h-2 w-24 overflow-hidden rounded-full bg-white/20 sm:w-32">
-                <motion.div
-                  /* White, not Macaw: on a blue band the brand blue lands at
-                     2.81:1 against it and the bar stops reading as filled. */
-                  className="h-full rounded-full bg-white"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${Math.max(0, Math.min(100, curriculum.progress))}%` }}
-                  transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
-                />
-              </div>
-              <CountUp value={curriculum.progress} suffix="%" className="rb-numeric !text-white text-sm" />
-            </div>
-
-          {/* Priority summary -- how many not-yet-done lessons need attention,
-              worst tag first, so the learner knows before opening a unit
-              whether anything here is urgent. Only shown once the diagnostic
-              has produced a priority order; before that every lesson's tag
-              is null and the row would be meaningless. Stays visible even
-              when nothing is pending, so "all caught up" reads as a result
-              rather than the row just disappearing.
-
-              Runs on into the meta row rather than starting its own, with a
-              hairline to mark where the facts stop and the triage begins. */}
+          {/* Triage, one chip. The full worst-first breakdown was four pills
+              wide on a page whose whole job is now to point at one node. */}
           {diagnosticDone ? (
             <>
-              <span
-                className="mx-1 hidden h-5 w-px shrink-0 bg-white/25 sm:block"
-                aria-hidden="true"
-              />
-
-              <span className="text-[11px] font-bold uppercase tracking-wide text-white/80">
-                priority focus
-              </span>
-
               {PRIORITY_SUMMARY_ORDER.some((tag) => priorityCounts[tag]) ? (
-                PRIORITY_SUMMARY_ORDER.map((tag) => {
-                  const count = priorityCounts[tag]
-                  if (!count) return null
-
+                (() => {
+                  const tag = PRIORITY_SUMMARY_ORDER.find((item) => priorityCounts[item])
                   const config = PRIORITY_CONFIG[tag]
                   const Icon = config.icon
-                  const isCritical = tag === "CRITICAL_PRIORITY"
-                  const isHigh = tag === "HIGH_PRIORITY"
-                  const isUrgent = isCritical || isHigh
+                  const urgent = tag === "CRITICAL_PRIORITY" || tag === "HIGH_PRIORITY"
 
                   return (
-                    <motion.span
-                      key={tag}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-bold ${
-                        isUrgent
+                    <span
+                      className={`hidden shrink-0 items-center gap-1.5 rounded-rb-pill px-3 py-1.5 text-xs font-extrabold md:inline-flex ${
+                        urgent
                           ? "bg-rb-cardinal-wash text-rb-cardinal-lip"
                           : `${config.bgColor} ${config.textColor}`
-                      } ${isUrgent ? "ring-2 ring-rb-cardinal/40" : ""}`}
-                      animate={isUrgent ? { scale: [1, 1.06, 1] } : undefined}
-                      transition={
-                        isUrgent
-                          ? { duration: 1.6, repeat: Infinity, ease: "easeInOut" }
-                          : undefined
-                      }
+                      }`}
                     >
-                      <Icon className="size-4" aria-hidden="true" />
-                      <CountUp value={count} className="rb-numeric" />
+                      <Icon className="size-3.5" aria-hidden="true" />
+                      <CountUp value={priorityCounts[tag]} className="rb-numeric" />
                       {PRIORITY_SUMMARY_LABEL[tag]}
-                    </motion.span>
+                    </span>
                   )
-                })
+                })()
               ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-rb-feather-wash px-3 py-1.5 text-sm font-bold text-rb-feather-ink">
-                  <CheckCircle2 className="size-4" aria-hidden="true" />
+                <span className="hidden shrink-0 items-center gap-1.5 rounded-rb-pill bg-rb-feather-wash px-3 py-1.5 text-xs font-extrabold text-rb-feather-ink md:inline-flex">
+                  <CheckCircle2 className="size-3.5" aria-hidden="true" />
                   all caught up
                 </span>
               )}
             </>
           ) : null}
 
-          {/* The plan itself is built on My Learning, at the click that starts
-              the studying -- this is only the way through to it once one
-              exists. Last in the meta row: it is the one item here that leaves
-              the page, and it had a 28px band of its own to say so. */}
           {diagnosticDone && hasPlan ? (
             <Link
               to="/learner/plan"
-              className="inline-flex items-center gap-1.5 rounded-rb-pill px-1 text-[13px] font-bold text-white/80 underline-offset-4 hover:text-white hover:underline"
+              className="hidden shrink-0 items-center gap-1.5 text-xs font-bold text-rb-macaw-lip underline decoration-dotted underline-offset-4 hover:text-rb-macaw lg:inline-flex"
             >
               <CalendarDays className="size-4" aria-hidden="true" />
-              view study calendar
+              study calendar
             </Link>
           ) : null}
-          </div>
-
-          {/* The gate, stated once at the top and then enforced on every card
-              below. Gone entirely once the diagnostic is sat, rather than
-              turning into a banner nobody needs to keep reading. */}
-          {!diagnosticDone ? (
-            <Reveal
-              variants={popIn}
-              amount={0}
-              className="mt-7 flex flex-col gap-4 rounded-rb-card border-2 border-rb-swan bg-rb-fox-wash p-5 sm:flex-row sm:items-center"
-            >
-              <motion.span
-                className="grid size-12 shrink-0 place-items-center rounded-2xl bg-rb-fox text-white"
-                // A slow, small pulse. The gate is the one thing on this page
-                // that has to be noticed before anything else can happen.
-                animate={{ scale: [1, 1.08, 1] }}
-                transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-              >
-                <Lock className="size-5" aria-hidden="true" />
-              </motion.span>
-
-              <div className="min-w-0 flex-1">
-                <p className="font-rb-display text-base font-extrabold text-rb-eel">
-                  Take your diagnostic to unlock the curriculum
-                </p>
-                <p className="mt-1 text-sm font-medium text-rb-wolf">
-                  It decides which topics your study plan puts first.
-                </p>
-              </div>
-
-              <TactileButton variant="fox" size="sm" onClick={() => setDialogOpen(true)}>
-                <ClipboardCheck className="size-4" />
-                take diagnostic
-              </TactileButton>
-            </Reveal>
-          ) : null}
-          </div>
-
-          <HeroProgressRing value={curriculum.progress} />
         </div>
       </header>
+
+      {/* The gate. Out of the header and into the page, directly above the
+          road it locks -- in the header bar it would have to compete with the
+          title for a row that is now one line tall. */}
+      {!diagnosticDone ? (
+        <Reveal
+          variants={popIn}
+          amount={0}
+          className="mx-auto mt-6 flex max-w-[720px] flex-col gap-4 rounded-rb-card border-2 border-rb-swan bg-rb-fox-wash p-5 sm:flex-row sm:items-center"
+        >
+          <motion.span
+            className="grid size-12 shrink-0 place-items-center rounded-2xl bg-rb-fox text-white"
+            // A slow, small pulse. The gate is the one thing on this page that
+            // has to be noticed before anything else can happen.
+            animate={{ scale: [1, 1.08, 1] }}
+            transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <Lock className="size-5" aria-hidden="true" />
+          </motion.span>
+
+          <div className="min-w-0 flex-1">
+            <p className="font-rb-display text-base font-extrabold text-rb-eel">
+              Take your diagnostic to unlock the curriculum
+            </p>
+            <p className="mt-1 text-sm font-medium text-rb-wolf">
+              It decides which topics your study plan puts first.
+            </p>
+          </div>
+
+          <TactileButton variant="fox" size="sm" onClick={() => setDialogOpen(true)}>
+            <ClipboardCheck className="size-4" />
+            take diagnostic
+          </TactileButton>
+        </Reveal>
+      ) : null}
 
       {/* ------------------------------------------------------------- units */}
       <main className="mx-auto max-w-[1600px] px-5 py-10 lg:px-8">
@@ -1305,32 +1222,68 @@ export default function LearnerCertificationCurriculumPage() {
             description="This certification has no units with published lessons. Check back once content is released."
           />
         ) : (
-          /* Bands arrive one after another as you scroll. The stagger is the
-             page saying the stack has an order — which is the whole reason
-             units are a column rather than a grid. */
           <StaggerList className="space-y-6" stagger={0.09}>
-            {curriculum.majors.map((major) => (
-              <StaggerItem key={major.id} variants={fadeUp}>
-                <MajorCard
-                  major={major}
-                  locked={!diagnosticDone}
-                  onLocked={() => setDialogOpen(true)}
-                  onStudy={openTopic}
-                  takenExamIds={takenExamIds}
-                />
-              </StaggerItem>
-            ))}
+            {/* The road. Every unit contributes a banner and a stretch of
+                nodes, and the whole certification reads as one continuous
+                scroll from the first topic to the final -- which is the point:
+                the old stack of cards was a table of contents, and this is a
+                route. */}
+            <StaggerItem variants={fadeUp}>
+              <div className="mx-auto max-w-[820px]">
+                {sections.map((section) => {
+                  const open = diagnosticDone && openUnits.has(section.major.id)
 
-            {curriculum.mockExam ? (
-              <StaggerItem variants={fadeUp}>
-                <MockExamCard
-                  exam={curriculum.mockExam}
-                  locked={!diagnosticDone}
-                  onLocked={() => setDialogOpen(true)}
-                  takenExamIds={takenExamIds}
-                />
-              </StaggerItem>
-            ) : null}
+                  return (
+                    <section key={section.major.id} className="pb-4">
+                      <UnitBanner
+                        major={section.major}
+                        exam={section.major.assessment}
+                        locked={!diagnosticDone}
+                        open={open}
+                        onToggle={() => toggleUnit(section.major.id)}
+                        onLocked={() => setDialogOpen(true)}
+                        takenExamIds={takenExamIds}
+                      />
+
+                      <Collapse open={open}>
+                        <div
+                          className="relative mx-auto"
+                          style={{ width: PATH_WIDTH, height: PATH_ROW * section.nodes.length }}
+                        >
+                          <PathTrail count={section.nodes.length} />
+
+                          {section.nodes.map((node, index) => (
+                            <PathNode
+                              key={node.key}
+                              node={node}
+                              index={index}
+                              onSelect={openNode}
+                              onLocked={() => setDialogOpen(true)}
+                            />
+                          ))}
+                        </div>
+                      </Collapse>
+                    </section>
+                  )
+                })}
+
+                {/* The final, on the road rather than in a card of its own.
+                    It is the last stop, and a card after the path read as a
+                    separate feature rather than as the end of the journey. */}
+                {finalNode ? (
+                  <section className="pb-2">
+                    <div className="relative mx-auto" style={{ width: PATH_WIDTH, height: PATH_ROW }}>
+                      <PathNode
+                        node={finalNode}
+                        index={0}
+                        onSelect={openNode}
+                        onLocked={() => setDialogOpen(true)}
+                      />
+                    </div>
+                  </section>
+                ) : null}
+              </div>
+            </StaggerItem>
 
             {/* Everything the units and the mock card do not already show.
                 The curriculum places one quiz per lesson and one exam per unit,

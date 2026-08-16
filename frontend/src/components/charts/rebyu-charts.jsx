@@ -180,6 +180,98 @@ export function masteryInk(theme, value) {
   return band ? theme.statusInk[band] : theme.ink.secondary
 }
 
+/**
+ * Where a readiness score sits on the needs-review → exam-ready scale.
+ *
+ * These four are the backend's own bands, not a second opinion invented for the
+ * UI: `readiness_service._level` in the Python service cuts at exactly 85 / 70 /
+ * 50 and names them `needs_review`, `developing`, `nearly_ready`, `exam_ready`.
+ * It computes the level on every call and the Java analytics service then reads
+ * only `readiness_score` off the response and drops it, so the frontend has the
+ * number without the word and has to re-derive it here.
+ *
+ * That is a duplicated threshold and it can drift -- if the service's cuts move,
+ * these must move with them. The fix is for `computeReadiness` to carry
+ * `readiness_level` through to the DTO, after which this reads the field
+ * instead of the number.
+ *
+ * Separate from `MASTERY_BANDS` on purpose. Mastery asks "do you know this
+ * topic" over one lesson; readiness asks "could you pass the exam" over a whole
+ * certification, and 60% means very different things in the two sentences.
+ */
+export const READINESS_BANDS = { developing: 50, nearlyReady: 70, examReady: 85 }
+
+const READINESS_META = {
+  needs_review: { label: "needs review", hint: "Plenty still to cover before exam day." },
+  developing: { label: "developing", hint: "The foundations are forming. Keep going." },
+  nearly_ready: { label: "nearly ready", hint: "Close. Tighten your weakest topics." },
+  exam_ready: { label: "exam ready", hint: "You are scoring at exam standard." },
+}
+
+export function readinessBand(value) {
+  if (value == null) {
+    return null
+  }
+  const score = Number(value)
+  if (!Number.isFinite(score)) {
+    return null
+  }
+  if (score >= READINESS_BANDS.examReady) {
+    return "exam_ready"
+  }
+  if (score >= READINESS_BANDS.nearlyReady) {
+    return "nearly_ready"
+  }
+  if (score >= READINESS_BANDS.developing) {
+    return "developing"
+  }
+  return "needs_review"
+}
+
+/** The band as words: a short status and the sentence that explains it. */
+export function readinessMeta(value) {
+  return READINESS_META[readinessBand(value)] ?? null
+}
+
+/** For the gauge arc. Follows `masteryColor`'s reasoning: status, not series. */
+export function readinessColor(theme, value) {
+  switch (readinessBand(value)) {
+    case "needs_review":
+      return theme.danger
+    case "developing":
+      return seriesColor(theme, 2)
+    case "nearly_ready":
+      return seriesColor(theme, 0)
+    case "exam_ready":
+      return theme.success
+    default:
+      return theme.ink.muted
+  }
+}
+
+/**
+ * The same four bands, shaded for type.
+ *
+ * `statusInk` only has three entries, keyed to the mastery scale, so the two
+ * blue-and-green bands borrow from it rather than adding a fourth: nearly-ready
+ * takes the series azure (which is chosen to carry type) and exam-ready the
+ * strong ink.
+ */
+export function readinessInk(theme, value) {
+  switch (readinessBand(value)) {
+    case "needs_review":
+      return theme.statusInk.weak
+    case "developing":
+      return theme.statusInk.developing
+    case "nearly_ready":
+      return seriesColor(theme, 0)
+    case "exam_ready":
+      return theme.statusInk.strong
+    default:
+      return theme.ink.secondary
+  }
+}
+
 /* ------------------------------------------------------------------- shell */
 
 export function ChartPanel({
@@ -639,7 +731,21 @@ export function DonutChart({
 /* ------------------------------------------------------------------- gauge */
 
 /** A single headline that happens to have a ceiling — one number, one arc. */
-export function RadialGauge({ value, label, height = 200, unit = "%", max = 100 }) {
+/**
+ * @param color  arc fill. Defaults to the first series hue; pass a status
+ *               colour (`readinessColor`, `masteryColor`) when the value means
+ *               something on a scale rather than being one series among several.
+ * @param valueInk  colour for the big number, when it should follow the arc.
+ */
+export function RadialGauge({
+  value,
+  label,
+  height = 200,
+  unit = "%",
+  max = 100,
+  color,
+  valueInk,
+}) {
   const theme = useChartTheme()
   const bounded = Math.max(0, Math.min(max, Number(value) || 0))
 
@@ -659,13 +765,16 @@ export function RadialGauge({ value, label, height = 200, unit = "%", max = 100 
               background={{ fill: theme.track }}
               dataKey="value"
               cornerRadius={8}
-              fill={seriesColor(theme, 0)}
+              fill={color ?? seriesColor(theme, 0)}
             />
           </RadialBarChart>
         </ResponsiveContainer>
 
         <div className="pointer-events-none absolute inset-0 grid place-content-center text-center">
-          <div className="font-rb-display text-3xl font-extrabold tabular-nums text-foreground">
+          <div
+            className="font-rb-display text-3xl font-extrabold tabular-nums text-foreground"
+            style={valueInk ? { color: valueInk } : undefined}
+          >
             {Math.round(bounded)}
             {unit}
           </div>

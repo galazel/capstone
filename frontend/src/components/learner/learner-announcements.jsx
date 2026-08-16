@@ -3,7 +3,6 @@ import { MegaphoneIcon, PinIcon } from "@/components/icons"
 
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
-import { Skeleton } from "@/components/ui/skeleton"
 import { getMyAnnouncements } from "@/services/enterpriseService.js"
 
 function formatWhen(value) {
@@ -35,12 +34,12 @@ export function LearnerAnnouncements({ certificationId }) {
 
   const announcements = Array.isArray(query.data) ? query.data : []
 
-  if (query.isLoading) {
-    return <Skeleton className="h-28 w-full rounded-xl" />
-  }
-  // A learner with no group has nothing to show here, and a failed request
-  // should not push an error box onto an otherwise healthy course page.
-  if (query.isError || announcements.length === 0) {
+  // Nothing while loading, for the same reason as nothing when empty: most
+  // learners are not in an organization group, so the usual outcome of this
+  // request is that this component draws nothing at all. A skeleton held a
+  // 112px blank band open on every certification page for a section that
+  // almost never arrives -- it read as a layout gap, not as loading.
+  if (query.isLoading || query.isError || announcements.length === 0) {
     return null
   }
 

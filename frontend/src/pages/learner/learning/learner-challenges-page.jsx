@@ -17,7 +17,10 @@ import {
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { getChallengeGamificationData } from "@/services/challengeService.js"
+import {
+  getChallengeLeaderboard,
+  getMyChallengeRecord,
+} from "@/services/challengeService.js"
 import LearnerPremiumGuard from "@/components/learner/learner-premium-guard.jsx"
 import { XpRankingsPanel } from "@/components/learner/xp-rankings-panel.jsx"
 import { FEATURES } from "@/services/subscriptionService.js"
@@ -79,19 +82,14 @@ const CHALLENGES = [
   },
 ]
 
-const previewLeaderboard = [
-  { learnerId: "preview-1", name: "Mika Santos", points: 2480, completed: 18, bestScore: 196, rank: 1 },
-  { learnerId: "preview-2", name: "Andre Reyes", points: 2215, completed: 16, bestScore: 188, rank: 2 },
-  { learnerId: "preview-current", name: "You", points: 1960, completed: 14, bestScore: 181, rank: 3, isCurrentLearner: true },
-  { learnerId: "preview-4", name: "Sam Rivera", points: 1740, completed: 13, bestScore: 176, rank: 4 },
-  { learnerId: "preview-5", name: "Jamie Cruz", points: 1585, completed: 12, bestScore: 169, rank: 5 },
-]
-
-const previewActivity = [
-  { challengeSessionId: "preview-a", title: "CodeStrike", startedTime: new Date().toISOString(), status: "passed", score: 181 },
-  { challengeSessionId: "preview-b", title: "Blueprint Arena", startedTime: new Date(Date.now() - 86400000).toISOString(), status: "passed", score: 164 },
-  { challengeSessionId: "preview-c", title: "World Cup", startedTime: new Date(Date.now() - 172800000).toISOString(), status: "completed", score: 152 },
-]
+/* No preview data here any more.
+   The board and the activity list used to fall back to five invented learners
+   and three invented sessions whenever the request came back empty -- which it
+   always did for a learner, because the page was reading `/api/challenge-
+   sessions` (every session on the platform) and `/api/learners` (every learner)
+   to build them, and those are not a learner's to read. Both now come from
+   endpoints scoped to the caller, and empty means empty: a board nobody is on
+   says so, and says that finishing a challenge puts you top of it. */
 
 function relativePosition(index, activeIndex) {
   let difference = index - activeIndex
@@ -99,27 +97,6 @@ function relativePosition(index, activeIndex) {
   if (difference > midpoint) difference -= CHALLENGES.length
   if (difference < -midpoint) difference += CHALLENGES.length
   return difference
-}
-
-function getChallengeStreak(sessions) {
-  const days = new Set(
-    sessions
-      .map((session) => session.startedTime)
-      .filter(Boolean)
-      .map((value) => new Date(value).toISOString().slice(0, 10))
-  )
-  if (!days.size) return 0
-
-  const cursor = new Date()
-  cursor.setHours(0, 0, 0, 0)
-  if (!days.has(cursor.toISOString().slice(0, 10))) cursor.setDate(cursor.getDate() - 1)
-
-  let streak = 0
-  while (days.has(cursor.toISOString().slice(0, 10))) {
-    streak += 1
-    cursor.setDate(cursor.getDate() - 1)
-  }
-  return streak
 }
 
 function formatSessionDate(value) {
@@ -157,56 +134,26 @@ export default function LearnerChallengesPage() {
   )
 
   const activeChallenge = challenges[activeIndex]
-  const gamificationQuery = useQuery({
-    queryKey: ["challenge-gamification"],
-    queryFn: getChallengeGamificationData,
+
+  /* Two scoped reads. The server ranks and names the board (and marks which row
+     is yours), and returns your own totals, streak and recent sessions -- work
+     that used to be done in the browser over data belonging to everybody. */
+  const leaderboardQuery = useQuery({
+    queryKey: ["challenge-leaderboard"],
+    queryFn: () => getChallengeLeaderboard(10),
+    staleTime: 60_000,
   })
 
-  const gamification = useMemo(() => {
-    const sessions = gamificationQuery.data?.sessions ?? []
-    const learners = gamificationQuery.data?.learners ?? []
-    const modes = gamificationQuery.data?.modes ?? []
-    const learnerById = new Map(learners.map((learner) => [String(learner.learnerId), learner]))
-    const modeById = new Map(modes.map((mode) => [String(mode.challengeModeId), mode]))
-    const standings = new Map()
+  const recordQuery = useQuery({
+    queryKey: ["challenge-record", learnerId],
+    queryFn: getMyChallengeRecord,
+    enabled: learnerId != null,
+    staleTime: 60_000,
+  })
 
-    sessions.forEach((session) => {
-      if (session.score == null || session.status === "in_progress") return
-      const key = String(session.learnerId)
-      const learner = learnerById.get(key)
-      const entry = standings.get(key) ?? {
-        learnerId: session.learnerId,
-        name: learner
-          ? `${learner.firstName ?? ""} ${learner.lastName ?? ""}`.trim() || learner.username
-          : `Learner ${session.learnerId}`,
-        points: 0,
-        completed: 0,
-        bestScore: 0,
-      }
-      const score = Number(session.score) || 0
-      entry.points += score
-      entry.completed += 1
-      entry.bestScore = Math.max(entry.bestScore, score)
-      standings.set(key, entry)
-    })
-
-    const leaderboard = [...standings.values()]
-      .sort((a, b) => b.points - a.points || b.bestScore - a.bestScore)
-      .map((entry, index) => ({ ...entry, rank: index + 1 }))
-    const mine = leaderboard.find((entry) => String(entry.learnerId) === String(learnerId))
-    const mySessions = sessions
-      .filter((session) => String(session.learnerId) === String(learnerId))
-      .sort((a, b) => new Date(b.startedTime ?? 0) - new Date(a.startedTime ?? 0))
-
-    return {
-      leaderboard: leaderboard.length ? leaderboard : previewLeaderboard,
-      mine: mine ?? previewLeaderboard.find((entry) => entry.isCurrentLearner),
-      mySessions: mySessions.length ? mySessions : previewActivity,
-      streak: mySessions.length ? getChallengeStreak(mySessions) : 3,
-      modeById,
-      isPreview: leaderboard.length === 0,
-    }
-  }, [gamificationQuery.data, learnerId])
+  const leaderboard = Array.isArray(leaderboardQuery.data) ? leaderboardQuery.data : []
+  const record = recordQuery.data ?? null
+  const recentSessions = Array.isArray(record?.recent) ? record.recent : []
 
   const move = (direction) => {
     setActiveIndex(
@@ -383,47 +330,58 @@ export default function LearnerChallengesPage() {
                   <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-foreground">
                     <Crown className="size-4 text-rb-fox-lip" />
                     Leaderboard
-                    {gamification.isPreview && (
-                      <span className="rounded-full bg-rb-macaw-wash px-2 py-0.5 font-rb-display text-[10px] font-extrabold uppercase tracking-wide text-rb-macaw-lip">
-                        Preview
-                      </span>
-                    )}
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">
                     Ranked by points earned from completed challenges.
                   </p>
                 </div>
                 <span className="text-xs font-medium text-muted-foreground">
-                  {gamification.leaderboard.length} ranked
+                  {leaderboard.length} ranked
                 </span>
               </div>
 
-              {(
+              {leaderboardQuery.isLoading ? (
+                <p className="py-10 text-center text-sm text-muted-foreground">
+                  Loading the board…
+                </p>
+              ) : leaderboard.length === 0 ? (
+                /* The honest empty state, and an invitation: nobody has
+                   finished a challenge yet, so the first to finish one tops
+                   the board. */
+                <div className="py-10 text-center">
+                  <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-rb-fox-wash text-rb-fox-lip">
+                    <Crown className="size-5" aria-hidden="true" />
+                  </span>
+                  <p className="mt-3 font-rb-display text-base font-extrabold text-foreground">
+                    Nobody is on the board yet
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Finish a challenge and you take first place.
+                  </p>
+                </div>
+              ) : (
                 <div className="divide-y divide-border">
-                  {gamification.leaderboard.slice(0, 10).map((entry) => {
-                    const isCurrentLearner = entry.isCurrentLearner || String(entry.learnerId) === String(learnerId)
-                    return (
-                      <div
-                        key={entry.learnerId}
-                        className={`grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-3 px-2 py-3.5 ${isCurrentLearner ? "bg-rb-macaw-wash dark:bg-rb-macaw/10" : ""}`}
-                      >
-                        <div className="flex h-8 w-8 items-center justify-center text-sm font-semibold text-muted-foreground">
-                          {entry.rank <= 3 ? (
-                            <Medal className={`h-5 w-5 ${entry.rank === 1 ? "text-rb-fox" : entry.rank === 2 ? "text-rb-hare" : "text-rb-fox-lip"}`} />
-                          ) : entry.rank}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-foreground">
-                            {entry.name}{isCurrentLearner && entry.name !== "You" ? " (You)" : ""}
-                          </p>
-                          <p className="text-xs text-muted-foreground">{entry.completed} completed · Best {entry.bestScore.toLocaleString()} pts</p>
-                        </div>
-                        <p className="text-sm font-bold tabular-nums text-rb-macaw-lip dark:text-rb-macaw">
-                          {entry.points.toLocaleString()} pts
-                        </p>
+                  {leaderboard.map((entry) => (
+                    <div
+                      key={`${entry.rank}-${entry.name}`}
+                      className={`grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-3 px-2 py-3.5 ${entry.you ? "bg-rb-macaw-wash dark:bg-rb-macaw/10" : ""}`}
+                    >
+                      <div className="flex h-8 w-8 items-center justify-center text-sm font-semibold text-muted-foreground">
+                        {entry.rank <= 3 ? (
+                          <Medal className={`h-5 w-5 ${entry.rank === 1 ? "text-rb-fox" : entry.rank === 2 ? "text-rb-hare" : "text-rb-fox-lip"}`} />
+                        ) : entry.rank}
                       </div>
-                    )
-                  })}
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground">
+                          {entry.name}{entry.you ? " (You)" : ""}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{entry.completed} completed · Best {entry.bestScore.toLocaleString()} pts</p>
+                      </div>
+                      <p className="text-sm font-bold tabular-nums text-rb-macaw-lip dark:text-rb-macaw">
+                        {entry.points.toLocaleString()} pts
+                      </p>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -437,19 +395,19 @@ export default function LearnerChallengesPage() {
                 <dl className="mt-4 grid grid-cols-2 gap-x-5 gap-y-5 border-y-2 border-border py-5">
                   <div>
                     <dt className="text-xs text-muted-foreground">Global rank</dt>
-                    <dd className="mt-1 text-2xl font-bold text-foreground">{gamification.mine ? `#${gamification.mine.rank}` : "—"}</dd>
+                    <dd className="mt-1 text-2xl font-bold text-foreground">{record?.rank ? `#${record.rank}` : "Unranked"}</dd>
                   </div>
                   <div>
                     <dt className="text-xs text-muted-foreground">Total points</dt>
-                    <dd className="mt-1 text-2xl font-bold text-foreground">{gamification.mine?.points?.toLocaleString() ?? "—"}</dd>
+                    <dd className="mt-1 text-2xl font-bold text-foreground">{(record?.points ?? 0).toLocaleString()}</dd>
                   </div>
                   <div>
                     <dt className="flex items-center gap-1 text-xs text-muted-foreground"><Flame className="h-3.5 w-3.5" /> Challenge streak</dt>
-                    <dd className="mt-1 text-lg font-semibold text-foreground">{gamification.streak} {gamification.streak === 1 ? "day" : "days"}</dd>
+                    <dd className="mt-1 text-lg font-semibold text-foreground">{record?.streakDays ?? 0} {record?.streakDays === 1 ? "day" : "days"}</dd>
                   </div>
                   <div>
                     <dt className="flex items-center gap-1 text-xs text-muted-foreground"><Zap className="h-3.5 w-3.5" /> Best score</dt>
-                    <dd className="mt-1 text-lg font-semibold text-foreground">{gamification.mine?.bestScore?.toLocaleString() ?? "—"}</dd>
+                    <dd className="mt-1 text-lg font-semibold text-foreground">{(record?.bestScore ?? 0).toLocaleString()}</dd>
                   </div>
                 </dl>
               </div>
@@ -459,17 +417,17 @@ export default function LearnerChallengesPage() {
                   <Activity className="size-4 text-rb-beetle-lip" />
                   Recent activity
                 </div>
-                {gamification.mySessions.length === 0 ? (
+                {recentSessions.length === 0 ? (
                   <p className="mt-4 text-sm leading-6 text-muted-foreground">Your completed challenges will appear here.</p>
                 ) : (
                   <div className="mt-3 divide-y divide-border">
-                    {gamification.mySessions.slice(0, 4).map((session) => (
+                    {recentSessions.slice(0, 4).map((session) => (
                       <div key={session.challengeSessionId} className="flex items-center justify-between gap-4 py-3">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-foreground">
-                            {session.title ?? gamification.modeById.get(String(session.challengeModeId))?.name ?? "Challenge"}
+                            {session.mode ?? "Challenge"}
                           </p>
-                          <p className="mt-0.5 text-xs text-muted-foreground">{formatSessionDate(session.startedTime)} · {String(session.status ?? "").replace("_", " ")}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">{formatSessionDate(session.startedAt)} · {String(session.status ?? "").replace("_", " ")}</p>
                         </div>
                         <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
                           {session.score == null ? "—" : `${Number(session.score).toLocaleString()} pts`}

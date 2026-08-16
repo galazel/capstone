@@ -1,13 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react"
 import { useNavigate, useOutletContext } from "react-router-dom"
-import { useStudyPlanGate } from "@/components/learner/use-study-plan-gate.jsx"
-import { isDiagnosticCompleted } from "./learner-learning-page.jsx"
 import { Award, GraduationCap } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { BUBBLE_TONES, BubbleCard } from "@/components/commons/bubble-card.jsx"
-import { LearnerEmptyState, ProgressBar, toneForCertification } from "@/components/learner/learner-ui.jsx"
+import { LearnerEmptyState, toneForCertification } from "@/components/learner/learner-ui.jsx"
 
 const INITIAL_VISIBLE_COUNT = 8
 const LOAD_MORE_COUNT = 8
@@ -34,32 +32,20 @@ function getCertificationDescription(certification) {
 /* The same bubble card the admin challenges arenas use — gradient cap,
    bubbles, icon medallion, wash body — so a certification reads as one card
    design wherever it shows up across the learner portal. */
+/* No progress on these cards. This is the catalog -- what exists, what it is
+   about, and whether you are in it -- and progress is a question about your
+   own study, which My Learning is the page for. Carrying a percentage here
+   also meant a second surface to keep in step with the analytics board every
+   time the definition of "done" moved. */
 function CertificationCard({
                              certification,
-                             lessons,
                              enrolled,
                              onOpen,
                              onAction,
                            }) {
-  const certificationId = getCertificationId(certification)
-
-  const relatedLessons = lessons.filter(
-      (lesson) =>
-          String(lesson.certificationId) === String(certificationId)
-  )
-
-  const completedLessons = relatedLessons.filter(
-      (lesson) => lesson.completed
-  ).length
-
-  const progress =
-      relatedLessons.length > 0
-          ? Math.round((completedLessons / relatedLessons.length) * 100)
-          : 0
-
   const category = getCertificationCategory(certification)
   const tone = toneForCertification(certification)
-  // Same tone the cap uses, so the button and the bar belong to this card.
+  // Same tone the cap uses, so the button belongs to this card.
   const palette = BUBBLE_TONES[tone] ?? BUBBLE_TONES.macaw
 
   return (
@@ -76,39 +62,20 @@ function CertificationCard({
               {getCertificationTitle(certification)}
             </button>
           }
-          chips={[
-            { label: enrolled ? "Enrolled" : "Free to study" },
-            ...(enrolled && relatedLessons.length > 0
-                ? [{ label: `${progress}%`, side: "right" }]
-                : []),
-          ]}
+          chips={[{ label: enrolled ? "Enrolled" : "Free to study" }]}
           footer={
             <Button
                 className="w-full rounded-full text-white hover:opacity-90"
                 style={{ background: palette.solid }}
                 onClick={onAction}
             >
-              {enrolled ? "Continue Learning" : "View Certification"}
+              View details
             </Button>
           }
       >
         <p className="mt-2 line-clamp-3 min-h-[60px] break-words text-sm leading-6 text-muted-foreground">
           {getCertificationDescription(certification)}
         </p>
-
-        {enrolled && relatedLessons.length > 0 && (
-            <div className="mt-4 space-y-2">
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>Course progress</span>
-
-                <span className="font-semibold text-foreground">
-                {progress}%
-              </span>
-              </div>
-
-              <ProgressBar value={progress} color={palette.solid} />
-            </div>
-        )}
       </BubbleCard>
   )
 }
@@ -176,17 +143,11 @@ function CategoryFilter({
 export default function LearnerCertificationsPage() {
   const navigate = useNavigate()
   const outletContext = useOutletContext()
-  // The same plan gate My Learning uses. Without it, opening an enrolled
-  // certification from this page went straight into the curriculum and the
-  // study plan was never offered.
-  const { openCertification: openWithStudyPlan, studyPlanDialog } = useStudyPlanGate()
-
   const data = outletContext?.data ?? {}
   const searchValue = String(outletContext?.searchValue ?? "")
 
   const certifications = data.certifications ?? []
   const enrolledCertifications = data.enrolledCertifications ?? []
-  const lessons = data.lessons ?? []
 
   const [selectedCategories, setSelectedCategories] = useState(new Set())
   const [sortBy, setSortBy] = useState("popular")
@@ -317,19 +278,14 @@ export default function LearnerCertificationsPage() {
     )
   }
 
-  function handleCertificationAction(certification, enrolled) {
-    const certificationId = getCertificationId(certification)
-
-    if (enrolled) {
-      // Offers the study plan first when there isn't one, exactly as My
-      // Learning does; falls through to the curriculum otherwise.
-      openWithStudyPlan(certification, {
-        diagnosticCompleted: isDiagnosticCompleted(certification, data),
-      })
-      return
-    }
-
-    navigate(`/learner/certifications/${certificationId}`)
+  /* One destination for every card, enrolled or not: this certification's
+     page. The catalog answers "what is this and do I want it"; carrying on
+     with something you are already enrolled in is My Learning's job, and the
+     button that used to do it from here jumped an enrolled learner straight
+     into the curriculum -- past the details the card had just offered to show
+     them, and through a study-plan dialog they had not asked for. */
+  function handleCertificationAction(certification) {
+    navigate(`/learner/certifications/${getCertificationId(certification)}`)
   }
 
   return (
@@ -403,15 +359,9 @@ export default function LearnerCertificationsPage() {
                           <CertificationCard
                               key={certificationId}
                               certification={certification}
-                              lessons={lessons}
                               enrolled={enrolled}
                               onOpen={() => openCertification(certification)}
-                              onAction={() =>
-                                  handleCertificationAction(
-                                      certification,
-                                      enrolled
-                                  )
-                              }
+                              onAction={() => handleCertificationAction(certification)}
                           />
                       )
                     })}
@@ -439,7 +389,6 @@ export default function LearnerCertificationsPage() {
         </div>
 
         {/* The study-plan generator, rendered by the shared gate hook. */}
-        {studyPlanDialog}
       </div>
   )
 }

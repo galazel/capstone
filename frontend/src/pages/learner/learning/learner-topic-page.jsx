@@ -42,7 +42,7 @@ import {
 } from "@/components/motion/rebyu-motion.jsx"
 import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
 import { LessonAiTutor } from "@/components/learner/lesson-ai-tutor.jsx"
-import { PriorityTag } from "@/components/learner/priority-tag.jsx"
+import { PriorityBookmark, PriorityChip } from "@/components/learner/priority-tag.jsx"
 import { ASSESSMENT_MAX_XP, LESSON_COMPLETION_XP } from "@/lib/xp.js"
 import { announceRewards, snapshotRewards } from "@/components/learner/xp-award-modal.jsx"
 import { LessonTool } from "@/components/certifications/lesson-content-renderer.jsx"
@@ -166,6 +166,7 @@ const ROW_ICON = { lesson: BookOpen, assessment: ClipboardCheck }
 
 function OutlineRow({
   item,
+  mastery,
   active,
   collapsed,
   expanded,
@@ -245,13 +246,32 @@ function OutlineRow({
                   ? `lesson${item.quiz ? " · 1 quiz" : ""}`
                   : `unit assessment · ${item.exam.totalQuestions} questions`}
               </span>
-
-              {item.kind === "lesson" && !done && item.priorityTag ? (
-                <PriorityTag tag={item.priorityTag} size="sm" />
-              ) : null}
             </span>
           ) : null}
         </button>
+
+        {/* The lesson's priority, as a bookmark on the row.
+            Where the words used to be: a full "🔴 Critical" pill under every
+            lesson turned the rail into a column of coloured labels, each one as
+            loud as the lesson name above it.
+
+            On finished lessons too. Completion says the pages were read;
+            mastery says whether they stuck, and it keeps moving -- score zero
+            on the unit exam and a lesson ticked off last week is critical
+            today. That is exactly when the mark is worth having, so hiding it
+            on completion hid it from the learner who most needed it.
+
+            Rides the row's right edge, outside the select button, so it is a
+            mark on the row rather than another thing inside the target. */}
+        {item.kind === "lesson" && item.priorityTag ? (
+          <span className={collapsed ? "absolute right-0.5 top-1" : "pr-2"}>
+            <PriorityBookmark
+              tag={item.priorityTag}
+              masteryProbability={mastery}
+              size={collapsed ? 11 : 14}
+            />
+          </span>
+        ) : null}
 
         {hasChildren && !collapsed ? (
           <button
@@ -326,6 +346,7 @@ function Outline({
   middle,
   major,
   track,
+  masteryByLessonId,
   activeId,
   collapsed,
   onCollapse,
@@ -416,6 +437,7 @@ function Outline({
                 // structure is fetched per lesson, and prefetching every one to
                 // fill the rail would be a request per row.
                 sections={item.id === activeId ? activeSections : []}
+                mastery={masteryByLessonId?.get(String(item.id))}
                 readSections={readSections}
                 done={item.kind === "lesson" && isDone(item.id)}
               />
@@ -522,9 +544,13 @@ function sectionTone(section, index) {
    decision -- adding a fourth surface means filling in one object, not
    hunting four conditionals through the JSX.
 
-   Plain and wash take different accents on purpose. They already alternate,
-   and giving them the same colour would waste the alternation on a background
-   change most people would not consciously register. */
+   Plain and wash share one accent. They used to differ -- Fox on plain, Macaw
+   on wash -- on the reasoning that the alternation should be felt rather than
+   merely present. In a portal that is Azure everywhere else, what that produced
+   was an orange rule under one heading and a blue rule under the next, in the
+   same lesson, with nothing about the content to explain the switch: it read as
+   inconsistency, not rhythm. The alternation still runs, carried by the surface
+   the section sits on, which is the part that separates them. */
 const SECTION_TONE = {
   statement: {
     /* Surface only. Geometry -- the bleed, the padding, the full-screen
@@ -571,8 +597,8 @@ const SECTION_TONE = {
   plain: {
     shell: "",
     heading: "text-rb-eel",
-    eyebrow: "text-rb-fox-lip",
-    rule: "bg-rb-fox",
+    eyebrow: "text-rb-macaw-lip",
+    rule: "bg-rb-macaw",
     ghost: "text-rb-swan/70",
     content: "",
   },
@@ -688,8 +714,12 @@ function LessonView({
             </h1>
           </div>
 
+          {/* Feather, the portal's primary: this is the one key in the header,
+              and Macaw is the focus/secondary blue. Two different blues on the
+              same page for the same weight of action is what made the header
+              look like it belonged to another screen. */}
           {backTo ? (
-            <TactileButton asChild variant="macaw" size="sm" className="shrink-0">
+            <TactileButton asChild variant="feather" size="sm" className="shrink-0">
               <Link to={backTo}>
                 <ArrowLeft className="size-4" />
                 back to curriculum
@@ -728,8 +758,18 @@ function LessonView({
             {lessonDone ? `${LESSON_COMPLETION_XP} XP earned` : `+${LESSON_COMPLETION_XP} XP`}
           </span>
 
-          {!lessonDone && lessonItem.priorityTag ? (
-            <PriorityTag tag={lessonItem.priorityTag} size="sm" />
+          {/* Last in the row and in the row's own shape: a priority is a fact
+              about this lesson like the section count beside it, not a badge
+              from another design.
+
+              Shown whether or not the lesson is finished. Reading a lesson and
+              knowing it are different things -- mastery moves with every
+              question answered, so a lesson ticked off in the morning can be
+              critical by the evening if its quiz went badly. Hiding the tag on
+              completion meant the learner could only see that where they were
+              least likely to look for it. */}
+          {lessonItem.priorityTag ? (
+            <PriorityChip tag={lessonItem.priorityTag} />
           ) : null}
         </div>
       </div>
@@ -1063,8 +1103,12 @@ function AssessmentView({ exam, position, total, backTo, taken }) {
             </h1>
           </div>
 
+          {/* Feather, the portal's primary: this is the one key in the header,
+              and Macaw is the focus/secondary blue. Two different blues on the
+              same page for the same weight of action is what made the header
+              look like it belonged to another screen. */}
           {backTo ? (
-            <TactileButton asChild variant="macaw" size="sm" className="shrink-0">
+            <TactileButton asChild variant="feather" size="sm" className="shrink-0">
               <Link to={backTo}>
                 <ArrowLeft className="size-4" />
                 back to curriculum
@@ -1220,6 +1264,20 @@ export default function LearnerTopicPage() {
     const map = new Map()
     for (const topic of masteryQuery.data?.lessonPriorities ?? []) {
       if (topic.lessonId != null) map.set(String(topic.lessonId), topic.priorityTag)
+    }
+    return map
+  }, [masteryQuery.data])
+
+  /* Mastery kept beside the tag rather than folded into it: the tag is what the
+     bookmark is coloured by, the probability is what its tooltip says when a
+     learner wants the number behind the colour. `buildCurriculum` only carries
+     tags, so this stays a lookup of its own. */
+  const lessonMasteryById = useMemo(() => {
+    const map = new Map()
+    for (const topic of masteryQuery.data?.lessonPriorities ?? []) {
+      if (topic.lessonId != null && topic.masteryProbability != null) {
+        map.set(String(topic.lessonId), topic.masteryProbability)
+      }
     }
     return map
   }, [masteryQuery.data])
@@ -1504,6 +1562,7 @@ export default function LearnerTopicPage() {
       middle={middle}
       major={major}
       track={track}
+      masteryByLessonId={lessonMasteryById}
       activeId={active?.id}
       collapsed={outlineCollapsed}
       onCollapse={() => setOutlineCollapsed((value) => !value)}

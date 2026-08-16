@@ -14,13 +14,11 @@ import {
   LayoutDashboard,
   Menu,
   ReceiptText,
-  ShieldAlert,
   ServerCog,
   Sparkles,
   Search,
   Swords,
   Users,
-  UsersRound,
   X,
 } from "@/components/icons"
 
@@ -51,7 +49,6 @@ const learnerNavigation = [
   // No Rankings entry: the XP leaderboard is a panel on Challenges now, beside
   // the challenge-points board. Two standings on two pages meant knowing which
   // board you wanted before you could find it.
-  { label: "Community", href: "/learner/community", icon: UsersRound },
 ]
 
 const adminGroups = [
@@ -80,7 +77,6 @@ const adminGroups = [
     items: [
       { label: "Institutions", href: "/admin/organizations", icon: Building2 },
       { label: "Partnership requests", href: "/admin/partnership-requests", icon: Handshake },
-      { label: "Community moderation", href: "/admin/community-moderation", icon: ShieldAlert },
       { label: "BKT delivery", href: "/admin/bkt-delivery", icon: ServerCog },
       { label: "Gamification", href: "/admin/gamification-settings", icon: Sparkles },
       { label: "Learners", href: "/admin/learners", icon: Users },
@@ -293,25 +289,13 @@ export function PortalTopNavigation({ role, actions, organizationName, enterpris
             independent declarations of the same gutter, so they have to move
             together — widening the page alone left the brand and the nav links
             indented relative to every heading underneath them. */}
-        <div className="relative mx-auto flex h-16 w-full max-w-[1800px] items-center gap-4 px-3 sm:px-5 lg:px-6">
+        <div className="mx-auto flex h-16 w-full max-w-[1800px] items-center gap-4 px-3 sm:px-5 lg:px-6">
           <Brand role={role} organizationName={organizationName} />
-          {/* Centred on the bar, not between its neighbours.
-              A previous attempt centred the links with flex, and they drifted
-              horizontally every time the brand or the action cluster changed
-              width -- an organisation with a long name pushed the whole nav
-              right, and the XP counter ticking over nudged it back. Taking the
-              nav out of flow and pinning it to the bar's midpoint fixes the
-              links to the centre of the *viewport*, which is what "centred"
-              actually means here: the two side clusters can now change width
-              freely without moving them.
-
-              `lg:` only. Below that the links are hidden and the mobile tab bar
-              at the foot of this file takes over, so the absolute positioning
-              never competes with a cramped bar. */}
-          <nav
-            className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 lg:flex"
-            aria-label={`${role.toLowerCase()} navigation`}
-          >
+          {/* Left-aligned against the logo. Centred, the links floated in the
+              middle of the bar and shifted horizontally whenever the brand or
+              the action cluster changed width -- next to the wordmark they have
+              a fixed edge to start from. */}
+          <nav className="hidden min-w-0 flex-1 items-center justify-start gap-1 lg:flex" aria-label={`${role.toLowerCase()} navigation`}>
             {role === "LEARNER"
               ? learnerNavigation.slice(0, 6).map((item) => {
                   const Icon = item.icon
@@ -336,14 +320,7 @@ export function PortalTopNavigation({ role, actions, organizationName, enterpris
                   <GroupDropdown key={group.label} group={group} pathname={location.pathname} />
                 ))}
           </nav>
-          {/* Takes the whole remaining row and pushes its contents to the far
-              edge, so streak, XP, notifications and the avatar sit hard right.
-              It used to drop to `lg:flex-none` on wide screens, which was
-              correct while the nav had `flex-1` and did the pushing; now the
-              nav is absolutely centred and out of flow, so this is the only
-              thing left that can hold the right edge. Without it the action
-              cluster collapses back against the wordmark. */}
-          <div className="flex flex-1 items-center justify-end gap-1.5">
+          <div className="flex flex-1 items-center justify-end gap-1.5 lg:flex-none">
             {/* No search control in the bar. It occupied the widest slot in the
                 header to search a nav tree of at most a dozen destinations that
                 are already on screen. The Ctrl-K palette below still opens on

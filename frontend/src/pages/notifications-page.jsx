@@ -1,6 +1,5 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { useAuth } from "@/context/auth-context.jsx"
 import { ArrowLeftIcon, Bell, CheckCheck, ChevronRight, Loader2, Trash2 } from "@/components/icons"
 
 import {
@@ -13,21 +12,70 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useNotifications } from "@/hooks/use-notifications.js"
-import { useCommunityNotifications } from "@/hooks/use-community-notifications.js"
 
-function formatTime(value) {
-  if (!value) return "Recently"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "Recently"
+/* The clock time alone on the row, because the date is on the group heading
+   above it. Every row carrying "Aug 17, 2026, 6:58 AM" spent a line of each
+   notification restating the same date thirty times. */
+function formatClock(value) {
+  const date = new Date(value ?? "")
+  if (Number.isNaN(date.getTime())) return ""
+  return new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(date)
+}
+
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+}
+
+function formatDayLabel(value) {
+  const date = new Date(value ?? "")
+  if (Number.isNaN(date.getTime())) return "Earlier"
+
+  const now = new Date()
+  const today = startOfDay(now)
+  const day = startOfDay(date)
+
+  /* Yesterday is built from the calendar, not by subtracting 24 hours: a clock
+     change makes a local day 23 or 25 hours long, and on those two days a
+     fixed 86,400,000 would miss -- labelling yesterday's notifications with a
+     date while today's said "Today". `setDate(0)` rolls back across month and
+     year boundaries on its own. */
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).getTime()
+
+  if (day === today) return "Today"
+  if (day === yesterday) return "Yesterday"
+
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
-    timeStyle: "short",
   }).format(date)
+}
+
+/**
+ * Consecutive runs of notifications from the same day.
+ *
+ * A run, not a bucket keyed by date: the list is already sorted newest-first,
+ * so walking it keeps that order without a second sort, and an item with an
+ * unparseable date falls into whatever run it is sitting in rather than being
+ * collected into a stray "Earlier" group at the end.
+ */
+function groupByDay(items) {
+  const groups = []
+
+  for (const item of items) {
+    const label = formatDayLabel(item.createdAt)
+    const current = groups[groups.length - 1]
+
+    if (current && current.label === label) {
+      current.items.push(item)
+    } else {
+      groups.push({ label, items: [item] })
+    }
+  }
+
+  return groups
 }
 
 /**
@@ -37,68 +85,52 @@ function formatTime(value) {
  */
 export default function NotificationsPage() {
   const navigate = useNavigate()
-  const { user } = useAuth()
   const [confirmClearAll, setConfirmClearAll] = useState(false)
   const inbox = useNotifications()
-  // Learners have a second feed (community upvotes, replies, moderation) that
-  // the bell already merges in. This page has to merge it too, or "Clear all"
-  // empties the page while the bell still shows every community row -- which is
-  // exactly what "delete all doesn't delete everything" looked like.
-  const community = useCommunityNotifications({
-    enabled: String(user?.role ?? "").toUpperCase() === "LEARNER",
-  })
 
-  const items = [...inbox.items, ...community.items].sort(
+  const items = [...inbox.items].sort(
     (a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0)
   )
-  const unreadCount = inbox.unreadCount + community.unreadCount
-  const isLoading = inbox.isLoading || community.isLoading
+  const unreadCount = inbox.unreadCount
+  const isLoading = inbox.isLoading
   const isError = inbox.isError
   const isMarkingAllRead = inbox.isMarkingAllRead
-  const isRemovingAll = inbox.isRemovingAll || community.isRemovingAll
+  const isRemovingAll = inbox.isRemovingAll
 
-  // Every write is routed by `source`: the two feeds are separate tables whose
-  // ids collide, so sending a community id to the inbox endpoint 404s.
   const open = (item) => {
-    if (item.source === "community") {
-      if (item.read === false) community.markRead(item.id)
-      if (item.href) navigate(item.href)
-      return
-    }
     inbox.open(item)
   }
 
   const remove = (item) => {
-    if (item.source === "community") {
-      community.remove(item.id)
-      return
-    }
     inbox.remove(item.id)
   }
 
   const markAllRead = () => {
     if (inbox.unreadCount > 0) inbox.markAllRead()
-    if (community.unreadCount > 0) community.markAllRead().catch(() => {})
   }
 
   const removeAll = () => {
     if (inbox.items.length > 0) inbox.removeAll()
-    if (community.items.length > 0) community.removeAll().catch(() => {})
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-8">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="mx-auto w-full max-w-2xl px-5 py-8 sm:px-6">
+      {/* Back on its own line. It used to sit inside the title block, which
+          pushed the title down while the actions stayed pinned to the top of
+          the row -- so the two buttons lined up with the back link rather than
+          with the heading they act on. */}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="-ml-2 text-muted-foreground"
+        onClick={() => navigate(-1)}
+      >
+        <ArrowLeftIcon className="size-4" aria-hidden="true" />
+        Back
+      </Button>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-2 mb-1 text-muted-foreground"
-            onClick={() => navigate(-1)}
-          >
-            <ArrowLeftIcon className="size-4" aria-hidden="true" />
-            Back
-          </Button>
           <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">
             Notifications
           </h1>
@@ -140,7 +172,7 @@ export default function NotificationsPage() {
         ) : null}
       </div>
 
-      <div className="mt-6">
+      <div className="mt-8">
         {isLoading ? (
           <div className="space-y-2" aria-busy="true" aria-label="Loading notifications">
             {[0, 1, 2, 3].map((row) => (
@@ -171,58 +203,98 @@ export default function NotificationsPage() {
             </CardContent>
           </Card>
         ) : (
-          <ul className="divide-y overflow-hidden rounded-xl border bg-card">
-            {items.map((item) => (
-              <li
-                key={`${item.source ?? "inbox"}-${item.id}`}
-                className="group flex items-start gap-2"
-              >
-                <button
-                  type="button"
-                  onClick={() => open(item)}
-                  className={`flex min-w-0 flex-1 items-start gap-3 px-4 py-4 text-left transition-colors hover:bg-accent ${
-                    item.read ? "" : "bg-primary/5"
-                  }`}
-                >
-                  <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <Bell className="size-4" aria-hidden="true" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium text-foreground">{item.title}</span>
-                      {item.read ? null : (
-                        <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
-                          New
-                        </Badge>
-                      )}
-                    </span>
-                    {item.description ? (
-                      <span className="mt-1 block text-sm leading-6 text-muted-foreground">
-                        {item.description}
-                      </span>
-                    ) : null}
-                    <span className="mt-1.5 block text-xs text-muted-foreground">
-                      {formatTime(item.createdAt)}
-                    </span>
-                  </span>
-                  {item.href ? (
-                    <ChevronRight
-                      className="mt-2 size-4 shrink-0 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                  ) : null}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => remove(item)}
-                  aria-label={`Delete notification: ${item.title}`}
-                  className="mr-2 mt-4 rounded-md p-2 text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
-                >
-                  <Trash2 className="size-4" />
-                </button>
-              </li>
+          /* Day groups, and hairlines instead of a bordered card. Thirty rows
+             in one framed block is a wall; the headings break it into runs the
+             eye can land in, and they are the reason each row now needs only a
+             clock time. */
+          <div className="space-y-8">
+            {/* Keyed by position too: an item with an unreadable date labels
+                its run "Earlier", and two of those can occur non-consecutively,
+                which would collide on the label alone. */}
+            {groupByDay(items).map((group, index) => (
+              <section key={`${group.label}-${index}`}>
+                <h2 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {group.label}
+                </h2>
+
+                <ul className="divide-y divide-border">
+                  {group.items.map((item) => (
+                    <li
+                      key={`${item.source ?? "inbox"}-${item.id}`}
+                      className="group relative flex items-start"
+                    >
+                      {/* `pr-11` reserves the delete button's gutter, so the
+                          timestamp column ends before it -- otherwise the
+                          button faded in directly on top of the time. */}
+                      <button
+                        type="button"
+                        onClick={() => open(item)}
+                        className="flex min-w-0 flex-1 items-start gap-3 rounded-lg py-4 pl-3 pr-11 text-left transition-colors hover:bg-accent"
+                      >
+                        {/* Unread as a dot on the icon, not a "New" badge after
+                            the title: the badge sat in the text flow and moved
+                            with every title length, so a column of them
+                            zig-zagged down the page. */}
+                        <span className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <Bell className="size-4" aria-hidden="true" />
+                          {item.read ? null : (
+                            <span
+                              className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-primary ring-2 ring-background"
+                              aria-hidden="true"
+                            />
+                          )}
+                        </span>
+
+                        <span className="min-w-0 flex-1">
+                          {/* Title and time on one line, the time hard right --
+                              a fixed column to read down, rather than a third
+                              line under every notification. */}
+                          <span className="flex items-baseline gap-3">
+                            <span
+                              className={`min-w-0 flex-1 truncate text-sm ${
+                                item.read
+                                  ? "font-medium text-foreground"
+                                  : "font-semibold text-foreground"
+                              }`}
+                            >
+                              {item.title}
+                            </span>
+                            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                              {formatClock(item.createdAt)}
+                            </span>
+                          </span>
+
+                          {item.description ? (
+                            <span className="mt-1 block text-sm leading-6 text-muted-foreground">
+                              {item.description}
+                            </span>
+                          ) : null}
+                        </span>
+
+                        {item.href ? (
+                          <ChevronRight
+                            className="mt-1.5 size-4 shrink-0 text-muted-foreground"
+                            aria-hidden="true"
+                          />
+                        ) : null}
+                      </button>
+
+                      {/* Absolute, so the row's text does not reflow when the
+                          button fades in on hover. */}
+                      <button
+                        type="button"
+                        onClick={() => remove(item)}
+                        aria-label={`Delete notification: ${item.title}`}
+                        className="absolute right-1 top-1/2 -translate-y-1/2 rounded-md p-2 text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ))}
-          </ul>
+          </div>
         )}
       </div>
 

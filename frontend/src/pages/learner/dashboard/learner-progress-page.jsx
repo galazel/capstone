@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react"
 import { useNavigate, useOutletContext } from "react-router-dom"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { certificationProgressPercent } from "@/lib/certification-progress.js"
 import { toast } from "sonner"
 import {
   ArrowRight,
@@ -40,6 +41,9 @@ import {
   masteryBand,
   masteryColor,
   masteryInk,
+  readinessColor,
+  readinessInk,
+  readinessMeta,
   seriesColor,
   useChartTheme,
 } from "@/components/charts/rebyu-charts.jsx"
@@ -242,25 +246,15 @@ function NextUpTile({
   const awaitingAssessments = lessonsDone && !assessmentsDone
 
   /* Progress over everything the certification requires, not just the reading.
-     Lessons read, quizzes passed and exams passed are each one unit, and the
-     bar is the share of those units done.
-
-     Weighted evenly on purpose. A lesson and a mock exam are obviously not the
-     same amount of work, but any other weighting would have to be invented
-     here -- nothing in the payload says what an assessment is worth relative
-     to a lesson -- and an invented weight that makes the bar move faster or
-     slower than the work is worse than an even one the learner can predict.
-
-     Each side is clamped before it is added, so a stale count (more passes
-     recorded than assessments currently published, which happens when an exam
-     is unpublished after being passed) cannot push the bar past 100%. */
-  const lessonUnits = Math.max(0, totalLessons)
-  const assessmentUnits = Math.max(0, totalAssessments)
-  const totalUnits = lessonUnits + assessmentUnits
-  const doneUnits =
-    Math.min(Math.max(0, completedLessons), lessonUnits) +
-    Math.min(Math.max(0, passedAssessments), assessmentUnits)
-  const percent = totalUnits > 0 ? Math.round((doneUnits / totalUnits) * 100) : 0
+     The formula moved to `certificationProgressPercent` when the My Learning
+     cards started showing this same number -- two copies of it is how the
+     cards and this tile disagreed in the first place. */
+  const percent = certificationProgressPercent({
+    completedLessons,
+    totalLessons,
+    passedAssessments,
+    totalAssessments,
+  })
 
   return (
     <BentoTile tone="macaw" col={4} row={2}>
@@ -349,7 +343,7 @@ function NextUpTile({
 }
 
 /**
- * Readiness, with the coverage it rests on.
+ * Readiness: the score, and the band it falls in.
  *
  * Readiness is a weighted blend of average mastery with the diagnostic, quiz,
  * middle-exam and mock-exam averages, renormalised over whichever of those
@@ -362,15 +356,20 @@ function NextUpTile({
  * label, and it collided with the per-topic "confidence" in the mastery list --
  * which does mean certainty, and is derived from evidence count.
  *
- * The coverage line stays, because it is the part that actually qualified the
- * gauge: readiness only sees lessons that have been assessed, so a high score
- * over three of forty lessons is a statement about a small corner of the
- * certification.
+ * The lesson-coverage line that used to close the tile is gone too. It was
+ * meant to qualify the gauge -- a high score over three of forty lessons is a
+ * statement about a small corner of the certification -- but as a tally it
+ * spent its line on arithmetic the reader had to finish themselves, and on a
+ * one-lesson certification it read "1 of 1". The band and its sentence are what
+ * the tile is for.
  */
-function ReadinessTile({ readiness, assessedLessons, totalLessons }) {
+function ReadinessTile({ readiness }) {
+  const theme = useChartTheme()
+  const meta = readinessMeta(readiness)
+
   return (
     <BentoTile col={2} row={2}>
-      <BentoHeading title="exam readiness" />
+      <BentoHeading title="exam readiness" hint="Your estimated chance of passing." />
 
       {readiness === null ? (
         <div className="flex flex-1 flex-col items-center justify-center text-center">
@@ -383,15 +382,29 @@ function ReadinessTile({ readiness, assessedLessons, totalLessons }) {
           </p>
         </div>
       ) : (
-        <>
-          <RadialGauge value={readiness} label="ready for the exam" height={150} />
+        <div className="flex flex-1 flex-col items-center justify-center">
+          {/* No caption inside the ring. "ready for the exam" was four words in
+              an 11px line inside a 70%-inner-radius hole, wrapping against the
+              arc -- and it only restated the heading. The hole holds the number
+              alone now, and the reading of that number goes below, where it has
+              the width to be a sentence. */}
+          <RadialGauge
+            value={readiness}
+            height={150}
+            color={readinessColor(theme, readiness)}
+          />
 
-          <p className="mt-3 text-center text-xs font-semibold text-muted-foreground">
-            {totalLessons > 0
-              ? `Based on ${assessedLessons} of ${totalLessons} lessons assessed`
-              : "Based on the lessons assessed so far"}
+          <p
+            className="mt-2 font-rb-display text-base font-extrabold lowercase leading-none"
+            style={{ color: readinessInk(theme, readiness) }}
+          >
+            {meta?.label}
           </p>
-        </>
+
+          <p className="mt-2 text-center text-xs font-semibold leading-5 text-muted-foreground">
+            {meta?.hint}
+          </p>
+        </div>
       )}
     </BentoTile>
   )
@@ -497,10 +510,29 @@ export default function LearnerProgressPage() {
     queryFn: () => getProgressAnalytics(selectedCertificationId),
     enabled: Boolean(selectedCertificationId),
     staleTime: 30_000,
+    /* Coming back to this page should not cost a full load again. This response
+       is expensive -- three round trips to the BKT service on top of the
+       certification's attempts, lessons and exams -- and the default five-minute
+       cache lifetime meant leaving the page for longer than that and returning
+       started from an empty board. The data is a learner's own history, so an
+       hour-old copy on screen for the second it takes to refresh is fine. */
+    gcTime: 60 * 60_000,
+    /* Switching certification changes the query key, which is a *new* query with
+       no data -- so the whole board was replaced by the skeleton every time,
+       even though the previous certification's board was still on screen and
+       still valid. Keeping it means the switch reads as the numbers updating
+       rather than the page reloading; `analyticsQuery.isPlaceholderData` marks
+       the moment for the subtle cue below. */
+    placeholderData: keepPreviousData,
     // Mastery numbers land asynchronously after a diagnostic or assessment --
     // poll while the BKT service hasn't caught up yet so the banner below
     // clears itself the moment it does, instead of needing a manual refresh.
-    refetchInterval: (query) => (query.state.data?.bktAvailable === false ? 4000 : false),
+    //
+    // Ten seconds, not four: each of these requests makes the BKT service calls
+    // again, and when that service is the thing not answering, a four-second
+    // poll queues up requests that each wait on its timeout -- the page gets
+    // slower the longer it fails.
+    refetchInterval: (query) => (query.state.data?.bktAvailable === false ? 10_000 : false),
   })
   const analytics = analyticsQuery.data
 
@@ -555,6 +587,25 @@ export default function LearnerProgressPage() {
   const resumeNextLesson = () => {
     if (!nextLesson) return
     goToLesson(nextLesson)
+  }
+
+  /**
+   * Opens the weakest topic directly, from the focus tile's own button.
+   *
+   * `focusTopic` comes off `lessonPriorities`, which only carries
+   * `categoryId` (the middle category the lesson sits under) and
+   * `lessonId` -- not `certificationId`, since the row is already scoped to
+   * whichever certification is selected. `goToLesson` takes a lesson shape
+   * with `certificationId`, so it is filled in here from the page's own
+   * selection rather than expected on the topic row.
+   */
+  const goToFocusTopic = () => {
+    if (!focusTopic) return
+    goToLesson({
+      certificationId: selectedCertificationId,
+      middleCategoryId: focusTopic.categoryId,
+      lessonId: focusTopic.lessonId,
+    })
   }
 
   /**
@@ -752,6 +803,34 @@ export default function LearnerProgressPage() {
      always the part doing the accessible work. */
   const MASTERY_TONES = { weak: "cardinal", developing: "fox", strong: "leaf" }
 
+  /**
+   * What the tile says, by how well the topic is actually going.
+   *
+   * "Work on this next" was printed over every score the tile could hold, so a
+   * topic at 12% and a topic at 88% were given the same instruction in the same
+   * words -- and at 88% the instruction is wrong: there is somewhere better to
+   * spend the next hour. The heading now states what the number means and what
+   * it asks of the learner, which is the only reason to put a heading over a
+   * number at all.
+   *
+   * `mastered` is a copy-only cut at 85 (the same threshold the analytics
+   * service calls mastered). It deliberately does NOT introduce a fourth colour
+   * band -- the tone, the ink and the bars below still read `masteryBand`, so
+   * nothing on the board can disagree about which band a score is in.
+   */
+  const FOCUS_COPY = {
+    weak: { label: "Study this first", line: "Your weakest topic -- start here." },
+    developing: { label: "Needs practice", line: "Coming along. A quiz would move it." },
+    strong: { label: "Almost there", line: "One more pass should lock it in." },
+    mastered: { label: "You're on top of this", line: "Nothing here needs work right now." },
+  }
+
+  function focusCopy(band, score) {
+    if (!band) return null
+    if (band === "strong" && Number(score) >= 85) return FOCUS_COPY.mastered
+    return FOCUS_COPY[band] ?? null
+  }
+
   const focusTopic = useMemo(() => {
     if (rankedMastery.length === 0) return null
 
@@ -769,11 +848,6 @@ export default function LearnerProgressPage() {
      copy rather than a figure there, so it must not borrow a band's colour. */
   const focusTone = MASTERY_TONES[focusBand] ?? "beetle"
   const readinessLevel = clampPercent(analytics?.readinessPercentage)
-  /* What the readiness figure is actually based on. The response carries the
-     unassessed count rather than a coverage percentage, so the assessed count
-     is the total less that. Floored at zero: the two numbers come from
-     different queries and a transient disagreement should not print "-1". */
-  const assessedLessonCount = Math.max(0, totalLessons - (analytics?.unassessedTopicCount ?? 0))
   const bktUnavailable = analytics != null && analytics.bktAvailable === false
 
   // The same palette the chart draws its lines with, so a swatch beside an
@@ -781,12 +855,19 @@ export default function LearnerProgressPage() {
   const chartTheme = useChartTheme()
 
   /**
-   * Every tile on this page, in its default order, with the room it needs.
+   * Every tile on this page in its default spot: `x`/`y` are the board
+   * coordinates on the six-column grid, `col`/`row` the width and height in
+   * grid cells.
    *
-   * Sizes stay here rather than being draggable: a trend line needs width
-   * and a counter does not, and a dashboard where those can be squeezed is
-   * one where the charts stop being readable. The learner arranges the
-   * order; the tiles keep their proportions.
+   * Placed rather than packed. The arrangement below is the shipped default --
+   * what a learner sees before they touch the board, and what "Reset layout"
+   * returns them to -- so it is written as coordinates instead of being left to
+   * fall out of array order. A learner who arranges their own board still
+   * overrides all of it; this is only the starting point.
+   *
+   * Reading down the board: what to do next and how ready you are, then the
+   * desk (notes, countdown) beside the weakest topic, then mastery in full,
+   * then the two history charts side by side.
    *
    * The ids are the contract with the saved layout, so renaming one drops a
    * learner's position for that tile (it falls back to the default spot)
@@ -795,7 +876,9 @@ export default function LearnerProgressPage() {
   const dashboardTiles = [
     {
       id: "next-up",
-      col: 4,
+      x: 0,
+      y: 0,
+      col: 3,
       row: 2,
       element: (
         <NextUpTile
@@ -818,14 +901,12 @@ export default function LearnerProgressPage() {
       // Id unchanged so a saved board keeps this tile in place -- same slot,
       // same question, a number that can actually be explained.
       id: "exam-readiness",
+      x: 3,
+      y: 0,
       col: 2,
       row: 2,
       element: (
-        <ReadinessTile
-        readiness={readinessLevel}
-        assessedLessons={assessedLessonCount}
-        totalLessons={totalLessons}
-        />
+        <ReadinessTile readiness={readinessLevel} />
       ),
     },
     {
@@ -833,10 +914,12 @@ export default function LearnerProgressPage() {
       // it occupies the same slot and answers a better version of the same
       // question, so moving it would be the surprise, not the change.
       id: "topic-mastery",
-      col: 2,
+      x: 3,
+      y: 2,
+      col: 3,
       row: 1,
       element: (
-        <BentoTile tone={focusTone} col={2} row={1}>
+        <BentoTile tone={focusTone} col={2} row={1} className="relative">
           <div className="flex items-start justify-between gap-3">
             {/* Band ink rather than the tone's own `-lip`: the `-lip` shades
                 are tuned for button shadows, not for AA text on a wash, and
@@ -846,7 +929,9 @@ export default function LearnerProgressPage() {
               className={`text-sm font-bold ${focusBand ? "" : "text-rb-beetle-lip"}`}
               style={focusBand ? { color: masteryInk(chartTheme, focusScore) } : undefined}
             >
-              {focusTopic ? "Work on this next" : "Topic Mastery"}
+              {focusTopic
+                ? (focusCopy(focusBand, focusScore)?.label ?? "Work on this next")
+                : "Topic Mastery"}
             </p>
             {focusTopic?.priorityTag ? (
               <PrioritySeal tag={focusTopic.priorityTag} size={36} />
@@ -878,18 +963,55 @@ export default function LearnerProgressPage() {
 
               {/* Clamped to one line: the row is a fixed 176px and the tile
                   clips, so a second line would be cut silently rather than
-                  shown. An ellipsis at least says there was more. */}
-              <p className="mt-1.5 truncate text-sm font-bold text-rb-eel">
+                  shown. An ellipsis at least says there was more.
+
+                  The right padding is the button's lane. The button below is
+                  taken out of the flow -- there is no vertical room left in a
+                  176px row to give it one -- so without a reserved gutter the
+                  title would run under it. */}
+              <p
+                className={`mt-1.5 truncate text-sm font-bold text-rb-eel ${
+                  focusBand === "weak" ? "pr-32" : ""
+                }`}
+              >
                 {focusTopic.lessonTitle ?? getTopicTitle(focusTopic)}
               </p>
 
-              {focusTopic.categoryTitle ? (
-                <p
-                  className="truncate text-xs font-semibold"
-                  style={{ color: masteryInk(chartTheme, focusScore) }}
+              {/* What the band asks of the learner, in a sentence. The unit
+                  name it replaces is already on the topic row below and on the
+                  curriculum page this tile links into; what was missing was any
+                  reading of the number. */}
+              <p
+                className={`truncate text-xs font-semibold text-rb-wolf ${
+                  focusBand === "weak" ? "pr-32" : ""
+                }`}
+              >
+                {focusCopy(focusBand, focusScore)?.line ?? focusTopic.categoryTitle}
+              </p>
+
+              {/* Only on the weak band: this is the topic the tile is telling
+                  the learner to start on, and "study this first" without a way
+                  to do that from here is just a label. The other bands already
+                  have a better place to act -- Almost there and Needs practice
+                  point at a quiz, not a re-read -- so the button does not
+                  follow them.
+
+                  Pinned to the tile's bottom-right corner rather than placed
+                  after the copy. The tile is one 176px board row, and the
+                  heading, the display figure and the two lines under it already
+                  spend all but a few pixels of that -- a button in the flow was
+                  simply clipped off the bottom edge. Anchoring it to the corner
+                  costs no height, and the `pr-32` above keeps the text clear
+                  of it. */}
+              {focusBand === "weak" ? (
+                <Button
+                  size="sm"
+                  className="absolute bottom-5 right-5 sm:bottom-6 sm:right-6"
+                  onClick={goToFocusTopic}
                 >
-                  {focusTopic.categoryTitle}
-                </p>
+                  study now
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Button>
               ) : null}
             </div>
           ) : (
@@ -909,7 +1031,9 @@ export default function LearnerProgressPage() {
     },
     {
       id: "todays-plan",
-      col: 3,
+      x: 5,
+      y: 0,
+      col: 1,
       row: 2,
       element: (
         <TodaysPlanTile certificationId={selectedCertificationId} />
@@ -917,19 +1041,27 @@ export default function LearnerProgressPage() {
     },
     {
       id: "exam-countdown",
-      col: 3,
-      row: 2,
+      // A date and a number of days: one row is all it has to say.
+      x: 2,
+      y: 2,
+      col: 1,
+      row: 1,
       element: (
         <ExamCountdownTile certificationId={selectedCertificationId} />
       ),
     },
     {
       id: "study-notes",
-      // Half the band. The countdown beside it takes the other half, so the
-      // row still ends level rather than leaving a column-wide hole that
-      // nothing on this page is narrow enough to fill.
-      col: 3,
-      row: 2,
+      // The deepest tile in its band: this one is a list you add to, and a
+      // short version of it shows the input and nothing you have written. The
+      // countdown and the weakest-topic tile beside it are single rows, and
+      // mastery-by-topic fills the space under them rather than starting a new
+      // band -- which is what keeps this column's extra depth from opening a
+      // hole across the rest of the board.
+      x: 0,
+      y: 2,
+      col: 2,
+      row: 3,
       element: (
         <StudyNotesTile certificationId={selectedCertificationId} />
       ),
@@ -939,7 +1071,9 @@ export default function LearnerProgressPage() {
       // Taller by default than the other charts: it carries the per-assessment
       // verdicts under the lines, and squeezed into two rows the chart wins and
       // they get cut off.
-      col: 4,
+      x: 0,
+      y: 5,
+      col: 3,
       row: 3,
       element: (
         <BentoTile col={4} row={3}>
@@ -1041,10 +1175,15 @@ export default function LearnerProgressPage() {
     },
     {
       id: "mastery-by-topic",
-      // Four wide and four tall: it is a list rather than a chart, and the
-      // whole point of it is that it does not stop after the first few rows.
+      // Four of the six columns, tucked under the countdown and the weakest
+      // topic rather than starting its own band: study notes to its left is
+      // three rows deep, and a full-width tile below that would leave the space
+      // beside it empty. It is a list rather than a chart, so the two rows are
+      // there to stop it ending after the first topic.
+      x: 2,
+      y: 3,
       col: 4,
-      row: 4,
+      row: 2,
       element: (
         <BentoTile col={4} row={4} className="!p-0">
           <div className="flex min-h-0 flex-1 flex-col">
@@ -1116,7 +1255,9 @@ export default function LearnerProgressPage() {
     },
     {
       id: "assessment-history",
-      col: 4,
+      x: 3,
+      y: 5,
+      col: 3,
       row: 3,
       element: (
         <BentoTile col={4} row={3} className="!p-0">
@@ -1342,6 +1483,17 @@ export default function LearnerProgressPage() {
             the page. `ml-auto` on the picker holds them to the right now that
             nothing occupies the left of the row. */}
         <div className="flex flex-wrap items-center gap-3">
+          {/* The board below stays on the previous certification's numbers while
+              the new ones load, so this is what says the page heard the switch.
+              A spinner in the control that was just used, rather than a skeleton
+              where the board was. */}
+          {analyticsQuery.isPlaceholderData || analyticsQuery.isFetching ? (
+            <span className="ml-auto flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+              Updating
+            </span>
+          ) : null}
+
           <Select
             value={selectedCertificationId}
             onValueChange={setSelectedCertificationId}

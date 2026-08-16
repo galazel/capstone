@@ -20,7 +20,6 @@ const AdminOrganizationDetail = lazy(() => import("./pages/admin/admin-organizat
 const ViewCertificationAdmin = lazy(() => import("./pages/admin/view-certification-admin-page.jsx"))
 const AdminDashboard = lazy(() => import("./pages/admin/admin-dashboard-page.jsx"))
 const PartnershipRequests = lazy(() => import("./pages/admin/partnership-requests-page.jsx"))
-const CommunityModeration = lazy(() => import("./pages/admin/community-moderation-page.jsx"))
 const BktDeliveryStatus = lazy(() => import("./pages/admin/bkt-delivery-status-page.jsx"))
 const GamificationSettings = lazy(() => import("./pages/admin/gamification-settings-page.jsx"))
 const AcceptEnterpriseInvitationPage = lazy(() => import("./pages/admin/accept-enterprise-invitation-page.jsx"))
@@ -48,7 +47,6 @@ const LearnerAssessmentHistoryPage = lazy(() => import("./pages/learner/assessme
 const LearnerPracticeAttemptPage = lazy(() => import("./pages/learner/practice/learner-practice-attempt-page.jsx"))
 const LearnerPracticeHistoryPage = lazy(() => import("./pages/learner/practice/learner-practice-history-page.jsx"))
 const LearnerPracticeReviewPage = lazy(() => import("./pages/learner/practice/learner-practice-review-page.jsx"))
-const Community = lazy(() => import("./pages/learner/community/learner-community-qa.jsx"))
 const EnterpriseDashboardPage = lazy(() => import("./pages/enterprise/dashboard/enterprise-dashboard-page.jsx"))
 const EnterpriseMemberDashboardPage = lazy(() => import("./pages/enterprise/dashboard/enterprise-member-dashboard-page.jsx"))
 const EnterpriseGroupWorkspacePage = lazy(() => import("./pages/enterprise/groups/enterprise-group-workspace-page.jsx"))
@@ -228,7 +226,9 @@ export function App() {
                         element={<AdminOrganizationDetail />}
                     />
                     <Route path="partnership-requests" element={<PartnershipRequests />} />
-                    <Route path="community-moderation" element={<CommunityModeration />} />
+                    {/* Community moderation is withdrawn from the admin portal.
+                        The page and its service still exist -- re-register this
+                        route to bring it back. */}
                     <Route path="bkt-delivery" element={<BktDeliveryStatus />} />
                     {/* No standalone generation workspace. A run is watched in
                         the modal that started it -- the InlineGenerationMonitor
@@ -287,7 +287,9 @@ export function App() {
                     <Route path="challenges" element={<LearnerChallengesPage />} />
                     <Route path="subscription" element={<LearnerSubscriptionPage />} />
                     <Route path="library" element={<LearnerFilesPage />} />
-                    <Route path="community" element={<Community />} />
+                    {/* Community Q&A is withdrawn from the learner portal. The
+                        page, hooks and services are kept -- re-register this
+                        route to bring it back. */}
                     <Route path="account" element={<LearnerAccountPage />} />
                 </Route>
 

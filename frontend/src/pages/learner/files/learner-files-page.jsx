@@ -221,7 +221,7 @@ export default function LearnerFilesPage() {
             <LearnerEmptyState
                 icon={LibraryBig}
                 title="Your library is empty"
-                description="Generated quizzes, flashcards, files, and saved community resources will appear here."
+                description="Generated quizzes, flashcards, and files will appear here."
             />
         ) : (
             <div className="overflow-x-auto border-y border-zinc-200">

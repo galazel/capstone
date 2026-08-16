@@ -426,11 +426,31 @@ export default function LearnerAssessmentResultPage() {
                         ))}
                       </ol>
                     ) : answer.learnerAnswer && !answer.selectedChoiceText ? (
-                      <div className="text-sm">
+                      <div className="space-y-1.5 text-sm">
                         <p className="text-muted-foreground">Your answer:</p>
                         <p className="mt-1 whitespace-pre-wrap rounded-lg bg-muted/50 p-2.5">
                           {answer.learnerAnswer}
                         </p>
+
+                        {/* The answer key, on typed answers too. This block
+                            only existed in the multiple-choice branch above,
+                            so a wrong short answer showed the learner their own
+                            wrong words and stopped there. */}
+                        {answer.isCorrect === false && answer.correctChoiceText ? (
+                          <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 dark:border-emerald-900 dark:bg-emerald-950/30">
+                            <span className={cn("font-medium", ANSWER_TONES.correct.text)}>
+                              Correct answer:{" "}
+                            </span>
+                            {answer.correctChoiceText}
+                          </p>
+                        ) : null}
+
+                        {answer.explanation ? (
+                          <div className={cn("rounded-lg border p-2.5", tone.panel)}>
+                            <p className={cn("text-xs font-semibold", tone.text)}>Explanation</p>
+                            <p className="mt-1 text-muted-foreground">{answer.explanation}</p>
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
 

@@ -47,7 +47,14 @@
     --muted-foreground: #777777; /* Wolf */
 
     --accent: #e8f1fe; /* Feather wash */
-    --accent-foreground: #3d6b06;
+    /* Feather lip. Was #3d6b06 -- the green `rb-feather-ink`, left behind when
+       the brand went blue-led and the wash above was moved to Azure. Every
+       shadcn primitive hovers to `bg-accent text-accent-foreground`, so that
+       one stale value turned the label of every hovered menu item, tab, table
+       row and outline button green on a pale blue ground. `rb-feather-ink` is
+       still green on purpose (it is what "passed" is printed in); it just has
+       no business being the hover ink. */
+    --accent-foreground: #1553c4;
 
     --destructive: #ff4b4b; /* Cardinal */
     --destructive-foreground: #ffffff;
@@ -90,7 +97,7 @@
     --sidebar-primary-foreground: #ffffff;
 
     --sidebar-accent: #e8f1fe;
-    --sidebar-accent-foreground: #3d6b06;
+    --sidebar-accent-foreground: #1553c4;
 
     --sidebar-border: #e5e5e5;
     --sidebar-ring: #1cb0f6;
@@ -318,7 +325,7 @@ body.netacad-overlay-theme {
     --muted: #f7f7f7;
     --muted-foreground: #777777;
     --accent: #e8f1fe;
-    --accent-foreground: #3d6b06;
+    --accent-foreground: #1553c4;
     --border: #e5e5e5;
     --input: #e5e5e5;
     --ring: #1cb0f6;
@@ -333,7 +340,7 @@ body.netacad-overlay-theme {
     --sidebar-primary: #1b6ef3;
     --sidebar-primary-foreground: #ffffff;
     --sidebar-accent: #e8f1fe;
-    --sidebar-accent-foreground: #3d6b06;
+    --sidebar-accent-foreground: #1553c4;
     --sidebar-border: #e5e5e5;
     --sidebar-ring: #1cb0f6;
     /* The page canvas for all three portals, and the one place it is set.
@@ -356,13 +363,19 @@ body.netacad-overlay-theme {
     --popover: #242424;
     --popover-foreground: #f2f2f2;
     --primary: #1b6ef3;
-    --primary-foreground: #10240a;
+    /* White, not the near-black green #10240a this carried: it is the label on
+       a filled Azure key, and light mode has always printed that white. */
+    --primary-foreground: #ffffff;
     --secondary: #2e2e2e;
     --secondary-foreground: #f2f2f2;
     --muted: #2e2e2e;
     --muted-foreground: #afafaf;
-    --accent: #2a3d1c;
-    --accent-foreground: #b7f08a;
+    /* The dark blue accent pair the `.dark` root already uses. This block still
+       held the pre-rebrand green (#2a3d1c on #b7f08a), so every hover in the
+       dark portal went green on green -- against the rule two comments up that
+       Azure stays the only saturated colour here. */
+    --accent: #203b52;
+    --accent-foreground: #eaf6ff;
     --border: #3a3a3a;
     --input: #3a3a3a;
     --ring: #1cb0f6;
@@ -374,9 +387,9 @@ body.netacad-overlay-theme {
     --sidebar: #1f1f1f;
     --sidebar-foreground: #f2f2f2;
     --sidebar-primary: #1b6ef3;
-    --sidebar-primary-foreground: #10240a;
-    --sidebar-accent: #2a3d1c;
-    --sidebar-accent-foreground: #b7f08a;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #203b52;
+    --sidebar-accent-foreground: #eaf6ff;
     --sidebar-border: #3a3a3a;
     --sidebar-ring: #1cb0f6;
     color-scheme: dark;

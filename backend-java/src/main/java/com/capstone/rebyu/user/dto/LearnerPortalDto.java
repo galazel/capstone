@@ -4,6 +4,7 @@ import com.capstone.rebyu.assessment.dto.ExamResultDto;
 import com.capstone.rebyu.enrollment.dto.LearnerCertificationDto;
 import com.capstone.rebyu.enrollment.dto.OrganizationCertificationLearnerDto;
 import com.capstone.rebyu.organization.dto.OrganizationCertificateDto;
+import com.capstone.rebyu.progress.analytics.dto.CertificationProgressDto;
 import com.capstone.rebyu.progress.dto.ActivityLogDto;
 import com.capstone.rebyu.progress.dto.LearnerAchievementViewDto;
 import com.capstone.rebyu.progress.dto.LearnerCompletedLessonDto;
@@ -36,7 +37,12 @@ public record LearnerPortalDto(
         BigDecimal coinBalance,
         Long aiCreditsRemaining,
         // BKT mastery per certification (certificationId -> mastery level 0-4)
-        Map<Long, Integer> masteryByMasteryByCertification
+        Map<Long, Integer> masteryByMasteryByCertification,
+        // Lessons read and assessments passed per enrolled certification,
+        // counted by ProgressAnalyticsService -- the same rules the analytics
+        // board uses. Sent from here so the My Learning cards stop deriving a
+        // second, lesson-only progress figure in the browser.
+        List<CertificationProgressDto> certificationProgress
 ) {
     // Convenience constructor without gamification (backwards compatible)
     public LearnerPortalDto(
@@ -49,6 +55,7 @@ public record LearnerPortalDto(
             List<OrganizationCertificationLearnerDto> orgCertLearners,
             List<OrganizationCertificateDto> orgCertificates) {
         this(learner, user, learnerCertifications, completedLessons, activityLogs,
-             examResults, orgCertLearners, orgCertificates, List.of(), 0L, BigDecimal.ZERO, 0L, Map.of());
+             examResults, orgCertLearners, orgCertificates, List.of(), 0L, BigDecimal.ZERO, 0L,
+             Map.of(), List.of());
     }
 }

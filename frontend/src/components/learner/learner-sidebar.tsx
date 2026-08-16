@@ -4,7 +4,6 @@ import {
   BookOpenCheckIcon,
   CircleAlertIcon,
   CrownIcon,
-  MessagesSquareIcon,
   SwordsIcon,
 } from "@/components/icons"
 
@@ -58,16 +57,6 @@ const learnerNav = {
         name: "Mistakes Bank",
         url: "/learner/mistakes",
         icon: CircleAlertIcon,
-      },
-      {
-        name: "Community Q&A",
-        url: "/learner/community",
-        activeUrls: [
-          "/learner/community",
-          "/learner/community/questions",
-          "/learner/community/posts",
-        ],
-        icon: MessagesSquareIcon,
       },
     ],
   },

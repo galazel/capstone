@@ -39,6 +39,7 @@ def calculate_readiness(session: Session, payload: ReadinessRequest) -> Readines
         ("diagnostic", payload.diagnostic_score, settings.readiness_diagnostic_weight),
         ("lesson_quiz", payload.lesson_quiz_score, settings.readiness_quiz_weight),
         ("middle_exam", payload.middle_exam_score, settings.readiness_middle_exam_weight),
+        ("major_exam", payload.major_exam_score, settings.readiness_major_exam_weight),
         ("mock_exam", payload.mock_exam_score, settings.readiness_mock_exam_weight),
         ("lesson_progress", payload.lesson_progress_score, settings.readiness_progress_weight),
         ("streak", payload.streak_score, settings.readiness_streak_weight),

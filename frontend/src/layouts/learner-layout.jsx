@@ -34,7 +34,6 @@ import { useNotifications } from "@/hooks/use-notifications.js"
 import { PortalThemeMenuItem } from "@/components/portal-theme-toggle"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useLearnerEntitlements } from "@/hooks/use-learner-entitlements.js"
-import { useCommunityNotifications } from "@/hooks/use-community-notifications.js"
 
 function getInitials(name = "", email = "") {
   const source = name || email || "Learner"
@@ -59,6 +58,12 @@ export default function LearnerLayout() {
   // page it is still a portal screen — so it only drops `.rebyu-page`'s cap and
   // padding and owns its own gutters from there.
   const isCurriculumPage = /^\/learner\/learning\/[^/]+$/.test(location.pathname)
+  /* The certification page is a board of tiles that should fill the window the
+     way the analytics board does. Inside `.rebyu-page` it was capped twice --
+     once by the wrapper and again by its own container -- which left a wide
+     empty gutter down both sides on a large screen and made the page look like
+     a narrow column floating on the ground colour. It owns its own gutters. */
+  const isCertificationDetailPage = /^\/learner\/certifications\/[^/]+$/.test(location.pathname)
   const { logout: authLogout } = useAuth()
   const [searchValue, setSearchValue] = useState("")
   const entitlements = useLearnerEntitlements()
@@ -67,6 +72,12 @@ export default function LearnerLayout() {
     queryKey: ["learner-portal-data"],
     queryFn: getLearnerPortalData,
     staleTime: 30_000,
+    /* This one gates the whole learner shell -- while it has no data at all,
+       every page under it is a skeleton. Leaving the portal for longer than the
+       default five-minute cache lifetime and coming back therefore meant a cold
+       load of every page, not just the one being opened. Kept for an hour so a
+       return is instant and the refresh happens behind the page already drawn. */
+    gcTime: 60 * 60_000,
   })
 
   const displayName = getLearnerDisplayName(query.data)
@@ -114,28 +125,15 @@ export default function LearnerLayout() {
         href: `/learner/certifications/${enrollment.certificationId}`,
       }
     })
-  // Tagged by source, not by id shape: these ids come from
-  // learner_community_notifications and collide with the inbox table's ids, so
-  // "has a numeric id" is not enough to tell them apart -- opening one used to
-  // mark an unrelated inbox row read and never reach the post, and deleting one
-  // was sent to the inbox endpoint, which answered "Notification not found".
-  const community = useCommunityNotifications()
   // The persisted feed (the same one admins and enterprises see) was never read
   // here before, so backend-issued notifications never reached learners at all.
   const inbox = useNotifications()
   const notifications = [
     ...inbox.items,
-    ...community.items,
     ...pendingInvitationNotifications,
     ...assignmentNotifications,
   ].sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0))
 
-  // The badge counts every read-tracked feed the bell displays, not just the
-  // inbox. Community notifications are persisted server-side with their own
-  // read flag, so a comment or an upvote that arrived while the learner was
-  // signed out was being listed in the dropdown but never counted -- the bell
-  // sat bare next to "View all notifications (4)".
-  //
   // `=== false` rather than `!item.read` deliberately: the invitation and
   // assignment items below are derived from portal data and carry no read
   // state at all, so a truthiness test would count them forever. Nothing can
@@ -143,19 +141,11 @@ export default function LearnerLayout() {
   // a count of new things.
   const unreadCount = notifications.filter((item) => item.read === false).length
 
-  // Marking all read has to reach both feeds for the same reason -- each one
-  // has its own bulk endpoint and only knows about its own rows.
   const markAllNotificationsRead = () => {
     inbox.markAllRead()
-    if (community.unreadCount > 0) community.markAllRead().catch(() => {})
   }
 
   const openNotification = (item) => {
-    if (item.source === "community") {
-      if (item.read === false) community.markRead(item.id)
-      if (item.href) navigate(item.href)
-      return
-    }
     if (typeof item.id === "number") {
       inbox.open(item)
       return
@@ -163,13 +153,7 @@ export default function LearnerLayout() {
     if (item.href) navigate(item.href)
   }
 
-  // Same routing on the way out: a community row deleted through the inbox
-  // endpoint 404s, since that id belongs to a different table.
   const deleteNotification = (item) => {
-    if (item.source === "community") {
-      community.remove(item.id)
-      return
-    }
     inbox.remove(item.id)
   }
 
@@ -270,7 +254,9 @@ export default function LearnerLayout() {
 
         <main
           className={`rebyu-page ${isTopicPage ? "" : "pb-24 lg:pb-8"} ${
-            isTopicPage || isCurriculumPage ? "!max-w-none !gap-0 !p-0" : ""
+            isTopicPage || isCurriculumPage || isCertificationDetailPage
+              ? "!max-w-none !gap-0 !p-0"
+              : ""
           }`}
         >
           {query.isLoading ? (

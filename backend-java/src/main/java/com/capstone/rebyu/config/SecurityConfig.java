@@ -173,6 +173,10 @@ public class SecurityConfig {
                                 "/api/files").authenticated()
                         .requestMatchers(org.springframework.http.HttpMethod.POST,
                                 "/api/files/upload", "/api/files/upload/certification").authenticated()
+                        // The challenge board names other learners, and the
+                        // record is the caller's own: both require a real token
+                        // rather than falling through to the permitAll default.
+                        .requestMatchers("/api/challenges/**").authenticated()
                         // Existing application routes keep their current
                         // public behavior; tokens are validated when present.
                         .anyRequest().permitAll()

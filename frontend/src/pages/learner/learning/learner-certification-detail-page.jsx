@@ -1,11 +1,11 @@
 import { useMemo } from "react"
-import { useNavigate, useOutletContext, useParams } from "react-router-dom"
+import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
-  ArrowLeft,
   BookOpen,
-  CheckCircle2,
+  Check,
   Clock3,
+  GraduationCap,
   Languages,
   Layers3,
   LockKeyhole,
@@ -21,31 +21,18 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@/components/ui/alert"
-
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-} from "@/components/ui/card"
+import { BentoHeading } from "@/components/commons/bento.jsx"
+import { BackButton, TactileButton } from "@/components/rebyu/rebyu-ui.jsx"
 
-import { Progress } from "@/components/ui/progress"
-import { Separator } from "@/components/ui/separator"
-
-import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
+import { BUBBLE_TONES } from "@/components/commons/bubble-card.jsx"
+import { LearnerEmptyState, toneForCertification } from "@/components/learner/learner-ui.jsx"
 import { LearnerAnnouncements } from "@/components/learner/learner-announcements.jsx"
-import { PriorityTag } from "@/components/learner/priority-tag.jsx"
 import { announceRewards, snapshotRewards } from "@/components/learner/xp-award-modal.jsx"
 
 import { getCertificationModules } from "@/services/learnerService.js"
-import { getCertificationPriorities } from "@/services/learnerAnalyticsService.js"
+import { hasSatDiagnostic } from "./curriculum-model.js"
 
 import {
   confirmPurchase,
@@ -97,20 +84,31 @@ function formatDuration(minutes) {
 
 function ProductMetaItem({ icon: Icon, children }) {
   return (
-      <div className="flex min-w-0 items-center gap-3 text-sm text-foreground">
-        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 font-medium break-words [overflow-wrap:anywhere]">
+      <div className="flex min-w-0 items-center gap-3 text-sm text-rb-eel">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-rb-polar text-rb-wolf">
+          <Icon className="size-4" aria-hidden="true" />
+        </span>
+        <span className="min-w-0 break-words font-bold [overflow-wrap:anywhere]">
         {children}
       </span>
       </div>
   )
 }
 
-function ProductFeature({ children }) {
+/* A tick and a line, on the card's own ground. These used to be four bordered
+   tiles inside a bordered card -- a box in a box in a box, which is what made
+   the page read as a grid of containers rather than as a page. The round check
+   medallion carries them; they do not need a frame of their own. */
+function ProductFeature({ tone, children }) {
   return (
       <div className="flex min-w-0 items-start gap-3">
-        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
-        <p className="min-w-0 break-words text-sm leading-6 text-foreground [overflow-wrap:anywhere]">
+        <span
+            className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full text-white"
+            style={{ background: tone.solid }}
+        >
+          <Check className="size-3.5" strokeWidth={3} aria-hidden="true" />
+        </span>
+        <p className="min-w-0 break-words text-sm font-semibold leading-6 text-rb-eel [overflow-wrap:anywhere]">
           {children}
         </p>
       </div>
@@ -128,8 +126,6 @@ export default function LearnerCertificationDetailPage() {
   const learnerId = data.learnerId ?? null
   const certifications = data.certifications ?? []
   const enrolledCertifications = data.enrolledCertifications ?? []
-  const completedLessonItems = data.completedLessons ?? []
-  const learnerLessons = data.lessons ?? []
 
   const enrollmentsQuery = useQuery({
     queryKey: ["learner-enrollments", learnerId],
@@ -162,24 +158,13 @@ export default function LearnerCertificationDetailPage() {
     queryFn: getExamTypes,
   })
 
-  // BKT priority hierarchy (major -> middle -> lesson), used to tag each
-  // module/category in the curriculum outline below with its urgency.
-  const prioritiesQuery = useQuery({
-    queryKey: ["certification-priorities", certificationId, learnerId],
-    queryFn: () => getCertificationPriorities(learnerId, certificationId),
-    enabled: Boolean(learnerId && certificationId),
-  })
-
-  const majorPriorityById = useMemo(() => {
-    const majors = prioritiesQuery.data?.major_categories ?? []
-    return new Map(majors.map((major) => [String(major.major_category_id), major]))
-  }, [prioritiesQuery.data])
-
-  const middlePriorityById = useMemo(() => {
-    const majors = prioritiesQuery.data?.major_categories ?? []
-    const middles = majors.flatMap((major) => major.middle_categories ?? [])
-    return new Map(middles.map((middle) => [String(middle.middle_category_id), middle]))
-  }, [prioritiesQuery.data])
+  /* No BKT here. This page describes the certification -- what is in it and
+     what it asks of you -- and nothing about how the reader is doing at it.
+     Priority tags, mastery and progress are readings of a learner, they change
+     under the same content from one day to the next, and they already have two
+     homes (the analytics board and My Learning). Carrying them here also meant
+     this page could not be shown to somebody who is not enrolled without
+     showing them an empty version of somebody else's dashboard. */
 
   const publishedDiagnostic = useMemo(() => {
     const typeById = new Map(
@@ -279,36 +264,36 @@ export default function LearnerCertificationDetailPage() {
           (item) => String(item.certificationId) === String(certificationId)
       )
 
+  /* Two pieces of evidence, and the flag is only one of them.
+     `diagnosticCompletedAt` is stamped on whichever enrollment row was active
+     when the diagnostic was submitted, so anything that produces a different
+     active row afterwards -- re-enrolling, an organization re-issuing a seat, a
+     self-enrollment added beside a sponsored one -- leaves a learner who has
+     demonstrably sat it being told to sit it again. Their own submitted result
+     is the fact; the flag is a cache of it, and `hasSatDiagnostic` is the same
+     check the curriculum page gates on. */
+  const diagnosticDone =
+      Boolean(enrollment?.diagnosticCompletedAt) ||
+      hasSatDiagnostic({
+        diagnostic: publishedDiagnostic,
+        examResults: data.examResults ?? [],
+        certificationId,
+      })
+
   const diagnosticRequired =
-      enrolled &&
-      publishedDiagnostic != null &&
-      !enrollment?.diagnosticCompletedAt
+      enrolled && publishedDiagnostic != null && !diagnosticDone
+
+  /* The same tone the catalog card used for this certification, so opening a
+     card lands on a page in that card's colour instead of on a page that looks
+     the same for every certification. */
+  const toneKey = toneForCertification(certification)
+  const tone = BUBBLE_TONES[toneKey] ?? BUBBLE_TONES.macaw
 
   const modules = getCertificationModules(certification) ?? []
-
-  const lessons = learnerLessons.filter(
-      (lesson) => String(lesson.certificationId) === String(certificationId)
-  )
 
   const allLessons = modules.flatMap((major) =>
       (major.middleCategory ?? []).flatMap((middle) => middle.lessons ?? [])
   )
-
-  function isLessonCompleted(lesson) {
-    return (
-        Boolean(lesson.completed) ||
-        completedLessonItems.some(
-            (item) => String(item.lessonId) === String(lesson.lessonId)
-        )
-    )
-  }
-
-  const completedLessonCount = lessons.filter(isLessonCompleted).length
-
-  const progress =
-      lessons.length > 0
-          ? Math.round((completedLessonCount / lessons.length) * 100)
-          : 0
 
   const moduleCount = modules.reduce(
       (total, major) => total + (major.middleCategory?.length ?? 0),
@@ -352,108 +337,166 @@ export default function LearnerCertificationDetailPage() {
   }
 
   return (
-      <div className="w-full min-w-0 pb-16">
-        <div className="mx-auto w-full max-w-[1280px]">
+      /* One white ground and one coloured header. `rb-polar` was the ground
+         while the page was made of `rb-snow` cards -- it existed to be the
+         grey the cards sat on. With the cards gone it would leave every
+         section, medallion and hover state washing into the page, so the page
+         takes the surface colour and the greys go back to marking things on
+         it. */
+      <div className="rebyu-ds min-h-[calc(100dvh-4rem)] w-full min-w-0 bg-rb-snow pb-20">
+        {/* The layout hands this route the full window (see
+            `isCertificationDetailPage` in learner-layout), so the gutters and
+            the cap are set here and nowhere else. 1600, matching the curriculum
+            page: wide enough to fill a large screen, short of the point where
+            the description in the left column runs past a readable measure.
+            `min-h` on the wrapper so the ground colour reaches the bottom of
+            the window on a short certification instead of stopping under the
+            last tile. */}
+        <div className="mx-auto w-full max-w-[1600px] px-5 lg:px-8">
 
-          {/* Breadcrumb / Back Navigation */}
-          <div className="py-6">
-            <Button
-                type="button"
-                variant="link"
-                className="h-auto p-0 text-muted-foreground hover:text-primary"
-                onClick={() => navigate("/learner/certifications")}
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Certifications
-            </Button>
+          {/* The portal's back control, not a text link: the same tactile
+              round arrow the curriculum page and every arena open with. */}
+          <div className="flex items-center gap-3 py-6">
+            <BackButton asChild label="Back to certifications">
+              <Link to="/learner/certifications" />
+            </BackButton>
+            <span className="font-rb-display text-sm font-extrabold lowercase text-rb-wolf">
+              back to certifications
+            </span>
           </div>
 
-          {/* Guidebook header: a solid Feather banner rather than a blurred
-              cover photo. The title has to survive at any length, and text over
-              an arbitrary uploaded image never reliably does. */}
-          <header className="relative isolate overflow-hidden rounded-3xl bg-rb-feather px-6 py-10 shadow-[0_6px_0_var(--color-rb-feather-lip)] sm:px-10 lg:py-14">
-            {/* oversized wordmark as texture, clipped by the banner */}
-            <span
-                aria-hidden="true"
-                className="pointer-events-none absolute -bottom-8 -right-4 select-none font-rb-display text-[7rem] font-black lowercase leading-none tracking-tight text-white/15"
-            >
-              {certification.title?.slice(0, 8)}
-            </span>
+          {/* The title block, drawn as the catalog card's cap rather than as a
+              fourth bordered tile: the gradient, the two bled bubbles and the
+              icon medallion are the card the learner pressed to get here,
+              opened out to the width of the page. */}
+          <header
+              className="relative overflow-hidden rounded-rb-card p-6 text-white sm:p-8"
+              style={{ background: tone.accent }}
+          >
+            <div className="pointer-events-none absolute -right-16 -top-24 size-72 rounded-full bg-white/10" />
+            <div className="pointer-events-none absolute -bottom-28 -left-12 size-64 rounded-full bg-white/10" />
 
-            <div className="relative z-10">
-              <Badge
-                  variant="secondary"
-                  className="mb-5 border-0 bg-white/25 px-3 py-1 text-xs font-bold text-white hover:bg-white/25"
-              >
-                {certification.industry || "Certification Program"}
-              </Badge>
+            <div className="relative flex flex-wrap items-start gap-5">
+              <span className="hidden size-16 shrink-0 place-items-center rounded-full bg-white/20 sm:grid">
+                <GraduationCap className="size-8" strokeWidth={1.7} aria-hidden="true" />
+              </span>
 
-              <h1 className="max-w-3xl break-words font-rb-display text-3xl font-extrabold lowercase tracking-tight text-white sm:text-4xl lg:text-5xl [overflow-wrap:anywhere]">
-                {certification.title}
-              </h1>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <p className="rb-eyebrow text-white/80">
+                    {certification.industry || "certification program"}
+                  </p>
 
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-white/90 sm:text-base">
-                {certification.description ||
-                    "A comprehensive certification review designed to build your expertise, prepare you for the examination, and accelerate your career."}
-              </p>
-
-              <div className="mt-8 flex flex-wrap gap-2.5 text-sm">
-                <div className="flex items-center gap-2 rounded-full bg-white/20 px-4 py-2 font-bold text-white">
-                  <Layers3 className="h-4 w-4" />
-                  <span>
-                    {modules.length} major{" "}
-                    {modules.length === 1 ? "category" : "categories"}
+                  <span className="shrink-0 rounded-rb-pill bg-white/90 px-3.5 py-1.5 font-rb-display text-[10px] font-extrabold uppercase tracking-wide text-rb-eel">
+                    {enrolled ? "Enrolled" : "Free to study"}
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2 rounded-full bg-white/20 px-4 py-2 font-bold text-white">
-                  <BookOpen className="h-4 w-4" />
-                  <span>
+                {/* `text-white` explicitly, not inherited: the design system
+                    sets a colour on `h1` itself, which beats the white the
+                    header passes down and left the title near-black on the
+                    gradient. */}
+                <h1 className="mt-2 max-w-3xl break-words font-rb-display text-3xl font-extrabold text-white sm:text-4xl [overflow-wrap:anywhere]">
+                  {certification.title}
+                </h1>
+
+                <p className="mt-3 max-w-2xl text-sm leading-7 text-white/85">
+                  {certification.description ||
+                      "A comprehensive certification review designed to build your expertise, prepare you for the examination, and accelerate your career."}
+                </p>
+
+                {/* Not `rb-chip`: that chip is drawn for a light ground and
+                    turns into three grey slabs on the gradient. */}
+                <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs font-extrabold text-white/90">
+                  <span className="inline-flex items-center gap-2">
+                    <Layers3 className="size-4" aria-hidden="true" />
+                    {modules.length} major {modules.length === 1 ? "category" : "categories"}
+                  </span>
+                  <span className="inline-flex items-center gap-2">
+                    <BookOpen className="size-4" aria-hidden="true" />
                     {moduleCount} modules · {lessonCount} lessons
                   </span>
+                  <span className="inline-flex items-center gap-2">
+                    <Clock3 className="size-4" aria-hidden="true" />
+                    {formatDuration(totalMinutes)}
+                  </span>
                 </div>
 
-                <div className="flex items-center gap-2 rounded-full bg-white/20 px-4 py-2 font-bold text-white">
-                  <Clock3 className="h-4 w-4" />
-                  <span>{formatDuration(totalMinutes)}</span>
+                {/* The action, beside what it acts on. It used to sit in a
+                    sidebar card three headings down the page, under a "Free"
+                    price that a free product does not need quoting. `snow`,
+                    because a coloured button on a coloured gradient has no
+                    edge to stand on. */}
+                <div className="mt-6 flex flex-wrap items-center gap-4">
+                  <TactileButton
+                      type="button"
+                      variant="snow"
+                      size="lg"
+                      onClick={handlePrimaryAction}
+                      disabled={enrollMutation.isPending}
+                  >
+                    {primaryButtonLabel}
+                  </TactileButton>
+
+                  {(diagnosticRequired || (publishedDiagnostic && !enrolled)) && (
+                      <span className="inline-flex min-w-0 items-center gap-2 text-xs font-bold text-white/85">
+                        {diagnosticRequired ? (
+                            <Target className="size-4 shrink-0" aria-hidden="true" />
+                        ) : (
+                            <LockKeyhole className="size-4 shrink-0" aria-hidden="true" />
+                        )}
+                        {diagnosticRequired
+                            ? "Complete the diagnostic to unlock your learning path."
+                            : "A short placement test runs once you enrol."}
+                      </span>
+                  )}
                 </div>
               </div>
             </div>
           </header>
 
-          <main className="mt-10 grid min-w-0 items-start gap-10 lg:grid-cols-[minmax(0,1.8fr)_minmax(380px,1fr)]">
+          {/* Plain sections on one ground, not a grid of cards. Each is a
+              lowercase heading, a hint line and its content -- the heading and
+              the space around it separate them, which is all the separation a
+              page with four sections needs. */}
+          <main className="mt-10 grid min-w-0 items-start gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,1.8fr)_minmax(300px,1fr)]">
 
             {/* LEFT COLUMN - About & Curriculum */}
-            <div className="flex min-w-0 flex-col space-y-10">
+            <div className="flex min-w-0 flex-col gap-10">
 
               {/* What You'll Learn (Features) */}
-              <div className="rounded-xl border bg-card p-6 shadow-sm sm:p-8">
-                <h2 className="mb-6 text-xl font-bold">What you'll learn</h2>
+              <section>
+                <BentoHeading
+                    title="what you'll learn"
+                    hint="What this certification review gives you."
+                />
                 <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
-                  <ProductFeature>
+                  <ProductFeature tone={tone}>
                     A structured diagnostic assessment to pinpoint your learning gaps immediately.
                   </ProductFeature>
-                  <ProductFeature>
+                  <ProductFeature tone={tone}>
                     Step-by-step organized lessons grouped by highly relevant modules.
                   </ProductFeature>
-                  <ProductFeature>
+                  <ProductFeature tone={tone}>
                     Self-paced study materials letting you review complex course materials on your schedule.
                   </ProductFeature>
-                  <ProductFeature>
+                  <ProductFeature tone={tone}>
                     Comprehensive progress tracking tailored to your personal learner dashboard.
                   </ProductFeature>
                 </div>
-              </div>
+              </section>
 
               {/* Announcements from the learner's organization group, if any.
                   Renders nothing when they aren't in one. */}
               <LearnerAnnouncements certificationId={certificationId} />
 
               {/* Course Curriculum grouped by major category */}
-              <div className="space-y-6">
+              <section>
                 <div>
-                  <h2 className="text-2xl font-bold">Course Content</h2>
-                  <p className="mt-2 text-sm text-muted-foreground">
+                  <h2 className="font-rb-display text-sm font-extrabold lowercase text-rb-eel">
+                    course content
+                  </h2>
+                  <p className="mt-1 text-xs text-rb-wolf">
                     {modules.length} major {modules.length === 1 ? "category" : "categories"} •{" "}
                     {moduleCount} modules • {lessonCount} lessons •{" "}
                     {formatDuration(totalMinutes)} total length
@@ -467,28 +510,28 @@ export default function LearnerCertificationDetailPage() {
                         description="This certification does not have modules or lessons yet."
                     />
                 ) : (
-                    <div className="space-y-8">
+                    <div className="mt-5 space-y-6">
                       {modules.map((major, majorIndex) => {
                         const middleCategories = major.middleCategory ?? []
-                        const majorPriority = majorPriorityById.get(
-                            String(major.majorCategoryId)
-                        )
-
                         return (
                             <section
                                 key={major.majorCategoryId ?? majorIndex}
                                 className="space-y-3"
                             >
+                              {/* The number as a key rather than as a prefix in
+                                  the sentence: "Major Category 3:" spent four
+                                  words of the heading saying what a numbered
+                                  chip says at a glance. */}
                               <div className="flex flex-wrap items-center gap-3">
-                                <h3 className="font-heading text-lg font-bold text-foreground">
-                                  <span className="text-primary">
-                                    Major Category {majorIndex + 1}:
-                                  </span>{" "}
+                                <span
+                                    className="grid size-9 shrink-0 place-items-center rounded-full font-rb-display text-sm font-extrabold text-white"
+                                    style={{ background: tone.solid }}
+                                >
+                                  {majorIndex + 1}
+                                </span>
+                                <h3 className="min-w-0 font-rb-display text-lg font-extrabold text-rb-eel">
                                   {major.title ?? "Untitled"}
                                 </h3>
-                                {majorPriority?.priority_tag && (
-                                    <PriorityTag tag={majorPriority.priority_tag} size="sm" />
-                                )}
                               </div>
 
                               {middleCategories.length === 0 ? (
@@ -496,9 +539,15 @@ export default function LearnerCertificationDetailPage() {
                                     No modules under this major category yet.
                                   </div>
                               ) : (
+                                  /* One list with hairlines between the
+                                     modules, not one bordered box per module.
+                                     Nine outlined boxes stacked inside an
+                                     outlined card was the page's boxiest
+                                     stretch, and the border said nothing the
+                                     row spacing did not. */
                                   <Accordion
                                       type="multiple"
-                                      className="space-y-3"
+                                      className="border-y border-rb-swan"
                                   >
                                     {middleCategories.map((middle, middleIndex) => {
                                       const middleLessons = middle.lessons ?? []
@@ -512,28 +561,18 @@ export default function LearnerCertificationDetailPage() {
                                           middle.middleCategoryId ??
                                           `${majorIndex}-${middleIndex}`
                                       )
-                                      const middlePriority = middlePriorityById.get(
-                                          String(middle.middleCategoryId)
-                                      )
-
                                       return (
                                           <AccordionItem
                                               key={itemValue}
                                               value={itemValue}
-                                              className="overflow-hidden rounded-2xl border-2 border-rb-swan bg-rb-snow px-2"
+                                              className="border-rb-swan"
                                           >
-                                            <AccordionTrigger className="rounded-xl px-4 py-5 transition-colors hover:bg-rb-polar hover:no-underline">
+                                            <AccordionTrigger className="rounded-rb-tile px-3 py-4 transition-colors hover:bg-rb-polar hover:no-underline">
                                               <div className="flex flex-col items-start text-left">
                                                 <div className="flex flex-wrap items-center gap-2">
                                                   <span className="font-rb-display text-base font-extrabold text-rb-eel">
                                                     {middle.title ?? "Untitled Module"}
                                                   </span>
-                                                  {middlePriority?.priority_tag && (
-                                                      <PriorityTag
-                                                          tag={middlePriority.priority_tag}
-                                                          size="sm"
-                                                      />
-                                                  )}
                                                 </div>
                                                 <span className="mt-1 text-sm font-normal text-muted-foreground">
                                                   {middleLessons.length}{" "}
@@ -552,28 +591,22 @@ export default function LearnerCertificationDetailPage() {
                                               ) : (
                                                   <div className="space-y-1">
                                                     {middleLessons.map((lesson) => {
-                                                      const completed =
-                                                          isLessonCompleted(lesson)
-
                                                       return (
                                                           <div
                                                               key={lesson.lessonId}
-                                                              className="flex items-center justify-between gap-4 rounded-md px-4 py-3 hover:bg-muted/50"
+                                                              className="flex items-center justify-between gap-4 rounded-rb-tile px-4 py-3 hover:bg-rb-polar"
                                                           >
                                                             <div className="flex min-w-0 items-start gap-3">
-                                                              <PlayCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                                                              <span className="grid size-7 shrink-0 place-items-center rounded-full bg-rb-swan text-rb-wolf">
+                                                                <PlayCircle className="size-4" aria-hidden="true" />
+                                                              </span>
                                                               <div className="flex min-w-0 flex-col">
-                                                                <span className="truncate text-sm font-medium text-foreground">
+                                                                <span className="truncate text-sm font-bold text-rb-eel">
                                                                   {lesson.name}
                                                                 </span>
-                                                                {completed && (
-                                                                    <span className="text-xs font-medium text-green-600">
-                                                                      Completed
-                                                                    </span>
-                                                                )}
                                                               </div>
                                                             </div>
-                                                            <span className="shrink-0 text-xs text-muted-foreground">
+                                                            <span className="shrink-0 text-xs font-bold text-rb-wolf">
                                                               {getLessonDurationMinutes(lesson) > 0
                                                                   ? formatDuration(
                                                                       getLessonDurationMinutes(lesson)
@@ -596,106 +629,42 @@ export default function LearnerCertificationDetailPage() {
                       })}
                     </div>
                 )}
-              </div>
+              </section>
             </div>
 
-            {/* RIGHT COLUMN - Sticky Enrollment Box */}
-            <aside className="min-w-0 self-start lg:sticky lg:top-6 lg:h-fit">
-              <Card className="overflow-hidden border shadow-lg">
-                <CardHeader className="bg-muted/30 pb-4">
-                  <div className="flex flex-col space-y-1">
-                    <span className="text-sm font-medium text-muted-foreground">
-                      Enrollment Status
-                    </span>
-                    <span className="text-4xl font-extrabold tracking-tight text-foreground">
-                      {enrolled ? "Enrolled" : "Free"}
-                    </span>
-                  </div>
-                </CardHeader>
+            {/* RIGHT COLUMN - what the certification ships with.
+                No enrollment card: the price line said "Free" about a free
+                product, the status repeated the header's chip, and the button
+                is now beside the title it belongs to. */}
+            <aside className="flex min-w-0 flex-col gap-8 self-start lg:sticky lg:top-6 lg:h-fit">
+              <section>
+                <BentoHeading title="this course includes" />
 
-                <CardContent className="space-y-6 pt-6">
+                <div className="space-y-3">
+                  <ProductMetaItem icon={Clock3}>
+                    {formatDuration(totalMinutes)} of learning content
+                  </ProductMetaItem>
+                  <ProductMetaItem icon={Layers3}>
+                    {moduleCount} distinct learning modules
+                  </ProductMetaItem>
+                  <ProductMetaItem icon={BookOpen}>
+                    {lessonCount} comprehensive lessons
+                  </ProductMetaItem>
+                  <ProductMetaItem icon={Languages}>
+                    English language support
+                  </ProductMetaItem>
+                </div>
 
-                  {enrolled && (
-                      <div className="space-y-3">
-                        <div className="flex justify-between text-sm font-medium">
-                          <span>Your Progress</span>
-                          <span>{progress}%</span>
-                        </div>
-                        <Progress value={progress} className="h-2" />
-                        <p className="text-xs text-muted-foreground">
-                          {completedLessonCount} of {lessons.length} lessons completed
-                        </p>
-                      </div>
-                  )}
+                <div className="mt-6 border-t border-rb-swan pt-5">
+                  <BentoHeading title="requirements" />
 
-                  <div className="space-y-3">
-                    <Button
-                        type="button"
-                        size="lg"
-                        className="h-14 w-full text-base font-bold"
-                        onClick={handlePrimaryAction}
-                        disabled={enrollMutation.isPending}
-                    >
-                      {primaryButtonLabel}
-                    </Button>
-                    {!enrolled && (
-                        <p className="text-center text-xs text-muted-foreground">
-                          Enrolling adds this certification to My Learning.
-                        </p>
-                    )}
-                  </div>
-
-                  {diagnosticRequired && (
-                      <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/30">
-                        <Target className="h-4 w-4 text-amber-600" />
-                        <AlertTitle className="text-amber-800 dark:text-amber-300">Diagnostic Required</AlertTitle>
-                        <AlertDescription className="text-amber-700 dark:text-amber-400">
-                          Complete the diagnostic assessment to unlock your personalized learning path.
-                        </AlertDescription>
-                      </Alert>
-                  )}
-
-                  {publishedDiagnostic && !enrolled && (
-                      <Alert>
-                        <LockKeyhole className="h-4 w-4" />
-                        <AlertTitle>Diagnostic Assessment</AlertTitle>
-                        <AlertDescription>
-                          A mandatory diagnostic test is required post-enrollment.
-                        </AlertDescription>
-                      </Alert>
-                  )}
-
-                  <Separator />
-
-                  <div className="space-y-4">
-                    <h4 className="font-semibold text-foreground">This course includes:</h4>
-                    <ProductMetaItem icon={Clock3}>
-                      {formatDuration(totalMinutes)} of learning content
-                    </ProductMetaItem>
-                    <ProductMetaItem icon={Layers3}>
-                      {moduleCount} distinct learning modules
-                    </ProductMetaItem>
-                    <ProductMetaItem icon={BookOpen}>
-                      {lessonCount} comprehensive lessons
-                    </ProductMetaItem>
-                    <ProductMetaItem icon={Languages}>
-                      English language support
-                    </ProductMetaItem>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Auxiliary Info Card */}
-              <Card className="mt-6 border shadow-sm">
-                <CardContent className="space-y-4 p-6">
-                  <h4 className="font-semibold text-foreground">Course Requirements</h4>
-                  <ul className="list-inside list-disc space-y-2 text-sm text-muted-foreground">
+                  <ul className="space-y-2 text-sm font-semibold text-rb-wolf">
                     <li>No prior experience required.</li>
                     <li>A stable internet connection.</li>
                     <li>Willingness to learn and complete the diagnostic.</li>
                   </ul>
-                </CardContent>
-              </Card>
+                </div>
+              </section>
             </aside>
           </main>
         </div>

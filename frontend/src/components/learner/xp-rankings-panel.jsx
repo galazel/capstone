@@ -1,13 +1,11 @@
-import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Crown, UsersRound } from "@/components/icons"
 
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { getLeaderboard } from "@/services/gamificationService"
 
 /**
- * The XP leaderboard, with its scope and period filters.
+ * The XP leaderboard: one board, all-time.
  *
  * This was a standalone /learner/rankings page reached from its own top-level
  * nav item. It is a competitive standing, which is what the Challenges page is
@@ -17,12 +15,17 @@ import { getLeaderboard } from "@/services/gamificationService"
  *
  * Note these two boards genuinely rank different things and are not
  * interchangeable: the challenge board ranks points from completed challenge
- * sessions, this one ranks XP earned across practice and Community quizzes.
- * That is why both are shown rather than one replacing the other.
+ * sessions, this one ranks XP earned across practice. That is why both are
+ * shown rather than one replacing the other.
  */
 export function XpRankingsPanel() {
-  const [scope, setScope] = useState("overall")
-  const [period, setPeriod] = useState("all")
+  // Only the overall board is offered now that the Community scope is gone; the
+  // service still takes a scope, so it is pinned rather than dropped.
+  const scope = "overall"
+  // Same treatment for the period. The monthly and weekly tabs are gone, so
+  // there is one board and it is the all-time one -- which is also what the
+  // subtitle promises ("Permanent XP earned across REBYU").
+  const period = "all"
 
   const query = useQuery({
     queryKey: ["leaderboard", scope, period],
@@ -39,28 +42,10 @@ export function XpRankingsPanel() {
             XP rankings
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            {scope === "overall"
-              ? "Permanent XP earned across REBYU."
-              : "XP earned from completed shared Community quizzes."}
+            Permanent XP earned across REBYU.
           </p>
         </div>
         <span className="text-xs font-medium text-muted-foreground">{entries.length} ranked</span>
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-3">
-        <Tabs value={scope} onValueChange={setScope}>
-          <TabsList>
-            <TabsTrigger value="overall">Overall XP</TabsTrigger>
-            <TabsTrigger value="community">Community XP</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <Tabs value={period} onValueChange={setPeriod}>
-          <TabsList>
-            <TabsTrigger value="all">All-time</TabsTrigger>
-            <TabsTrigger value="month">Monthly</TabsTrigger>
-            <TabsTrigger value="week">Weekly</TabsTrigger>
-          </TabsList>
-        </Tabs>
       </div>
 
       {query.isLoading ? (

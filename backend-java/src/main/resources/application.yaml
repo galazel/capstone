@@ -196,6 +196,17 @@ retake:
   strong-reduction-factor: ${RETAKE_STRONG_REDUCTION_FACTOR:0.5}
   min-evidence-per-cell: ${RETAKE_MIN_EVIDENCE_PER_CELL:2}
 
+# Assessment access rules.
+#
+# TEMPORARY: mock exams are open to every enrolled learner. They are a paid
+# feature in the revenue model, and the MOCK_EXAM_ACCESS entitlement gates are
+# still in the code -- this switch is what turns them back on, so restoring the
+# paywall is a config change rather than a rewrite. Set to true (or export
+# MOCK_EXAM_REQUIRES_ENTITLEMENT=true) when mock exams go back behind Pro.
+rebyu:
+  assessment:
+    mock-exam-requires-entitlement: ${MOCK_EXAM_REQUIRES_ENTITLEMENT:false}
+
 # PayMongo (test-mode payment provider). Disabled by default so a missing key
 # never accidentally reaches the live API; the paymongo-test profile (or real
 # env vars below) turns it on.

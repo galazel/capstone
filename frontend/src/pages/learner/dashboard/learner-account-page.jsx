@@ -39,7 +39,6 @@ const ACCOUNT_TABS = [
 const DEFAULT_PREFERENCES = {
   learningReminders: true,
   certificationUpdates: true,
-  communityReplies: true,
   productNews: false,
 }
 
@@ -235,7 +234,7 @@ export default function LearnerAccountPage() {
               <label className="space-y-2 sm:col-span-2">
                 <span className="text-sm font-medium">Username</span>
                 <Input value={form.username} onChange={(e) => updateField("username", e.target.value)} disabled={!canSave} required />
-                <span className="block text-xs text-muted-foreground">Used in community posts and learner activity.</span>
+                <span className="block text-xs text-muted-foreground">Used across your learner activity.</span>
               </label>
             </div>
           </div>
@@ -353,7 +352,6 @@ export default function LearnerAccountPage() {
           <SectionHeader title="Notification preferences" description="Choose which learner updates you want to receive in the portal." />
           <PreferenceRow title="Learning reminders" description="Study-plan reminders and upcoming learning tasks." checked={preferences.learningReminders} onCheckedChange={(value) => updatePreference("learningReminders", value)} />
           <PreferenceRow title="Certification updates" description="New assignments, invitations, and certification changes." checked={preferences.certificationUpdates} onCheckedChange={(value) => updatePreference("certificationUpdates", value)} />
-          <PreferenceRow title="Community replies" description="Replies and activity related to your community posts." checked={preferences.communityReplies} onCheckedChange={(value) => updatePreference("communityReplies", value)} />
           <PreferenceRow title="Product news" description="Occasional REBYU feature announcements." checked={preferences.productNews} onCheckedChange={(value) => updatePreference("productNews", value)} />
         </div>
       )

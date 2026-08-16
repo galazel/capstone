@@ -2,6 +2,7 @@ package com.capstone.rebyu.user.service;
 
 import com.capstone.rebyu.assessment.mapper.ExamResultMapper;
 import com.capstone.rebyu.assessment.repository.ExamResultRepository;
+import com.capstone.rebyu.enrollment.entity.LearnerCertification;
 import com.capstone.rebyu.enrollment.entity.OrganizationCertificationLearner;
 import com.capstone.rebyu.enrollment.mapper.LearnerCertificationMapper;
 import com.capstone.rebyu.enrollment.mapper.OrganizationCertificationLearnerMapper;
@@ -11,6 +12,8 @@ import com.capstone.rebyu.gamification.RewardService;
 import com.capstone.rebyu.organization.dto.OrganizationCertificateDto;
 import com.capstone.rebyu.organization.entity.OrganizationCertificate;
 import com.capstone.rebyu.organization.mapper.OrganizationCertificateMapper;
+import com.capstone.rebyu.progress.analytics.dto.CertificationProgressDto;
+import com.capstone.rebyu.progress.analytics.service.ProgressAnalyticsService;
 import com.capstone.rebyu.progress.mapper.ActivityLogMapper;
 import com.capstone.rebyu.progress.mapper.LearnerCompletedLessonMapper;
 import com.capstone.rebyu.progress.repository.ActivityLogRepository;
@@ -27,8 +30,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Learner-scoped read model for the learner portal. Every list is filtered to the
@@ -58,6 +63,7 @@ public class LearnerPortalService {
     private final OrganizationCertificateMapper orgCertMapper;
     private final RewardService rewardService;
     private final AchievementAwardService achievementAwardService;
+    private final ProgressAnalyticsService progressAnalyticsService;
 
     public LearnerDto currentLearner(Long learnerId) {
         return learnerRepository.findById(learnerId).map(learnerMapper::toDto).orElse(null);
@@ -94,6 +100,36 @@ public class LearnerPortalService {
         // Fetch BKT mastery state per certification (stubbed for now)
         Map<Long, Integer> masteryByCertification = new java.util.HashMap<>();
 
+        /* Progress per enrolled certification, counted once, server-side.
+         *
+         * Both routes into a certification count: a self-purchased enrollment
+         * writes learner_certifications, an organization-sponsored one writes
+         * only organization_certification_learners, and a learner can hold
+         * both. Deduped, or a certification held twice would be counted twice.
+         *
+         * This is the counts only -- no BKT, no readiness, no mastery rows (see
+         * ProgressAnalyticsService.progressFor) -- so it stays a handful of
+         * queries per certification rather than the analytics board's work. */
+        Set<Long> enrolledCertificationIds = new LinkedHashSet<>();
+        for (LearnerCertification enrollment
+                : learnerCertificationRepository.findByLearner_LearnerId(learnerId)) {
+            if (enrollment.getStatus() == LearnerCertification.Status.active
+                    && enrollment.getCertification() != null) {
+                enrolledCertificationIds.add(enrollment.getCertification().getCertificationId());
+            }
+        }
+        for (OrganizationCertificationLearner row : orgCertLearnerEntities) {
+            if (row.getStatus() == OrganizationCertificationLearner.Status.active
+                    && row.getOrgCert() != null
+                    && row.getOrgCert().getCertification() != null) {
+                enrolledCertificationIds.add(row.getOrgCert().getCertification().getCertificationId());
+            }
+        }
+
+        List<CertificationProgressDto> certificationProgress = enrolledCertificationIds.stream()
+                .map(certificationId -> progressAnalyticsService.progressFor(learnerId, certificationId))
+                .toList();
+
         return new LearnerPortalDto(
                 learnerRepository.findById(learnerId).map(learnerMapper::toDto).orElse(null),
                 userRepository.findById(userId).map(userMapper::toDto).orElse(null),
@@ -111,6 +147,7 @@ public class LearnerPortalService {
                 totalXp,
                 coinBalance,
                 aiCreditsRemaining,
-                masteryByCertification);
+                masteryByCertification,
+                certificationProgress);
     }
 }

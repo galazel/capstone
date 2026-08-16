@@ -372,6 +372,12 @@ export async function getLearnerPortalData() {
     // Server-decided: the browser only ever reads it (and diffs it to notice a
     // new one), never writes it.
     achievements: asArray(portal.achievements),
+    /* Lessons read and assessments passed per enrolled certification, counted
+       server-side by the same rules the analytics board uses. Every surface
+       that shows a certification's progress reads this rather than counting
+       lessons itself -- that divergence is why My Learning said 100% while
+       Analytics said 20% for the same learner. */
+    certificationProgress: asArray(portal.certificationProgress),
     totalXp: Number(portal.totalXp) || 0,
     coinBalance: Number(portal.coinBalance) || 0,
     aiCreditsRemaining: Number(portal.aiCreditsRemaining) || 0,

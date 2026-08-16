@@ -9,6 +9,11 @@ class ReadinessRequest(BaseModel):
     diagnostic_score: float | None = Field(default=None, ge=0, le=100)
     lesson_quiz_score: float | None = Field(default=None, ge=0, le=100)
     middle_exam_score: float | None = Field(default=None, ge=0, le=100)
+    # Major-category exams score separately from the mock exam. BKT folds the
+    # two together because its event schema is a fixed four-value Literal;
+    # readiness is not bound by that, and the distinction matters here -- a
+    # major exam covers one section, a mock exam simulates the whole paper.
+    major_exam_score: float | None = Field(default=None, ge=0, le=100)
     mock_exam_score: float | None = Field(default=None, ge=0, le=100)
     # Share of the certification's lessons completed, 0..100. Unlike the score
     # components this is always computable, so it is always present -- which is
