@@ -37,6 +37,9 @@ import { DashboardBoard } from "@/components/commons/dashboard-board.jsx"
 import {
   RadialGauge,
   TrendLineChart,
+  masteryBand,
+  masteryColor,
+  masteryInk,
   seriesColor,
   useChartTheme,
 } from "@/components/charts/rebyu-charts.jsx"
@@ -102,27 +105,33 @@ function getTopicTitle(topic, fallback = "Untitled Topic") {
 /* ------------------------------------------------------------------ pieces */
 
 /**
- * How much evidence sits behind a mastery estimate.
+ * How well the learner is holding a topic, as a tier.
  *
- * A mastery number on its own overstates what the system knows: 40% from three
- * answers and 40% from forty are the same figure carrying very different
- * weight, and only one of them is worth reorganising a study week around. The
- * BKT service reports the observation count per lesson as `evidenceCount`, and
- * this turns it into the tier a learner can act on.
+ * Read off the mastery percentage, on the same boundaries the bar is coloured
+ * with -- so a red bar always reads "low", orange "medium", green "high", and
+ * the two can never contradict each other on the same row.
  *
- * Bands are deliberately wide: a tier that flips every time one more question
- * is answered reads as jitter rather than as information.
+ * This used to grade the *evidence count* instead (25+ answers = high), which
+ * is a different question: how sure the estimate is, rather than how good it
+ * is. That reading never worked on a REBYU-sized curriculum, where a topic can
+ * hold only a handful of questions and so was pinned at "low" permanently,
+ * however well it was answered. The answer count is still printed beside the
+ * tier, which is where "how much is this based on?" is now answered.
+ *
+ * Returns null when nothing has been answered: a topic with no evidence at all
+ * gets no tier rather than a flattering one.
  */
-const EVIDENCE_TIERS = [
-  { min: 25, label: "high", bars: 3 },
-  { min: 8, label: "medium", bars: 2 },
-  { min: 1, label: "low", bars: 1 },
-]
+const MASTERY_TIERS = {
+  weak: { label: "low", bars: 1 },
+  developing: { label: "medium", bars: 2 },
+  strong: { label: "high", bars: 3 },
+}
 
-function evidenceConfidence(evidenceCount) {
+function masteryConfidence(value, evidenceCount) {
   const count = Number(evidenceCount)
   if (!Number.isFinite(count) || count <= 0) return null
-  return EVIDENCE_TIERS.find((tier) => count >= tier.min) ?? EVIDENCE_TIERS.at(-1)
+  const band = masteryBand(value)
+  return band ? MASTERY_TIERS[band] : null
 }
 
 /**
@@ -152,7 +161,7 @@ function ConfidenceMeter({ bars }) {
  * the bar, rows that do not are unchanged.
  */
 function MasteryRow({ title, caption, value, color = SERIES_INK[0], leading, evidenceCount }) {
-  const confidence = evidenceConfidence(evidenceCount)
+  const confidence = masteryConfidence(value, evidenceCount)
 
   return (
     <div className="flex items-start gap-3">
@@ -697,12 +706,15 @@ export default function LearnerProgressPage() {
    * percentage cannot see. An unknown or absent tag ranks below every known one
    * rather than above, so a missing tag never promotes a topic.
    */
-  /* Red when the topic is actually urgent, so the tile's colour carries the
-     same message as the seal on it. Anything below high priority keeps the
-     ordinary surface -- if every focus topic were red, red would stop meaning
-     anything. Priority tags are always accompanied by the written seal, so
-     colour is never the only signal. */
-  const URGENT_TONES = { CRITICAL_PRIORITY: "cardinal", HIGH_PRIORITY: "cardinal" }
+  /* The tile is filled by how the topic is going, on the same bands that
+     colour every mastery bar -- so the wash, the figure printed on it, and the
+     row for the same topic further down the board all agree.
+
+     This used to key off the priority tag instead (red for critical/high, an
+     ordinary surface otherwise). Urgency has not lost its signal: the
+     `PrioritySeal` in the tile's corner still names it in words, which was
+     always the part doing the accessible work. */
+  const MASTERY_TONES = { weak: "cardinal", developing: "fox", strong: "leaf" }
 
   const focusTopic = useMemo(() => {
     if (rankedMastery.length === 0) return null
@@ -715,7 +727,11 @@ export default function LearnerProgressPage() {
     })[0]
   }, [rankedMastery])
 
-  const focusTone = URGENT_TONES[focusTopic?.priorityTag] ?? "beetle"
+  const focusScore = focusTopic ? getTopicScore(focusTopic) : null
+  const focusBand = masteryBand(focusScore)
+  /* Violet is the "nothing scored yet" surface, not a band -- the tile shows
+     copy rather than a figure there, so it must not borrow a band's colour. */
+  const focusTone = MASTERY_TONES[focusBand] ?? "beetle"
   const readinessLevel = clampPercent(analytics?.readinessPercentage)
   /* What the readiness figure is actually based on. The response carries the
      unassessed count rather than a coverage percentage, so the assessed count
@@ -786,7 +802,14 @@ export default function LearnerProgressPage() {
       element: (
         <BentoTile tone={focusTone} col={2} row={1}>
           <div className="flex items-start justify-between gap-3">
-            <p className={`text-sm font-bold ${focusTone === "cardinal" ? "text-rb-cardinal-lip" : "text-rb-beetle-lip"}`}>
+            {/* Band ink rather than the tone's own `-lip`: the `-lip` shades
+                are tuned for button shadows, not for AA text on a wash, and
+                this label is small type. Falls back to violet on the
+                nothing-scored surface, which has no band. */}
+            <p
+              className={`text-sm font-bold ${focusBand ? "" : "text-rb-beetle-lip"}`}
+              style={focusBand ? { color: masteryInk(chartTheme, focusScore) } : undefined}
+            >
               {focusTopic ? "Work on this next" : "Topic Mastery"}
             </p>
             {focusTopic?.priorityTag ? (
@@ -804,9 +827,17 @@ export default function LearnerProgressPage() {
                   stat tiles beside it so the row still scans as one band of
                   figures. It is this topic's mastery, not an average -- which
                   is the point of the change: the number now belongs to
-                  something you can name and open. */}
-              <p className="font-rb-display text-4xl font-extrabold leading-[0.9] tracking-tight tabular-nums text-rb-eel sm:text-5xl">
-                {getTopicScore(focusTopic)}%
+                  something you can name and open.
+
+                  Tinted by the same bands as the bars below it, but through
+                  `masteryInk` rather than `masteryColor`: this is type on a
+                  tinted wash, and the bar's orange reads at 1.9:1 there --
+                  under half the 3:1 large-text floor. */}
+              <p
+                className="font-rb-display text-4xl font-extrabold leading-[0.9] tracking-tight tabular-nums sm:text-5xl"
+                style={{ color: masteryInk(chartTheme, focusScore) }}
+              >
+                {focusScore}%
               </p>
 
               {/* Clamped to one line: the row is a fixed 176px and the tile
@@ -817,7 +848,10 @@ export default function LearnerProgressPage() {
               </p>
 
               {focusTopic.categoryTitle ? (
-                <p className={`truncate text-xs font-semibold ${focusTone === "cardinal" ? "text-rb-cardinal-lip" : "text-rb-beetle-lip"}`}>
+                <p
+                  className="truncate text-xs font-semibold"
+                  style={{ color: masteryInk(chartTheme, focusScore) }}
+                >
                   {focusTopic.categoryTitle}
                 </p>
               ) : null}
@@ -1025,10 +1059,10 @@ export default function LearnerProgressPage() {
                       title={topic.lessonTitle ?? getTopicTitle(topic)}
                       caption={topic.categoryTitle}
                       value={getTopicScore(topic)}
-                      /* Orange under the weak threshold, azure above it, taken
-                         from the shared kit so the row tints the same way in
-                         either theme. */
-                      color={seriesColor(chartTheme, getTopicScore(topic) < 50 ? 2 : 0)}
+                      /* Red under 25, orange under 50, green above — the shared
+                         mastery scale, so the row tints the same way in either
+                         theme and the bands live in one place. */
+                      color={masteryColor(chartTheme, getTopicScore(topic))}
                       evidenceCount={topic.evidenceCount}
                       leading={
                         topic.priorityTag ? (
@@ -1158,7 +1192,13 @@ export default function LearnerProgressPage() {
   // Held locally as well as saved, so a tile lands where it was dropped or
   // dragged to size immediately rather than after the round trip.
   const [localLayout, setLocalLayout] = useState(null)
-  const tileLayout = localLayout ?? layoutQuery.data?.tiles ?? []
+  /* Null while the saved board is still in flight -- deliberately distinct
+     from `[]`, which is a real arrangement meaning "the defaults". Only
+     `tileLayout` below flattens the two, because rendering has to draw
+     something either way; anything that could *write* the layout back has to
+     be able to tell "no arrangement yet" from "the default arrangement". */
+  const savedLayout = localLayout ?? layoutQuery.data?.tiles ?? null
+  const tileLayout = savedLayout ?? []
 
   const saveLayoutMutation = useMutation({
     mutationFn: saveDashboardLayout,
@@ -1215,6 +1255,43 @@ export default function LearnerProgressPage() {
     saveLayoutMutation.mutate([])
   }
 
+  /* The board as it stood when this editing session opened.
+   *
+   * Cancel needs it because every drag saves as it happens -- by the time the
+   * learner decides they preferred the old arrangement, the new one is already
+   * in the database. So "cancel" cannot be a matter of dropping local state
+   * the way it usually is; it has to put the snapshot back the same way any
+   * other change goes in. */
+  const [layoutBeforeEdit, setLayoutBeforeEdit] = useState(null)
+
+  const startRearranging = () => {
+    /* `savedLayout`, not `tileLayout`: entering the mode before the query has
+       answered would otherwise snapshot the `[]` that stands in for "still
+       loading", and cancelling would then write that back as though the
+       learner had asked for the default board -- discarding the arrangement
+       they actually had. A null snapshot means cancel restores nothing, which
+       is the honest behaviour when we do not yet know what to restore. */
+    setLayoutBeforeEdit(savedLayout)
+    setRearranging(true)
+  }
+
+  const finishRearranging = () => {
+    setLayoutBeforeEdit(null)
+    setRearranging(false)
+  }
+
+  const cancelRearranging = () => {
+    const previous = layoutBeforeEdit
+    finishRearranging()
+    // Nothing actually moved, so there is nothing to write. Worth the compare:
+    // otherwise opening the mode and thinking better of it costs a PUT and a
+    // toast on every failure path, to store what was already stored.
+    if (previous != null && JSON.stringify(previous) !== JSON.stringify(tileLayout)) {
+      setLocalLayout(previous)
+      saveLayoutMutation.mutate(previous)
+    }
+  }
+
   return (
     <LearnerPremiumGuard
       feature={FEATURES.PROGRESS_ANALYTICS}
@@ -1251,6 +1328,23 @@ export default function LearnerProgressPage() {
             </SelectContent>
           </Select>
 
+          {/* Read left to right, the two ways out of this mode sit before the
+              one way to keep it: put everything back, abandon this session's
+              changes, accept them. The confirm is last because it is where the
+              hand ends up, and because a destructive-ish control should never
+              be the one under the finger that just finished dragging. */}
+          {rearranging ? (
+            <>
+              <Button variant="ghost" onClick={resetLayout}>
+                Reset layout
+              </Button>
+
+              <Button variant="outline" onClick={cancelRearranging}>
+                Cancel
+              </Button>
+            </>
+          ) : null}
+
           {/* Icon only, and a mode rather than a permanent affordance: drag
               handles on every tile all the time are clutter on the many visits
               where the learner only wants to read the page. The label is on
@@ -1264,8 +1358,8 @@ export default function LearnerProgressPage() {
                 // beside it -- `icon-sm` sat three pixels short of the row.
                 size="icon"
                 aria-pressed={rearranging}
-                aria-label={rearranging ? "Finish rearranging tiles" : "Rearrange tiles"}
-                onClick={() => setRearranging((current) => !current)}
+                aria-label={rearranging ? "Keep this arrangement" : "Rearrange tiles"}
+                onClick={rearranging ? finishRearranging : startRearranging}
               >
                 {rearranging ? (
                   <Check className="size-4" aria-hidden="true" />
@@ -1276,15 +1370,9 @@ export default function LearnerProgressPage() {
             </TooltipTrigger>
 
             <TooltipContent side="bottom">
-              {rearranging ? "Done rearranging" : "Rearrange tiles"}
+              {rearranging ? "Keep this arrangement" : "Rearrange tiles"}
             </TooltipContent>
           </Tooltip>
-
-          {rearranging ? (
-            <Button variant="ghost" onClick={resetLayout}>
-              Reset layout
-            </Button>
-          ) : null}
         </div>
 
         {publishedCertifications.length === 0 ? (

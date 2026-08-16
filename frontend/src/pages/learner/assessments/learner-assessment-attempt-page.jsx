@@ -1064,8 +1064,11 @@ export default function LearnerAssessmentAttemptPage() {
           )}
         </footer>
 
+        {/* `rebyu-ds` is repeated on every dialog surface below: Radix portals
+            content to <body>, which sits outside the page's scope wrapper, so
+            without it none of the `.rebyu-ds`-scoped tactile rules resolve. */}
         <AlertDialog open={leaveOpen} onOpenChange={setLeaveOpen}>
-          <AlertDialogContent>
+          <AlertDialogContent className="rebyu-ds">
             <AlertDialogHeader>
               <AlertDialogTitle>Leave this attempt?</AlertDialogTitle>
               <AlertDialogDescription>
@@ -1077,8 +1080,10 @@ export default function LearnerAssessmentAttemptPage() {
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Keep Taking Assessment</AlertDialogCancel>
-              <AlertDialogAction onClick={() => navigate(-1)}>
+              <AlertDialogCancel className="rb-btn rb-btn-ghost">
+                Keep Taking Assessment
+              </AlertDialogCancel>
+              <AlertDialogAction className="rb-btn" onClick={() => navigate(-1)}>
                 Leave Attempt
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -1086,7 +1091,7 @@ export default function LearnerAssessmentAttemptPage() {
         </AlertDialog>
 
         <AlertDialog open={finishOpen} onOpenChange={setFinishOpen}>
-          <AlertDialogContent>
+          <AlertDialogContent className="rebyu-ds">
             <AlertDialogHeader>
               <AlertDialogTitle>Submit assessment?</AlertDialogTitle>
               <AlertDialogDescription asChild>
@@ -1132,10 +1137,14 @@ export default function LearnerAssessmentAttemptPage() {
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel disabled={submitMutation.isPending}>
+              <AlertDialogCancel
+                  className="rb-btn rb-btn-ghost"
+                  disabled={submitMutation.isPending}
+              >
                 Review Answers
               </AlertDialogCancel>
               <AlertDialogAction
+                  className="rb-btn"
                   onClick={(event) => {
                     event.preventDefault()
                     submitMutation.mutate()
@@ -1149,7 +1158,7 @@ export default function LearnerAssessmentAttemptPage() {
         </AlertDialog>
 
         <AlertDialog open={timeUp && !submitMutation.isPending}>
-          <AlertDialogContent>
+          <AlertDialogContent className="rebyu-ds">
             <AlertDialogHeader>
               <AlertDialogTitle>Time is up</AlertDialogTitle>
               <AlertDialogDescription>
@@ -1159,6 +1168,7 @@ export default function LearnerAssessmentAttemptPage() {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogAction
+                  className="rb-btn"
                   onClick={(event) => {
                     event.preventDefault()
                     submitMutation.mutate()

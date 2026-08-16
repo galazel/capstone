@@ -3,6 +3,7 @@ import { Code2, Plus, Trash2 } from "@/components/icons"
 
 import {
     Dialog,
+    DialogClose,
     DialogContent,
     DialogDescription,
     DialogHeader,
@@ -10,6 +11,7 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog"
 
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -238,13 +240,9 @@ export default function CreateQuestionDialog({
     return (
         <Dialog>
             <DialogTrigger asChild>
-                <button
-                    type="button"
-                    className="rounded-lg bg-zinc-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-800"
-                    onClick={onClickCreateQuestion}
-                >
+                <Button type="button" onClick={onClickCreateQuestion}>
                     Create
-                </button>
+                </Button>
             </DialogTrigger>
 
             <DialogContent
@@ -500,14 +498,15 @@ export default function CreateQuestionDialog({
                                             </p>
                                         </div>
 
-                                        <button
+                                        <Button
                                             type="button"
+                                            variant="outline"
+                                            size="sm"
                                             onClick={addChoice}
-                                            className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100"
                                         >
-                                            <Plus className="h-4 w-4" />
+                                            <Plus />
                                             Add Choice
-                                        </button>
+                                        </Button>
                                     </div>
 
                                     <div className="space-y-4">
@@ -528,15 +527,17 @@ export default function CreateQuestionDialog({
                                                         Correct answer
                                                     </label>
 
-                                                    <button
+                                                    <Button
                                                         type="button"
+                                                        variant="ghost"
+                                                        size="icon-sm"
                                                         onClick={() => removeChoice(choice.id)}
                                                         disabled={choices.length <= 2}
-                                                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                                                        className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                                                         aria-label={`Remove choice ${index + 1}`}
                                                     >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </button>
+                                                        <Trash2 />
+                                                    </Button>
                                                 </div>
 
                                                 <div className="space-y-4">
@@ -740,14 +741,15 @@ export default function CreateQuestionDialog({
                                             </p>
                                         </div>
 
-                                        <button
+                                        <Button
                                             type="button"
+                                            variant="outline"
+                                            size="sm"
                                             onClick={addSubQuestion}
-                                            className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100"
                                         >
-                                            <Plus className="h-4 w-4" />
+                                            <Plus />
                                             Add Sub-question
-                                        </button>
+                                        </Button>
                                     </div>
 
                                     <div className="space-y-4">
@@ -768,15 +770,17 @@ export default function CreateQuestionDialog({
                                                         </p>
                                                     </div>
 
-                                                    <button
+                                                    <Button
                                                         type="button"
+                                                        variant="ghost"
+                                                        size="icon-sm"
                                                         onClick={() => removeSubQuestion(subQuestion.id)}
                                                         disabled={subQuestions.length <= 1}
-                                                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                                                        className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                                                         aria-label={`Remove sub-question ${index + 1}`}
                                                     >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </button>
+                                                        <Trash2 />
+                                                    </Button>
                                                 </div>
 
                                                 <div className="space-y-4">
@@ -886,13 +890,14 @@ export default function CreateQuestionDialog({
                         </div>
                     </div>
 
-                    <div className="flex items-center justify-end gap-3 border-t border-zinc-200 px-6 py-4">
-                        <button
-                            type="button"
-                            className="rounded-lg bg-zinc-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-800"
-                        >
-                            Create Question
-                        </button>
+                    <div className="flex items-center justify-end gap-3 border-t px-6 py-4">
+                        <DialogClose asChild>
+                            <Button type="button" variant="outline">
+                                Cancel
+                            </Button>
+                        </DialogClose>
+
+                        <Button type="button">Create Question</Button>
                     </div>
                 </div>
             </DialogContent>

@@ -1,5 +1,6 @@
 package com.capstone.rebyu.assessment.service;
 
+import com.capstone.rebyu.aigateway.client.AiServiceException;
 import com.capstone.rebyu.aigateway.dto.AnswerGradingRequestDto;
 import com.capstone.rebyu.aigateway.dto.AnswerGradingRequestDto.SubQuestionGradingRequestDto;
 import com.capstone.rebyu.aigateway.dto.AnswerGradingResultDto;
@@ -1390,7 +1391,16 @@ public class AssessmentAttemptService {
      */
     private Optional<AnswerGradingResultDto> gradeWithRetry(AnswerGradingRequestDto request) {
         for (int attempt = 1; attempt <= GRADING_ATTEMPTS; attempt++) {
-            Optional<AnswerGradingResultDto> graded = aiAnswerGradingService.grade(request);
+            Optional<AnswerGradingResultDto> graded;
+            try {
+                graded = aiAnswerGradingService.grade(request);
+            } catch (AiServiceException permanent) {
+                // The request itself is wrong -- a missing route, a bad payload,
+                // a rejected key. No number of retries fixes any of those.
+                log.error("AI grading cannot succeed for this request; not retrying: {}",
+                        permanent.getMessage());
+                return Optional.empty();
+            }
             if (graded.isPresent()) {
                 return graded;
             }

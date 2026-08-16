@@ -5,6 +5,7 @@ import {
     DialogContent,
     DialogTrigger,
 } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
 
 export default function GenerateQuestionDialog({
                                                    onClickGenerateAiQuestions,
@@ -12,13 +13,9 @@ export default function GenerateQuestionDialog({
     return (
         <Dialog>
             <DialogTrigger asChild>
-                <button
-                    type="button"
-                    onClick={onClickGenerateAiQuestions}
-                    className="rounded-lg bg-zinc-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-800"
-                >
+                <Button type="button" onClick={onClickGenerateAiQuestions}>
                     Generate
-                </button>
+                </Button>
             </DialogTrigger>
 
             <DialogContent

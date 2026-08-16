@@ -33,6 +33,12 @@
     --color-rb-feather-ink: #3d6b06;
     --color-rb-fox: #ff9600;
     --color-rb-fox-lip: #e08600;
+    /* The one green accent. The brand palette is blue-led -- `rb-feather` is
+       blue here -- so green was only ever available as `rb-feather-ink` and as
+       the a11y-mode override. Named separately so "doing well" can be a tone
+       and a wash, not just an ink. */
+    --color-rb-leaf: #3f8f02;
+    --color-rb-leaf-lip: #2f6b01;
     --color-rb-beetle: #ce82ff;
     --color-rb-beetle-lip: #b061e6;
     --color-rb-humpback: #2b70c9;
@@ -51,6 +57,7 @@
     --color-rb-macaw-wash: #e3f5fe;
     --color-rb-bee-wash: #e0f9fd;
     --color-rb-fox-wash: #fff1e0;
+    --color-rb-leaf-wash: #edf7e3;
     --color-rb-beetle-wash: #f6ecff;
     --color-rb-cardinal-wash: #ffecec;
 

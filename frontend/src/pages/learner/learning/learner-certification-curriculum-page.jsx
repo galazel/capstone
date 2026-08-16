@@ -1341,7 +1341,9 @@ export default function LearnerCertificationCurriculumPage() {
 
       {/* -------------------------------------------------- diagnostic dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        {/* `rebyu-ds` on the content itself: the dialog portals to <body>, so
+            without it the `rb-btn` footer keys resolve to unstyled buttons. */}
+        <DialogContent className="rebyu-ds sm:max-w-md">
           <DialogHeader>
             <div className="mb-2 grid size-14 place-items-center rounded-2xl bg-rb-fox-wash text-rb-fox-lip">
               <ClipboardCheck className="size-7" aria-hidden="true" />

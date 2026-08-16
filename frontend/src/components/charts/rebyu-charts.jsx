@@ -37,6 +37,22 @@ import {
 const LIGHT = {
   series: ["#1B6EF3", "#00B8D4", "#FF9600", "#CE82FF"],
   other: "#AFAFAF",
+  // Deliberately outside `series`: these are statuses, not categories, so
+  // `seriesColor` must never hand them out. `danger` is the cardinal the
+  // design system already uses for a wrong answer (`--color-rb-cardinal`), so
+  // "you are in trouble here" reads the same in a chart as anywhere else.
+  // `success` is the one green the system commits to (`--color-rb-feather`
+  // under `.rb-a11y`); the default brand palette is blue-led and carries no
+  // other green, so inventing a brighter one would have been a new hue.
+  danger: "#FF4B4B",
+  success: "#3F8F02",
+  // Text-safe counterparts, for a mastery figure printed *as type* rather than
+  // drawn as a bar. They are not interchangeable: `#FF9600` is a fine bar fill
+  // and only ~1.9:1 against a tile wash, which fails even the 3:1 large-text
+  // floor — so the band most learners sit in would have been the one nobody
+  // could read. Verified against every wash a mastery-toned tile can take
+  // (cardinal #FFECEC, fox #FFF1E0, leaf #EDF7E3).
+  statusInk: { weak: "#C62828", developing: "#8A4F00", strong: "#33660A" },
   ink: { primary: "#4B4B4B", secondary: "#777777", muted: "#AFAFAF" },
   grid: "#E5E5E5",
   surface: "#FFFFFF",
@@ -46,6 +62,11 @@ const LIGHT = {
 const DARK = {
   series: ["#3B82F6", "#00A896", "#D4761B", "#A96BE0"],
   other: "#6B6B6B",
+  danger: "#D62C2C",
+  success: "#5CA82F",
+  // Against the dark washes (cardinal #3A1618, fox #3A2A12, leaf #1E2E14) the
+  // same reasoning runs the other way: type has to be lighter than the fill.
+  statusInk: { weak: "#FF8A8A", developing: "#FFB35C", strong: "#8ED14F" },
   ink: { primary: "#E8E8E8", secondary: "#A8A8A8", muted: "#7A7A7A" },
   grid: "#3A3A3A",
   surface: "#242424",
@@ -76,6 +97,87 @@ export function useChartTheme() {
 /** Assign by position in the caller's series list — never by rank or value. */
 export function seriesColor(theme, index) {
   return index < theme.series.length ? theme.series[index] : theme.other
+}
+
+/**
+ * Where a mastery score sits on the weak → developing → strong scale.
+ *
+ * Exported as numbers rather than inlined so the bar, any future badge, and
+ * the copy that explains them cannot drift apart. Both bounds are exclusive:
+ * 25 is developing, 50 is strong.
+ */
+export const MASTERY_BANDS = { weak: 25, developing: 50 }
+
+/**
+ * Mastery as a status, not a category.
+ *
+ * The categorical rule above — colour by position, never by value — is exactly
+ * right for a series and exactly wrong here: a mastery bar has one meaning per
+ * band, and a learner reads red as "this one is in trouble", not as "this one
+ * is the third topic". So this is a separate, deliberately small scale.
+ *
+ * Red → orange → green is the requested scale and it is also the hardest trio
+ * for the commonest colour-vision deficiencies, where red and green converge.
+ * That makes the band a supporting signal only, never the message: every
+ * caller draws the percentage beside the bar, which is the same relief the
+ * categorical palette leans on its legend for. Bar *length* carries it too,
+ * which a legend cannot.
+ */
+/**
+ * Which band a score falls in: "weak", "developing", "strong", or null when
+ * there is no score at all.
+ *
+ * The one place the thresholds are applied. Everything that varies by band —
+ * fill, ink, tile tone, the confidence tier on a row — reads this rather than
+ * re-testing the numbers, so a bar and the label beside it cannot end up
+ * disagreeing about which band the same score is in.
+ */
+export function masteryBand(value) {
+  // `null` is checked before the cast, not after: `Number(null)` is 0, which
+  // is finite, so an absent mastery would otherwise land in the weakest band —
+  // the loudest "you are failing this" the scale has, for a topic nobody
+  // scored.
+  if (value == null) {
+    return null
+  }
+  const score = Number(value)
+  if (!Number.isFinite(score)) {
+    return null
+  }
+  if (score < MASTERY_BANDS.weak) {
+    return "weak"
+  }
+  if (score < MASTERY_BANDS.developing) {
+    return "developing"
+  }
+  return "strong"
+}
+
+export function masteryColor(theme, value) {
+  switch (masteryBand(value)) {
+    case "weak":
+      return theme.danger
+    case "developing":
+      return seriesColor(theme, 2)
+    case "strong":
+      return theme.success
+    default:
+      return theme.ink.muted
+  }
+}
+
+/**
+ * The same three bands, shaded for type instead of for fill.
+ *
+ * Use this wherever the score is *written* — a headline figure, a badge — and
+ * `masteryColor` wherever it is drawn. Reusing the fill colours on text is the
+ * mistake this exists to prevent: they are chosen to read as areas against a
+ * neutral track, and the orange band in particular does not clear the 3:1
+ * large-text floor on a tinted tile.
+ */
+export function masteryInk(theme, value) {
+  const band = masteryBand(value)
+  return band ? theme.statusInk[band] : theme.ink.secondary
 }
 
 /* ------------------------------------------------------------------- shell */

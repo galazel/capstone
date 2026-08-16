@@ -22,6 +22,9 @@ const TILE_TONES = {
   macaw: "border-rb-macaw/30 bg-rb-macaw-wash text-rb-eel dark:bg-[#12283d] dark:text-rb-snow",
   beetle: "border-rb-beetle/30 bg-rb-beetle-wash text-rb-eel dark:bg-[#2a1f3a] dark:text-rb-snow",
   fox: "border-rb-fox/30 bg-rb-fox-wash text-rb-eel dark:bg-[#3a2a12] dark:text-rb-snow",
+  // Doing well. The counterpart to `cardinal` below, so a tile whose subject is
+  // a score can be filled by how that score is going.
+  leaf: "border-rb-leaf/30 bg-rb-leaf-wash text-rb-eel dark:bg-[#1e2e14] dark:text-rb-snow",
   bee: "border-rb-bee/30 bg-rb-bee-wash text-rb-eel dark:bg-[#12333a] dark:text-rb-snow",
   feather:
     "border-rb-feather/30 bg-rb-feather-wash text-rb-eel dark:bg-[#152744] dark:text-rb-snow",

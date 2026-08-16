@@ -1626,14 +1626,14 @@ export default function LearnerTopicPage() {
       {/* Narrow windows get the outline and the tutor as sheets rather than
           columns — three columns on a laptop leaves nothing for the reading. */}
       <Sheet open={railOpen} onOpenChange={setRailOpen}>
-        <SheetContent side="left" className="w-full p-0 sm:max-w-sm">
+        <SheetContent side="left" className="rebyu-ds w-full p-0 sm:max-w-sm">
           <SheetTitle className="sr-only">Topic outline</SheetTitle>
           {outline}
         </SheetContent>
       </Sheet>
 
       <Sheet open={tutorVisible && !isXl} onOpenChange={(open) => !open && setTutorOpen(false)}>
-        <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-md">
+        <SheetContent side="right" className="rebyu-ds w-full gap-0 p-0 sm:max-w-md">
           <SheetTitle className="sr-only">AI tutor</SheetTitle>
           <LessonAiTutor
             lessonId={activeLessonId}

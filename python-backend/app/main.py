@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
+from app.api.routes import assessments as assessment_routes
 from app.api.routes import certification as certification_routes
 from app.api.routes import question_bank as question_bank_routes
 from app.api.routes import study_aids as study_aid_routes
@@ -82,6 +83,10 @@ def create_app() -> FastAPI:
     # AI generation routes (certification/lesson/question) live under their
     # own /api/v1/ai prefix, separate from the BKT service's /api/v1/bkt
     # prefix baked into api_router.
+    # Written-answer marking. Synchronous and on the critical path: a learner's
+    # submission blocks on it, so unlike generation it is a direct call rather
+    # than a queued run.
+    app.include_router(assessment_routes.router, prefix="/api/v1/ai")
     app.include_router(certification_routes.router, prefix="/api/v1/ai")
     app.include_router(question_bank_routes.router, prefix="/api/v1/ai")
     app.include_router(study_aid_routes.router, prefix="/api/v1/ai")

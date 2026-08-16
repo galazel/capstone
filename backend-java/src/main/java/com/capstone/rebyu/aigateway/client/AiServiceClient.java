@@ -18,6 +18,8 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.io.IOException;
 import java.util.List;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
@@ -127,12 +129,27 @@ public class AiServiceClient {
                     .bodyToMono(AnswerGradingResultDto.class)
                     .block(GRADING_TIMEOUT);
             return Optional.ofNullable(result);
+        } catch (WebClientResponseException e) {
+            /* A 4xx is the service telling us the request itself is wrong --
+               a missing route, a bad payload, a rejected key. Retrying cannot
+               change any of those, and doing so cost three extra round trips
+               and several seconds on every written answer. Raised so the
+               caller stops immediately instead of trying again. */
+            if (e.getStatusCode().is4xxClientError()) {
+                log.error("Answer grading rejected with {} -- not retrying. "
+                                + "Check that POST /assessments/grade-answer exists on the AI service.",
+                        e.getStatusCode(), e);
+                throw new AiServiceException(
+                        "Answer grading endpoint returned " + e.getStatusCode(), e);
+            }
+            log.warn("Answer grading failed with {} -- retryable", e.getStatusCode(), e);
+            return Optional.empty();
         } catch (Exception e) {
-            /* Logged with its type, not just its message. `getMessage()` alone
-               is empty or useless for most WebClient failures -- a timeout, a
-               connection refusal and a 500 from the AI service all arrived here
-               looking identical, which is why an answer being scored zero could
-               not be told apart from the service being down. */
+            /* Everything else -- timeouts, connection refusals, 5xx -- is worth
+               another try. Logged with its type, not just its message:
+               `getMessage()` alone is empty or useless for most WebClient
+               failures, which is why a slow service and a dead one arrived here
+               looking identical. */
             log.warn("Answer grading request failed [{}]: {}",
                     e.getClass().getSimpleName(), e.getMessage(), e);
             return Optional.empty();

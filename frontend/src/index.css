@@ -1433,6 +1433,97 @@ body.netacad-overlay-theme {
     background: var(--muted);
 }
 
+/* --- Chat surfaces --------------------------------------------------------- */
+/* The AI tutor and every message list were the last conversational surfaces
+   still on 12px corners with hairline borders, which read as a chat widget
+   bolted onto the product rather than part of it. Tile radius and the system's
+   2px border bring them in line with cards and inputs. No lip: a speech bubble
+   is a surface, not a key, and giving it press depth would imply it is
+   clickable.
+
+   Caveat if the `ghost` Bubble variant ever gets used (nothing uses it today):
+   it asks for square corners via a `*:` utility on the parent, and this rule is
+   unlayered, so it would win and re-round them. Give that variant an explicit
+   `rounded-none` on the content itself at the call site. */
+:root :is([data-slot="bubble-content"], [data-slot="message-content"]) {
+    border-radius: var(--radius-rb-tile);
+    border-width: 2px;
+}
+
+/* A bubble that really is interactive keeps the travel, so the affordance
+   stays honest. */
+:root [data-slot="bubble-content"]:is(button, a):active {
+    transform: translateY(1px);
+}
+
+:root [data-slot="message-avatar"] {
+    border: 2px solid var(--border);
+}
+
+/* --- Sidebar navigation ---------------------------------------------------- */
+/* Nav items are pressed more than any other control in the product, so they
+   take the travel. Radius only steps up to the tile — these sit in a narrow
+   rail where a full pill would waste the horizontal space. */
+:root [data-slot="sidebar-menu-button"] {
+    border-radius: 12px;
+    font-weight: 600;
+    transition:
+        transform var(--rb-press),
+        background-color 0.15s ease-out;
+}
+:root [data-slot="sidebar-menu-button"]:active:not(:disabled) {
+    transform: translateY(1px);
+}
+/* The current page is stated in weight, not just a wash — at rail width the
+   background tint alone is easy to miss. */
+:root [data-slot="sidebar-menu-button"][data-active="true"] {
+    font-weight: 800;
+}
+:root [data-slot="sidebar-menu-button"]:focus-visible {
+    outline: 3px solid var(--rb-focus);
+    outline-offset: -2px;
+}
+
+:root :is([data-slot="sidebar-menu-sub-button"], [data-slot="sidebar-group-action"], [data-slot="sidebar-menu-action"]) {
+    border-radius: 10px;
+}
+
+/* --- Scroll areas ---------------------------------------------------------- */
+/* Only applies where a ScrollArea is used deliberately; the bars inside modals
+   stay hidden by the rule at the foot of this file. */
+:root [data-slot="scroll-area-thumb"] {
+    background: var(--color-rb-hare);
+    border-radius: var(--radius-rb-pill);
+}
+:root [data-slot="scroll-area-thumb"]:hover {
+    background: var(--color-rb-wolf);
+}
+
+/* --- Field text ------------------------------------------------------------ */
+/* `field-label` is already handled above with the other labels. These are its
+   two supporting lines: help text sits back, the error leans in. */
+:root [data-slot="field-description"] {
+    color: var(--muted-foreground);
+}
+:root [data-slot="field-error"] {
+    color: var(--destructive);
+    font-weight: 600;
+}
+
+/* --- Avatars --------------------------------------------------------------- */
+/* Initials are display type in this system — they are a graphic element, not a
+   sentence. */
+:root [data-slot="avatar-fallback"] {
+    background: var(--muted);
+    font-weight: 800;
+    letter-spacing: 0.01em;
+}
+
+/* --- Collapsibles ---------------------------------------------------------- */
+:root [data-slot="collapsible-trigger"]:active:not(:disabled) {
+    transform: translateY(1px);
+}
+
 /* --- Auth shell ------------------------------------------------------------ */
 /* Overrides the compact defaults declared near the top of this file: auth is a
    low-density, high-intent surface, so it takes the full tactile sizing —
