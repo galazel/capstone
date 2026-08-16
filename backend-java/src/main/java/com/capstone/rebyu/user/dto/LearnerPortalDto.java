@@ -5,6 +5,7 @@ import com.capstone.rebyu.enrollment.dto.LearnerCertificationDto;
 import com.capstone.rebyu.enrollment.dto.OrganizationCertificationLearnerDto;
 import com.capstone.rebyu.organization.dto.OrganizationCertificateDto;
 import com.capstone.rebyu.progress.dto.ActivityLogDto;
+import com.capstone.rebyu.progress.dto.LearnerAchievementViewDto;
 import com.capstone.rebyu.progress.dto.LearnerCompletedLessonDto;
 
 import java.math.BigDecimal;
@@ -27,6 +28,9 @@ public record LearnerPortalDto(
         List<ExamResultDto> examResults,
         List<OrganizationCertificationLearnerDto> orgCertLearners,
         List<OrganizationCertificateDto> orgCertificates,
+        // The whole achievement catalog with this learner's earned ones flagged,
+        // so the portal can show both what they have and what is left to chase.
+        List<LearnerAchievementViewDto> achievements,
         // Gamification
         Long totalXp,
         BigDecimal coinBalance,
@@ -45,6 +49,6 @@ public record LearnerPortalDto(
             List<OrganizationCertificationLearnerDto> orgCertLearners,
             List<OrganizationCertificateDto> orgCertificates) {
         this(learner, user, learnerCertifications, completedLessons, activityLogs,
-             examResults, orgCertLearners, orgCertificates, 0L, BigDecimal.ZERO, 0L, Map.of());
+             examResults, orgCertLearners, orgCertificates, List.of(), 0L, BigDecimal.ZERO, 0L, Map.of());
     }
 }

@@ -149,7 +149,7 @@ export function NotificationBell({
               const Icon = resolveIcon(item)
               return (
                 <div
-                  key={item.id}
+                  key={`${item.source ?? "inbox"}-${item.id}`}
                   className={`group flex items-start gap-1 rounded-lg transition-colors hover:bg-accent ${
                     item.read === false ? "bg-primary/5" : ""
                   }`}
@@ -181,7 +181,10 @@ export function NotificationBell({
                       onClick={(event) => {
                         event.preventDefault()
                         event.stopPropagation()
-                        onDelete(item.id)
+                        // The whole item, not just the id: ids are only unique
+                        // within a feed, so the caller needs `source` to know
+                        // which endpoint the row belongs to.
+                        onDelete(item)
                       }}
                       aria-label={`Delete notification: ${item.title}`}
                       className="mr-1 mt-3 rounded-md p-1.5 text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"

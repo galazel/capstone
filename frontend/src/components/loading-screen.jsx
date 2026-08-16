@@ -32,6 +32,22 @@ const MESSAGES = [
   { tag: "challenge", text: "Loading your next challenge...", tone: "fox" },
 ]
 
+/**
+ * Copy for the wait after submitting an assessment.
+ *
+ * A different wait deserves different words. Submitting runs real work — string
+ * and structural marking, an AI pass over written answers, Judge0 over any code
+ * — and "Loading your next challenge..." during it would describe something
+ * that is not happening. These name the actual stages, in the order the server
+ * performs them, so the screen reads as progress rather than as a stall.
+ */
+export const GRADING_MESSAGES = [
+  { tag: "answers", text: "Checking your answers...", tone: "macaw" },
+  { tag: "written", text: "Marking your written responses...", tone: "beetle" },
+  { tag: "code", text: "Running your code against the tests...", tone: "fox" },
+  { tag: "score", text: "Totalling your score...", tone: "bee" },
+]
+
 const TAG_TONE = {
   macaw: "bg-rb-macaw-wash text-rb-macaw-lip",
   bee: "bg-rb-bee-wash text-rb-bee-ink",
@@ -163,18 +179,30 @@ function Road({ still }) {
   )
 }
 
-export function LoadingScreen() {
+/**
+ * @param messages  Optional replacement for the boot copy — pass
+ *                  `GRADING_MESSAGES` when the wait is a submission being
+ *                  marked. The figure is deliberately unchanged: it is the
+ *                  product's shape for "something is in progress", and swapping
+ *                  it per wait would make each one look like a different app.
+ */
+export function LoadingScreen({ messages = MESSAGES }) {
   const [messageIndex, setMessageIndex] = useState(0)
   const reduced = useReducedMotion()
-  const current = MESSAGES[messageIndex]
+  // Guarded against an empty array, and modulo'd rather than indexed directly:
+  // the interval below keeps counting against whatever list was current when it
+  // was scheduled, so a shorter list arriving mid-cycle must not read past its
+  // own end and blank the line.
+  const list = messages?.length ? messages : MESSAGES
+  const current = list[messageIndex % list.length]
 
   useEffect(() => {
     if (reduced) return undefined
     const id = setInterval(() => {
-      setMessageIndex((current) => (current + 1) % MESSAGES.length)
+      setMessageIndex((current) => (current + 1) % list.length)
     }, 1900)
     return () => clearInterval(id)
-  }, [reduced])
+  }, [reduced, list.length])
 
   return (
     <div className="rebyu-ds flex min-h-svh flex-col items-center justify-center bg-rb-snow px-6">

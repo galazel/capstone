@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react"
 import { useNavigate, useOutletContext } from "react-router-dom"
+import { useStudyPlanGate } from "@/components/learner/use-study-plan-gate.jsx"
+import { isDiagnosticCompleted } from "./learner-learning-page.jsx"
 import { Award, GraduationCap } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
@@ -167,6 +169,10 @@ function CategoryFilter({
 export default function LearnerCertificationsPage() {
   const navigate = useNavigate()
   const outletContext = useOutletContext()
+  // The same plan gate My Learning uses. Without it, opening an enrolled
+  // certification from this page went straight into the curriculum and the
+  // study plan was never offered.
+  const { openCertification: openWithStudyPlan, studyPlanDialog } = useStudyPlanGate()
 
   const data = outletContext?.data ?? {}
   const searchValue = String(outletContext?.searchValue ?? "")
@@ -308,7 +314,11 @@ export default function LearnerCertificationsPage() {
     const certificationId = getCertificationId(certification)
 
     if (enrolled) {
-      navigate(`/learner/learning/${certificationId}`)
+      // Offers the study plan first when there isn't one, exactly as My
+      // Learning does; falls through to the curriculum otherwise.
+      openWithStudyPlan(certification, {
+        diagnosticCompleted: isDiagnosticCompleted(certification, data),
+      })
       return
     }
 
@@ -415,6 +425,9 @@ export default function LearnerCertificationsPage() {
             )}
           </main>
         </div>
+
+        {/* The study-plan generator, rendered by the shared gate hook. */}
+        {studyPlanDialog}
       </div>
   )
 }

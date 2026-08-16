@@ -435,147 +435,6 @@ function LandingNavbar() {
   );
 }
 
-/* --------------------------------------------------- hero assessment gallery */
-
-/**
- * The hero visual: photographs of the assessment workspace.
- *
- * These are screenshots of the real attempt page, not a drawing of it — shot
- * from `/__preview/attempt` by `scripts/shoot-attempt-screenshots.mjs`, which
- * renders the genuine `LearnerAssessmentAttemptPage` against fixture answers.
- * The hero is the one block on the site that claims what sitting an exam looks
- * like, so it should not be able to drift from the product. Re-run that script
- * rather than editing anything here when the attempt page changes.
- *
- * No type label is drawn over the frame. Every shot has real UI in every corner
- * — the exam header, the navigator, the problem column — so any overlay covers
- * something the screenshot exists to show, and each shot already names its own
- * type in the item's own badge. `label` survives for the dot controls' accessible
- * names.
- */
-const WORKSPACE_SHOTS = [
-  {
-    id: "mcq",
-    label: "Multiple Choice",
-    src: "/screenshots/attempt-multiple-choice.png",
-    alt: "The Rebyu attempt page on a multiple choice item: the question and four tactile options in the centre, item navigation on the right showing which items are answered and flagged, and the exam clock in the header.",
-  },
-  {
-    id: "short-answer",
-    label: "Short Answer",
-    src: "/screenshots/attempt-short-answer.png",
-    alt: "The attempt page on a short answer item: a single typed answer field beneath the question, with the same item navigation and clock.",
-  },
-  {
-    id: "descriptive",
-    label: "Descriptive",
-    src: "/screenshots/attempt-descriptive.png",
-    alt: "The attempt page on a descriptive item: a long written answer in progress with a live character count, marked against a rubric.",
-  },
-  {
-    id: "programming",
-    label: "Programming",
-    src: "/screenshots/attempt-programming.png",
-    alt: "The attempt page on a programming item: three columns — the problem, its constraints and its parts on the left, a syntax-highlighted code editor with Run and Check in the centre, and item navigation over the test cases on the right.",
-  },
-  {
-    id: "diagram",
-    label: "Diagram",
-    src: "/screenshots/attempt-diagram.png",
-    alt: "The attempt page on a diagram item: an entity relationship diagram part-built on the canvas, with the problem on the left and the scoring rubric beside item navigation on the right.",
-  },
-]
-
-/* 16:10, the aspect the screenshots are shot at. Reserved with `aspect-*` so
-   the fold does not jump as each image decodes. */
-function AssessmentGallery() {
-  const [index, setIndex] = useState(0)
-  const [reducedMotion, setReducedMotion] = useState(false)
-
-  useEffect(() => {
-    setReducedMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches)
-  }, [])
-
-  useEffect(() => {
-    if (reducedMotion) return undefined
-    const timer = window.setTimeout(
-      () => setIndex((n) => (n + 1) % WORKSPACE_SHOTS.length),
-      5600
-    )
-    return () => window.clearTimeout(timer)
-  }, [index, reducedMotion])
-
-  return (
-    <figure className="relative mx-auto w-full">
-      <div className="relative overflow-hidden rounded-rb-card border-2 border-rb-swan bg-rb-snow shadow-[0_6px_0_var(--color-rb-swan)]">
-        <div className="relative aspect-[16/10] w-full">
-          {/* All five stay mounted and cross-fade: swapping one <img> src
-              flashes the frame empty for a beat on every cycle. That is also
-              why this is not an AnimatePresence — there is nothing to exit,
-              every frame is always in the tree, and only opacity and a hair of
-              scale move. The scale is what stops the swap reading as a slide
-              deck: the outgoing shot settles back as the incoming one arrives.
-
-              `initial={false}` because these values are state, not an entrance.
-              Animated in from the defaults, all five paint at full opacity
-              until the first frame lands — and the fold would open on five
-              screenshots piled on top of each other. */}
-          {WORKSPACE_SHOTS.map((shot, shotIndex) => (
-            <motion.img
-              key={shot.id}
-              src={shot.src}
-              alt={shot.alt}
-              width={2880}
-              height={1800}
-              loading={shotIndex === 0 ? "eager" : "lazy"}
-              decoding="async"
-              className="absolute inset-0 size-full object-cover object-top"
-              initial={false}
-              animate={shotIndex === index ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 1.03 }}
-              transition={{ duration: 0.7, ease: EASE }}
-            />
-          ))}
-        </div>
-
-      </div>
-
-      {/* Position sits under the frame, where a carousel's controls are looked
-          for. The type itself is not named — each shot says what it is. */}
-      <div className="mt-5 flex items-center justify-center gap-2">
-        {WORKSPACE_SHOTS.map((shot, shotIndex) => (
-          <button
-            key={shot.id}
-            type="button"
-            onClick={() => setIndex(shotIndex)}
-            aria-label={`Show the ${shot.label} question type`}
-            aria-current={shotIndex === index ? "true" : undefined}
-            className="h-2.5 shrink-0"
-          >
-            {/* Width is animated on the dot itself rather than sliding one
-                shared `layoutId` pill between them: the active dot is over
-                three times wider than the rest, so a free-floating pill would
-                sit on top of its neighbours. Springing the width keeps the
-                row's spacing honest and still lands with a little give. */}
-            <motion.span
-              className={`block h-2.5 rounded-rb-pill ${
-                shotIndex === index ? "bg-rb-eel" : "bg-rb-swan hover:bg-rb-hare"
-              }`}
-              initial={false}
-              animate={{ width: shotIndex === index ? 32 : 10 }}
-              transition={{ type: "spring", stiffness: 420, damping: 34, mass: 0.7 }}
-            />
-          </button>
-        ))}
-      </div>
-
-      <figcaption className="mt-4 text-center text-sm font-semibold text-rb-wolf">
-        One workspace, five question types — multiple choice through code and
-        diagrams. These are screenshots of the real thing.
-      </figcaption>
-    </figure>
-  )
-}
-
 function HeroSection() {
   const sectionRef = useRef(null);
   /* The wash blob drifts up against the scroll. It is the one element in the
@@ -585,22 +444,107 @@ function HeroSection() {
 
   return (
     <section ref={sectionRef} className="relative overflow-hidden bg-rb-snow">
-      <motion.div
-        aria-hidden="true"
-        style={{ y: blobY }}
-        className="pointer-events-none absolute -right-40 -top-52 hidden size-[720px] rounded-full bg-rb-feather-wash lg:block"
-      />
+      {/* --- decoration -----------------------------------------------------
+          Everything in this block is ornament: geometry and two product
+          fragments that frame the claim without competing with it. All of it is
+          `aria-hidden` and `pointer-events-none`.
 
-      <div className="relative mx-auto w-full max-w-[1280px] px-5 pb-12 pt-16 lg:px-8 lg:pb-14 lg:pt-20">
+          It carries more weight now than it did. With the screenshot gallery
+          gone the fold is copy and nothing else, and a centred column of text on
+          an empty white page reads as a page that failed to load its image.
+          These are what give the fold its width.
+
+          `xl:` and not `lg:`: measured at 1024px the headline's own glyphs run
+          170px–855px and the lead sits at 224–800, leaving each shoulder too
+          narrow for a 224px card — they landed on the words. Below 1280px the
+          fold is not wide enough to carry decoration, so it does not try, and
+          the centred copy stands on its own. */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden xl:block">
+        {/* The parallax survives, moved onto the ring. It is still the only
+            thing in the fold carrying no information, which is the whole test
+            for whether something may drift against the scroll. */}
+        <motion.div
+          style={{ y: blobY }}
+          className="absolute -bottom-20 left-[6%] size-64 rounded-full border-[34px] border-rb-feather/15"
+        />
+        <div className="absolute right-[-110px] top-32 size-72 rounded-full bg-rb-macaw-wash/70" />
+        <div className="absolute left-[-40px] top-20 size-28 rounded-br-[999px] bg-rb-feather/10" />
+        <div className="absolute bottom-16 right-[12%] size-16 rounded-tl-[999px] bg-rb-fox/15" />
+
+        {/* Two product fragments, not whole cards: a corner of the mastery
+            panel and a corner of the streak tile, cropped the way a screenshot
+            pinned to a moodboard would be. Whole cards here invite reading, and
+            anything readable beside a headline steals from it. */}
+        {/* Sat beside the headline until measurement showed it overlapping the
+            glyphs by 71px. Dropped below it instead: at this height the copy
+            beside them is the lead and the buttons, both of which are far
+            narrower than the heading, so the shoulders are genuinely clear. */}
+        {/* Anchored to the section's midline rather than to a fixed offset from
+            its top. The copy is vertically centred, so as the fold's min-height
+            changes the copy moves but a `top-[21rem]` card would not — the two
+            would drift apart at every viewport height. Offsetting from `top-1/2`
+            keeps the card beside the same words at any height.
+
+            Which words matters: the heading's leftmost glyph sits at x=240 and
+            this card's box reaches x=263 once the -6° rotation is applied —
+            rotation widens the bounding box, which is the easy thing to miss.
+            The offset drops it past the heading so the lead and the buttons are
+            what sit beside it, both far narrower. */}
+        <div className="absolute left-8 top-1/2 mt-24 w-56 -translate-y-1/2 rotate-[-6deg] rounded-rb-card border-2 border-rb-swan bg-rb-snow p-4 shadow-[0_6px_0_var(--color-rb-swan)] 2xl:left-20">
+          <span className="inline-flex items-center gap-1.5 rounded-rb-pill bg-rb-feather px-2.5 py-1 text-[0.6875rem] font-extrabold lowercase text-white">
+            <Target className="size-3" />
+            weakest first
+          </span>
+          <div className="mt-3 space-y-2.5">
+            {[["Normalization", 31, "bg-rb-cardinal"], ["Subnetting", 38, "bg-rb-fox"]].map(
+              ([name, value, bar]) => (
+                <div key={name}>
+                  <div className="flex items-center justify-between text-[0.6875rem] font-bold text-rb-eel">
+                    <span>{name}</span>
+                    <span>{value}%</span>
+                  </div>
+                  <div className="mt-1 h-1.5 w-full rounded-full bg-rb-swan">
+                    <div className={`h-full rounded-full ${bar}`} style={{ width: `${value}%` }} />
+                  </div>
+                </div>
+              ),
+            )}
+          </div>
+        </div>
+
+        <div className="absolute right-10 top-1/2 mt-10 w-44 -translate-y-1/2 rotate-[5deg] rounded-rb-card border-2 border-rb-swan bg-rb-snow p-4 shadow-[0_6px_0_var(--color-rb-swan)] 2xl:right-24">
+          <div className="flex items-center gap-2.5">
+            <span className="grid size-9 place-items-center rounded-xl bg-rb-fox-wash text-rb-fox-lip">
+              <Trophy className="size-5" />
+            </span>
+            <div>
+              <div className="font-rb-display text-lg font-extrabold leading-none text-rb-eel">
+                12
+              </div>
+              <div className="text-[0.625rem] font-bold text-rb-wolf">day streak</div>
+            </div>
+          </div>
+          <div className="mt-3 flex gap-1">
+            {[1, 1, 1, 1, 1, 0, 0].map((done, i) => (
+              <span
+                key={i}
+                className={`h-5 flex-1 rounded-sm ${done ? "bg-rb-feather" : "bg-rb-swan"}`}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* The fold is now copy alone, so its height has to be stated rather than
+          inherited from a screenshot. `min-h` with the copy centred in it gives
+          the hero the presence the gallery used to supply, and `70svh` — small
+          viewport height — because `vh` on mobile measures the viewport with the
+          browser chrome retracted, which pushes the buttons under the address
+          bar on first paint. */}
+      <div className="relative mx-auto flex w-full max-w-[1280px] flex-col justify-center px-5 pb-24 pt-20 min-h-[76svh] lg:min-h-[88svh] lg:px-8 lg:pb-32 lg:pt-28">
         {/* Centred: the hero is the one block on the site with nothing beside
-            it, and the workspace demo below it is centred too — left-aligning
-            the copy over a centred visual pulled the whole fold off axis.
-            `!text-center` because `.rb-display` sets left alignment as a system
-            rule, and an unlayered rule outranks a Tailwind utility. */}
-        {/* 4xl, not 3xl: at the display-xl size "study what you don't know."
-            is ~830px, so a 768px block broke it after "don't" and the heading
-            came out three lines. The width is set by the heading; the paragraph
-            keeps its own narrower measure. */}
+            it. `!text-center` because `.rb-display` sets left alignment as a
+            system rule, and an unlayered rule outranks a Tailwind utility. */}
         {/* `animate`, not `whileInView`: the fold is on screen before any
             observer could fire, and a hero that waits to be scrolled into view
             is a hero that opens blank. The stagger is what makes the sequence
@@ -612,23 +556,44 @@ function HeroSection() {
           animate="show"
           variants={staggerParent(0.09, 0.1)}
         >
-          <motion.div variants={fadeUp}>
-            <Chip tone="feather">
-              <Sparkles className="size-4" />
-              topcit · it passport · fe exam
-            </Chip>
-          </motion.div>
+          {/* The audience, named before the claim — a fold earns its size by
+              telling you inside one line whether it is addressed to you, and
+              "which three exams" is that line here. Set as plain tracked-out
+              capitals rather than the pill this used to be: a filled chip and a
+              headline this large are two loud things stacked, and the chip is
+              the one that loses. */}
+          <motion.p
+            variants={fadeUp}
+            className="text-[0.6875rem] font-extrabold uppercase tracking-[0.2em] text-rb-wolf sm:text-xs"
+          >
+            for topcit, it passport &amp; fe exam candidates
+          </motion.p>
 
-          <motion.h1 variants={fadeUp} className="rb-display rb-display-xl mt-6 !text-center">
-            study what you don't know.
-            <br />
-            skip what you do.
+          {/* The heading names the outcome, the lead names the method. Said the
+              other way round — mechanism first — the fold spends its largest
+              type explaining how a study tool works to someone who has not yet
+              been told what it gets them.
+
+              Sized here rather than by `rb-display-xl`: this is the one heading
+              on the site that has nothing above it and no neighbour, and the
+              system's largest step is tuned for headings that do. Tracking is
+              pulled to -0.04em because letterforms this big carry visibly more
+              air between them than the same face at 3rem. */}
+          <motion.h1
+            variants={fadeUp}
+            /* `!` on tracking and leading for the same reason as `!text-center`:
+               `.rebyu-ds .rb-display` is unlayered, and an unlayered rule
+               outranks every Tailwind layer no matter how specific the utility
+               looks. Without the important modifier this silently kept the
+               system's -0.02em. */
+            className="rb-display mt-5 !text-center text-[clamp(2.75rem,7.5vw,5.5rem)] !leading-[0.95] !tracking-[-0.04em]"
+          >
+            pass it the first time.
           </motion.h1>
 
-          <motion.p variants={fadeUp} className="rb-body-lg mx-auto mt-6 max-w-xl">
-            Rebyu measures your mastery of every topic as you answer, then puts the weakest ones in
-            front of you first. No more re-reading what you already know, and no more finding out
-            what you missed on exam day.
+          <motion.p variants={fadeUp} className="rb-body-lg mx-auto mt-6 max-w-xl text-balance">
+            Rebyu finds the topics you are weakest at and builds your study plan around them — so
+            nothing on exam day is a surprise.
           </motion.p>
 
           <motion.div
@@ -651,23 +616,10 @@ function HeroSection() {
             className="mt-6 flex items-center justify-center gap-2 text-sm font-semibold text-rb-wolf"
           >
             <span className="size-2 rounded-full bg-rb-mask" aria-hidden="true" />
-            Every lesson is free. Upgrade only for mock exams and analytics.
+            Every lesson is free. Pay only for mock exams and analytics.
           </motion.p>
         </motion.div>
-
       </div>
-
-      {/* Wider than the copy above it, and outside that container to get there:
-          the screenshots are dense product UI, and at the text column's measure
-          the code editor and the item navigator stop being legible. */}
-      <motion.div
-        className="relative mx-auto w-full max-w-[1560px] px-5 pb-16 lg:px-8 lg:pb-20"
-        initial={{ opacity: 0, y: 32, scale: 0.985 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.7, delay: 0.55, ease: EASE }}
-      >
-        <AssessmentGallery />
-      </motion.div>
     </section>
   );
 }

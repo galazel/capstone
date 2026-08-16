@@ -44,6 +44,15 @@ export function markLessonComplete(data) {
     data,
   })
 }
+/**
+ * The signed-in learner's badge wall: the whole catalog, with the earned ones
+ * flagged. Read-only by design -- achievements are decided and written
+ * server-side as they are earned (see AchievementAwardService), so there is no
+ * "award me this" call from the browser to make.
+ */
+export function getMyAchievements() {
+  return base("learner-achievements/me")
+}
 
 // Section-level lesson-read progress for the signed-in learner (learnerId is
 // resolved server-side from the JWT, so it survives a refresh).
@@ -359,6 +368,10 @@ export async function getLearnerPortalData() {
     // Server-authoritative gamification balances, passed straight through from
     // `learners/me/portal`. Dropping them here is why the header's XP counter
     // read 0 no matter how much XP the ledger had actually awarded.
+    // The full achievement catalog with this learner's earned ones flagged.
+    // Server-decided: the browser only ever reads it (and diffs it to notice a
+    // new one), never writes it.
+    achievements: asArray(portal.achievements),
     totalXp: Number(portal.totalXp) || 0,
     coinBalance: Number(portal.coinBalance) || 0,
     aiCreditsRemaining: Number(portal.aiCreditsRemaining) || 0,

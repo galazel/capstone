@@ -94,6 +94,7 @@ export function PriorityTag({ tag, size = 'md', showDescription = false }) {
 // theme (see styles/rebyu-ds.css @theme) rather than Tailwind class names,
 // since an inline SVG `fill` attribute can't take a `fill-rb-*` utility class.
 const SEAL_CONFIG = {
+  // The BKT priority tags.
   CRITICAL_PRIORITY: { fill: "var(--color-rb-cardinal)", short: "critical" },
   HIGH_PRIORITY: { fill: "var(--color-rb-fox)", short: "high" },
   MEDIUM_PRIORITY: { fill: "var(--color-rb-bee)", short: "medium" },
@@ -102,6 +103,15 @@ const SEAL_CONFIG = {
   ON_TRACK: { fill: "var(--color-rb-macaw)", short: "on track" },
   NOT_ENOUGH_DATA: { fill: "var(--color-rb-hare)", short: "no data" },
   NEEDS_REASSESSMENT: { fill: "var(--color-rb-beetle)", short: "reassess" },
+
+  /* The tags the progress-analytics recommender mints itself, which are not
+     BKT priority tags and were missing here. `PrioritySeal` renders nothing for
+     a tag it does not know, so the *most urgent* rows on the recommended tile —
+     the ones the backend labels HIGHEST_PRIORITY — were the only ones arriving
+     with no seal, while the tamer HIGH/MEDIUM rows below them got one. */
+  HIGHEST_PRIORITY: { fill: "var(--color-rb-cardinal)", short: "highest" },
+  REPEATED_MISTAKE: { fill: "var(--color-rb-fox)", short: "missed" },
+  UNASSESSED: { fill: "var(--color-rb-hare)", short: "new" },
 }
 
 /** A 20-point zigzag ring, computed once at module load. */

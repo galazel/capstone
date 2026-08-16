@@ -202,6 +202,11 @@ function axisProps(theme) {
 /**
  * Change over time. `series` is [{ key, name }] — colour comes from position,
  * so filtering the list out from under it never repaints the survivors.
+ *
+ * @param showLegend  set false when the caller already names each series
+ *   beside the chart. This draws two legends when left on -- recharts' own
+ *   above the axis and the kit's footer below it -- which is fine when the
+ *   chart stands alone and is pure duplication when it does not.
  */
 export function TrendLineChart({
   data,
@@ -212,6 +217,7 @@ export function TrendLineChart({
   domain = [0, 100],
   ticks,
   legendNote,
+  showLegend = true,
 }) {
   const theme = useChartTheme()
   if (!data?.length) return <ChartEmpty />
@@ -230,7 +236,7 @@ export function TrendLineChart({
               content={<TooltipCard suffix={unit} />}
               cursor={{ stroke: theme.grid, strokeWidth: 1 }}
             />
-            {series.length > 1 ? (
+            {showLegend && series.length > 1 ? (
               <Legend
                 wrapperStyle={{ fontSize: 12, fontWeight: 700, color: theme.ink.secondary }}
                 iconType="plainline"
@@ -256,14 +262,16 @@ export function TrendLineChart({
         </ResponsiveContainer>
       </div>
 
-      <ChartLegend
-        items={series.map((entry, index) => ({
-          name: entry.name,
-          value: `${last?.[entry.key] ?? "—"}${unit}`,
-          color: seriesColor(theme, index),
-        }))}
-        note={legendNote ?? "Latest value in the period"}
-      />
+      {showLegend ? (
+        <ChartLegend
+          items={series.map((entry, index) => ({
+            name: entry.name,
+            value: `${last?.[entry.key] ?? "—"}${unit}`,
+            color: seriesColor(theme, index),
+          }))}
+          note={legendNote ?? "Latest value in the period"}
+        />
+      ) : null}
     </figure>
   )
 }

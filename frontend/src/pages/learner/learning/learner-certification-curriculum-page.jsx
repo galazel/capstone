@@ -5,6 +5,7 @@ import {
   ArrowRight,
   BookOpen,
   Brain,
+  CalendarDays,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -42,6 +43,7 @@ import { PRIORITY_CONFIG, PriorityTag } from "@/components/learner/priority-tag.
 import { ASSESSMENT_MAX_XP, LESSON_COMPLETION_XP } from "@/lib/xp.js"
 import { getExams, getExamTypes } from "@/services/assessmentService.js"
 import { getProgressAnalytics } from "@/services/learnerAnalyticsService.js"
+import { STUDY_PLAN_QUERY_KEY, getActiveStudyPlan } from "@/services/studyPlanService.js"
 import { buildCurriculum, hasSatDiagnostic } from "./curriculum-model.js"
 
 /**
@@ -705,15 +707,16 @@ function MockExamCard({ exam, locked, onLocked, takenExamIds }) {
 }
 
 /**
- * Certification progress as a ring in the band's bottom-right corner, echoing
- * the AI tutor's launcher on the topic page — a round white-on-brand object in
- * the bottom-right of a learning surface reads as the same kind of thing.
+ * Certification progress as a ring beside the title.
  *
- * Anchored to the content column rather than the band, so it lines up with the
- * right edge of the title and chips instead of the window.
+ * In the band's flex row rather than absolutely pinned to its corner. Pinned,
+ * it floated free of everything it described — it drifted with the height of
+ * the copy, sat level with whichever row happened to be last, and left a
+ * corner of the band that nothing else could use. In flow it reads as the
+ * band's second column: the certification on the left, how far through it you
+ * are on the right.
  *
- * Large screens only: at this size it would land on top of the meta chips on a
- * narrow band, so the inline pill stays as the small-screen form.
+ * Large screens only; the inline pill below is the small-screen form.
  */
 function HeroProgressRing({ value }) {
   const pct = Math.max(0, Math.min(100, Number(value) || 0))
@@ -722,7 +725,7 @@ function HeroProgressRing({ value }) {
 
   return (
     <div
-      className="pointer-events-none absolute bottom-0 right-0 hidden size-32 place-items-center lg:grid"
+      className="pointer-events-none relative hidden size-28 shrink-0 place-items-center lg:grid"
       role="img"
       aria-label={`${pct}% of this certification complete`}
     >
@@ -762,6 +765,63 @@ function HeroProgressRing({ value }) {
 }
 
 /* --------------------------------------------------------------------- page */
+
+/**
+ * The curriculum while it loads.
+ *
+ * This used to be `LearnerEmptyState` -- an empty state, borrowed to mean
+ * "waiting". It said "Loading curriculum" inside the component the page uses
+ * for "there is nothing here", so the screen a learner met while their course
+ * was fetching was the same one they would meet if the course did not exist:
+ * one icon, centred in an otherwise blank box, with the page's real shape
+ * nowhere in sight.
+ *
+ * This draws the shape instead -- the header band, then unit cards -- so the
+ * layout is already there and only the content arrives. Nothing pretends to be
+ * data: no titles, no counts, just the blocks they will occupy.
+ */
+function CurriculumSkeleton() {
+  return (
+    <div className="space-y-6" role="status" aria-label="Loading curriculum">
+      {/* The ink band the page opens on. */}
+      <div className="rounded-rb-card bg-rb-eel/10 p-6 sm:p-8">
+        <div className="h-3 w-28 animate-pulse rounded bg-rb-eel/20" />
+        <div className="mt-4 h-8 w-2/3 animate-pulse rounded-lg bg-rb-eel/20 sm:h-10" />
+        <div className="mt-3 h-3 w-1/2 animate-pulse rounded bg-rb-eel/15" />
+
+        <div className="mt-6 flex gap-3">
+          <div className="h-10 w-36 animate-pulse rounded-rb-pill bg-rb-eel/20" />
+          <div className="h-10 w-28 animate-pulse rounded-rb-pill bg-rb-eel/15" />
+        </div>
+      </div>
+
+      {/* Two unit cards. Two rather than one so the page reads as a list, and
+          not so many that the skeleton claims a length the course may not have. */}
+      {[0, 1].map((unit) => (
+        <div
+          key={unit}
+          className="grid overflow-hidden rounded-rb-card border-2 border-rb-swan bg-rb-snow lg:grid-cols-[260px_1fr]"
+        >
+          <div className="space-y-3 bg-rb-polar p-6">
+            <div className="h-9 w-9 animate-pulse rounded-xl bg-rb-swan" />
+            <div className="h-5 w-32 animate-pulse rounded bg-rb-swan" />
+            <div className="h-3 w-24 animate-pulse rounded bg-rb-swan" />
+          </div>
+
+          <div className="space-y-3 p-6">
+            {[0, 1, 2].map((row) => (
+              <div key={row} className="flex items-center gap-3">
+                <div className="size-8 shrink-0 animate-pulse rounded-full bg-rb-swan" />
+                <div className="h-4 flex-1 animate-pulse rounded bg-rb-swan" />
+                <div className="h-4 w-16 shrink-0 animate-pulse rounded bg-rb-swan" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export default function LearnerCertificationCurriculumPage() {
   const navigate = useNavigate()
@@ -883,6 +943,18 @@ export default function LearnerCertificationCurriculumPage() {
   const masteryReady =
     !diagnosticDone || skippedMasteryWait || masteryQuery.data?.bktAvailable === true
 
+  // --------------------------------------------------------------- study plan
+  // Read-only here. The plan is built on My Learning, at the click that starts
+  // the studying; this page only needs to know whether one exists so it can
+  // offer the way through to the calendar.
+  const planQuery = useQuery({
+    queryKey: [STUDY_PLAN_QUERY_KEY, certificationId],
+    queryFn: () => getActiveStudyPlan(certificationId),
+    enabled: Boolean(certificationId) && diagnosticDone,
+    staleTime: 30_000,
+  })
+  const hasPlan = Boolean(planQuery.data?.planId)
+
   if (!certification) {
     return (
       <LearnerEmptyState
@@ -901,13 +973,7 @@ export default function LearnerCertificationCurriculumPage() {
   // The exam list decides what is locked and what a unit contains, so the page
   // waits for it rather than flashing an unlocked curriculum with no quizzes.
   if (examsQuery.isLoading || examTypesQuery.isLoading || !curriculum) {
-    return (
-      <LearnerEmptyState
-        icon={BookOpen}
-        title="Loading curriculum"
-        description="Preparing your units, lessons and assessments."
-      />
-    )
+    return <CurriculumSkeleton />
   }
 
   // Diagnostic taken, mastery not back yet: hold here rather than dropping the
@@ -968,18 +1034,23 @@ export default function LearnerCertificationCurriculumPage() {
        stack set their own gutters rather than clawing back the page's. */
     <div className="rebyu-ds min-h-dvh w-full bg-rb-polar pb-20">
       {/* ------------------------------------------------------------ header */}
-      <header className="rb-hero-ink px-5 py-10 lg:px-8 lg:py-16">
+      <header className="rb-hero-ink px-5 py-8 lg:px-8 lg:py-11">
         {/* The product's bubble figure, same as `bubble-card`'s cap and the
             landing page's tiles: two white/10 circles off opposite corners,
             scaled from a card to a band. Before the content in the DOM so the
-            copy paints over them without either needing a z-index. */}
-        <div className="pointer-events-none absolute -right-24 -top-24 size-[24rem] rounded-full bg-white/10" />
-        <div className="pointer-events-none absolute -bottom-32 -left-20 size-[30rem] rounded-full bg-white/10" />
+            copy paints over them without either needing a z-index.
 
-        {/* `relative` is what the progress ring anchors to, so it lands on the
-            content column's right edge rather than the window's. */}
-        <div className="relative mx-auto max-w-[1600px]">
-          <HeroProgressRing value={curriculum.progress} />
+            Sized off the band now rather than fixed at 24/30rem — on a band
+            this much shorter, a 30rem circle was most of the surface and the
+            figure stopped reading as a motif. */}
+        <div className="pointer-events-none absolute -right-20 -top-28 size-[20rem] rounded-full bg-white/10" />
+        <div className="pointer-events-none absolute -bottom-28 -left-16 size-[22rem] rounded-full bg-white/10" />
+
+        {/* Two columns: the certification on the left, how far through it you
+            are on the right. `items-start` so the ring holds the top of the
+            band instead of centring against copy of unpredictable length. */}
+        <div className="relative mx-auto flex max-w-[1600px] items-start gap-10">
+          <div className="min-w-0 flex-1">
           <div className="flex items-center gap-3">
             <BackButton asChild label="Back to my learning">
               <Link to="/learner/learning" />
@@ -996,17 +1067,27 @@ export default function LearnerCertificationCurriculumPage() {
               `capitalize` rather than a JS transform: it only touches the
               first letter of each word, so titles already stored in caps
               (TOPCIT, AWS) pass through untouched. */}
-          <h1 className="mt-6 max-w-4xl font-rb-display text-5xl font-extrabold capitalize leading-[1.05] tracking-tight text-white sm:text-6xl lg:text-7xl">
+          {/* Down from 7xl. At that size a two-word certification title was
+              taller than every unit card below it and the learner had to
+              scroll past the name of the thing they had just opened to reach
+              the curriculum they came for. */}
+          <h1 className="mt-5 max-w-3xl font-rb-display text-4xl font-extrabold capitalize leading-[1.05] tracking-tight text-white sm:text-5xl">
             {certification.title ?? "Certification"}
           </h1>
 
+          {/* Clamped: descriptions are author-entered and unbounded, and a long
+              one pushed the entire curriculum below the fold. */}
           {certification.description ? (
-            <p className="mt-5 max-w-2xl text-lg leading-8 text-white/80">
+            <p className="mt-3 line-clamp-2 max-w-2xl leading-7 text-white/75">
               {certification.description}
             </p>
           ) : null}
 
-          <div className="mt-8 flex flex-wrap items-center gap-3">
+          {/* One meta row. The counts, the mock-exam marker and the priority
+              summary were three separately-spaced rows of small chips saying
+              small things; stacked, they read as three sections rather than as
+              one line of facts about this certification. */}
+          <div className="mt-6 flex flex-wrap items-center gap-2.5">
             <div className="rb-chip">
               <BookOpen className="size-4" aria-hidden="true" />
               {curriculum.majors.length} unit{curriculum.majors.length === 1 ? "" : "s"} ·{" "}
@@ -1037,7 +1118,6 @@ export default function LearnerCertificationCurriculumPage() {
               </div>
               <CountUp value={curriculum.progress} suffix="%" className="rb-numeric !text-white text-sm" />
             </div>
-          </div>
 
           {/* Priority summary -- how many not-yet-done lessons need attention,
               worst tag first, so the learner knows before opening a unit
@@ -1045,9 +1125,17 @@ export default function LearnerCertificationCurriculumPage() {
               has produced a priority order; before that every lesson's tag
               is null and the row would be meaningless. Stays visible even
               when nothing is pending, so "all caught up" reads as a result
-              rather than the row just disappearing. */}
+              rather than the row just disappearing.
+
+              Runs on into the meta row rather than starting its own, with a
+              hairline to mark where the facts stop and the triage begins. */}
           {diagnosticDone ? (
-            <div className="mt-4 flex flex-wrap items-center gap-2">
+            <>
+              <span
+                className="mx-1 hidden h-5 w-px shrink-0 bg-white/25 sm:block"
+                aria-hidden="true"
+              />
+
               <span className="text-[11px] font-bold uppercase tracking-wide text-white/80">
                 priority focus
               </span>
@@ -1090,8 +1178,23 @@ export default function LearnerCertificationCurriculumPage() {
                   all caught up
                 </span>
               )}
-            </div>
+            </>
           ) : null}
+
+          {/* The plan itself is built on My Learning, at the click that starts
+              the studying -- this is only the way through to it once one
+              exists. Last in the meta row: it is the one item here that leaves
+              the page, and it had a 28px band of its own to say so. */}
+          {diagnosticDone && hasPlan ? (
+            <Link
+              to="/learner/plan"
+              className="inline-flex items-center gap-1.5 rounded-rb-pill px-1 text-[13px] font-bold text-white/80 underline-offset-4 hover:text-white hover:underline"
+            >
+              <CalendarDays className="size-4" aria-hidden="true" />
+              view study calendar
+            </Link>
+          ) : null}
+          </div>
 
           {/* The gate, stated once at the top and then enforced on every card
               below. Gone entirely once the diagnostic is sat, rather than
@@ -1127,6 +1230,9 @@ export default function LearnerCertificationCurriculumPage() {
               </TactileButton>
             </Reveal>
           ) : null}
+          </div>
+
+          <HeroProgressRing value={curriculum.progress} />
         </div>
       </header>
 
@@ -1163,6 +1269,70 @@ export default function LearnerCertificationCurriculumPage() {
                   onLocked={() => setDialogOpen(true)}
                   takenExamIds={takenExamIds}
                 />
+              </StaggerItem>
+            ) : null}
+
+            {/* Everything the units and the mock card do not already show.
+                The curriculum places one quiz per lesson and one exam per unit,
+                so a second exam on the same target -- or a certification-level
+                exam that is not the chosen mock -- was rendered nowhere, and
+                the page accounted for four assessments while the certification
+                held nine. They are listed rather than slotted into the units,
+                because the one-per-place layout is deliberate and widening it
+                would make an authoring mistake look like structure. */}
+            {curriculum.extraExams?.length ? (
+              <StaggerItem variants={fadeUp}>
+                <section className="rounded-rb-card border-2 border-rb-swan bg-rb-snow p-5 sm:p-6">
+                  <h2 className="font-rb-display text-lg font-extrabold lowercase text-rb-eel">
+                    other assessments
+                  </h2>
+                  <p className="mt-1 text-sm text-rb-wolf">
+                    Published for this certification but not attached to a unit above.
+                  </p>
+
+                  <ul className="mt-4 space-y-2">
+                    {curriculum.extraExams.map((exam) => {
+                      const taken = takenExamIds?.has?.(String(exam.examId))
+                      return (
+                        <li
+                          key={exam.examId}
+                          className="flex flex-wrap items-center gap-3 rounded-rb-tile border-2 border-rb-swan bg-rb-polar p-3"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-bold text-rb-eel">
+                              {exam.title ?? `Exam ${exam.examId}`}
+                            </p>
+                            <p className="mt-0.5 text-xs font-semibold text-rb-wolf">
+                              {[
+                                exam.questionCount ? `${exam.questionCount} questions` : null,
+                                exam.passingScore != null ? `${exam.passingScore}% to pass` : null,
+                                taken ? "attempted" : null,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </p>
+                          </div>
+
+                          <TactileButton
+                            asChild={diagnosticDone}
+                            size="sm"
+                            variant="macaw"
+                            onClick={diagnosticDone ? undefined : () => setDialogOpen(true)}
+                          >
+                            {diagnosticDone ? (
+                              <Link to={`/learner/assessments/${exam.examId}`}>
+                                start
+                                <ArrowRight className="size-4" aria-hidden="true" />
+                              </Link>
+                            ) : (
+                              <span>locked</span>
+                            )}
+                          </TactileButton>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </section>
               </StaggerItem>
             ) : null}
           </StaggerList>
@@ -1220,6 +1390,7 @@ export default function LearnerCertificationCurriculumPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
     </div>
   )
 }

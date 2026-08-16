@@ -106,6 +106,15 @@ public class SecurityConfig {
                         .requestMatchers("/api/learner-exam-details/**").authenticated()
                         // A user's own in-app notifications -- never public.
                         .requestMatchers("/api/notifications/**").authenticated()
+                        // Achievements: /me is JWT-derived, the rest is admin-only at the
+                        // controller. Awards themselves are made server-side as learners
+                        // earn them, so nothing here should ever be reachable anonymously.
+                        .requestMatchers("/api/learner-achievements/**").authenticated()
+                        // A learner's own study plans -- learnerId is JWT-derived at the
+                        // controller, so anonymous access has nothing to resolve.
+                        .requestMatchers("/api/study-plans/**").authenticated()
+                        // A learner's own exam countdown and study notes -- same rule.
+                        .requestMatchers("/api/study-desk/**").authenticated()
                         // learnerId is now JWT-derived at the controller instead of a
                         // client-supplied request param; block anonymous access here too.
                         .requestMatchers("/api/learner/analytics/**").authenticated()

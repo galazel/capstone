@@ -10,6 +10,13 @@ class ReadinessRequest(BaseModel):
     lesson_quiz_score: float | None = Field(default=None, ge=0, le=100)
     middle_exam_score: float | None = Field(default=None, ge=0, le=100)
     mock_exam_score: float | None = Field(default=None, ge=0, le=100)
+    # Share of the certification's lessons completed, 0..100. Unlike the score
+    # components this is always computable, so it is always present -- which is
+    # the point: it is the one input that can say "you have not done the work
+    # yet" instead of going quiet.
+    lesson_progress_score: float | None = Field(default=None, ge=0, le=100)
+    # Study consistency, already scaled to 0..100 by the caller.
+    streak_score: float | None = Field(default=None, ge=0, le=100)
 
 
 class ReadinessComponent(BaseModel):

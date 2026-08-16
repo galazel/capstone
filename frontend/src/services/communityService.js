@@ -56,6 +56,12 @@ export const reportCommunityPost = (postId, reason, details = null) =>
 export const getCommunityNotifications = () => base("community/notifications")
 export const markCommunityNotificationRead = (notificationId) =>
   base(`community/notifications/${notificationId}/read`, { method: "PUT" })
+export const markAllCommunityNotificationsRead = () =>
+  base("community/notifications/read-all", { method: "PUT" })
+export const deleteCommunityNotification = (notificationId) =>
+  base(`community/notifications/${notificationId}`, { method: "DELETE" })
+export const deleteAllCommunityNotifications = () =>
+  base("community/notifications", { method: "DELETE" })
 export const toggleCommunityLike = (id) => base(`community/posts/${id}/like`, { method: "POST" })
 export const toggleCommunitySave = (id) => base(`community/posts/${id}/save`, { method: "POST" })
 export const toggleCircleMembership = (id) => base(`community/circles/${id}/membership`, { method: "POST" })

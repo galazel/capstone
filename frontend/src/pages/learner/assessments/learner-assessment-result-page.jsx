@@ -21,7 +21,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import CodeMirrorProgrammingWorkspace from "@/components/assessments/attempt/code-mirror-programming-workspace.jsx"
 import PerformanceBreakdown from "@/components/assessments/attempt/performance-breakdown.jsx"
-import CertificationAnalyticsPanel from "@/components/analytics/certification-analytics-panel.jsx"
 import {
   getCurrentLearner,
   getCurrentLearnerIdentity,
@@ -32,6 +31,59 @@ import {
 } from "@/services/assessmentService.js"
 import LearnerPremiumGuard from "@/components/learner/learner-premium-guard.jsx"
 import { FEATURES } from "@/services/subscriptionService.js"
+
+/**
+ * Per-state colours for the answer review.
+ *
+ * `--primary` is Azure (#1b6ef3), so "correct" was rendering blue — the same
+ * hue the page uses for links and neutral emphasis, which left a right answer
+ * and a plain UI accent looking identical. Correct is green here, and every
+ * state carries a tinted surface rather than the same muted grey, so the shape
+ * of a run of answers is readable before any of the text is.
+ *
+ * Green/amber are literal palette classes rather than design-system tokens
+ * because the token set has no success or warning hue — `--color-rb-feather` is
+ * blue despite its Duolingo name. Both halves of each pair are declared so the
+ * tints survive dark mode instead of washing out to near-black.
+ */
+const ANSWER_TONES = {
+  correct: {
+    card: "border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20",
+    panel: "border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30",
+    text: "text-emerald-700 dark:text-emerald-400",
+    badge: "border-transparent bg-emerald-600 text-white dark:bg-emerald-500",
+  },
+  incorrect: {
+    card: "border-destructive/30 bg-destructive/5",
+    panel: "border-destructive/30 bg-destructive/10",
+    text: "text-destructive",
+    badge: null, // the destructive Badge variant already covers this
+  },
+  pending: {
+    card: "border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/20",
+    panel: "border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30",
+    text: "text-amber-700 dark:text-amber-400",
+    badge: "border-transparent bg-amber-500 text-white",
+  },
+  neutral: {
+    card: "",
+    panel: "bg-muted/50",
+    text: "text-muted-foreground",
+    badge: null,
+  },
+}
+
+/** Which of the four states an answer is in. Order matters: an item awaiting
+ *  manual marking is pending even though `isCorrect` is still null. */
+function answerState(answer) {
+  if (answer.pendingManualEvaluation) return "pending"
+  if (answer.isCorrect == null) return "neutral"
+  return answer.isCorrect ? "correct" : "incorrect"
+}
+
+function answerTone(answer) {
+  return ANSWER_TONES[answerState(answer)]
+}
 
 function formatDuration(totalSeconds) {
   if (totalSeconds == null) return "—"
@@ -95,6 +147,13 @@ export default function LearnerAssessmentResultPage() {
 
   const percentage = Number(result.percentage ?? 0)
 
+  /* Null when the assessment carries no threshold, which is a real case -- the
+     card falls back to "No passing score set" rather than drawing a marker at
+     zero and claiming every score cleared it. */
+  const rawPassingScore = Number(result.passingScore)
+  const passingScore =
+    result.passingScore != null && Number.isFinite(rawPassingScore) ? rawPassingScore : null
+
   return (
     <div className="min-h-dvh bg-muted/30">
       <header className="border-b bg-background px-4 py-3">
@@ -124,15 +183,20 @@ export default function LearnerAssessmentResultPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap items-center gap-6">
-              <div>
-                <p className="text-5xl font-bold tabular-nums">
+            <div className="flex flex-wrap items-start gap-x-8 gap-y-5">
+              <div className="shrink-0">
+                <p
+                  className={cn(
+                    "text-6xl font-bold leading-none tabular-nums",
+                    result.passed ? ANSWER_TONES.correct.text : "text-destructive"
+                  )}
+                >
                   {percentage.toFixed(0)}%
                 </p>
                 <p
                   className={cn(
-                    "mt-1 flex items-center gap-1.5 text-sm font-medium",
-                    result.passed ? "text-primary" : "text-destructive"
+                    "mt-2 flex items-center gap-1.5 text-sm font-semibold",
+                    result.passed ? ANSWER_TONES.correct.text : "text-destructive"
                   )}
                 >
                   {result.passed ? (
@@ -148,34 +212,57 @@ export default function LearnerAssessmentResultPage() {
                   )}
                 </p>
               </div>
-              <dl className="grid flex-1 grid-cols-2 gap-x-6 gap-y-1.5 text-sm sm:grid-cols-4">
-                <div>
-                  <dt className="text-muted-foreground">Passing score</dt>
-                  <dd className="font-medium tabular-nums">
-                    {result.passingScore != null
-                      ? `${Number(result.passingScore).toFixed(0)}%`
-                      : "Not set"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Correct</dt>
-                  <dd className="font-medium tabular-nums">
-                    {result.correctCount}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Incorrect</dt>
-                  <dd className="font-medium tabular-nums">
-                    {result.incorrectCount}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Pending review</dt>
-                  <dd className="font-medium tabular-nums">
-                    {result.pendingCount}
-                  </dd>
-                </div>
-              </dl>
+
+              <div className="min-w-[15rem] flex-1 space-y-4">
+                {/* The score against the mark it had to clear. "40%" and
+                    "passing score 70%" as two separate figures leave the reader
+                    to do the subtraction; the bar puts the gap on screen, which
+                    is the first thing anyone wants after not passing. */}
+                {passingScore != null ? (
+                  <div>
+                    <div className="relative h-2.5 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={cn(
+                          "h-full rounded-full",
+                          result.passed ? "bg-emerald-600 dark:bg-emerald-500" : "bg-destructive"
+                        )}
+                        style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }}
+                      />
+                      {/* The threshold marker sits above the fill, so a score
+                          that clears it still shows where the line was. */}
+                      <span
+                        className="absolute inset-y-0 w-0.5 bg-foreground/60"
+                        style={{ left: `${Math.min(100, Math.max(0, passingScore))}%` }}
+                        aria-hidden="true"
+                      />
+                    </div>
+
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Passing score {passingScore.toFixed(0)}%
+                      {result.passed
+                        ? ` · cleared by ${(percentage - passingScore).toFixed(0)} points`
+                        : ` · ${(passingScore - percentage).toFixed(0)} points short`}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No passing score set.</p>
+                )}
+
+                <dl className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: "Correct", value: result.correctCount, tone: ANSWER_TONES.correct.text },
+                    { label: "Incorrect", value: result.incorrectCount, tone: "text-destructive" },
+                    { label: "Pending", value: result.pendingCount, tone: "text-muted-foreground" },
+                  ].map((stat) => (
+                    <div key={stat.label} className="rounded-lg border p-3">
+                      <dt className="text-xs text-muted-foreground">{stat.label}</dt>
+                      <dd className={cn("mt-0.5 text-xl font-bold tabular-nums", stat.tone)}>
+                        {stat.value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
             </div>
             {result.pendingCount > 0 ? (
               <p className="mt-4 flex items-center gap-1.5 rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
@@ -228,27 +315,17 @@ export default function LearnerAssessmentResultPage() {
           title="Advanced result insights"
           description="Unlock weakness analysis, detailed performance breakdowns, readiness insights, and deeper attempt comparisons with Pro or institution access."
         >
-          <div className="space-y-6">
-            {result.certificationId != null && learnerId != null ? (
-              <CertificationAnalyticsPanel
-                learnerId={learnerId}
-                certificationId={result.certificationId}
-              />
-            ) : null}
-
-            <PerformanceBreakdown
-              lessonBreakdown={result.lessonBreakdown}
-              assessmentType={result.assessmentType}
-            />
-          </div>
+          <PerformanceBreakdown lessonBreakdown={result.lessonBreakdown} />
         </LearnerPremiumGuard>
 
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">Answer review</h2>
           <ol className="space-y-3">
-            {(result.answers ?? []).map((answer) => (
+            {(result.answers ?? []).map((answer) => {
+              const tone = answerTone(answer)
+              return (
               <li key={answer.attemptQuestionId}>
-                <Card>
+                <Card className={tone.card}>
                   <CardContent className="space-y-3 pt-5">
                     <div className="flex items-start justify-between gap-3">
                       <p className="text-sm font-medium leading-6">
@@ -259,11 +336,11 @@ export default function LearnerAssessmentResultPage() {
                       </p>
                       <div className="flex shrink-0 flex-col items-end gap-1">
                         {answer.pendingManualEvaluation ? (
-                          <Badge variant="secondary">Pending review</Badge>
+                          <Badge className={ANSWER_TONES.pending.badge}>Pending review</Badge>
                         ) : answer.isCorrect == null ? (
                           <Badge variant="outline">Unanswered</Badge>
                         ) : answer.isCorrect ? (
-                          <Badge>Correct</Badge>
+                          <Badge className={ANSWER_TONES.correct.badge}>Correct</Badge>
                         ) : (
                           <Badge variant="destructive">Incorrect</Badge>
                         )}
@@ -284,17 +361,20 @@ export default function LearnerAssessmentResultPage() {
                           {answer.selectedChoiceText}
                         </p>
                         {answer.isCorrect === false && answer.correctChoiceText ? (
-                          <p>
-                            <span className="text-muted-foreground">
+                          <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 dark:border-emerald-900 dark:bg-emerald-950/30">
+                            <span className={cn("font-medium", ANSWER_TONES.correct.text)}>
                               Correct answer:{" "}
                             </span>
                             {answer.correctChoiceText}
                           </p>
                         ) : null}
                         {answer.explanation ? (
-                          <p className="rounded-lg bg-muted/50 p-2.5 text-muted-foreground">
-                            {answer.explanation}
-                          </p>
+                          <div className={cn("rounded-lg border p-2.5", tone.panel)}>
+                            <p className={cn("text-xs font-semibold", tone.text)}>
+                              Explanation
+                            </p>
+                            <p className="mt-1 text-muted-foreground">{answer.explanation}</p>
+                          </div>
                         ) : null}
                       </div>
                     ) : null}
@@ -342,8 +422,8 @@ export default function LearnerAssessmentResultPage() {
                     ) : null}
 
                     {answer.feedback ? (
-                      <div className="rounded-lg border border-primary/30 bg-primary/5 p-2.5 text-sm">
-                        <p className="text-xs font-medium text-primary">Feedback</p>
+                      <div className={cn("rounded-lg border p-2.5 text-sm", tone.panel)}>
+                        <p className={cn("text-xs font-semibold", tone.text)}>Feedback</p>
                         <p className="mt-1 text-muted-foreground">{answer.feedback}</p>
                       </div>
                     ) : null}
@@ -375,13 +455,16 @@ export default function LearnerAssessmentResultPage() {
                               className={cn(
                                 "flex items-start gap-2 rounded-lg border p-2.5",
                                 element.matched
-                                  ? "border-primary/30 bg-primary/5"
+                                  ? ANSWER_TONES.correct.panel
                                   : "border-destructive/30 bg-destructive/5"
                               )}
                             >
                               {element.matched ? (
                                 <CheckCircle2Icon
-                                  className="mt-0.5 size-4 shrink-0 text-primary"
+                                  className={cn(
+                                    "mt-0.5 size-4 shrink-0",
+                                    ANSWER_TONES.correct.text
+                                  )}
                                   aria-hidden="true"
                                 />
                               ) : (
@@ -418,7 +501,8 @@ export default function LearnerAssessmentResultPage() {
                   </CardContent>
                 </Card>
               </li>
-            ))}
+              )
+            })}
           </ol>
         </section>
       </main>

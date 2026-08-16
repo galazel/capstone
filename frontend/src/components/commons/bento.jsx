@@ -25,6 +25,10 @@ const TILE_TONES = {
   bee: "border-rb-bee/30 bg-rb-bee-wash text-rb-eel dark:bg-[#12333a] dark:text-rb-snow",
   feather:
     "border-rb-feather/30 bg-rb-feather-wash text-rb-eel dark:bg-[#152744] dark:text-rb-snow",
+  // Urgency. Reserved for a tile whose subject is something going wrong --
+  // a critical or high-priority topic -- so red keeps meaning "act on this".
+  cardinal:
+    "border-rb-cardinal/40 bg-rb-cardinal-wash text-rb-eel dark:bg-[#3a1618] dark:text-rb-snow",
   ink: "border-rb-eel bg-rb-eel text-rb-snow",
 }
 
@@ -72,6 +76,28 @@ export function BentoGrid({ className = "", children }) {
  * @param col   columns to claim at lg and up (1–6)
  * @param row   rows to claim at lg and up (1–5)
  */
+/**
+ * The loading state for a tile's body.
+ *
+ * Every tile on the analytics board was rolling its own -- an `animate-pulse`
+ * div at 10px here, 12px there, three rows in one and one row in another, and
+ * only some of them labelled for assistive tech. Side by side on the same board
+ * they read as three different things loading in three different ways.
+ *
+ * One shape, one rhythm, announced once. `rows` is the only knob, because the
+ * only honest difference between these tiles while loading is how much content
+ * is about to arrive.
+ */
+export function BentoSkeleton({ rows = 2, className = "" }) {
+  return (
+    <div className={`mt-4 space-y-2 ${className}`} role="status" aria-label="Loading">
+      {Array.from({ length: rows }, (_, row) => (
+        <div key={row} className="h-10 animate-pulse rounded-lg bg-muted" />
+      ))}
+    </div>
+  )
+}
+
 export function BentoTile({
   tone = "plain",
   col = 2,

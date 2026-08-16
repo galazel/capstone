@@ -1,21 +1,20 @@
 import { useEffect, useMemo, useState } from "react"
 import { useOutletContext } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
+
+import { getProgressAnalytics } from "@/services/learnerAnalyticsService.js"
 import {
     ArrowLeft,
-    ArrowRight,
     BookOpenCheck,
     Brain,
-    CalendarCheck,
     CalendarDays,
     CheckCircle2,
     Clock3,
-    Layers3,
     ListChecks,
     Repeat2,
     Sparkles,
     Target,
     TimerReset,
-    Zap,
 } from "@/components/icons"
 
 import { Badge } from "@/components/ui/badge"
@@ -29,7 +28,6 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
 import {
     Select,
     SelectContent,
@@ -38,7 +36,6 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import LearnerPremiumGuard from "@/components/learner/learner-premium-guard.jsx"
 
 const readinessOptions = [
     "Ready 1 week before the exam",
@@ -116,84 +113,14 @@ const studyTechniques = [
 
 const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-function collectArrays(...sources) {
-    return sources.flatMap((source) => (Array.isArray(source) ? source : []))
-}
-
-function getTopicName(topic) {
-    return (
-        topic?.topicName ??
-        topic?.lessonName ??
-        topic?.categoryName ??
-        topic?.middleCategoryTitle ??
-        topic?.middleCategoryName ??
-        topic?.majorCategoryTitle ??
-        topic?.title ??
-        topic?.name ??
-        topic
-    )
-}
-
-function getDiagnosticPriorityTopics(data) {
-    const directTopics = collectArrays(
-        data?.diagnosticPriorityTopics,
-        data?.priorityTopics,
-        data?.weakTopics,
-        data?.weakLessons,
-        data?.diagnosticWeakTopics,
-        data?.latestDiagnosticResult?.priorityTopics,
-        data?.latestDiagnosticResult?.weakTopics,
-        data?.latestDiagnosticResult?.weakLessons,
-        data?.diagnosticResult?.priorityTopics,
-        data?.diagnosticResult?.weakTopics,
-        data?.diagnosticResult?.weakLessons
-    )
-
-    const resultSources = collectArrays(
-        data?.assessmentResults,
-        data?.examResults,
-        data?.diagnosticResults,
-        data?.learnerExamResults
-    )
-
-    const resultTopics = resultSources.flatMap((result) => {
-        const typeText = String(
-            result?.assessmentType ??
-            result?.assessmentTypeText ??
-            result?.examType ??
-            result?.examTypeText ??
-            result?.type ??
-            result?.title ??
-            result?.examName ??
-            ""
-        ).toLowerCase()
-
-        const isDiagnostic = typeText.includes("diagnostic")
-
-        if (!isDiagnostic) {
-            return []
-        }
-
-        return collectArrays(
-            result?.priorityTopics,
-            result?.weakTopics,
-            result?.weakLessons,
-            result?.topicResults,
-            result?.lessonResults
-        )
-    })
-
-    return [
-        ...new Set(
-            [...directTopics, ...resultTopics]
-                .map((topic) => String(getTopicName(topic) ?? "").trim())
-                .filter(Boolean)
-        ),
-    ]
-}
-
 function parseDate(value) {
     return new Date(`${value}T00:00:00`)
+}
+
+function addDays(date, days) {
+    const next = new Date(date)
+    next.setDate(next.getDate() + days)
+    return next
 }
 
 function toDateKey(date) {
@@ -377,67 +304,79 @@ function FormSelect({ label, value, onValueChange, options }) {
     )
 }
 
-function FormInput({ label, value, onChange, type = "text" }) {
+function FormInput({ label, value, onChange, type = "text", min, max, error }) {
     return (
         <div className="space-y-2">
             <Label className="text-xs font-semibold text-foreground">
                 {label}
             </Label>
 
+            {/* `min`/`max` are handed to the native date picker so out-of-range
+                days are unselectable rather than merely rejected afterwards.
+                They are a convenience, not the guard -- a date can still be
+                typed straight into the field, which is why `handleGeneratePlan`
+                checks the range as well. */}
             <Input
                 type={type}
                 value={value}
+                min={min}
+                max={max}
+                aria-invalid={error ? true : undefined}
                 onChange={(event) => onChange(event.target.value)}
-                className="h-10 rounded-lg text-sm"
+                className={`h-10 rounded-lg text-sm ${
+                    error ? "border-destructive focus-visible:ring-destructive/40" : ""
+                }`}
             />
+
+            {error ? (
+                <p className="text-xs font-medium text-destructive">{error}</p>
+            ) : null}
         </div>
     )
 }
 
+/**
+ * A study technique, as a selectable tile.
+ *
+ * Selection is carried by fill and a ring rather than by a border swap: with
+ * every tile outlined, the selected one differed only in border colour, which
+ * is the weakest signal available and left the grid reading as a wall of boxes.
+ */
 function TechniqueCard({ technique, selected, onSelect }) {
     const Icon = technique.icon
 
     return (
-        <button type="button" onClick={onSelect} className="h-full text-left">
-            <Card
-                className={`h-full min-h-[145px] rounded-xl border shadow-none transition hover:border-primary/40 hover:bg-muted/30 ${
-                    selected
-                        ? "border-primary bg-primary/5 ring-2 ring-primary/10"
-                        : "border-border bg-card"
-                }`}
-            >
-                <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-3">
-                        <div
-                            className={`flex size-9 items-center justify-center rounded-lg ${
-                                selected
-                                    ? "bg-primary text-primary-foreground"
-                                    : "bg-muted text-muted-foreground"
-                            }`}
-                        >
-                            <Icon className="size-4" />
-                        </div>
+        <button
+            type="button"
+            onClick={onSelect}
+            aria-pressed={selected}
+            className={`h-full rounded-2xl p-4 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+                selected ? "bg-primary/10 ring-2 ring-primary" : "bg-muted/50 hover:bg-muted"
+            }`}
+        >
+            <div className="flex items-start justify-between gap-3">
+                <div
+                    className={`flex size-9 items-center justify-center rounded-xl ${
+                        selected
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background text-muted-foreground"
+                    }`}
+                >
+                    <Icon className="size-4" />
+                </div>
 
-                        <div
-                            className={`flex size-5 items-center justify-center rounded-full border ${
-                                selected
-                                    ? "border-primary bg-primary text-primary-foreground"
-                                    : "border-border bg-background"
-                            }`}
-                        >
-                            {selected ? <CheckCircle2 className="size-4" /> : null}
-                        </div>
-                    </div>
+                {selected ? (
+                    <CheckCircle2 className="size-5 text-primary" aria-hidden="true" />
+                ) : null}
+            </div>
 
-                    <h3 className="mt-4 text-sm font-semibold text-foreground">
-                        {technique.title}
-                    </h3>
+            <h3 className="mt-4 text-sm font-semibold text-foreground">
+                {technique.title}
+            </h3>
 
-                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                        {technique.description}
-                    </p>
-                </CardContent>
-            </Card>
+            <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
+                {technique.description}
+            </p>
         </button>
     )
 }
@@ -611,7 +550,20 @@ function StudyPlanCalendar({
     )
 }
 
-export function StudyPlanContent({ onPlanGenerated }) {
+/**
+ * @param lockedCertification  when the generator is opened for one
+ *   certification, its title -- the picker is replaced by that name, since the
+ *   plan being built is for the course the learner just opened
+ * @param certificationId      that certification's id, which is what the
+ *   diagnostic's priority topics are read against
+ * @param generating           whether the parent is still saving the plan
+ */
+export function StudyPlanContent({
+    onPlanGenerated,
+    lockedCertification,
+    certificationId,
+    generating = false,
+}) {
     const { data } = useOutletContext()
 
     const certificationOptions = useMemo(
@@ -621,34 +573,89 @@ export function StudyPlanContent({ onPlanGenerated }) {
         [data?.certifications]
     )
 
-    const [certification, setCertification] = useState("")
+    const [certification, setCertification] = useState(lockedCertification ?? "")
     const [courseGoal, setCourseGoal] = useState("Complete a full reviewer")
-    const [targetExamDate, setTargetExamDate] = useState("2026-11-08")
+    // Dated from today rather than from fixed literals. The defaults used to be
+    // hardcoded calendar dates, which quietly went stale -- a plan whose first
+    // study block is already in the past schedules nothing the learner can do.
+    const [targetExamDate, setTargetExamDate] = useState(() => toDateKey(addDays(new Date(), 90)))
     const [targetReadiness, setTargetReadiness] = useState(readinessOptions[1])
     const [examPriority, setExamPriority] = useState(priorityOptions[0])
-    const [calendarStart, setCalendarStart] = useState("2026-07-06")
+    const [calendarStart, setCalendarStart] = useState(() => toDateKey(new Date()))
     const [studyDays, setStudyDays] = useState(studyDaysOptions[2])
     const [studyWindow, setStudyWindow] = useState(studyWindowOptions[2])
     const [selectedTechnique, setSelectedTechnique] = useState("spaced-repetition")
     const [studyPreferences, setStudyPreferences] = useState("")
     const [generatedPlan, setGeneratedPlan] = useState(null)
-    const [viewDate, setViewDate] = useState(() => parseDate("2026-07-06"))
+    const [viewDate, setViewDate] = useState(() => new Date())
 
     useEffect(() => {
+        if (lockedCertification) {
+            setCertification(lockedCertification)
+            return
+        }
         if (!certificationOptions.includes(certification)) {
             setCertification(certificationOptions[0] ?? "")
         }
-    }, [certification, certificationOptions])
+    }, [certification, certificationOptions, lockedCertification])
+
+    /**
+     * The topics the diagnostic says to study first.
+     *
+     * From the certification's progress analytics, which is where the
+     * diagnostic's result actually lands: the BKT service turns the attempt
+     * into a per-lesson mastery probability and priority tag, and
+     * `weakestTopics` is that list already sorted worst-first. This used to
+     * rummage through the portal payload for a dozen speculative field names
+     * (`weakTopics`, `diagnosticResult.weakLessons`, ...) that nothing ever
+     * sets, so it came back empty no matter how many diagnostics were sat.
+     */
+    const analyticsQuery = useQuery({
+        queryKey: ["learner-progress-analytics", String(certificationId ?? "")],
+        queryFn: () => getProgressAnalytics(certificationId),
+        enabled: Boolean(certificationId),
+        staleTime: 60_000,
+    })
 
     const priorityTopics = useMemo(() => {
-        return getDiagnosticPriorityTopics(data)
-    }, [data])
+        const rows = analyticsQuery.data?.weakestTopics
+        return [
+            ...new Set(
+                (Array.isArray(rows) ? rows : [])
+                    .map((row) => String(row?.lessonTitle ?? "").trim())
+                    .filter(Boolean)
+            ),
+        ]
+    }, [analyticsQuery.data])
+
+    // Told apart so the empty state can say which it is: mastery still being
+    // computed is a wait, no certification is a different situation entirely.
+    const priorityTopicsPending =
+        Boolean(certificationId) &&
+        (analyticsQuery.isLoading || analyticsQuery.data?.bktAvailable === false)
 
     const selectedTechniqueInfo = useMemo(() => {
         return studyTechniques.find((item) => item.id === selectedTechnique)
     }, [selectedTechnique])
 
+    /* The calendar has to begin before the exam it is preparing for. Compared
+       as plain YYYY-MM-DD strings: both come from date inputs in that format,
+       so lexicographic order is chronological and there is no timezone to get
+       wrong. Equal dates are allowed -- a single-day crash plan is odd, but it
+       is not incoherent. */
+    const datesOutOfOrder =
+        Boolean(calendarStart) && Boolean(targetExamDate) && calendarStart > targetExamDate
+
     function handleGeneratePlan() {
+        // Belt and braces alongside the pickers' own min/max: a date typed
+        // directly into the field bypasses those entirely, and a calendar
+        // starting after the exam produces a plan with no study days at all --
+        // `generateStudyEvents` loops `while (currentDate <= examDate)`, which
+        // never runs, leaving only the target-exam marker.
+        if (datesOutOfOrder) {
+            return
+        }
+
         const events = generateStudyEvents({
             calendarStart,
             targetExamDate,
@@ -711,380 +718,271 @@ export function StudyPlanContent({ onPlanGenerated }) {
     }
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <Button className="gap-2" onClick={handleGeneratePlan}>
-                    <Sparkles className="size-4" />
-                    Generate Calendar
-                </Button>
-            </div>
+        <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_300px]">
+            {/* Left: the form, as flat sections separated by space rather than
+                by nested bordered cards. The old markup put a Card inside a
+                Card inside a bordered section, so every group announced itself
+                with an outline and nothing read as more important than
+                anything else. */}
+            <main className="min-w-0 space-y-8">
+                <section>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Course and target
+                    </p>
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-                <main className="min-w-0">
-                    <Card className="rounded-xl border-border shadow-sm">
-                        <CardHeader className="border-b border-border pb-5">
-                            <div className="flex items-center gap-3">
-                                <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                    <Target className="size-5" />
-                                </div>
-
-                                <div>
-                                    <CardTitle className="text-base">
-                                        Course, target exam, and calendar schedule
-                                    </CardTitle>
-
-                                    <CardDescription>
-                                        Calendar generation is required for every REBYU study plan.
-                                    </CardDescription>
-                                </div>
-                            </div>
-                        </CardHeader>
-
-                        <CardContent className="space-y-6 p-5">
-                            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                                <FormSelect
-                                    label="Certification"
-                                    value={certification}
-                                    onValueChange={setCertification}
-                                    options={certificationOptions}
-                                />
-
-                                <FormInput
-                                    label="Course goal"
-                                    value={courseGoal}
-                                    onChange={setCourseGoal}
-                                />
-
-                                <FormSelect
-                                    label="Exam priority"
-                                    value={examPriority}
-                                    onValueChange={setExamPriority}
-                                    options={priorityOptions}
-                                />
-
-                                <FormInput
-                                    label="Target exam date"
-                                    value={targetExamDate}
-                                    onChange={setTargetExamDate}
-                                    type="date"
-                                />
-
-                                <FormSelect
-                                    label="Target readiness"
-                                    value={targetReadiness}
-                                    onValueChange={setTargetReadiness}
-                                    options={readinessOptions}
-                                />
-
-                                <FormSelect
-                                    label="Preferred study window"
-                                    value={studyWindow}
-                                    onValueChange={setStudyWindow}
-                                    options={studyWindowOptions}
-                                />
-                            </div>
-
-                            <Separator />
-
-                            <section className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-                                <div className="flex items-start gap-3">
-                                    <CalendarCheck className="mt-0.5 size-5 shrink-0 text-primary" />
-
-                                    <div>
-                                        <h3 className="text-sm font-semibold text-foreground">
-                                            Calendar schedule is required
-                                        </h3>
-
-                                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                            After creating a study plan, this page will show a full calendar
-                                            with lessons, reviews, quizzes, catch-up days, and mock exam checkpoints.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className="mt-5 grid gap-4 md:grid-cols-3">
-                                    <FormInput
-                                        label="Calendar starts"
-                                        value={calendarStart}
-                                        onChange={setCalendarStart}
-                                        type="date"
-                                    />
-
-                                    <FormSelect
-                                        label="Study days per week"
-                                        value={studyDays}
-                                        onValueChange={setStudyDays}
-                                        options={studyDaysOptions}
-                                    />
-
-                                    <FormSelect
-                                        label="Preferred study time"
-                                        value={studyWindow}
-                                        onValueChange={setStudyWindow}
-                                        options={studyWindowOptions}
-                                    />
-                                </div>
-                            </section>
-
-                            <Separator />
-
-                            <section>
-                                <div className="flex items-center gap-3">
-                                    <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                        <Brain className="size-5" />
-                                    </div>
-
-                                    <div>
-                                        <h2 className="text-base font-semibold text-foreground">
-                                            Choose your study technique
-                                        </h2>
-
-                                        <p className="mt-1 text-sm text-muted-foreground">
-                                            Select how REBYU should structure your review.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className="mt-5 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-                                    {studyTechniques.map((technique) => (
-                                        <TechniqueCard
-                                            key={technique.id}
-                                            technique={technique}
-                                            selected={selectedTechnique === technique.id}
-                                            onSelect={() => setSelectedTechnique(technique.id)}
-                                        />
-                                    ))}
-                                </div>
-
-                                <div className="mt-5 rounded-xl border border-primary/15 bg-primary/5 px-4 py-3 text-sm leading-6 text-primary">
-                  <span className="font-semibold">
-                    {selectedTechniqueInfo?.title}:
-                  </span>{" "}
-                                    REBYU will organize your study flow using this method and connect it
-                                    with quizzes, weak-topic practice, and mock exam checkpoints.
-                                </div>
-                            </section>
-
-                            <Separator />
-
-                            <section>
-                                <div className="flex items-center gap-3">
-                                    <div className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                                        <Layers3 className="size-5" />
-                                    </div>
-
-                                    <div>
-                                        <h2 className="text-base font-semibold text-foreground">
-                                            Priority Topics
-                                        </h2>
-
-                                        <p className="mt-1 text-sm text-muted-foreground">
-                                            These topics are automatically generated from your diagnostic exam result.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <Card className="mt-5 rounded-xl border-border bg-muted/30 shadow-none">
-                                    <CardContent className="p-4">
-                                        {priorityTopics.length > 0 ? (
-                                            <div className="flex flex-wrap gap-2">
-                                                {priorityTopics.map((topic) => (
-                                                    <Badge
-                                                        key={topic}
-                                                        variant="secondary"
-                                                        className="rounded-full px-3 py-1.5 text-xs font-medium"
-                                                    >
-                                                        {topic}
-                                                    </Badge>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <div className="rounded-lg border border-dashed border-border bg-background p-4">
-                                                <p className="text-sm font-medium text-foreground">
-                                                    No priority topics yet
-                                                </p>
-
-                                                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                                    Take the diagnostic exam first. After submission, REBYU will display
-                                                    your weak topics here automatically.
-                                                </p>
-                                            </div>
-                                        )}
-                                    </CardContent>
-                                </Card>
-
-                                <Card className="mt-5 rounded-xl border-border shadow-none">
-                                    <CardContent className="p-4">
-                                        <div className="flex items-start gap-3">
-                                            <CalendarCheck className="mt-1 size-5 shrink-0 text-primary" />
-
-                                            <div className="min-w-0 flex-1">
-                                                <h3 className="text-sm font-semibold text-foreground">
-                                                    Study plan preferences
-                                                </h3>
-
-                                                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                                    Add optional notes such as rest days, short sessions, review style,
-                                                    or school schedule.
-                                                </p>
-
-                                                <Textarea
-                                                    value={studyPreferences}
-                                                    onChange={(event) =>
-                                                        setStudyPreferences(event.target.value)
-                                                    }
-                                                    maxLength={500}
-                                                    placeholder="Example: I am available Monday, Wednesday, and Friday after 7 PM. Use short sessions with breaks and add one catch-up day every week."
-                                                    className="mt-4 min-h-[120px] resize-none rounded-lg"
-                                                />
-
-                                                <div className="mt-2 text-right text-xs text-muted-foreground">
-                                                    {studyPreferences.length} / 500
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            </section>
-
-                            <div className="flex flex-col gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
-                                <Button variant="outline">Save as Draft</Button>
-
-                                <Button className="gap-2" onClick={handleGeneratePlan}>
-                                    Generate REBYU Calendar
-                                    <ArrowRight className="size-4" />
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </main>
-
-                <aside className="min-w-0 space-y-4">
-                    <Card className="rounded-xl border-border shadow-sm">
-                        <CardHeader className="pb-4">
-                            <div className="flex items-center gap-3">
-                                <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                    <ListChecks className="size-5" />
-                                </div>
-
-                                <div>
-                                    <CardTitle className="text-sm">Plan Preview</CardTitle>
-                                    <CardDescription>Based on your choices</CardDescription>
-                                </div>
-                            </div>
-                        </CardHeader>
-
-                        <CardContent className="space-y-3">
-                            <div className="rounded-xl bg-muted/50 p-4">
-                                <p className="text-xs font-medium text-muted-foreground">
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                        {lockedCertification ? (
+                            // Opened for one certification: the course is decided,
+                            // and a picker would only offer a way to plan the wrong one.
+                            <div className="space-y-2">
+                                <Label className="text-xs font-semibold text-foreground">
                                     Certification
-                                </p>
+                                </Label>
 
-                                <p className="mt-1 text-sm font-semibold text-foreground">
-                                    {certification}
+                                <p className="flex h-10 items-center rounded-lg bg-muted px-3 text-sm font-medium text-foreground">
+                                    {lockedCertification}
                                 </p>
                             </div>
+                        ) : (
+                            <FormSelect
+                                label="Certification"
+                                value={certification}
+                                onValueChange={setCertification}
+                                options={certificationOptions}
+                            />
+                        )}
 
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="rounded-xl bg-muted/50 p-4">
-                                    <Clock3 className="size-4 text-primary" />
+                        <FormInput
+                            label="Course goal"
+                            value={courseGoal}
+                            onChange={setCourseGoal}
+                        />
 
-                                    <p className="mt-2 text-xs text-muted-foreground">
-                                        Study days
-                                    </p>
+                        <FormInput
+                            label="Target exam date"
+                            value={targetExamDate}
+                            onChange={setTargetExamDate}
+                            type="date"
+                            min={calendarStart || undefined}
+                            error={
+                                datesOutOfOrder
+                                    ? "The exam date is before the calendar starts."
+                                    : undefined
+                            }
+                        />
 
-                                    <p className="mt-1 text-sm font-semibold text-foreground">
-                                        {studyDays}
-                                    </p>
+                        <FormSelect
+                            label="Target readiness"
+                            value={targetReadiness}
+                            onValueChange={setTargetReadiness}
+                            options={readinessOptions}
+                        />
+
+                        <FormSelect
+                            label="Exam priority"
+                            value={examPriority}
+                            onValueChange={setExamPriority}
+                            options={priorityOptions}
+                        />
+                    </div>
+                </section>
+
+                <section>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Schedule
+                    </p>
+
+                    {/* "Preferred study window" used to appear up in the section
+                        above as well, both controls bound to the same state --
+                        two inputs for one value, which is a bug however it is
+                        laid out. It lives here, with the rest of the timing. */}
+                    <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                        <FormInput
+                            label="Calendar starts"
+                            value={calendarStart}
+                            onChange={setCalendarStart}
+                            type="date"
+                            max={targetExamDate || undefined}
+                            error={
+                                datesOutOfOrder
+                                    ? "Start the calendar on or before your exam date."
+                                    : undefined
+                            }
+                        />
+
+                        <FormSelect
+                            label="Study days per week"
+                            value={studyDays}
+                            onValueChange={setStudyDays}
+                            options={studyDaysOptions}
+                        />
+
+                        <FormSelect
+                            label="Preferred study time"
+                            value={studyWindow}
+                            onValueChange={setStudyWindow}
+                            options={studyWindowOptions}
+                        />
+                    </div>
+                </section>
+
+                <section>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Study technique
+                    </p>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+                        {studyTechniques.map((technique) => (
+                            <TechniqueCard
+                                key={technique.id}
+                                technique={technique}
+                                selected={selectedTechnique === technique.id}
+                                onSelect={() => setSelectedTechnique(technique.id)}
+                            />
+                        ))}
+                    </div>
+                </section>
+
+                <section>
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            Priority topics
+                        </p>
+
+                        <p className="text-xs text-muted-foreground">From your diagnostic</p>
+                    </div>
+
+                    {priorityTopics.length > 0 ? (
+                        <div className="mt-4 flex flex-wrap gap-2">
+                            {priorityTopics.map((topic) => (
+                                <Badge
+                                    key={topic}
+                                    variant="secondary"
+                                    className="rounded-full px-3 py-1.5 text-xs font-medium"
+                                >
+                                    {topic}
+                                </Badge>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="mt-4 rounded-2xl bg-muted/50 p-4 text-sm leading-6 text-muted-foreground">
+                            {priorityTopicsPending
+                                ? "Working out which topics to put first from your diagnostic. This takes a moment."
+                                : "Your weak topics appear here once the diagnostic is submitted."}
+                        </p>
+                    )}
+                </section>
+
+                <section>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Anything else
+                    </p>
+
+                    <Textarea
+                        value={studyPreferences}
+                        onChange={(event) => setStudyPreferences(event.target.value)}
+                        maxLength={500}
+                        placeholder="Example: I am available Monday, Wednesday, and Friday after 7 PM. Use short sessions with breaks and add one catch-up day every week."
+                        className="mt-4 min-h-28 resize-none rounded-2xl border-transparent bg-muted/50 focus-visible:bg-background"
+                    />
+
+                    <p className="mt-2 text-right text-xs text-muted-foreground">
+                        {studyPreferences.length} / 500
+                    </p>
+                </section>
+
+                {/* One action, at the end of the form it completes. There were
+                    two "generate" buttons doing the same thing, and a "Save as
+                    draft" beside them that was wired to nothing at all. */}
+                <div className="flex justify-end">
+                    <Button
+                        className="gap-2"
+                        onClick={handleGeneratePlan}
+                        disabled={generating || datesOutOfOrder}
+                    >
+                        {generating ? (
+                            "Saving plan…"
+                        ) : (
+                            <>
+                                <Sparkles className="size-4" />
+                                Generate calendar
+                            </>
+                        )}
+                    </Button>
+                </div>
+            </main>
+
+            {/* Right: what the plan currently amounts to, updating as the form
+                is filled. Sticky, so it stays readable while the form scrolls. */}
+            <aside className="min-w-0 xl:sticky xl:top-0 xl:self-start">
+                <div className="rounded-2xl bg-muted/50 p-5">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                        <ListChecks className="size-4" aria-hidden="true" />
+
+                        <p className="text-xs font-semibold uppercase tracking-wider">
+                            Preview
+                        </p>
+                    </div>
+
+                    <p className="mt-4 font-semibold leading-snug text-foreground">
+                        {certification || "Your certification"}
+                    </p>
+
+                    <dl className="mt-4 space-y-3 text-sm">
+                        {[
+                            [Clock3, "Study days", studyDays],
+                            [CalendarDays, "Exam date", targetExamDate],
+                            [Brain, "Technique", selectedTechniqueInfo?.title],
+                            [Target, "Readiness", targetReadiness],
+                        ].map(([Icon, label, value]) => (
+                            <div key={label} className="flex items-start gap-2.5">
+                                <Icon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+
+                                <div className="min-w-0">
+                                    <dt className="text-xs text-muted-foreground">{label}</dt>
+                                    <dd className="font-medium text-foreground">{value}</dd>
                                 </div>
-
-                                <div className="rounded-xl bg-muted/50 p-4">
-                                    <CalendarDays className="size-4 text-primary" />
-
-                                    <p className="mt-2 text-xs text-muted-foreground">
-                                        Exam date
-                                    </p>
-
-                                    <p className="mt-1 text-sm font-semibold text-foreground">
-                                        {targetExamDate}
-                                    </p>
-                                </div>
                             </div>
+                        ))}
+                    </dl>
 
-                            <div className="rounded-xl bg-muted/50 p-4">
-                                <p className="text-xs font-medium text-muted-foreground">
-                                    Technique
-                                </p>
+                    {priorityTopics.length > 0 ? (
+                        <div className="mt-5 border-t border-border/60 pt-4">
+                            <p className="text-xs text-muted-foreground">Focus first</p>
 
-                                <p className="mt-1 text-sm font-semibold text-foreground">
-                                    {selectedTechniqueInfo?.title}
-                                </p>
-
-                                <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                                    {selectedTechniqueInfo?.description}
-                                </p>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                                {priorityTopics.slice(0, 4).map((topic) => (
+                                    <Badge key={topic} variant="secondary" className="rounded-full">
+                                        {topic}
+                                    </Badge>
+                                ))}
                             </div>
-
-                            <div className="rounded-xl bg-muted/50 p-4">
-                                <p className="text-xs font-medium text-muted-foreground">
-                                    Priority topics
-                                </p>
-
-                                {priorityTopics.length > 0 ? (
-                                    <div className="mt-3 flex flex-wrap gap-2">
-                                        {priorityTopics.map((topic) => (
-                                            <Badge key={topic} variant="secondary">
-                                                {topic}
-                                            </Badge>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                                        Priority topics will appear after the diagnostic exam.
-                                    </p>
-                                )}
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="rounded-xl border-primary/15 bg-primary/5 shadow-none">
-                        <CardContent className="p-5">
-                            <div className="flex items-start gap-3">
-                                <Zap className="mt-1 size-5 shrink-0 text-primary" />
-
-                                <div>
-                                    <h3 className="text-sm font-semibold text-foreground">
-                                        REBYU will personalize this
-                                    </h3>
-
-                                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                                        After your diagnostic exam, this study plan can adapt to weak lessons,
-                                        quiz scores, mock exam performance, and readiness score.
-                                    </p>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </aside>
-            </div>
+                        </div>
+                    ) : null}
+                </div>
+            </aside>
         </div>
     )
 }
 
-export function StudyPlanGenerator({ onPlanGenerated }) {
+/**
+ * No premium guard: the study plan is part of the study flow every learner
+ * goes through after their diagnostic, not an upsell. Gating it meant a Free
+ * learner clicked "Continue", got nothing, and had no way to know why.
+ */
+export function StudyPlanGenerator({
+    onPlanGenerated,
+    lockedCertification,
+    certificationId,
+    generating,
+}) {
     return (
-        <LearnerPremiumGuard
-            feature="PERSONALIZED_STUDY_PLAN"
-            title="Pro Feature"
-            description="Personalized and AI-generated study plans require a Pro subscription. Upgrade to unlock this feature."
-            benefits={[
-                "AI-generated, exam-date-aware schedules",
-                "Weakness-driven topic prioritization",
-                "Adapts to your diagnostic and quiz performance",
-            ]}
-        >
-            <StudyPlanContent onPlanGenerated={onPlanGenerated} />
-        </LearnerPremiumGuard>
+        <StudyPlanContent
+            onPlanGenerated={onPlanGenerated}
+            lockedCertification={lockedCertification}
+            certificationId={certificationId}
+            generating={generating}
+        />
     )
 }
 

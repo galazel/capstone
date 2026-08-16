@@ -28,6 +28,7 @@ public class LearnerCompletedLessonService {
     private final EntityManager entityManager;
     private final RewardService rewardService;
     private final StreakService streakService;
+    private final AchievementAwardService achievementAwardService;
 
     public List<LearnerCompletedLessonDto> getAll() {
         return learnerCompletedLessonRepository.findAll().stream().map(learnerCompletedLessonMapper::toDto).toList();
@@ -52,6 +53,9 @@ public class LearnerCompletedLessonService {
         rewardService.awardXp(dto.getLearnerId(), LESSON_COMPLETION_XP, "LESSON_COMPLETED",
                 "lesson-completed:" + dto.getLessonId());
         streakService.recordActivity(dto.getLearnerId());
+        // After the row is saved, so "First Step" sees this very lesson. The
+        // evaluation is idempotent, so a re-marked lesson awards nothing twice.
+        achievementAwardService.evaluate(dto.getLearnerId());
 
         return saved;
     }

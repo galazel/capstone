@@ -10,6 +10,7 @@ import com.capstone.rebyu.enrollment.entity.LearnerOrderDetail;
 import com.capstone.rebyu.enrollment.repository.LearnerCertificationRepository;
 import com.capstone.rebyu.enrollment.repository.LearnerOrderDetailRepository;
 import com.capstone.rebyu.enrollment.repository.LearnerOrderRepository;
+import com.capstone.rebyu.progress.service.AchievementAwardService;
 import com.capstone.rebyu.user.entity.Learner;
 import com.capstone.rebyu.user.repository.LearnerRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -41,6 +42,7 @@ public class EnrollmentTransactionService {
     private final LearnerOrderDetailRepository orderDetailRepository;
     private final LearnerCertificationRepository enrollmentRepository;
     private final PaymentVerificationService paymentVerificationService;
+    private final AchievementAwardService achievementAwardService;
 
     @Transactional
     public PurchaseTransactionDto purchase(
@@ -184,13 +186,17 @@ public class EnrollmentTransactionService {
 
     private LearnerCertification createEnrollment(
             Learner learner, Certification certification, LearnerOrderDetail detail) {
-        return enrollmentRepository.save(LearnerCertification.builder()
+        LearnerCertification enrollment = enrollmentRepository.save(LearnerCertification.builder()
                 .learner(learner)
                 .certification(certification)
                 .orderDetail(detail)
                 .enrolledAt(LocalDateTime.now())
                 .status(LearnerCertification.Status.active)
                 .build());
+        // "Knowledge Seeker" is the only achievement enrolling can unlock, and
+        // this is the one place an enrollment is created.
+        achievementAwardService.evaluate(learner.getLearnerId());
+        return enrollment;
     }
 
     private PurchaseTransactionDto toTransactionDto(LearnerOrder order, Long certificationId) {

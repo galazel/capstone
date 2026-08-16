@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react"
 import { useNavigate, useOutletContext } from "react-router-dom"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 import {
   Award,
   BookOpen,
@@ -14,9 +16,11 @@ import {
 } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
+import { useStudyPlanGate } from "@/components/learner/use-study-plan-gate.jsx"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { BubbleCard } from "@/components/commons/bubble-card.jsx"
+import { achievementBadge } from "@/lib/achievements.js"
 import {
   LearnerEmptyState,
   ProgressBar,
@@ -49,15 +53,6 @@ function getAchievementDescription(achievement) {
       achievement?.achievementDescription ??
       achievement?.earnedAt ??
       "Keep learning to unlock more achievements."
-  )
-}
-
-function getAchievementIcon(achievement) {
-  return (
-      achievement?.iconUrl ??
-      achievement?.imageUrl ??
-      achievement?.badgeUrl ??
-      null
   )
 }
 
@@ -151,7 +146,9 @@ function getDiagnosticAssessment(certification, data) {
   )
 }
 
-function isDiagnosticCompleted(certification, data) {
+/** Exported: the certifications page runs the same check before opening
+ *  a certification, and two copies of this would drift. */
+export function isDiagnosticCompleted(certification, data) {
   const certificationId = getCertificationId(certification)
 
   if (
@@ -258,12 +255,14 @@ function CourseCard({ course, onOpen }) {
             { label: needsDiagnostic ? "Diagnostic required" : status },
           ]}
           footer={
-            <Button className="w-full rounded-full" onClick={onOpen}>
-              {needsDiagnostic ? (
-                  <ClipboardCheck className="mr-2 size-3.5" />
-              ) : null}
-              {needsDiagnostic ? "Start" : completed ? "Review" : "Continue"}
-            </Button>
+            <div className="w-full space-y-2">
+              <Button className="w-full rounded-full" onClick={onOpen}>
+                {needsDiagnostic ? (
+                    <ClipboardCheck className="mr-2 size-3.5" />
+                ) : null}
+                {needsDiagnostic ? "Start" : completed ? "Review" : "Continue"}
+              </Button>
+            </div>
           }
       >
         <p className="mt-2 line-clamp-2 min-h-[42px] text-sm leading-5 text-muted-foreground">
@@ -300,20 +299,13 @@ function CourseCard({ course, onOpen }) {
 }
 
 function AchievementItem({ achievement }) {
-  const iconUrl = getAchievementIcon(achievement)
+  const badge = achievementBadge(achievement)
 
   return (
       <div className="flex gap-3 border-b border-border py-4 last:border-b-0">
         <div className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-muted">
-          {iconUrl ? (
-              <img
-                  src={iconUrl}
-                  alt=""
-                  className="size-full rounded-md object-cover"
-                  onError={(event) => {
-                    event.currentTarget.style.display = "none"
-                  }}
-              />
+          {badge ? (
+              <img src={badge} alt="" className="size-full rounded-md object-contain p-0.5" />
           ) : (
               <Award className="size-5 text-primary" />
           )}
@@ -339,16 +331,21 @@ export default function LearnerLearningPage() {
   const enrolledCertifications = data?.enrolledCertifications ?? []
   const allLessons = data?.lessons ?? []
 
-  const achievements = Array.isArray(data?.latestAchievements)
-      ? data.latestAchievements
-      : Array.isArray(data?.achievements)
-          ? data.achievements
-          : []
+  // "Latest Achievements" -- earned only, newest first. The locked ones are
+  // shown on the account page's badge wall, where the whole catalog belongs.
+  const achievements = (Array.isArray(data?.achievements) ? data.achievements : [])
+      .filter((achievement) => achievement.earned)
+      .sort((a, b) => new Date(b.earnedAt ?? 0) - new Date(a.earnedAt ?? 0))
 
   const [localSearch, setLocalSearch] = useState("")
   const [selectedIndustry, setSelectedIndustry] = useState("ALL")
   const [selectedStatus, setSelectedStatus] = useState("ALL")
   const [viewMode, setViewMode] = useState("GRID")
+
+  const queryClient = useQueryClient()
+  // The whole plan gate — lookup, dialog, save. Shared with the certifications
+  // page so both entry points into a curriculum behave the same.
+  const { openCertification, studyPlanDialog } = useStudyPlanGate()
 
   const query = (localSearch || searchValue || "").trim().toLowerCase()
 
@@ -420,22 +417,6 @@ export default function LearnerLearningPage() {
       return matchesSearch && matchesIndustry && matchesStatus
     })
   }, [courses, query, selectedIndustry, selectedStatus])
-
-  /**
-   * Opening a certification goes to its curriculum, always — including when
-   * the diagnostic is still outstanding.
-   *
-   * It used to fork three ways from here: to the diagnostic, or straight into
-   * whichever lesson came next, or to the certification detail page. That meant
-   * clicking a certification could drop you into a lesson without ever showing
-   * you the certification, and the diagnostic redirect took over the whole
-   * click with no way to look at what you had enrolled in. The curriculum owns
-   * the gate now — every unit carries the lock and offers the diagnostic — so
-   * this is one destination.
-   */
-  function openCertification(course) {
-    navigate(`/learner/learning/${getCertificationId(course.certification)}`)
-  }
 
   return (
       <div className="space-y-6">
@@ -558,7 +539,11 @@ export default function LearnerLearningPage() {
                           <CourseCard
                               key={course.certification.certificationId}
                               course={course}
-                              onOpen={() => openCertification(course)}
+                              onOpen={() =>
+                                  openCertification(course.certification, {
+                                    diagnosticCompleted: course.diagnosticCompleted,
+                                  })
+                              }
                           />
                       ))}
                     </div>
@@ -575,7 +560,7 @@ export default function LearnerLearningPage() {
                       variant="link"
                       size="sm"
                       className="h-auto p-0 text-xs"
-                      onClick={() => navigate("/learner/profile")}
+                      onClick={() => navigate("/learner/account")}
                   >
                     Show all
                   </Button>
@@ -586,8 +571,8 @@ export default function LearnerLearningPage() {
                       {achievements.slice(0, 5).map((achievement, index) => (
                           <AchievementItem
                               key={
+                                  achievement.code ??
                                   achievement.achievementId ??
-                                  achievement.id ??
                                   `${getAchievementTitle(achievement)}-${index}`
                               }
                               achievement={achievement}
@@ -625,6 +610,9 @@ export default function LearnerLearningPage() {
               </aside>
             </div>
         )}
+
+        {/* The study-plan generator, rendered by the shared gate hook. */}
+        {studyPlanDialog}
       </div>
   )
 }

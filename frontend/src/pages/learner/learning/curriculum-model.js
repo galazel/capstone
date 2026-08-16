@@ -99,7 +99,16 @@ export function buildCurriculum({
   examTypesById,
   lessonPriorityById,
 }) {
-  const published = exams.filter(isPublishedExam)
+  /* Published, and part of the certification's own curriculum.
+     The AI tutor saves its practice quizzes and flashcard decks as published
+     exams against the lesson (GeneratedAssessmentService), flagged
+     `isGenerated` and scoped "GENERATED" precisely so they never appear as
+     curriculum work. They are one learner's practice, generated on demand --
+     listing them here would grow the curriculum every time the tutor was
+     asked for a deck. */
+  const published = exams
+    .filter(isPublishedExam)
+    .filter((exam) => !exam.isGenerated && examScope(exam) !== "GENERATED")
 
   const diagnostic = published.find((exam) => isDiagnosticExam(exam, examTypesById)) ?? null
   const mockExam =
@@ -114,6 +123,19 @@ export function buildCurriculum({
   const assessmentByMiddle = new Map()
   const assessmentByMajor = new Map()
 
+  /* Everything that does not win a slot below. The buckets are deliberately
+     one-per-place -- a unit shows one unit exam, a lesson one quiz -- so a
+     second exam on the same target, or a certification-level exam that is not
+     the chosen mock, used to be dropped and rendered nowhere at all. The
+     curriculum then showed four assessments while the certification had nine,
+     and nothing on the page accounted for the difference.
+
+     They are collected rather than force-fitted into the slots: the layout
+     reads as one quiz per lesson for a reason, and widening it would make an
+     authoring mistake look like intended structure. These surface in their own
+     section instead, where they can be sat and can be seen to exist. */
+  const extraExams = []
+
   published.forEach((exam) => {
     if (exam === diagnostic || exam === mockExam) return
 
@@ -124,15 +146,25 @@ export function buildCurriculum({
       // and silently showing both would make the lesson look twice as long.
       if (!quizByLesson.has(idOf(exam.lessonId))) {
         quizByLesson.set(idOf(exam.lessonId), exam)
+      } else {
+        extraExams.push(exam)
       }
     } else if (MIDDLE_SCOPES.has(scope) && exam.middleCategoryId != null) {
       if (!assessmentByMiddle.has(idOf(exam.middleCategoryId))) {
         assessmentByMiddle.set(idOf(exam.middleCategoryId), exam)
+      } else {
+        extraExams.push(exam)
       }
     } else if (MAJOR_SCOPES.has(scope) && exam.majorCategoryId != null) {
       if (!assessmentByMajor.has(idOf(exam.majorCategoryId))) {
         assessmentByMajor.set(idOf(exam.majorCategoryId), exam)
+      } else {
+        extraExams.push(exam)
       }
+    } else {
+      // Certification-level exams beyond the mock, and anything whose target
+      // no longer resolves to a category in this curriculum.
+      extraExams.push(exam)
     }
   })
 
@@ -201,6 +233,7 @@ export function buildCurriculum({
     majors,
     diagnostic,
     mockExam,
+    extraExams,
     lessonTotal,
     lessonDone,
     progress: lessonTotal ? Math.round((lessonDone / lessonTotal) * 100) : 0,

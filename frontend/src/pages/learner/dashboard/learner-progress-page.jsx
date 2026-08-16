@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react"
 import { useNavigate, useOutletContext } from "react-router-dom"
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 import {
   ArrowRight,
   Brain,
   BookOpen,
-  Flame,
+  Check,
+  GripHorizontal,
   Loader2,
   Target,
-  TrendingUp,
   Trophy,
 } from "@/components/icons"
 
@@ -21,21 +22,34 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   LearnerEmptyState,
   LearnerErrorState,
 } from "@/components/learner/learner-ui.jsx"
 import LearnerPremiumGuard from "@/components/learner/learner-premium-guard.jsx"
+import { ExamCountdownTile } from "@/components/learner/exam-countdown-tile.jsx"
+import { StudyNotesTile } from "@/components/learner/study-notes-tile.jsx"
+import { TodaysPlanTile } from "@/components/learner/todays-plan-tile.jsx"
 import { PrioritySeal } from "@/components/learner/priority-tag.jsx"
-import { BentoGrid, BentoHeading, BentoStat, BentoTile } from "@/components/commons/bento.jsx"
+import { BentoGrid, BentoHeading, BentoTile } from "@/components/commons/bento.jsx"
+import { DashboardBoard } from "@/components/commons/dashboard-board.jsx"
 import {
-  BarBreakdownChart,
-  DonutChart,
   RadialGauge,
   TrendLineChart,
+  seriesColor,
+  useChartTheme,
 } from "@/components/charts/rebyu-charts.jsx"
 import { FEATURES } from "@/services/subscriptionService.js"
-import { getProgressAnalytics } from "@/services/learnerAnalyticsService.js"
+import {
+  PRIORITY_META,
+  getProgressAnalytics,
+} from "@/services/learnerAnalyticsService.js"
+import {
+  DASHBOARD_LAYOUT_KEY,
+  getDashboardLayout,
+  saveDashboardLayout,
+} from "@/services/studyDeskService.js"
 
 /* The page draws every chart from the shared portal kit rather than its own
    chart.js instance. That kit reads the active theme, so the grid lines and
@@ -45,30 +59,6 @@ import { getProgressAnalytics } from "@/services/learnerAnalyticsService.js"
 
 // Anything the page paints outside a chart still needs the series hues.
 const SERIES_INK = ["#1B6EF3", "#00B8D4", "#FF9600", "#CE82FF"]
-
-// The score a learner is working toward. Used as the reference line on the
-// difficulty breakdown so a bar reads as "short of the bar" rather than just
-// "shorter than the one beside it".
-const TARGET_ACCURACY = 70
-
-function getNumber(value, fallback = 0) {
-  const parsedValue = Number(value)
-
-  return Number.isFinite(parsedValue) ? parsedValue : fallback
-}
-
-// A bare percentage doesn't say whether 55% is good or bad without a scale to
-// compare it against -- the same reason a difficulty label reads faster than
-// a raw score. Bands are wide on purpose: confidence is noisy at the edges,
-// and a tier that flips on every point swing would read as jittery rather
-// than informative.
-function confidenceTier(value) {
-  if (value === null) return null
-  if (value < 40) return "Low"
-  if (value < 70) return "Moderate"
-  if (value < 90) return "High"
-  return "Very high"
-}
 
 // For values the backend already reports on a 0-100 scale. Never re-scales --
 // a real value of 0.5 (half a percent) must stay 0.5, not become 50.
@@ -109,18 +99,61 @@ function getTopicTitle(topic, fallback = "Untitled Topic") {
   )
 }
 
-function prettyBucket(key) {
-  return key?.replaceAll("_", " ").toLowerCase() ?? "unknown"
+/* ------------------------------------------------------------------ pieces */
+
+/**
+ * How much evidence sits behind a mastery estimate.
+ *
+ * A mastery number on its own overstates what the system knows: 40% from three
+ * answers and 40% from forty are the same figure carrying very different
+ * weight, and only one of them is worth reorganising a study week around. The
+ * BKT service reports the observation count per lesson as `evidenceCount`, and
+ * this turns it into the tier a learner can act on.
+ *
+ * Bands are deliberately wide: a tier that flips every time one more question
+ * is answered reads as jitter rather than as information.
+ */
+const EVIDENCE_TIERS = [
+  { min: 25, label: "high", bars: 3 },
+  { min: 8, label: "medium", bars: 2 },
+  { min: 1, label: "low", bars: 1 },
+]
+
+function evidenceConfidence(evidenceCount) {
+  const count = Number(evidenceCount)
+  if (!Number.isFinite(count) || count <= 0) return null
+  return EVIDENCE_TIERS.find((tier) => count >= tier.min) ?? EVIDENCE_TIERS.at(-1)
 }
 
-/* ------------------------------------------------------------------ pieces */
+/**
+ * Three ascending bars. Decorative on its own — the tier is always written out
+ * beside it, so the meaning never depends on counting bars or reading a colour.
+ */
+function ConfidenceMeter({ bars }) {
+  return (
+    <span className="inline-flex items-end gap-0.5" aria-hidden="true">
+      {[1, 2, 3].map((step) => (
+        <span
+          key={step}
+          className={`w-1 rounded-sm ${step <= bars ? "bg-foreground" : "bg-muted-foreground/30"}`}
+          style={{ height: `${4 + step * 3}px` }}
+        />
+      ))}
+    </span>
+  )
+}
 
 /**
  * One measured thing with a bar under it. Full title on its own line rather
  * than sharing a row with the number, because lesson titles here run long
  * enough that a shared row truncates every one of them to nothing.
+ *
+ * `evidenceCount` is optional: rows that have it gain a confidence line under
+ * the bar, rows that do not are unchanged.
  */
-function MasteryRow({ title, caption, value, color = SERIES_INK[0], leading }) {
+function MasteryRow({ title, caption, value, color = SERIES_INK[0], leading, evidenceCount }) {
+  const confidence = evidenceConfidence(evidenceCount)
+
   return (
     <div className="flex items-start gap-3">
       {leading ?? null}
@@ -144,6 +177,18 @@ function MasteryRow({ title, caption, value, color = SERIES_INK[0], leading }) {
             style={{ width: `${value}%`, background: color }}
           />
         </div>
+
+        {/* Only drawn when there is evidence to report. A row that says
+            "0 answers seen" invites the reading that the topic was assessed and
+            scored zero, which is the opposite of what an absent count means. */}
+        {confidence ? (
+          <p className="mt-1.5 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+            <ConfidenceMeter bars={confidence.bars} />
+            {confidence.label} confidence
+            <span aria-hidden="true">·</span>
+            {evidenceCount} {evidenceCount === 1 ? "answer" : "answers"} seen
+          </p>
+        ) : null}
       </div>
     </div>
   )
@@ -155,15 +200,36 @@ function MasteryRow({ title, caption, value, color = SERIES_INK[0], leading }) {
  * completion: the per-lesson progress it used to show was read off fields the
  * lesson payload does not carry, so it sat at 0% no matter how much was done.
  */
-function NextUpTile({ nextLesson, certification, completedLessons, totalLessons, onResume }) {
-  const done = totalLessons > 0 && completedLessons >= totalLessons
+function NextUpTile({
+  nextLesson,
+  certification,
+  completedLessons,
+  totalLessons,
+  passedAssessments,
+  totalAssessments,
+  onResume,
+  onOpenAssessments,
+}) {
+  /* "Finished" needs the assessments too.
+     This used to be the lesson counters alone, so reading the last lesson
+     flipped the tile to "all caught up" while every quiz and mock exam on the
+     certification was still unsat -- the tile declaring victory next to a
+     readiness gauge reading 29%.
+     A certification with no published assessments is judged on lessons alone,
+     rather than being made permanently unfinishable. */
+  const lessonsDone = totalLessons > 0 && completedLessons >= totalLessons
+  const assessmentsDone = totalAssessments === 0 || passedAssessments >= totalAssessments
+  const done = lessonsDone && assessmentsDone
+  // Lessons finished but assessments outstanding: the tile has no next lesson
+  // to offer, and the honest next action is to go and sit them.
+  const awaitingAssessments = lessonsDone && !assessmentsDone
   const percent = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0
 
   return (
     <BentoTile tone="macaw" col={4} row={2}>
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm font-bold text-rb-macaw-lip">
-          {done ? "certification complete" : "pick up where you left off"}
+          {done ? "all caught up" : awaitingAssessments ? "assessments left" : "study next"}
         </p>
 
         <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/60 text-rb-eel dark:bg-white/10 dark:text-rb-snow">
@@ -182,14 +248,20 @@ function NextUpTile({ nextLesson, certification, completedLessons, totalLessons,
 
         <p className="mt-1 font-rb-display text-xl font-extrabold leading-tight sm:text-2xl">
           {done
-            ? "Every lesson is done."
-            : (nextLesson?.name ?? nextLesson?.title ?? "Untitled Lesson")}
+            ? "Certification complete."
+            : awaitingAssessments
+              ? `${totalAssessments - passedAssessments} assessment${
+                  totalAssessments - passedAssessments === 1 ? "" : "s"
+                } to pass`
+              : (nextLesson?.name ?? nextLesson?.title ?? "Untitled Lesson")}
         </p>
 
         <p className="mt-1.5 text-sm text-rb-macaw-lip">
           {done
-            ? "Sit the unit assessments to convert that into mastery."
-            : (nextLesson?.middleCategoryTitle ?? "Continue studying to raise your mastery.")}
+            ? "Every lesson read and every assessment passed."
+            : awaitingAssessments
+              ? "Every lesson is read. Sit the remaining assessments to finish the certification."
+              : (nextLesson?.middleCategoryTitle ?? "Continue studying to raise your mastery.")}
         </p>
       </div>
 
@@ -197,6 +269,9 @@ function NextUpTile({ nextLesson, certification, completedLessons, totalLessons,
         <div className="mb-2 flex items-center justify-between text-xs font-bold text-rb-macaw-lip">
           <span>
             {completedLessons} of {totalLessons} lessons
+            {totalAssessments > 0
+              ? ` · ${passedAssessments} of ${totalAssessments} assessments`
+              : ""}
           </span>
           <span className="tabular-nums">{percent}%</span>
         </div>
@@ -208,9 +283,18 @@ function NextUpTile({ nextLesson, certification, completedLessons, totalLessons,
           />
         </div>
 
+        {/* The action follows the state. With lessons finished and assessments
+            outstanding there is no next lesson to resume, so the button points
+            at the curriculum, where the unit assessments live -- otherwise the
+            tile names work to do and offers no way to start it. */}
         {!done && nextLesson ? (
           <Button className="mt-4 w-full sm:w-fit" onClick={onResume}>
-            Resume lesson
+            study now
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </Button>
+        ) : awaitingAssessments ? (
+          <Button className="mt-4 w-full sm:w-fit" onClick={onOpenAssessments}>
+            go to assessments
             <ArrowRight className="size-4" aria-hidden="true" />
           </Button>
         ) : null}
@@ -220,12 +304,25 @@ function NextUpTile({ nextLesson, certification, completedLessons, totalLessons,
 }
 
 /**
- * Readiness is the question the learner actually has -- "can I sit the exam
- * yet" -- so it gets the arc rather than being a footnote under confidence.
+ * Readiness, with the coverage it rests on.
+ *
+ * Readiness is a weighted blend of average mastery with the diagnostic, quiz,
+ * middle-exam and mock-exam averages, renormalised over whichever of those
+ * exist -- "could I pass?".
+ *
+ * The certification-level confidence figure that used to sit under this gauge
+ * is gone. Despite the name it was not a measure of certainty: the service
+ * computes it as the evidence-weighted mean of the same lesson mastery the
+ * Topic Mastery figure averages, so it was that number again under a different
+ * label, and it collided with the per-topic "confidence" in the mastery list --
+ * which does mean certainty, and is derived from evidence count.
+ *
+ * The coverage line stays, because it is the part that actually qualified the
+ * gauge: readiness only sees lessons that have been assessed, so a high score
+ * over three of forty lessons is a statement about a small corner of the
+ * certification.
  */
-function ReadinessTile({ readiness, confidence }) {
-  const tier = confidenceTier(confidence)
-
+function ReadinessTile({ readiness, assessedLessons, totalLessons }) {
   return (
     <BentoTile col={2} row={2}>
       <BentoHeading title="exam readiness" />
@@ -237,7 +334,7 @@ function ReadinessTile({ readiness, confidence }) {
           <p className="mt-3 text-sm font-medium text-foreground">Not scored yet</p>
 
           <p className="mt-1 text-xs text-muted-foreground">
-            Sit a quiz or assessment to get a readiness estimate.
+            Sit a quiz or assessment to get an estimate.
           </p>
         </div>
       ) : (
@@ -245,126 +342,13 @@ function ReadinessTile({ readiness, confidence }) {
           <RadialGauge value={readiness} label="ready for the exam" height={150} />
 
           <p className="mt-3 text-center text-xs font-semibold text-muted-foreground">
-            {tier ? `${tier} confidence · ${confidence}%` : "Confidence not scored yet"}
+            {totalLessons > 0
+              ? `Based on ${assessedLessons} of ${totalLessons} lessons assessed`
+              : "Based on the lessons assessed so far"}
           </p>
         </>
       )}
     </BentoTile>
-  )
-}
-
-function RecommendationCard({ recommendation }) {
-  return (
-    <div className="flex items-start gap-3 rounded-rb-tile border-2 border-border/60 px-3.5 py-3">
-      <PrioritySeal tag={recommendation.priorityTag} size={44} />
-
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-foreground">
-          {recommendation.lessonTitle ?? "Untitled Topic"}
-        </p>
-
-        {recommendation.reason ? (
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            {recommendation.reason}
-          </p>
-        ) : null}
-      </div>
-    </div>
-  )
-}
-
-function CategoryMasteryNode({ category, depth = 0 }) {
-  const mastery = clampPercent(category.masteryPercentage)
-
-  return (
-    <div>
-      <div
-        className="flex items-center justify-between gap-3 py-1.5"
-        style={{ paddingLeft: `${depth * 16}px` }}
-      >
-        <p
-          className={`truncate ${
-            depth === 0 ? "text-sm font-semibold text-foreground" : "text-sm text-muted-foreground"
-          }`}
-        >
-          {category.title ?? "Untitled Category"}
-        </p>
-
-        <span className="shrink-0 text-xs font-medium text-muted-foreground">
-          {mastery === null ? "Unassessed" : `${mastery}%`}
-          {" · "}
-          {category.completedLessonCount}/{category.totalLessonCount} lessons
-        </span>
-      </div>
-
-      {(category.children ?? []).map((child) => (
-        <CategoryMasteryNode
-          key={`${child.categoryLevel}-${child.categoryId}`}
-          category={child}
-          depth={depth + 1}
-        />
-      ))}
-    </div>
-  )
-}
-
-function RecentActivityRow({ activity }) {
-  const occurredAt = activity.occurredAt ? new Date(activity.occurredAt) : null
-  const score = clampPercent(activity.scorePercentage)
-
-  return (
-    <div className="flex items-center justify-between gap-3 py-2">
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-foreground">
-          {activity.title ?? (activity.activityType === "CHALLENGE" ? "Challenge" : "Assessment")}
-        </p>
-
-        <p className="text-xs text-muted-foreground">
-          {activity.activityType === "CHALLENGE" ? "Challenge" : "Assessment"}
-          {occurredAt ? ` · ${occurredAt.toLocaleDateString()}` : ""}
-        </p>
-      </div>
-
-      {score != null ? (
-        <span
-          className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${
-            activity.passed === false
-              ? "bg-rb-fox-wash text-rb-fox-lip"
-              : "bg-rb-feather-wash text-rb-feather-lip"
-          }`}
-        >
-          {score}%
-        </span>
-      ) : null}
-    </div>
-  )
-}
-
-function PerformanceBreakdownList({ buckets }) {
-  const visible = (buckets ?? []).filter((bucket) => bucket.totalAnswered > 0)
-
-  if (visible.length === 0) {
-    return <p className="text-sm text-muted-foreground">No graded answers yet.</p>
-  }
-
-  // A certification can carry more question types than fit two rows, so the
-  // list scrolls inside its tile rather than pushing the band out of shape.
-  return (
-    <div className="-mr-2 min-h-0 flex-1 space-y-3.5 overflow-y-auto pr-2">
-      {visible.map((bucket) => {
-        const accuracy = clampPercent(bucket.accuracyPercentage) ?? 0
-
-        return (
-          <MasteryRow
-            key={bucket.bucketKey}
-            title={<span className="capitalize">{prettyBucket(bucket.bucketKey)}</span>}
-            caption={`${bucket.correctAnswers} of ${bucket.totalAnswered} correct`}
-            value={accuracy}
-            color={accuracy >= TARGET_ACCURACY ? SERIES_INK[0] : SERIES_INK[2]}
-          />
-        )
-      })}
-    </div>
   )
 }
 
@@ -487,90 +471,749 @@ export default function LearnerProgressPage() {
 
   const totalLessons = analytics?.totalLessonCount ?? 0
   const completedLessons = analytics?.completedLessonCount ?? 0
-  const overallProgress =
-    analytics?.completionPercentage != null ? Math.round(analytics.completionPercentage) : 0
-
-  const weakestTopics = analytics?.weakestTopics ?? []
-  const strongestTopics = analytics?.strongestTopics ?? []
 
   const nextLesson = useMemo(() => {
     return lessons.find((lesson) => !lesson.completed) ?? null
   }, [lessons])
 
-  const resumeNextLesson = () => {
-    if (!nextLesson) return
-
-    // The middle category is the unit a lesson is read inside; without it
-    // there is nowhere more specific to land than the curriculum itself.
-    if (nextLesson.certificationId && nextLesson.middleCategoryId) {
+  /**
+   * Open a lesson in the reading experience.
+   *
+   * The topic page, which is where the curriculum sends a learner and where the
+   * AI tutor lives. `/learner/lessons/:lessonId` is the older standalone page —
+   * still routed and still reachable from an assessment breakdown, but not
+   * where a lesson is read today, so linking there from here would put this
+   * page on a different screen than every other route into a lesson.
+   *
+   * `?lesson=` names the lesson explicitly. The topic page otherwise opens the
+   * first unfinished lesson in the topic, which is only coincidentally the one
+   * that was asked for.
+   *
+   * The middle category is the unit a lesson is read inside; without it there
+   * is nowhere more specific to land than the certification, which still beats
+   * a click that goes nowhere.
+   */
+  const goToLesson = (lesson) => {
+    if (lesson?.certificationId && lesson?.middleCategoryId) {
+      const query = lesson.lessonId == null ? "" : `?lesson=${lesson.lessonId}`
       navigate(
-        `/learner/learning/${nextLesson.certificationId}/topics/${nextLesson.middleCategoryId}`
+        `/learner/learning/${lesson.certificationId}/topics/${lesson.middleCategoryId}${query}`,
       )
       return
     }
 
-    navigate(`/learner/learning/${selectedCertificationId}`)
+    if (selectedCertificationId) {
+      navigate(`/learner/learning/${selectedCertificationId}`)
+    }
   }
 
-  /* Score over time. Quiz and exam are two series on one axis -- both are
-     percentages, so they belong on the same chart. A run of attempts of one
-     kind leaves gaps in the other, which recharts draws as a break rather
-     than inventing a straight line through data that isn't there. */
-  const scoreTrendRows = useMemo(() => {
-    const isQuizType = (type) => {
-      const normalized = (type ?? "").toUpperCase()
-      return normalized.includes("QUIZ") || normalized === "DIAGNOSTIC"
+  const resumeNextLesson = () => {
+    if (!nextLesson) return
+    goToLesson(nextLesson)
+  }
+
+  /**
+   * Score across retakes, one line per assessment.
+   *
+   * Plotted against attempt number rather than the calendar, because the
+   * question this answers is "is my second go at this better than my first" --
+   * and on a date axis the retakes of one assessment are scattered among every
+   * other assessment's attempts, so an improvement reads as noise. Each
+   * assessment gets its own line, so a rising line is that assessment getting
+   * better.
+   */
+  const retakeTrend = useMemo(() => {
+    const points = (analytics?.scoreTrend ?? []).filter(
+      (point) => clampPercent(point.percentage) !== null
+    )
+
+    const byAssessment = new Map()
+    for (const point of points) {
+      // examId when the backend has it; the title is the fallback so older
+      // payloads still group instead of drawing a line per attempt.
+      const key = String(point.examId ?? point.assessmentTitle ?? "unknown")
+      if (!byAssessment.has(key)) {
+        byAssessment.set(key, {
+          key: `assessment-${byAssessment.size}`,
+          name: point.assessmentTitle ?? "Assessment",
+          attempts: [],
+        })
+      }
+      byAssessment.get(key).attempts.push(point)
     }
 
-    return (analytics?.scoreTrend ?? []).map((point, index) => {
-      const percentage = clampPercent(point.percentage)
+    const assessments = [...byAssessment.values()]
+      .map((assessment) => ({
+        ...assessment,
+        attempts: [...assessment.attempts].sort(
+          (a, b) =>
+            (a.attemptNumber ?? 0) - (b.attemptNumber ?? 0) ||
+            new Date(a.submittedAt ?? 0) - new Date(b.submittedAt ?? 0)
+        ),
+      }))
+      // Most-attempted first: retakes are the subject, so the assessment a
+      // learner has ground away at is the one they came here to look at.
+      .sort((a, b) => b.attempts.length - a.attempts.length)
 
-      return {
-        label: point.submittedAt
-          ? new Date(point.submittedAt).toLocaleDateString(undefined, {
-              month: "short",
-              day: "numeric",
-            })
-          : point.assessmentTitle ?? `Attempt ${index + 1}`,
-        quiz: isQuizType(point.assessmentType) ? percentage : null,
-        exam: isQuizType(point.assessmentType) ? null : percentage,
+    // Capped to the chart kit's four categorical hues, and said out loud in
+    // the tile rather than silently truncated. A fifth series is not given a
+    // new colour by the kit -- it folds into neutral grey, so two assessments
+    // would arrive the same shade and stop being distinguishable at all.
+    const MAX_SERIES = 4
+    const shown = assessments.slice(0, MAX_SERIES)
+
+    const longestRun = shown.reduce((max, item) => Math.max(max, item.attempts.length), 0)
+    const rows = Array.from({ length: longestRun }, (_, index) => {
+      const row = { label: `Attempt ${index + 1}` }
+      for (const assessment of shown) {
+        // Null, not zero, past the end of a run: recharts breaks the line
+        // rather than drawing it down to the floor for an attempt never sat.
+        row[assessment.key] = clampPercent(assessment.attempts[index]?.percentage) ?? null
       }
+      return row
+    })
+
+    const summaries = shown.map((assessment) => {
+      const scores = assessment.attempts.map((attempt) => clampPercent(attempt.percentage) ?? 0)
+      const first = scores[0]
+      const latest = scores[scores.length - 1]
+      return {
+        key: assessment.key,
+        name: assessment.name,
+        attempts: scores.length,
+        first,
+        latest,
+        best: Math.max(...scores),
+        delta: latest - first,
+      }
+    })
+
+    return {
+      rows,
+      series: shown.map((assessment) => ({ key: assessment.key, name: assessment.name })),
+      summaries,
+      hiddenCount: assessments.length - shown.length,
+    }
+  }, [analytics])
+
+  /**
+   * Every assessed lesson, ranked weakest first.
+   *
+   * `lessonPriorities` rather than `weakestTopics`: the curated lists are a
+   * top-N of each extreme, so between "4 weakest" and "4 strongest" the middle
+   * of the certification never appears anywhere on this page. This is the
+   * uncapped set the DTO exists to carry — the curriculum pages already read
+   * it for their per-lesson tags.
+   *
+   * Unassessed lessons are dropped rather than sorted to the front. They would
+   * otherwise lead the list at 0%, which reads as "you scored nothing here"
+   * when it means "nothing has been asked yet" — and they are already counted
+   * separately as `unassessedTopicCount`.
+   */
+  const rankedMastery = useMemo(() => {
+    const rows = (analytics?.lessonPriorities ?? []).filter(
+      (topic) => Number(topic.evidenceCount) > 0 && topic.masteryPercentage != null
+    )
+
+    return [...rows].sort((a, b) => {
+      const byMastery = getTopicScore(a) - getTopicScore(b)
+      if (byMastery !== 0) return byMastery
+      // Same mastery: the better-evidenced one first, because it is the one
+      // the estimate is actually sure about and therefore the safer thing to
+      // spend an hour on.
+      return Number(b.evidenceCount ?? 0) - Number(a.evidenceCount ?? 0)
     })
   }, [analytics])
 
-  const difficultyRows = useMemo(() => {
-    return (analytics?.performanceByDifficulty ?? [])
-      .filter((bucket) => bucket.totalAnswered > 0)
-      .map((bucket) => ({
-        difficulty: prettyBucket(bucket.bucketKey),
-        accuracy: clampPercent(bucket.accuracyPercentage) ?? 0,
+  /**
+   * One row per assessment, carrying its most recent attempt.
+   *
+   * Built from `scoreTrend`, which is already every submitted attempt with its
+   * `examId` and `attemptNumber` — the same source the retake chart groups. No
+   * new endpoint is needed to answer "what have I sat, and how did it go".
+   *
+   * The point of the tile is the link out. Attempt history was previously only
+   * reachable by going to the certification, opening the assessment, and then
+   * its history; this puts the same destination one click from the page a
+   * learner is already on when they wonder about it.
+   */
+  const assessmentHistory = useMemo(() => {
+    const byExam = new Map()
+
+    for (const point of analytics?.scoreTrend ?? []) {
+      // Without an examId there is no history route to send anyone to, so the
+      // row would be a dead end. Those attempts still count in the retake
+      // chart, which groups by title as a fallback; here they are skipped.
+      if (point.examId == null) continue
+
+      const key = String(point.examId)
+      const existing = byExam.get(key)
+      const attemptNo = point.attemptNumber ?? 0
+      const submitted = new Date(point.submittedAt ?? 0).getTime()
+
+      if (!existing) {
+        byExam.set(key, { latest: point, attempts: 1 })
+        continue
+      }
+
+      existing.attempts += 1
+
+      const currentNo = existing.latest.attemptNumber ?? 0
+      const currentSubmitted = new Date(existing.latest.submittedAt ?? 0).getTime()
+      // Attempt number first, timestamp only to break a tie: two attempts can
+      // share a submission minute, but their numbering is always ordered.
+      if (attemptNo > currentNo || (attemptNo === currentNo && submitted > currentSubmitted)) {
+        existing.latest = point
+      }
+    }
+
+    return [...byExam.entries()]
+      .map(([examId, entry]) => ({
+        examId,
+        title: entry.latest.assessmentTitle ?? "Assessment",
+        assessmentType: entry.latest.assessmentType,
+        score: clampPercent(entry.latest.percentage),
+        passed: entry.latest.passed,
+        submittedAt: entry.latest.submittedAt,
+        attempts: entry.attempts,
+        resultId: entry.latest.assessmentAttemptId,
       }))
+      // Most recently sat first — the thing you just did is the thing you are
+      // most likely to have come here to look at.
+      .sort((a, b) => new Date(b.submittedAt ?? 0) - new Date(a.submittedAt ?? 0))
   }, [analytics])
 
-  const answerSplit = useMemo(() => {
-    const correct = getNumber(analytics?.totalCorrectAnswers, 0)
-    const incorrect = getNumber(analytics?.totalIncorrectAnswers, 0)
+  /**
+   * The one topic to work on next.
+   *
+   * Replaces the average this tile used to show. That figure divided only by
+   * the topics already assessed, so a certification with one measured topic
+   * answered correctly read 100% while the learner had barely started -- true
+   * arithmetic, and a useless thing to put in the largest text on the tile.
+   *
+   * Priority first, lowest mastery as the tie-break. The two usually agree;
+   * where they do not, the priority tag is the better answer because it already
+   * weighs how much the exam leans on that topic, which a bare mastery
+   * percentage cannot see. An unknown or absent tag ranks below every known one
+   * rather than above, so a missing tag never promotes a topic.
+   */
+  /* Red when the topic is actually urgent, so the tile's colour carries the
+     same message as the seal on it. Anything below high priority keeps the
+     ordinary surface -- if every focus topic were red, red would stop meaning
+     anything. Priority tags are always accompanied by the written seal, so
+     colour is never the only signal. */
+  const URGENT_TONES = { CRITICAL_PRIORITY: "cardinal", HIGH_PRIORITY: "cardinal" }
 
-    if (correct + incorrect === 0) return []
+  const focusTopic = useMemo(() => {
+    if (rankedMastery.length === 0) return null
 
-    return [
-      { name: "Correct", value: correct },
-      { name: "Incorrect", value: incorrect },
-    ]
-  }, [analytics])
+    return [...rankedMastery].sort((a, b) => {
+      const rankA = PRIORITY_META[a.priorityTag]?.rank ?? -1
+      const rankB = PRIORITY_META[b.priorityTag]?.rank ?? -1
+      if (rankA !== rankB) return rankB - rankA
+      return getTopicScore(a) - getTopicScore(b)
+    })[0]
+  }, [rankedMastery])
 
-  const topicMastery = clampPercent(analytics?.overallMasteryPercentage)
-  const confidenceLevel = clampPercent(analytics?.confidencePercentage)
-  const studyStreak = getNumber(analytics?.studyStreakDays, 0)
+  const focusTone = URGENT_TONES[focusTopic?.priorityTag] ?? "beetle"
   const readinessLevel = clampPercent(analytics?.readinessPercentage)
+  /* What the readiness figure is actually based on. The response carries the
+     unassessed count rather than a coverage percentage, so the assessed count
+     is the total less that. Floored at zero: the two numbers come from
+     different queries and a transient disagreement should not print "-1". */
+  const assessedLessonCount = Math.max(0, totalLessons - (analytics?.unassessedTopicCount ?? 0))
   const bktUnavailable = analytics != null && analytics.bktAvailable === false
 
-  const answerTotal =
-    getNumber(analytics?.totalCorrectAnswers, 0) + getNumber(analytics?.totalIncorrectAnswers, 0)
-  const answerAccuracy =
-    answerTotal > 0
-      ? Math.round((getNumber(analytics?.totalCorrectAnswers, 0) / answerTotal) * 100)
-      : null
+  // The same palette the chart draws its lines with, so a swatch beside an
+  // assessment is the colour of that assessment's line -- in either theme.
+  const chartTheme = useChartTheme()
+
+  /**
+   * Every tile on this page, in its default order, with the room it needs.
+   *
+   * Sizes stay here rather than being draggable: a trend line needs width
+   * and a counter does not, and a dashboard where those can be squeezed is
+   * one where the charts stop being readable. The learner arranges the
+   * order; the tiles keep their proportions.
+   *
+   * The ids are the contract with the saved layout, so renaming one drops a
+   * learner's position for that tile (it falls back to the default spot)
+   * rather than breaking the page.
+   */
+  const dashboardTiles = [
+    {
+      id: "next-up",
+      col: 4,
+      row: 2,
+      element: (
+        <NextUpTile
+        nextLesson={nextLesson}
+        certification={selectedCertification}
+        completedLessons={completedLessons}
+        totalLessons={totalLessons}
+        passedAssessments={analytics?.passedAssessmentCount ?? 0}
+        totalAssessments={analytics?.totalAssessmentCount ?? 0}
+        onResume={resumeNextLesson}
+        onOpenAssessments={() =>
+        selectedCertificationId
+        ? navigate(`/learner/learning/${selectedCertificationId}`)
+        : undefined
+        }
+        />
+      ),
+    },
+    {
+      // Id unchanged so a saved board keeps this tile in place -- same slot,
+      // same question, a number that can actually be explained.
+      id: "exam-readiness",
+      col: 2,
+      row: 2,
+      element: (
+        <ReadinessTile
+        readiness={readinessLevel}
+        assessedLessons={assessedLessonCount}
+        totalLessons={totalLessons}
+        />
+      ),
+    },
+    {
+      // Id kept so a saved board keeps this tile where the learner put it --
+      // it occupies the same slot and answers a better version of the same
+      // question, so moving it would be the surprise, not the change.
+      id: "topic-mastery",
+      col: 2,
+      row: 1,
+      element: (
+        <BentoTile tone={focusTone} col={2} row={1}>
+          <div className="flex items-start justify-between gap-3">
+            <p className={`text-sm font-bold ${focusTone === "cardinal" ? "text-rb-cardinal-lip" : "text-rb-beetle-lip"}`}>
+              {focusTopic ? "Work on this next" : "Topic Mastery"}
+            </p>
+            {focusTopic?.priorityTag ? (
+              <PrioritySeal tag={focusTopic.priorityTag} size={36} />
+            ) : (
+              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/60 text-rb-eel dark:bg-white/10 dark:text-rb-snow">
+                <Brain className="size-4" aria-hidden="true" />
+              </span>
+            )}
+          </div>
+
+          {focusTopic ? (
+            <div className="mt-auto min-w-0">
+              {/* The percentage carries the tile's display size, matching the
+                  stat tiles beside it so the row still scans as one band of
+                  figures. It is this topic's mastery, not an average -- which
+                  is the point of the change: the number now belongs to
+                  something you can name and open. */}
+              <p className="font-rb-display text-4xl font-extrabold leading-[0.9] tracking-tight tabular-nums text-rb-eel sm:text-5xl">
+                {getTopicScore(focusTopic)}%
+              </p>
+
+              {/* Clamped to one line: the row is a fixed 176px and the tile
+                  clips, so a second line would be cut silently rather than
+                  shown. An ellipsis at least says there was more. */}
+              <p className="mt-1.5 truncate text-sm font-bold text-rb-eel">
+                {focusTopic.lessonTitle ?? getTopicTitle(focusTopic)}
+              </p>
+
+              {focusTopic.categoryTitle ? (
+                <p className={`truncate text-xs font-semibold ${focusTone === "cardinal" ? "text-rb-cardinal-lip" : "text-rb-beetle-lip"}`}>
+                  {focusTopic.categoryTitle}
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="mt-auto">
+              <p className="font-rb-display text-2xl font-extrabold leading-tight text-rb-eel">
+                Nothing scored yet
+              </p>
+              <p className="mt-1 text-xs font-semibold text-rb-beetle-lip">
+                {analytics?.unassessedTopicCount
+                  ? `${analytics.unassessedTopicCount} topics not yet assessed`
+                  : "Sit an assessment to rank your topics"}
+              </p>
+            </div>
+          )}
+        </BentoTile>
+      ),
+    },
+    {
+      id: "todays-plan",
+      col: 3,
+      row: 2,
+      element: (
+        <TodaysPlanTile certificationId={selectedCertificationId} />
+      ),
+    },
+    {
+      id: "exam-countdown",
+      col: 3,
+      row: 2,
+      element: (
+        <ExamCountdownTile certificationId={selectedCertificationId} />
+      ),
+    },
+    {
+      id: "study-notes",
+      // Half the band. The countdown beside it takes the other half, so the
+      // row still ends level rather than leaving a column-wide hole that
+      // nothing on this page is narrow enough to fill.
+      col: 3,
+      row: 2,
+      element: (
+        <StudyNotesTile certificationId={selectedCertificationId} />
+      ),
+    },
+    {
+      id: "score-over-time",
+      // Taller by default than the other charts: it carries the per-assessment
+      // verdicts under the lines, and squeezed into two rows the chart wins and
+      // they get cut off.
+      col: 4,
+      row: 3,
+      element: (
+        <BentoTile col={4} row={3}>
+          <BentoHeading
+            title="score across retakes"
+            hint="Each assessment's attempts in order — a rising line is a score you moved."
+            chip={
+              retakeTrend.hiddenCount > 0 ? (
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
+                  showing {retakeTrend.summaries.length} of{" "}
+                  {retakeTrend.summaries.length + retakeTrend.hiddenCount} · most retaken
+                </span>
+              ) : null
+            }
+          />
+
+          {retakeTrend.rows.length === 0 ? (
+            <div className="flex flex-1 flex-col items-center justify-center text-center">
+              <Target className="size-7 text-muted-foreground/50" aria-hidden="true" />
+
+              <p className="mt-3 text-sm font-medium text-foreground">No graded attempts yet</p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                Sit a quiz or an assessment, then retake it — this chart is about the
+                difference between the two.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* `shrink-0` off, and a smaller height: the chart is what gives
+                  way when the tile is short. The verdicts below are the point
+                  of the tile and can scroll; a fixed-height chart cannot, and
+                  it was pushing them out of a tile the learner had made two
+                  rows tall. */}
+              <div className="min-h-0 shrink">
+                <TrendLineChart
+                  data={retakeTrend.rows}
+                  xKey="label"
+                  series={retakeTrend.series}
+                  height={150}
+                  unit="%"
+                  ticks={[0, 25, 50, 75, 100]}
+                  // The verdict list underneath already names every assessment
+                  // and carries its numbers; the chart's own two legends were
+                  // the same information a third and fourth time, printed over
+                  // the top of it.
+                  showLegend={false}
+                />
+              </div>
+
+              {/* The chart shows the shape; this says what it means. A learner
+                  asking "am I getting better at this one" gets the answer in
+                  words rather than having to read it off a line. */}
+              <div className="-mr-2 mt-2 min-h-16 flex-1 space-y-1 overflow-y-auto pr-2">
+                {retakeTrend.summaries.map((summary, index) => (
+                  <div key={summary.key} className="flex items-center gap-2.5 text-xs">
+                    <span
+                      className="size-2.5 shrink-0 rounded-sm"
+                      style={{ background: seriesColor(chartTheme, index) }}
+                      aria-hidden="true"
+                    />
+
+                    <span className="min-w-0 flex-1 truncate font-semibold text-foreground">
+                      {summary.name}
+                    </span>
+
+                    <span className="hidden shrink-0 text-muted-foreground sm:inline">
+                      {summary.attempts === 1
+                        ? "1 attempt"
+                        : `${summary.attempts} attempts · best ${summary.best}%`}
+                    </span>
+
+                    {summary.attempts === 1 ? (
+                      <span className="w-20 shrink-0 text-right font-semibold tabular-nums text-muted-foreground">
+                        {summary.latest}%
+                      </span>
+                    ) : (
+                      <span
+                        className={`w-20 shrink-0 text-right font-bold tabular-nums ${
+                          summary.delta > 0
+                            ? "text-rb-feather-ink"
+                            : summary.delta < 0
+                              ? "text-rb-cardinal-lip"
+                              : "text-muted-foreground"
+                        }`}
+                        title={`First attempt ${summary.first}%, latest ${summary.latest}%`}
+                      >
+                        {summary.delta > 0 ? "+" : ""}
+                        {summary.delta === 0 ? "no change" : `${summary.delta} pts`}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </BentoTile>
+      ),
+    },
+    {
+      id: "mastery-by-topic",
+      // Four wide and four tall: it is a list rather than a chart, and the
+      // whole point of it is that it does not stop after the first few rows.
+      col: 4,
+      row: 4,
+      element: (
+        <BentoTile col={4} row={4} className="!p-0">
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex items-start justify-between gap-3 border-b border-border p-5 sm:p-6">
+              <BentoHeading
+                title="mastery by topic"
+                hint="Weakest first — every topic with enough answers behind it to score."
+              />
+
+              {analytics?.unassessedTopicCount ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[11px] font-bold text-muted-foreground">
+                      {analytics.unassessedTopicCount} not yet assessed
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    These topics have no answers behind them yet, so they carry no
+                    mastery estimate and are left out of this list.
+                  </TooltipContent>
+                </Tooltip>
+              ) : null}
+            </div>
+
+            {rankedMastery.length === 0 ? (
+              <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+                <Brain className="size-6 text-muted-foreground/50" aria-hidden="true" />
+                <p className="mt-3 text-sm font-medium text-foreground">
+                  Nothing scored yet
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Sit a diagnostic or an assessment and every topic it touches gets a
+                  mastery level here.
+                </p>
+              </div>
+            ) : (
+              /* Scrolls inside the tile rather than growing it. The tile's
+                 height is part of the board layout the learner arranged, so a
+                 certification with ninety lessons must not be the one that
+                 pushes every tile below it off the screen. */
+              <ul className="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
+                {rankedMastery.map((topic, index) => (
+                  <li
+                    key={topic.lessonId ?? `${getTopicTitle(topic)}-${index}`}
+                    className="px-5 py-3.5 sm:px-6"
+                  >
+                    <MasteryRow
+                      title={topic.lessonTitle ?? getTopicTitle(topic)}
+                      caption={topic.categoryTitle}
+                      value={getTopicScore(topic)}
+                      /* Orange under the weak threshold, azure above it, taken
+                         from the shared kit so the row tints the same way in
+                         either theme. */
+                      color={seriesColor(chartTheme, getTopicScore(topic) < 50 ? 2 : 0)}
+                      evidenceCount={topic.evidenceCount}
+                      leading={
+                        topic.priorityTag ? (
+                          <PrioritySeal tag={topic.priorityTag} size={36} />
+                        ) : null
+                      }
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </BentoTile>
+      ),
+    },
+    {
+      id: "assessment-history",
+      col: 4,
+      row: 3,
+      element: (
+        <BentoTile col={4} row={3} className="!p-0">
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="border-b border-border p-5 sm:p-6">
+              <BentoHeading
+                title="assessment history"
+                hint="Your latest attempt on each assessment — open the full run from here."
+              />
+            </div>
+
+            {assessmentHistory.length === 0 ? (
+              <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+                <BookOpen className="size-6 text-muted-foreground/50" aria-hidden="true" />
+                <p className="mt-3 text-sm font-medium text-foreground">
+                  No assessments sat yet
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Once you submit one, every attempt shows up here.
+                </p>
+              </div>
+            ) : (
+              <ul className="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
+                {assessmentHistory.map((row) => (
+                  <li
+                    key={row.examId}
+                    className="flex items-center gap-3 px-5 py-3.5 sm:px-6"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {row.title}
+                      </p>
+
+                      <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                        <span className="font-bold tabular-nums text-foreground">
+                          {row.score === null ? "—" : `${row.score}%`}
+                        </span>
+
+                        {/* Pass/fail is written, never colour alone. */}
+                        {row.passed == null ? null : (
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                              row.passed
+                                ? "bg-rb-feather-wash text-rb-feather-ink"
+                                : "bg-rb-cardinal-wash text-rb-cardinal-lip"
+                            }`}
+                          >
+                            {row.passed ? "passed" : "not passed"}
+                          </span>
+                        )}
+
+                        <span aria-hidden="true">·</span>
+                        <span>
+                          {row.attempts} {row.attempts === 1 ? "attempt" : "attempts"}
+                        </span>
+
+                        {row.submittedAt ? (
+                          <>
+                            <span aria-hidden="true">·</span>
+                            <span>
+                              {new Date(row.submittedAt).toLocaleDateString(undefined, {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                              })}
+                            </span>
+                          </>
+                        ) : null}
+                      </p>
+                    </div>
+
+                    {/* The label names the destination rather than saying
+                        "view", because two different destinations exist for a
+                        row like this — the graded paper for one attempt, and
+                        the list of every attempt. This is the list. */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => navigate(`/learner/assessments/${row.examId}/history`)}
+                    >
+                      view attempts
+                      <ArrowRight className="size-4" aria-hidden="true" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </BentoTile>
+      ),
+    },
+  ]
+
+  // ------------------------------------------------------------ tile layout
+  // The learner's own arrangement of the tiles above, saved per learner rather
+  // than per certification: it is a preference about how they read the page,
+  // and having it change when they switch certification would read as the page
+  // rearranging itself.
+  const layoutQuery = useQuery({
+    queryKey: [DASHBOARD_LAYOUT_KEY],
+    queryFn: getDashboardLayout,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  })
+
+  const queryClient = useQueryClient()
+  const [rearranging, setRearranging] = useState(false)
+  // Held locally as well as saved, so a tile lands where it was dropped or
+  // dragged to size immediately rather than after the round trip.
+  const [localLayout, setLocalLayout] = useState(null)
+  const tileLayout = localLayout ?? layoutQuery.data?.tiles ?? []
+
+  const saveLayoutMutation = useMutation({
+    mutationFn: saveDashboardLayout,
+
+    /* Write the saved board straight back into the query cache.
+     *
+     * Without this the arrangement looked like it never saved. `localLayout`
+     * only lives as long as this component: navigate away and back and it is
+     * null again, so the board falls through to `layoutQuery.data` -- which
+     * still held the pre-drag value, because nothing invalidated it and the
+     * query's five-minute `staleTime` means react-query serves the cache
+     * instead of refetching. The write did reach the database; the page just
+     * kept reading a stale copy of what the board used to be.
+     *
+     * `setQueryData` rather than `invalidateQueries` because the PUT already
+     * returns the persisted board in the GET's own shape ({tiles: [...]}), so
+     * a refetch would be a round trip to learn what the response just said.
+     *
+     * Clearing `localLayout` afterwards hands authority back to the cache. It
+     * cannot flicker: the value just written is the one being cleared in
+     * favour of. */
+    onSuccess: (saved) => {
+      queryClient.setQueryData([DASHBOARD_LAYOUT_KEY], saved)
+      setLocalLayout(null)
+    },
+
+    onError: (error) => {
+      /* Drop the local override so the board falls back to the server's copy,
+         which is what is actually stored. Leaving the failed arrangement on
+         screen would show a layout that does not match the database, and the
+         learner would only discover it on some later reload. */
+      setLocalLayout(null)
+
+      // Named loudly, because the failure is otherwise invisible until the next
+      // reload puts every tile back and the arrangement looks like it was never
+      // made. A 404 here means the endpoint is not deployed yet.
+      console.warn("Saving the dashboard layout failed.", error)
+      toast.error("Could not save your layout", {
+        description:
+          error?.response?.status === 404
+            ? "The layout service isn't available, so arrangements cannot be saved yet."
+            : "Your tiles have been put back where they were.",
+      })
+    },
+  })
+
+  const handleLayoutChange = (nextLayout) => {
+    setLocalLayout(nextLayout)
+    saveLayoutMutation.mutate(nextLayout)
+  }
+
+  const resetLayout = () => {
+    setLocalLayout([])
+    saveLayoutMutation.mutate([])
+  }
 
   return (
     <LearnerPremiumGuard
@@ -579,20 +1222,19 @@ export default function LearnerProgressPage() {
       description="Unlock mastery, weakness analysis, performance trends, confidence, and recommended next actions with Pro or institution access."
     >
       <div className="space-y-6">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">Analytics</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Your mastery, performance trends, and recommended next steps.
-            </p>
-          </div>
-
+        {/* No page title. The route is already named "Analytics" in the top
+            navigation, and the strapline under it described the tiles rather
+            than telling a learner anything they could not read off them. The
+            controls keep the row to themselves and the board starts higher up
+            the page. `ml-auto` on the picker holds them to the right now that
+            nothing occupies the left of the row. */}
+        <div className="flex flex-wrap items-center gap-3">
           <Select
             value={selectedCertificationId}
             onValueChange={setSelectedCertificationId}
             disabled={publishedCertifications.length === 0}
           >
-            <SelectTrigger className="w-auto min-w-[210px] bg-background text-sm font-medium">
+            <SelectTrigger className="ml-auto w-auto min-w-[210px] bg-background text-sm font-medium">
               <SelectValue placeholder="Select certification" />
             </SelectTrigger>
 
@@ -608,6 +1250,41 @@ export default function LearnerProgressPage() {
               ))}
             </SelectContent>
           </Select>
+
+          {/* Icon only, and a mode rather than a permanent affordance: drag
+              handles on every tile all the time are clutter on the many visits
+              where the learner only wants to read the page. The label is on
+              the button for screen readers and as a tooltip for everyone
+              else -- an unlabelled icon is a guess otherwise. */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={rearranging ? "default" : "outline"}
+                // `icon` is size-11, which is the height of the select trigger
+                // beside it -- `icon-sm` sat three pixels short of the row.
+                size="icon"
+                aria-pressed={rearranging}
+                aria-label={rearranging ? "Finish rearranging tiles" : "Rearrange tiles"}
+                onClick={() => setRearranging((current) => !current)}
+              >
+                {rearranging ? (
+                  <Check className="size-4" aria-hidden="true" />
+                ) : (
+                  <GripHorizontal className="size-4" aria-hidden="true" />
+                )}
+              </Button>
+            </TooltipTrigger>
+
+            <TooltipContent side="bottom">
+              {rearranging ? "Done rearranging" : "Rearrange tiles"}
+            </TooltipContent>
+          </Tooltip>
+
+          {rearranging ? (
+            <Button variant="ghost" onClick={resetLayout}>
+              Reset layout
+            </Button>
+          ) : null}
         </div>
 
         {publishedCertifications.length === 0 ? (
@@ -641,273 +1318,12 @@ export default function LearnerProgressPage() {
               </div>
             )}
 
-            <BentoGrid>
-              {/* Band 1 — the two things a learner opens this page to decide:
-                  what to study next, and whether they are ready to sit it. */}
-              <NextUpTile
-                nextLesson={nextLesson}
-                certification={selectedCertification}
-                completedLessons={completedLessons}
-                totalLessons={totalLessons}
-                onResume={resumeNextLesson}
-              />
-
-              <ReadinessTile readiness={readinessLevel} confidence={confidenceLevel} />
-
-              {/* Band 2 — even thirds. Every counter carries a hint, so the
-                  number never sits there without the denominator that makes
-                  it mean something. */}
-              <BentoStat
-                tone="feather"
-                col={2}
-                row={1}
-                icon={TrendingUp}
-                label="Course Progress"
-                value={`${overallProgress}%`}
-                hint={`${completedLessons} of ${totalLessons} lessons done`}
-              />
-
-              <BentoStat
-                tone="beetle"
-                col={2}
-                row={1}
-                icon={Brain}
-                label="Topic Mastery"
-                value={topicMastery === null ? "—" : `${topicMastery}%`}
-                hint={
-                  analytics
-                    ? `${analytics.masteredTopicCount} mastered · ${analytics.weakTopicCount} weak`
-                    : undefined
-                }
-              />
-
-              <BentoStat
-                tone="fox"
-                col={2}
-                row={1}
-                icon={Flame}
-                label="Study Streak"
-                value={`${studyStreak} ${studyStreak === 1 ? "day" : "days"}`}
-                hint={`${getNumber(analytics?.totalAssessmentAttempts, 0)} assessment attempts`}
-              />
-
-              {/* Band 3 — the trend gets the width, because a line only reads
-                  as a direction when it has room to run. */}
-              <BentoTile col={4} row={2}>
-                <BentoHeading
-                  title="score over time"
-                  hint="Every graded quiz and assessment attempt, oldest first."
-                />
-
-                {scoreTrendRows.length === 0 ? (
-                  <div className="flex flex-1 flex-col items-center justify-center text-center">
-                    <Target className="size-7 text-muted-foreground/50" aria-hidden="true" />
-
-                    <p className="mt-3 text-sm font-medium text-foreground">
-                      No performance data yet
-                    </p>
-
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Complete quizzes or assessments to see your progress.
-                    </p>
-                  </div>
-                ) : (
-                  <TrendLineChart
-                    data={scoreTrendRows}
-                    xKey="label"
-                    series={[
-                      { key: "quiz", name: "Quiz" },
-                      { key: "exam", name: "Exam" },
-                    ]}
-                    height={190}
-                    unit="%"
-                    ticks={[0, 25, 50, 75, 100]}
-                    legendNote="Most recent attempt of each kind"
-                  />
-                )}
-              </BentoTile>
-
-              <BentoTile col={2} row={2}>
-                <BentoHeading title="strongest topics" />
-
-                {strongestTopics.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No strong topics identified yet.
-                  </p>
-                ) : (
-                  <div className="space-y-3.5">
-                    {strongestTopics.slice(0, 4).map((topic) => (
-                      <MasteryRow
-                        key={topic.lessonId}
-                        title={topic.lessonTitle ?? "Untitled Topic"}
-                        caption={topic.categoryTitle}
-                        value={clampPercent(topic.masteryPercentage) ?? 0}
-                        color={SERIES_INK[1]}
-                      />
-                    ))}
-                  </div>
-                )}
-              </BentoTile>
-
-              {/* Band 4 — what to do about it. Weak topics used to be drawn
-                  twice, once as this list and once as a bar chart whose labels
-                  were cut to seven characters; the list keeps the full title
-                  and the priority seal, which is the part that's actionable. */}
-              <BentoTile col={3} row={2}>
-                <BentoHeading
-                  title="focus areas"
-                  hint="Lowest mastery first — the fastest score to move."
-                />
-
-                {weakestTopics.length === 0 ? (
-                  <div className="flex flex-1 flex-col items-center justify-center text-center">
-                    <Target className="size-6 text-muted-foreground/50" aria-hidden="true" />
-
-                    <p className="mt-3 text-sm font-medium text-foreground">No weak areas yet</p>
-
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Complete assessments to identify what needs work.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3.5">
-                    {weakestTopics.slice(0, 4).map((topic, index) => (
-                      <MasteryRow
-                        key={topic.lessonId ?? `${getTopicTitle(topic)}-${index}`}
-                        title={topic.lessonTitle ?? getTopicTitle(topic)}
-                        caption={topic.categoryTitle}
-                        value={getTopicScore(topic)}
-                        color={SERIES_INK[2]}
-                        leading={
-                          topic.priorityTag ? (
-                            <PrioritySeal tag={topic.priorityTag} size={36} />
-                          ) : null
-                        }
-                      />
-                    ))}
-                  </div>
-                )}
-              </BentoTile>
-
-              <BentoTile col={3} row={2} className="!p-0">
-                <div className="flex min-h-0 flex-1 flex-col p-5 sm:p-6">
-                  <BentoHeading
-                    title="recommended next"
-                    hint="Ranked by what the model thinks costs you the most marks."
-                  />
-
-                  {(analytics?.recommendedTopics ?? []).length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      No recommendations yet -- complete an assessment to get personalized
-                      suggestions.
-                    </p>
-                  ) : (
-                    <div className="-mr-2 min-h-0 flex-1 space-y-2.5 overflow-y-auto pr-2">
-                      {analytics.recommendedTopics.map((recommendation) => (
-                        <RecommendationCard
-                          key={recommendation.lessonId}
-                          recommendation={recommendation}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </BentoTile>
-
-              {/* Band 5 — how the answers themselves are going. */}
-              <BentoTile col={3} row={2}>
-                <BentoHeading title="accuracy by difficulty" />
-
-                {difficultyRows.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No graded answers yet — complete an assessment to see this.
-                  </p>
-                ) : (
-                  <BarBreakdownChart
-                    data={difficultyRows}
-                    categoryKey="difficulty"
-                    valueKey="accuracy"
-                    height={170}
-                    unit="%"
-                    target={TARGET_ACCURACY}
-                    categoryWidth={78}
-                  />
-                )}
-              </BentoTile>
-
-              <BentoTile col={3} row={2}>
-                <BentoHeading title="answers graded" />
-
-                {answerSplit.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No graded answers yet — complete an assessment to see this.
-                  </p>
-                ) : (
-                  <DonutChart
-                    data={answerSplit}
-                    height={165}
-                    centerValue={answerAccuracy === null ? "—" : `${answerAccuracy}%`}
-                    centerLabel="correct"
-                  />
-                )}
-              </BentoTile>
-
-              {/* Band 6 — the reference material: where you stand by unit, and
-                  what you last did. Both scroll inside their tile. */}
-              <BentoTile col={3} row={2} className="!p-0">
-                <div className="flex min-h-0 flex-1 flex-col p-5 sm:p-6">
-                  <BentoHeading title="mastery by unit" />
-
-                  {(analytics?.categoryMastery ?? []).length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      No category mastery data yet.
-                    </p>
-                  ) : (
-                    <div className="-mr-2 min-h-0 flex-1 divide-y divide-border/60 overflow-y-auto pr-2">
-                      {analytics.categoryMastery.map((category) => (
-                        <CategoryMasteryNode
-                          key={`${category.categoryLevel}-${category.categoryId}`}
-                          category={category}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </BentoTile>
-
-              <BentoTile col={3} row={2} className="!p-0">
-                <div className="flex min-h-0 flex-1 flex-col p-5 sm:p-6">
-                  <BentoHeading title="recent activity" />
-
-                  {(analytics?.recentActivity ?? []).length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      No recent assessment or challenge activity yet.
-                    </p>
-                  ) : (
-                    <div className="-mr-2 min-h-0 flex-1 divide-y divide-border/60 overflow-y-auto pr-2">
-                      {analytics.recentActivity.map((activity, index) => (
-                        <RecentActivityRow
-                          key={`${activity.activityType}-${activity.occurredAt}-${index}`}
-                          activity={activity}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </BentoTile>
-
-              {/* Band 7 — the two breakdowns, now on the same bar treatment as
-                  everything else rather than a bare right-aligned fraction. */}
-              <BentoTile col={3} row={2}>
-                <BentoHeading title="accuracy by question type" />
-                <PerformanceBreakdownList buckets={analytics?.performanceByQuestionType} />
-              </BentoTile>
-
-              <BentoTile col={3} row={2}>
-                <BentoHeading title="accuracy by assessment type" />
-                <PerformanceBreakdownList buckets={analytics?.performanceByAssessmentType} />
-              </BentoTile>
-            </BentoGrid>
+            <DashboardBoard
+              tiles={dashboardTiles}
+              layout={tileLayout}
+              editing={rearranging}
+              onLayoutChange={handleLayoutChange}
+            />
           </>
         )}
       </div>

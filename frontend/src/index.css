@@ -99,8 +99,21 @@
 /* REBYU editorial application foundation. These rules intentionally replace
    the older boxed portal treatment without changing component behavior. */
 @layer components {
+    /* The shared page container for all three portals.
+
+       The cap was 1440px, which on a ~1750px window centred the content and
+       left roughly 155px of dead gutter down each side — wider than the padding
+       and doing nothing. It is raised rather than removed: uncapped, a wide
+       table or a bento row on an ultrawide stretches to a width nothing is
+       readable at. 1800px is past the common desktop widths, so most screens
+       now bound the layout by their own edge and the gutters are the padding
+       alone.
+
+       Horizontal padding is trimmed with it (32px → 24px at lg), since the
+       gutter no longer has a large margin beside it to sit against. Vertical
+       padding is untouched — this is only about the x axis. */
     .rebyu-page {
-        @apply mx-auto flex min-h-[calc(100dvh-4rem)] min-w-0 w-full max-w-[1440px] flex-1 flex-col items-stretch gap-8 px-4 py-6 sm:px-6 sm:py-8 lg:px-8;
+        @apply mx-auto flex min-h-[calc(100dvh-4rem)] min-w-0 w-full max-w-[1800px] flex-1 flex-col items-stretch gap-8 px-3 py-6 sm:px-5 sm:py-8 lg:px-6;
     }
 
     .rebyu-page > * {

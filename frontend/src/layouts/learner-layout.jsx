@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react"
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import {
+  CalendarDays,
   LogOutIcon,
   FilesIcon,
   NotebookPenIcon,
@@ -34,7 +35,7 @@ import { useNotifications } from "@/hooks/use-notifications.js"
 import { PortalThemeMenuItem } from "@/components/portal-theme-toggle"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useLearnerEntitlements } from "@/hooks/use-learner-entitlements.js"
-import { getCommunityNotifications, markCommunityNotificationRead } from "@/services/communityService.js"
+import { useCommunityNotifications } from "@/hooks/use-community-notifications.js"
 
 function getInitials(name = "", email = "") {
   const source = name || email || "Learner"
@@ -87,7 +88,6 @@ export default function LearnerLayout() {
     staleTime: 15_000,
     retry: 1,
   })
-  const communityNotificationsQuery = useQuery({ queryKey: ["learner-community-notifications"], queryFn: getCommunityNotifications, refetchInterval: 30_000, staleTime: 15_000 })
   const certificationById = new Map(
     (query.data?.certifications ?? []).map((certification) => [
       String(certification.certificationId),
@@ -126,16 +126,15 @@ export default function LearnerLayout() {
   // Tagged by source, not by id shape: these ids come from
   // learner_community_notifications and collide with the inbox table's ids, so
   // "has a numeric id" is not enough to tell them apart -- opening one used to
-  // mark an unrelated inbox row read and never reach the post.
-  const communityNotifications = (Array.isArray(communityNotificationsQuery.data) ? communityNotificationsQuery.data : []).map((notification) => ({ ...notification, source: "community" }))
+  // mark an unrelated inbox row read and never reach the post, and deleting one
+  // was sent to the inbox endpoint, which answered "Notification not found".
+  const community = useCommunityNotifications()
   // The persisted feed (the same one admins and enterprises see) was never read
   // here before, so backend-issued notifications never reached learners at all.
-  // These are the only ones with a numeric id, and the only ones that can be
-  // marked read or deleted; the derived items above stay read-only.
   const inbox = useNotifications()
   const notifications = [
     ...inbox.items,
-    ...communityNotifications,
+    ...community.items,
     ...pendingInvitationNotifications,
     ...assignmentNotifications,
   ].sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0))
@@ -153,25 +152,16 @@ export default function LearnerLayout() {
   // a count of new things.
   const unreadCount = notifications.filter((item) => item.read === false).length
 
-  // Marking all read has to reach both feeds for the same reason. The
-  // community side has no bulk endpoint, so its unread rows are marked
-  // individually and the list is refetched once at the end.
+  // Marking all read has to reach both feeds for the same reason -- each one
+  // has its own bulk endpoint and only knows about its own rows.
   const markAllNotificationsRead = () => {
     inbox.markAllRead()
-
-    const unreadCommunity = communityNotifications.filter((item) => item.read === false)
-    if (unreadCommunity.length === 0) return
-
-    Promise.allSettled(unreadCommunity.map((item) => markCommunityNotificationRead(item.id)))
-      .then(() => communityNotificationsQuery.refetch())
-      .catch(() => {})
+    if (community.unreadCount > 0) community.markAllRead().catch(() => {})
   }
 
   const openNotification = (item) => {
     if (item.source === "community") {
-      markCommunityNotificationRead(item.id)
-        .then(() => communityNotificationsQuery.refetch())
-        .catch(() => {})
+      if (item.read === false) community.markRead(item.id)
       if (item.href) navigate(item.href)
       return
     }
@@ -180,6 +170,16 @@ export default function LearnerLayout() {
       return
     }
     if (item.href) navigate(item.href)
+  }
+
+  // Same routing on the way out: a community row deleted through the inbox
+  // endpoint 404s, since that id belongs to a different table.
+  const deleteNotification = (item) => {
+    if (item.source === "community") {
+      community.remove(item.id)
+      return
+    }
+    inbox.remove(item.id)
   }
 
   const outletContext = useMemo(
@@ -215,7 +215,7 @@ export default function LearnerLayout() {
               emptyMessage="Certification invitations and assignments will appear here."
               onItemOpen={openNotification}
               onMarkAllRead={markAllNotificationsRead}
-              onDelete={inbox.remove}
+              onDelete={deleteNotification}
             />
 
             <DropdownMenu>
@@ -252,6 +252,10 @@ export default function LearnerLayout() {
                 <DropdownMenuItem onClick={() => navigate("/learner/account")}>
                   <UserIcon />
                   Account settings
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate("/learner/plan")}>
+                  <CalendarDays />
+                  Study calendar
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate("/learner/library")}>
                   <FilesIcon />

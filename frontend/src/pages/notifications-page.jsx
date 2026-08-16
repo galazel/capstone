@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { useAuth } from "@/context/auth-context.jsx"
 import { ArrowLeftIcon, Bell, CheckCheck, ChevronRight, Loader2, Trash2 } from "@/components/icons"
 
 import {
@@ -17,6 +18,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useNotifications } from "@/hooks/use-notifications.js"
+import { useCommunityNotifications } from "@/hooks/use-community-notifications.js"
 
 function formatTime(value) {
   if (!value) return "Recently"
@@ -35,19 +37,54 @@ function formatTime(value) {
  */
 export default function NotificationsPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [confirmClearAll, setConfirmClearAll] = useState(false)
-  const {
-    items,
-    unreadCount,
-    isLoading,
-    isError,
-    open,
-    markAllRead,
-    isMarkingAllRead,
-    remove,
-    removeAll,
-    isRemovingAll,
-  } = useNotifications()
+  const inbox = useNotifications()
+  // Learners have a second feed (community upvotes, replies, moderation) that
+  // the bell already merges in. This page has to merge it too, or "Clear all"
+  // empties the page while the bell still shows every community row -- which is
+  // exactly what "delete all doesn't delete everything" looked like.
+  const community = useCommunityNotifications({
+    enabled: String(user?.role ?? "").toUpperCase() === "LEARNER",
+  })
+
+  const items = [...inbox.items, ...community.items].sort(
+    (a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0)
+  )
+  const unreadCount = inbox.unreadCount + community.unreadCount
+  const isLoading = inbox.isLoading || community.isLoading
+  const isError = inbox.isError
+  const isMarkingAllRead = inbox.isMarkingAllRead
+  const isRemovingAll = inbox.isRemovingAll || community.isRemovingAll
+
+  // Every write is routed by `source`: the two feeds are separate tables whose
+  // ids collide, so sending a community id to the inbox endpoint 404s.
+  const open = (item) => {
+    if (item.source === "community") {
+      if (item.read === false) community.markRead(item.id)
+      if (item.href) navigate(item.href)
+      return
+    }
+    inbox.open(item)
+  }
+
+  const remove = (item) => {
+    if (item.source === "community") {
+      community.remove(item.id)
+      return
+    }
+    inbox.remove(item.id)
+  }
+
+  const markAllRead = () => {
+    if (inbox.unreadCount > 0) inbox.markAllRead()
+    if (community.unreadCount > 0) community.markAllRead().catch(() => {})
+  }
+
+  const removeAll = () => {
+    if (inbox.items.length > 0) inbox.removeAll()
+    if (community.items.length > 0) community.removeAll().catch(() => {})
+  }
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8">
@@ -136,7 +173,10 @@ export default function NotificationsPage() {
         ) : (
           <ul className="divide-y overflow-hidden rounded-xl border bg-card">
             {items.map((item) => (
-              <li key={item.id} className="group flex items-start gap-2">
+              <li
+                key={`${item.source ?? "inbox"}-${item.id}`}
+                className="group flex items-start gap-2"
+              >
                 <button
                   type="button"
                   onClick={() => open(item)}
@@ -174,7 +214,7 @@ export default function NotificationsPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => remove(item.id)}
+                  onClick={() => remove(item)}
                   aria-label={`Delete notification: ${item.title}`}
                   className="mr-2 mt-4 rounded-md p-2 text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
                 >

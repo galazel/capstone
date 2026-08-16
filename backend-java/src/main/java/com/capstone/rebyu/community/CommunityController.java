@@ -47,6 +47,21 @@ public class CommunityController {
         service.markNotificationRead(me(jwt), notificationId);
     }
 
+    @PutMapping("/notifications/read-all")
+    public Map<String, Integer> markAllNotificationsRead(@AuthenticationPrincipal Jwt jwt) {
+        return Map.of("updated", service.markAllNotificationsRead(me(jwt)));
+    }
+
+    @DeleteMapping("/notifications/{notificationId}")
+    public void deleteNotification(@AuthenticationPrincipal Jwt jwt, @PathVariable Long notificationId) {
+        service.deleteNotification(me(jwt), notificationId);
+    }
+
+    @DeleteMapping("/notifications")
+    public Map<String, Integer> deleteAllNotifications(@AuthenticationPrincipal Jwt jwt) {
+        return Map.of("deleted", service.deleteAllNotifications(me(jwt)));
+    }
+
     @PostMapping("/posts/shared-study-item/{libraryItemId}")
     @ResponseStatus(HttpStatus.CREATED)
     public CommunityService.Post shareStudyItem(

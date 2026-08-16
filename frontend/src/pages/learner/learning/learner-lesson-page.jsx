@@ -21,7 +21,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 
 import { cn } from "@/lib/utils"
 import { LESSON_COMPLETION_XP } from "@/lib/xp.js"
-import { announceXpAward } from "@/components/learner/xp-award-modal.jsx"
+import { announceRewards, snapshotRewards } from "@/components/learner/xp-award-modal.jsx"
 import {
   getCertificationModules,
   getLessonById,
@@ -557,6 +557,7 @@ export default function LearnerLessonPage() {
       data?.profile?.firstName ??
       "Learner"
 
+
   const completeMutation = useMutation({
     mutationFn: () =>
         markLessonComplete({
@@ -567,12 +568,15 @@ export default function LearnerLessonPage() {
           // completion from this page 400, so no XP was ever awarded.
           completedAt: new Date().toISOString().slice(0, 19),
         }),
-
-    onSuccess: async () => {
+    // Before the request, not after: the announcement is a before/after diff,
+    // and completing the lesson is what changes both sides of it.
+    onMutate: () => snapshotRewards(queryClient),
+    onSuccess: async (_result, _variables, before) => {
       setLocallyCompleted(true)
 
-      await announceXpAward({
+      await announceRewards({
         queryClient,
+        before,
         title: "Lesson complete",
         fallback: "You had already earned the XP for this lesson.",
       })

@@ -15,6 +15,7 @@ import com.capstone.rebyu.progress.mapper.ActivityLogMapper;
 import com.capstone.rebyu.progress.mapper.LearnerCompletedLessonMapper;
 import com.capstone.rebyu.progress.repository.ActivityLogRepository;
 import com.capstone.rebyu.progress.repository.LearnerCompletedLessonRepository;
+import com.capstone.rebyu.progress.service.AchievementAwardService;
 import com.capstone.rebyu.user.dto.LearnerDto;
 import com.capstone.rebyu.user.dto.LearnerPortalDto;
 import com.capstone.rebyu.user.mapper.LearnerMapper;
@@ -56,6 +57,7 @@ public class LearnerPortalService {
     private final OrganizationCertificationLearnerMapper orgCertLearnerMapper;
     private final OrganizationCertificateMapper orgCertMapper;
     private final RewardService rewardService;
+    private final AchievementAwardService achievementAwardService;
 
     public LearnerDto currentLearner(Long learnerId) {
         return learnerRepository.findById(learnerId).map(learnerMapper::toDto).orElse(null);
@@ -105,6 +107,7 @@ public class LearnerPortalService {
                         .map(examResultMapper::toDto).toList(),
                 orgCertLearnerEntities.stream().map(orgCertLearnerMapper::toDto).toList(),
                 orgCertificates,
+                achievementAwardService.catalogFor(learnerId),
                 totalXp,
                 coinBalance,
                 aiCreditsRemaining,

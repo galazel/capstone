@@ -19,7 +19,6 @@ public class LearnerCompletedLessonController {
     public List<LearnerCompletedLessonDto> getAll() {
         return learnerCompletedLessonService.getAll();
     }
-
     @GetMapping("/{learnerId}/{lessonId}")
     public LearnerCompletedLessonDto getById(@PathVariable Long learnerId, @PathVariable Long lessonId) {
         return learnerCompletedLessonService.getById(learnerId, lessonId);

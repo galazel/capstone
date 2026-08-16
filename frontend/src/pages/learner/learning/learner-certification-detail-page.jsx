@@ -42,6 +42,7 @@ import { Separator } from "@/components/ui/separator"
 import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
 import { LearnerAnnouncements } from "@/components/learner/learner-announcements.jsx"
 import { PriorityTag } from "@/components/learner/priority-tag.jsx"
+import { announceRewards, snapshotRewards } from "@/components/learner/xp-award-modal.jsx"
 
 import { getCertificationModules } from "@/services/learnerService.js"
 import { getCertificationPriorities } from "@/services/learnerAnalyticsService.js"
@@ -218,17 +219,26 @@ export default function LearnerCertificationDetailPage() {
       return transaction
     },
 
-    onSuccess: () => {
+    // Enrolling can unlock "Knowledge Seeker" server-side, so this flow diffs
+    // the portal payload too -- snapshot before, announce after.
+    onMutate: () => snapshotRewards(queryClient),
+    onSuccess: async (_result, _variables, before) => {
       queryClient.invalidateQueries({
         queryKey: ["learner-enrollments"],
-      })
-      queryClient.invalidateQueries({
-        queryKey: ["learner-portal-data"],
       })
 
       toast.success(
           "You are now enrolled. This certification was added to My Learning."
       )
+      // `silentXp`: enrolling pays no XP, and the "nothing was credited" toast
+      // would contradict the success toast just shown. This also refetches the
+      // portal payload, which is what the invalidate here used to do.
+      await announceRewards({
+        queryClient,
+        before,
+        title: "Enrolled",
+        silentXp: true,
+      })
       navigate("/learner/learning")
     },
 

@@ -6,7 +6,9 @@ import com.capstone.rebyu.assessment.entity.AssessmentAttemptQuestion;
 import com.capstone.rebyu.assessment.entity.Question;
 import com.capstone.rebyu.assessment.repository.AssessmentAttemptAnswerRepository;
 import com.capstone.rebyu.assessment.repository.AssessmentAttemptQuestionRepository;
+import com.capstone.rebyu.assessment.entity.Exam;
 import com.capstone.rebyu.assessment.repository.AssessmentAttemptRepository;
+import com.capstone.rebyu.assessment.repository.ExamRepository;
 import com.capstone.rebyu.assessment.repository.QuestionRepository;
 import com.capstone.rebyu.bkt.dto.LessonPriorityView;
 import com.capstone.rebyu.bkt.dto.MasteryHistoryView;
@@ -24,6 +26,7 @@ import com.capstone.rebyu.enrollment.entity.LearnerCertification;
 import com.capstone.rebyu.enrollment.entity.OrganizationCertificationLearner;
 import com.capstone.rebyu.enrollment.repository.LearnerCertificationRepository;
 import com.capstone.rebyu.enrollment.repository.OrganizationCertificationLearnerRepository;
+import com.capstone.rebyu.gamification.service.StreakService;
 import com.capstone.rebyu.progress.entity.LearnerCompletedLesson;
 import com.capstone.rebyu.progress.repository.LearnerCompletedLessonRepository;
 import com.capstone.rebyu.progress.analytics.dto.ProgressAnalyticsDtos.CategoryMasteryRow;
@@ -78,6 +81,8 @@ public class ProgressAnalyticsService {
     private final AssessmentAttemptQuestionRepository attemptQuestionRepository;
     private final AssessmentAttemptAnswerRepository attemptAnswerRepository;
     private final QuestionRepository questionRepository;
+    private final ExamRepository examRepository;
+    private final StreakService streakService;
     private final ChallengeSessionRepository challengeSessionRepository;
     private final LessonRepository lessonRepository;
     private final OrganizationCertificationLearnerRepository organizationCertificationLearnerRepository;
@@ -171,6 +176,8 @@ public class ProgressAnalyticsService {
                 .sorted(Comparator.comparing(AssessmentAttempt::getSubmittedAt))
                 .map(a -> new ScoreTrendPoint(
                         a.getAssessmentAttemptId(),
+                        a.getExam() != null ? a.getExam().getExamId() : null,
+                        a.getAttemptNumber(),
                         a.getSubmittedAt(),
                         a.getExam() != null ? a.getExam().getTitle() : null,
                         (a.getExam() != null && a.getExam().getExamType() != null)
@@ -178,18 +185,6 @@ public class ProgressAnalyticsService {
                         a.getPercentage(),
                         a.getPassed()))
                 .toList();
-
-        Set<LocalDate> activeDays = attempts.stream()
-                .map(AssessmentAttempt::getSubmittedAt)
-                .filter(Objects::nonNull)
-                .map(LocalDateTime::toLocalDate)
-                .collect(Collectors.toSet());
-        int studyStreakDays = 0;
-        LocalDate cursor = LocalDate.now();
-        while (activeDays.contains(cursor)) {
-            studyStreakDays++;
-            cursor = cursor.minusDays(1);
-        }
 
         List<ChallengeSession> sessions = challengeSessionRepository.findByLearner_LearnerId(learnerId);
         List<ChallengeSession> finishedChallenges = sessions.stream()
@@ -252,7 +247,93 @@ public class ProgressAnalyticsService {
         Double confidencePercentage = (confidenceResult.available() && confidenceResult.confidence() != null)
                 ? confidenceResult.confidence().confidenceScore() : null;
 
-        Double readinessPercentage = computeReadiness(learnerId, certLessons, attempts);
+        /* How much of the certification's assessment work is behind the
+           learner.
+
+           Published only: a draft or archived exam is not something anyone can
+           sit, so counting it would leave the certification permanently
+           unfinishable.
+
+           Passed, not merely attempted, and counted per distinct exam so three
+           goes at the same mock still count once. A failed attempt is evidence
+           of effort, not of completion. */
+        /* Scoped to what this learner can actually sit.
+
+           `findByCertification_CertificationId` returns every exam carrying the
+           certification's foreign key, which includes those targeting lessons
+           and categories private to an Enterprise group -- content this learner
+           cannot see, let alone attempt. Counting them made a certification
+           with one official lesson report nine outstanding assessments, and
+           made it impossible to ever finish.
+
+           This is the same guard `certLessons` already applies: the official
+           curriculum only. An exam qualifies when its target is inside that
+           curriculum, and a certification-level exam (a mock, which targets no
+           lesson or category) always does. */
+        Set<Long> officialLessonIds = certLessons.stream()
+                .map(Lesson::getLessonId)
+                .collect(Collectors.toSet());
+        Set<Long> officialMiddleIds = certLessons.stream()
+                .map(Lesson::getMiddleCategory)
+                .filter(Objects::nonNull)
+                .map(MiddleCategory::getMiddleCategoryId)
+                .collect(Collectors.toSet());
+        Set<Long> officialMajorIds = certLessons.stream()
+                .map(Lesson::getMiddleCategory)
+                .filter(Objects::nonNull)
+                .map(MiddleCategory::getMajorCategory)
+                .filter(Objects::nonNull)
+                .map(MajorCategory::getMajorCategoryId)
+                .collect(Collectors.toSet());
+
+        List<Exam> certExams = examRepository.findByCertification_CertificationId(certificationId)
+                .stream()
+                .filter(exam -> exam.effectiveStatus() == Exam.Status.PUBLISHED)
+                /* Not the AI tutor's practice quizzes and flashcard decks.
+                   Those are saved as published exams on the certification too
+                   (see GeneratedAssessmentService), but they belong to one
+                   learner, are made on demand, and are not work the
+                   certification requires -- counting them meant generating a
+                   deck quietly added an assessment the learner then had to
+                   "pass" to finish, so the target moved every time they asked
+                   the tutor for practice. */
+                .filter(exam -> !exam.isGenerated())
+                /* Nor the diagnostic. It places the learner rather than
+                   certifying them, the curriculum page pulls it out separately
+                   and never shows it as unit work, and counting it here left
+                   the tile disagreeing with the curriculum by one. */
+                .filter(exam -> exam.getExamType() == null
+                        || !"DIAGNOSTIC".equals(bktEventFactory.normalizeAssessmentType(
+                                exam.getExamType().getExamTypeText())))
+                .filter(exam -> {
+                    if (exam.getLesson() != null) {
+                        return officialLessonIds.contains(exam.getLesson().getLessonId());
+                    }
+                    if (exam.getMiddleCategory() != null) {
+                        return officialMiddleIds.contains(
+                                exam.getMiddleCategory().getMiddleCategoryId());
+                    }
+                    if (exam.getMajorCategory() != null) {
+                        return officialMajorIds.contains(
+                                exam.getMajorCategory().getMajorCategoryId());
+                    }
+                    // Certification-level: a mock exam, open to everyone enrolled.
+                    return true;
+                })
+                .toList();
+        int totalAssessmentCount = certExams.size();
+
+        Set<Long> passedExamIds = attempts.stream()
+                .filter(attempt -> Boolean.TRUE.equals(attempt.getPassed()))
+                .map(attempt -> attempt.getExam() == null ? null : attempt.getExam().getExamId())
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        int passedAssessmentCount = (int) certExams.stream()
+                .filter(exam -> passedExamIds.contains(exam.getExamId()))
+                .count();
+
+        Double readinessPercentage = computeReadiness(
+                learnerId, certLessons, attempts, totalLessonCount, completedLessonCount);
 
         List<CategoryMasteryRow> categoryMastery = buildCategoryMastery(certLessons, priorityByLessonId, completedLessons);
 
@@ -317,6 +398,8 @@ public class ProgressAnalyticsService {
                 totalLessonCount,
                 completedLessonCount,
                 completionPercentage,
+                totalAssessmentCount,
+                passedAssessmentCount,
                 totalAssessmentAttempts,
                 totalChallengeAttempts,
                 false,
@@ -325,7 +408,6 @@ public class ProgressAnalyticsService {
                 totalCorrect,
                 totalIncorrect,
                 false,
-                studyStreakDays,
                 recentActivity,
                 masteryTrend,
                 scoreTrend,
@@ -375,7 +457,21 @@ public class ProgressAnalyticsService {
         return sum / values.size();
     }
 
-    private Double computeReadiness(Long learnerId, List<Lesson> certLessons, List<AssessmentAttempt> attempts) {
+    /**
+     * How many days of an unbroken streak count as full marks for consistency.
+     *
+     * Two study weeks. Long enough that a couple of days does not read as a
+     * habit, short enough to be reachable before most exam dates -- and capped,
+     * because a 90-day streak is not three times more ready than a 30-day one.
+     */
+    private static final int STREAK_TARGET_DAYS = 14;
+
+    private Double computeReadiness(
+            Long learnerId,
+            List<Lesson> certLessons,
+            List<AssessmentAttempt> attempts,
+            int totalLessonCount,
+            int completedLessonCount) {
         if (certLessons.isEmpty()) {
             return null;
         }
@@ -396,6 +492,27 @@ public class ProgressAnalyticsService {
         putIfPresent(request, "lesson_quiz_score", average(scoresByNormalizedType.get("LESSON_QUIZ")));
         putIfPresent(request, "middle_exam_score", average(scoresByNormalizedType.get("MIDDLE_EXAM")));
         putIfPresent(request, "mock_exam_score", average(scoresByNormalizedType.get("MOCK_EXAM")));
+
+        /* Two inputs that are always computable, and are sent unconditionally
+           for exactly that reason.
+
+           Every score component above is omitted when the learner has not sat
+           that kind of assessment, and the readiness service renormalises over
+           whatever it receives -- so a learner who has only done a diagnostic
+           had their diagnostic renormalised up to the whole score and came out
+           100% ready. Progress and streak are always known, so they are always
+           in the denominator: an untouched syllabus now reads as 0 on the
+           progress component instead of vanishing from the calculation. */
+        if (totalLessonCount > 0) {
+            double progress = Math.min(100.0,
+                    (double) completedLessonCount / totalLessonCount * 100.0);
+            request.put("lesson_progress_score", progress);
+        }
+
+        int streakDays = streakService.getStreak(learnerId).currentStreak();
+        double streakScore = Math.min(100.0,
+                (double) streakDays / STREAK_TARGET_DAYS * 100.0);
+        request.put("streak_score", streakScore);
 
         Map<String, Object> response = learnerMasteryService.getReadiness(request);
         if (response == null || "TEMPORARILY_UNAVAILABLE".equals(response.get("status"))) {

@@ -3391,7 +3391,11 @@ OUTPUT RULES:
                     value="all-questions"
                     className="m-0 min-h-0 flex-1 overflow-y-auto py-5"
                 >
-                    <div className="mx-auto w-full max-w-[1440px] px-4 sm:px-6">
+                    {/* Matches `.rebyu-page`'s cap in index.css — this tab
+                        renders its own container rather than inheriting one,
+                        so it has to be widened alongside it or the question
+                        table stays inset while the rest of the portal is not. */}
+                    <div className="mx-auto w-full max-w-[1800px] px-3 sm:px-5">
                         <Card className="rounded-2xl border-border/80 bg-background shadow-sm">
                             <CardContent className="p-4 sm:p-5">
                                 <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">

@@ -1,11 +1,10 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { Link } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import { CalendarDays, ChevronLeft, ChevronRight, Sparkles } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { StudyPlanGenerator } from "@/pages/learner/learning/learner-study-plan.jsx"
-import { useLearnerEntitlements } from "@/hooks/use-learner-entitlements.js"
-import { FEATURES } from "@/services/subscriptionService.js"
+import { STUDY_PLAN_QUERY_KEY, getActiveStudyPlan } from "@/services/studyPlanService.js"
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
@@ -27,12 +26,46 @@ function buildMonth(viewDate) {
   })
 }
 
+/**
+ * The study calendar: the plan the learner is following, laid out by month.
+ *
+ * Read-only. Generating a plan moved to the certification's curriculum page --
+ * the moment the learner opens the course they are about to study, with the
+ * diagnostic's priority order behind them -- because reaching it here meant
+ * knowing the feature existed and navigating to a calendar to find it.
+ */
 export default function LearnerStudyPlanCalendarPage() {
-  const entitlements = useLearnerEntitlements()
-  const canGeneratePlan = entitlements.hasFeature(FEATURES.PERSONALIZED_STUDY_PLAN)
-  const [generatorOpen, setGeneratorOpen] = useState(false)
   const [viewDate, setViewDate] = useState(new Date())
-  const [plan, setPlan] = useState(null)
+  const [movedToPlan, setMovedToPlan] = useState(false)
+
+  const planQuery = useQuery({
+    queryKey: [STUDY_PLAN_QUERY_KEY, "active"],
+    queryFn: () => getActiveStudyPlan(),
+    staleTime: 30_000,
+  })
+
+  // The saved plan's schedule is the generated object as it was built, so its
+  // events come back exactly as the generator produced them.
+  const plan = planQuery.data?.schedule ?? null
+
+  /* The plan's own span, read off the saved schedule rather than off the
+     events, so it states what was asked for even if generation produced
+     nothing for it. */
+  const planRange = useMemo(() => {
+    const from = plan?.calendarStart
+    const to = plan?.targetExamDate
+    if (!from || !to) return null
+
+    const label = (value) => {
+      const date = new Date(`${String(value).slice(0, 10)}T00:00:00`)
+      return Number.isNaN(date.getTime())
+        ? value
+        : date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
+    }
+
+    return `${label(from)} → ${label(to)}`
+  }, [plan])
+
   const days = useMemo(() => buildMonth(viewDate), [viewDate])
   const today = dateKey(new Date())
   const eventsByDate = useMemo(() => (plan?.events ?? []).reduce((result, event) => {
@@ -41,14 +74,17 @@ export default function LearnerStudyPlanCalendarPage() {
     return result
   }, {}), [plan])
 
+  // Opens on the month the plan starts, once, rather than on today -- a plan
+  // that begins next month would otherwise load onto an empty grid. Only the
+  // first time, so paging away from it sticks.
+  useEffect(() => {
+    if (movedToPlan || !plan?.calendarStart) return
+    setViewDate(new Date(`${plan.calendarStart}T00:00:00`))
+    setMovedToPlan(true)
+  }, [plan?.calendarStart, movedToPlan])
+
   function changeMonth(amount) {
     setViewDate((current) => new Date(current.getFullYear(), current.getMonth() + amount, 1))
-  }
-
-  function receivePlan(nextPlan) {
-    setPlan(nextPlan)
-    if (nextPlan.calendarStart) setViewDate(new Date(`${nextPlan.calendarStart}T00:00:00`))
-    setGeneratorOpen(false)
   }
 
   return (
@@ -61,8 +97,21 @@ export default function LearnerStudyPlanCalendarPage() {
                 {viewDate.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
               </h2>
             </div>
+            {/* Which plan this is, and the span it covers.
+                The page asks for the active plan without naming a
+                certification, so the backend answers with the most recently
+                created active plan across all of them -- which is not
+                necessarily the one the learner just built. Without the range
+                printed, a plan running to a later exam date looks like the
+                calendar inventing sessions past the date you chose. */}
             <p className="mt-1.5 text-sm text-muted-foreground">
               {plan?.certification ?? "Personal study calendar"}
+              {planRange ? (
+                <>
+                  <span aria-hidden="true"> · </span>
+                  <span>{planRange}</span>
+                </>
+              ) : null}
             </p>
           </div>
 
@@ -72,24 +121,14 @@ export default function LearnerStudyPlanCalendarPage() {
               <Button variant="ghost" size="sm" className="min-w-16" onClick={() => setViewDate(new Date())}>Today</Button>
               <Button variant="ghost" size="icon-sm" onClick={() => changeMonth(1)} aria-label="Next month"><ChevronRight /></Button>
             </div>
-            <Button
-              className="gap-2 sm:min-w-48"
-              onClick={() => setGeneratorOpen(true)}
-              disabled={entitlements.isLoading || !canGeneratePlan}
-              aria-describedby={!canGeneratePlan ? "study-plan-pro-message" : undefined}
-              title={!canGeneratePlan ? "A Pro subscription or institution license is required" : undefined}
-            >
-              <Sparkles className="size-4" />
-              Generate study plan
+            <Button asChild variant="outline" className="gap-2">
+              <Link to="/learner/learning">
+                <Sparkles className="size-4" />
+                {plan ? "Update plan" : "Create a plan"}
+              </Link>
             </Button>
           </div>
         </div>
-
-        {!entitlements.isLoading && !canGeneratePlan ? (
-          <p id="study-plan-pro-message" className="mb-4 text-xs text-muted-foreground">
-            Pro feature · Upgrade or use institution access to generate a personalized plan.
-          </p>
-        ) : null}
 
         <div className="overflow-x-auto border-y border-border bg-card [scrollbar-width:thin]">
           <div className="min-w-[900px]">
@@ -122,20 +161,19 @@ export default function LearnerStudyPlanCalendarPage() {
           </div>
         </div>
 
-        {!plan ? (
+        {!plan && !planQuery.isLoading ? (
           <div className="flex items-center gap-3 border-b border-border px-1 py-5">
             <span className="flex size-9 items-center justify-center bg-accent text-primary"><CalendarDays className="size-4" /></span>
-            <div><p className="text-sm font-medium">No scheduled study tasks</p><p className="mt-0.5 text-xs text-muted-foreground">Generate a study plan to add personalized activities to this calendar.</p></div>
+            <div>
+              <p className="text-sm font-medium">No scheduled study tasks</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Open a certification in My Learning and build a study plan there — it
+                needs your diagnostic result to decide what to schedule first.
+              </p>
+            </div>
           </div>
         ) : null}
       </section>
-
-      <Dialog open={generatorOpen} onOpenChange={setGeneratorOpen}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[min(1180px,calc(100vw-4rem))]">
-          <DialogHeader className="sr-only"><DialogTitle>Generate study plan</DialogTitle><DialogDescription>Configure a personalized study plan.</DialogDescription></DialogHeader>
-          <StudyPlanGenerator onPlanGenerated={receivePlan} />
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

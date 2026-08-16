@@ -42,7 +42,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { ASSESSMENT_XP } from "@/lib/xp.js"
-import { announceXpAward } from "@/components/learner/xp-award-modal.jsx"
+import { announceRewards, snapshotRewards } from "@/components/learner/xp-award-modal.jsx"
+import { GRADING_MESSAGES, LoadingScreen } from "@/components/loading-screen.jsx"
 import DiagramArea from "@/components/challenges/diagram-area.jsx"
 import CodeMirrorProgrammingWorkspace from "@/components/assessments/attempt/code-mirror-programming-workspace.jsx"
 import DiagramQuestionLayout from "@/components/assessments/attempt/diagram-question-layout.jsx"
@@ -702,15 +703,21 @@ export default function LearnerAssessmentAttemptPage() {
           payload
       )
     },
-    onSuccess: async (result) => {
+    // Taken before the submission, and it loads the portal payload if this page
+    // never did -- this route renders outside LearnerLayout, so on a direct
+    // load there is otherwise nothing cached to diff against.
+    onMutate: () => snapshotRewards(queryClient),
+    onSuccess: async (result, _variables, before) => {
       sessionStorage.removeItem(`rebyu-attempt-key-${examId}-${learnerId}`)
-      // Submission may complete the certification's diagnostic gate. Remove
-      // the pre-attempt portal snapshot so lessons are unlocked on return.
-      // Also refetches the portal payload -- which both credits the header's XP
-      // counter and unlocks lessons behind a diagnostic gate this attempt may
-      // have just satisfied -- and reports what the award actually paid.
-      await announceXpAward({
+      // Refetches the portal payload -- which credits the header's XP counter,
+      // unlocks lessons behind a diagnostic gate this attempt may have just
+      // satisfied, and reports what the award actually paid. First Quiz /
+      // First Perfect Score / Exam Ready are all decided by this submission
+      // server-side; the modal is hosted at the app root, so those survive the
+      // navigation to the results page below.
+      await announceRewards({
         queryClient,
+        before,
         title: "Assessment submitted",
         fallback: "You had already earned the XP for this assessment.",
       })
@@ -745,6 +752,26 @@ export default function LearnerAssessmentAttemptPage() {
   // ---------------------------------------------------------------
   // Render states
   // ---------------------------------------------------------------
+
+  /* Submission grades the whole attempt server-side before it answers: string
+     and structural marking, an AI pass over any written answers, and Judge0
+     over any code that was never Checked. That is real work and it is not
+     instant, so the wait gets the product's own loading screen rather than a
+     disabled button and a frozen paper.
+
+     Placed above every other render state deliberately. The queries backing
+     this page are invalidated inside the mutation's `onSuccess`, so leaving the
+     attempt UI mounted meant it briefly re-rendered against refetching data on
+     its way out; this replaces the screen for the whole of the submit instead.
+
+     It also covers `isSuccess`, not just `isPending`: navigation to the result
+     happens after several awaited refetches, and without that the finished
+     paper flashes back for a beat between the grading finishing and the result
+     page arriving. */
+  if (submitMutation.isPending || submitMutation.isSuccess) {
+    return <LoadingScreen messages={GRADING_MESSAGES} />
+  }
+
   if (startError) {
     return (
         <div className="flex min-h-dvh items-center justify-center p-6">

@@ -903,11 +903,25 @@
    The chips and eyebrows inside are re-inked here rather than at each call
    site — a chip should not have to know it landed on a dark surface.
    --------------------------------------------------------------------------- */
+/* Feather-lip, not Humpback-lip. Humpback is a desaturated steel blue that
+   appears nowhere else on a learner surface — under it sit Macaw and Fox unit
+   cards at full saturation, and the band read as a different product's header
+   sitting on top of this one. Feather is the core brand blue, so the band now
+   belongs to the same family as the cards below it.
+
+   The -lip rather than the face: Feather-lip measures L=0.1028 against
+   Humpback-lip's 0.1029, so every white and white/nn value inside the band
+   keeps the contrast ratio it was chosen for (see the eyebrow rule below).
+   Feather's face would be a brighter band but drops the 80% eyebrow from
+   5.04:1 to 3.48:1, under AA.
+
+   It also means the band tracks `rb-a11y`, which re-inks the whole Feather
+   family — the header moving with its cards is the point. */
 .rebyu-ds .rb-hero-ink {
     position: relative;
     overflow: hidden;
     color: var(--color-rb-snow);
-    background: var(--color-rb-humpback-lip);
+    background: var(--color-rb-feather-lip);
 }
 
 .rebyu-ds .rb-hero-ink .rb-chip {

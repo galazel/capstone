@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { useLearnerEntitlements } from "@/hooks/use-learner-entitlements.js"
 import { updateLearner, updateUser } from "@/services/learnerService.js"
+import { achievementBadge } from "@/lib/achievements.js"
 
 const ACCOUNT_TABS = [
   { id: "profile", label: "Profile", icon: UserRound },
@@ -59,18 +60,25 @@ function achievementDescription(achievement) {
   return achievement?.description ?? achievement?.achievementDescription ?? "Learning milestone earned in REBYU."
 }
 
-function achievementImage(achievement) {
-  return achievement?.iconUrl ?? achievement?.imageUrl ?? achievement?.badgeUrl ?? null
-}
-
 function AchievementMark({ achievement }) {
-  const image = achievementImage(achievement)
+  const image = achievementBadge(achievement)
+  // Locked badges are shown, not hidden: what is left to earn is half of why a
+  // badge wall is worth looking at. They read as unreachable through the
+  // greyscale/opacity treatment rather than by being absent.
+  const earned = achievement?.earned !== false
   return (
-    <div className="group min-w-0 text-center" title={achievementDescription(achievement)}>
-      <div className="mx-auto flex size-20 items-center justify-center overflow-hidden rounded-full border border-border bg-muted/40 transition group-hover:-translate-y-0.5 group-hover:border-primary/40 group-hover:shadow-md">
-        {image ? <img src={image} alt="" className="h-full w-full object-cover" loading="lazy" /> : <Award className="size-9 text-primary" aria-hidden="true" />}
+    <div
+      className="group min-w-0 text-center"
+      title={`${achievementDescription(achievement)}${earned ? "" : " (locked)"}`}
+    >
+      <div
+        className={`mx-auto flex size-20 items-center justify-center overflow-hidden rounded-full border border-border bg-muted/40 transition group-hover:-translate-y-0.5 group-hover:border-primary/40 group-hover:shadow-md ${
+          earned ? "" : "opacity-40 grayscale"
+        }`}
+      >
+        {image ? <img src={image} alt="" className="h-full w-full object-contain p-1.5" loading="lazy" /> : <Award className="size-9 text-primary" aria-hidden="true" />}
       </div>
-      <p className="mt-2 truncate text-xs font-medium text-foreground">{achievementTitle(achievement)}</p>
+      <p className={`mt-2 truncate text-xs font-medium ${earned ? "text-foreground" : "text-muted-foreground"}`}>{achievementTitle(achievement)}</p>
       {achievement?.earnedAt ? <p className="mt-0.5 text-[11px] text-muted-foreground">{new Date(achievement.earnedAt).toLocaleDateString()}</p> : null}
     </div>
   )
@@ -142,11 +150,14 @@ export default function LearnerAccountPage() {
 
   const canSave = Boolean(learner?.learnerId && user?.userId)
   const featureList = useMemo(() => [...entitlements.features].sort(), [entitlements.features])
-  const achievements = Array.isArray(data?.latestAchievements)
-    ? data.latestAchievements
-    : Array.isArray(data?.achievements)
-      ? data.achievements
-      : []
+  // The whole catalog, earned first -- the count beside the header is the
+  // earned ones, not the size of the catalog.
+  const achievements = Array.isArray(data?.achievements) ? data.achievements : []
+  const earnedAchievements = achievements.filter((achievement) => achievement.earned)
+  const orderedAchievements = [
+    ...earnedAchievements,
+    ...achievements.filter((achievement) => !achievement.earned),
+  ]
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -202,11 +213,11 @@ export default function LearnerAccountPage() {
             <section className="border-b border-border/70 pb-6">
               <div className="flex items-end justify-between gap-4">
                 <div><h3 className="text-base font-semibold">Achievements</h3><p className="mt-1 text-sm text-muted-foreground">Milestones earned through lessons, assessments, and learning streaks.</p></div>
-                <span className="text-sm font-medium text-muted-foreground">{achievements.length} earned</span>
+                <span className="text-sm font-medium text-muted-foreground">{earnedAchievements.length} of {achievements.length} earned</span>
               </div>
               {achievements.length ? (
-                <div className="mt-5 grid grid-cols-3 gap-5 sm:grid-cols-5 lg:grid-cols-7">
-                  {achievements.slice(0, 7).map((achievement, index) => <AchievementMark key={achievement.achievementId ?? achievement.id ?? `${achievementTitle(achievement)}-${index}`} achievement={achievement} />)}
+                <div className="mt-5 grid grid-cols-3 gap-5 sm:grid-cols-5 lg:grid-cols-8">
+                  {orderedAchievements.map((achievement, index) => <AchievementMark key={achievement.code ?? achievement.achievementId ?? `${achievementTitle(achievement)}-${index}`} achievement={achievement} />)}
                 </div>
               ) : (
                 <div className="mt-5 flex items-center gap-3 py-3 text-sm text-muted-foreground"><span className="flex size-10 items-center justify-center rounded-full bg-muted"><Award className="size-5" /></span>Complete lessons and assessments to earn your first achievement.</div>

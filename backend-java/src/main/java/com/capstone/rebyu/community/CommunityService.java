@@ -273,15 +273,36 @@ public class CommunityService {
 
     @Transactional
     public void markNotificationRead(Long learnerId, Long notificationId) {
+        LearnerCommunityNotification notification = requireOwnedNotification(learnerId, notificationId);
+        if (notification.getReadAt() == null) {
+            notification.setReadAt(OffsetDateTime.now());
+            notificationRepository.save(notification);
+        }
+    }
+
+    @Transactional
+    public int markAllNotificationsRead(Long learnerId) {
+        return notificationRepository.markAllReadForLearner(learnerId, OffsetDateTime.now());
+    }
+
+    @Transactional
+    public void deleteNotification(Long learnerId, Long notificationId) {
+        notificationRepository.delete(requireOwnedNotification(learnerId, notificationId));
+    }
+
+    @Transactional
+    public int deleteAllNotifications(Long learnerId) {
+        return notificationRepository.deleteAllForLearner(learnerId);
+    }
+
+    /** Another learner's notification is reported as simply not found, never as forbidden. */
+    private LearnerCommunityNotification requireOwnedNotification(Long learnerId, Long notificationId) {
         LearnerCommunityNotification notification = notificationRepository.findById(notificationId)
                 .orElseThrow(() -> new EntityNotFoundException("Notification not found: " + notificationId));
         if (!notification.getLearner().getLearnerId().equals(learnerId)) {
             throw new EntityNotFoundException("Notification not found: " + notificationId);
         }
-        if (notification.getReadAt() == null) {
-            notification.setReadAt(OffsetDateTime.now());
-            notificationRepository.save(notification);
-        }
+        return notification;
     }
 
     /** Uploads a PDF/DOCX attachment and returns its key. Call before {@link #createPost}. */

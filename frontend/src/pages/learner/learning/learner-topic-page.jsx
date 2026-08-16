@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom"
+import {
+  Link,
+  useNavigate,
+  useOutletContext,
+  useParams,
+  useSearchParams,
+} from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import {
@@ -38,7 +44,7 @@ import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
 import { LessonAiTutor } from "@/components/learner/lesson-ai-tutor.jsx"
 import { PriorityTag } from "@/components/learner/priority-tag.jsx"
 import { ASSESSMENT_MAX_XP, LESSON_COMPLETION_XP } from "@/lib/xp.js"
-import { announceXpAward } from "@/components/learner/xp-award-modal.jsx"
+import { announceRewards, snapshotRewards } from "@/components/learner/xp-award-modal.jsx"
 import { LessonTool } from "@/components/certifications/lesson-content-renderer.jsx"
 import {
   getLessonById,
@@ -1119,6 +1125,7 @@ export default function LearnerTopicPage() {
   const { data } = useOutletContext()
   const isXl = useIsXl()
 
+  const [searchParams] = useSearchParams()
   const [activeId, setActiveId] = useState(null)
   const [outlineCollapsed, setOutlineCollapsed] = useState(false)
   const [tutorOpen, setTutorOpen] = useState(false)
@@ -1191,12 +1198,33 @@ export default function LearnerTopicPage() {
 
   const track = useMemo(() => (middle ? buildTrack(middle) : []), [middle])
 
-  // Land on the first unfinished lesson rather than always on lesson one.
+  /* Land on the first unfinished lesson rather than always on lesson one —
+     unless `?lesson=` names one, which is how links that recommend a specific
+     lesson (the analytics board's "study now") open the thing they named. A
+     recommendation is for one lesson in particular, and without this the page
+     would quietly open a different one whenever an earlier lesson in the same
+     topic was still unfinished.
+
+     The requested lesson is honoured only if it is actually in this topic's
+     track; a stale or hand-edited id falls through to the usual behaviour
+     rather than leaving the page with nothing selected. */
   useEffect(() => {
     if (activeId || track.length === 0) return
-    const next = track.find((item) => item.kind === "lesson" && !item.completed) ?? track[0]
+
+    const requestedLessonId = searchParams.get("lesson")
+    const requested = requestedLessonId
+      ? track.find(
+          (item) => item.kind === "lesson" && String(item.id) === String(requestedLessonId),
+        )
+      : null
+
+    const next =
+      requested ??
+      track.find((item) => item.kind === "lesson" && !item.completed) ??
+      track[0]
+
     setActiveId(next.id)
-  }, [track, activeId])
+  }, [track, activeId, searchParams])
 
   const activeIndex = Math.max(
     0,
@@ -1245,10 +1273,14 @@ export default function LearnerTopicPage() {
         // which never had this bug because it doesn't send a timestamp.
         completedAt: new Date().toISOString().slice(0, 19),
       }),
-    onSuccess: async (_result, lessonId) => {
+    // Before the request: the announcement diffs the portal payload, and this
+    // completion is what moves it.
+    onMutate: () => snapshotRewards(queryClient),
+    onSuccess: async (_result, lessonId, before) => {
       setLocallyDone((current) => new Set(current).add(lessonId))
-      await announceXpAward({
+      await announceRewards({
         queryClient,
+        before,
         title: "Lesson complete",
         fallback: "You had already earned the XP for this lesson.",
       })

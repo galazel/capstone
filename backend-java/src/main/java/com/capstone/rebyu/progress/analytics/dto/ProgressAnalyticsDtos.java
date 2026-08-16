@@ -36,6 +36,13 @@ public final class ProgressAnalyticsDtos {
             int completedLessonCount,
             Double completionPercentage,
 
+            // Published assessments on this certification, and how many the
+            // learner has passed. "Finished the certification" needs both these
+            // and the lesson counts -- reading every lesson is not the same as
+            // having sat what the lessons prepare you for.
+            int totalAssessmentCount,
+            int passedAssessmentCount,
+
             int totalAssessmentAttempts,
             int totalChallengeAttempts,
             boolean challengeStatsCertificationScoped,
@@ -46,8 +53,6 @@ public final class ProgressAnalyticsDtos {
             int totalCorrectAnswers,
             int totalIncorrectAnswers,
             boolean challengeAnswerBreakdownAvailable,
-
-            int studyStreakDays,
 
             List<RecentActivityItem> recentActivity,
             List<MasteryTrendPoint> masteryTrend,
@@ -91,8 +96,15 @@ public final class ProgressAnalyticsDtos {
     ) {
     }
 
+    /**
+     * One submitted attempt. Retakes are separate points, which is what lets the
+     * client group by {@code examId} and show whether a score moved between
+     * attempts of the same assessment rather than only across time.
+     */
     public record ScoreTrendPoint(
             Long assessmentAttemptId,
+            Long examId,
+            Integer attemptNumber,
             LocalDateTime submittedAt,
             String assessmentTitle,
             String assessmentType,

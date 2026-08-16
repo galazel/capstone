@@ -305,11 +305,25 @@ class Settings(BaseSettings):
     good_threshold: float = 0.70
     mastered_threshold: float = 0.85
 
-    readiness_mastery_weight: float = 0.60
-    readiness_diagnostic_weight: float = 0.05
-    readiness_quiz_weight: float = 0.15
-    readiness_middle_exam_weight: float = 0.10
-    readiness_mock_exam_weight: float = 0.10
+    # Readiness component weights. They must sum to 1.00: the service divides
+    # by the full total, so a component a learner has not earned yet counts as
+    # zero rather than being removed from the calculation.
+    #
+    # Mastery leads -- what you know matters most. Lesson progress is second:
+    # having covered the syllabus is the other half of being ready, and it is
+    # the component that keeps an untouched course from scoring well on the
+    # strength of one good assessment. The mock exam is third and now outranks
+    # the lesson quiz: it is the only component sat under real exam conditions,
+    # so it is the closest thing here to evidence of passing the actual thing.
+    readiness_mastery_weight: float = 0.40
+    readiness_progress_weight: float = 0.20
+    readiness_mock_exam_weight: float = 0.15
+    readiness_quiz_weight: float = 0.12
+    readiness_middle_exam_weight: float = 0.08
+    # A diagnostic places you; it does not certify you. Small on purpose.
+    readiness_diagnostic_weight: float = 0.03
+    # Consistency is evidence of effort, not of knowing the material.
+    readiness_streak_weight: float = 0.02
 
     # --- Priority scoring (lesson component weights; normalized at use) -------
     priority_weight_mastery: float = 0.45
@@ -466,6 +480,8 @@ class Settings(BaseSettings):
         "readiness_quiz_weight",
         "readiness_middle_exam_weight",
         "readiness_mock_exam_weight",
+        "readiness_progress_weight",
+        "readiness_streak_weight",
     )
     @classmethod
     def probability_range(cls, value: float) -> float:

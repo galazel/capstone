@@ -40,7 +40,7 @@ export default function DashboardLayout() {
               emptyMessage="Partnership request updates will appear here."
               onItemOpen={notifications.open}
               onMarkAllRead={notifications.markAllRead}
-              onDelete={notifications.remove}
+              onDelete={(item) => notifications.remove(item.id)}
             />
             <DropdownMenu>
               <DropdownMenuTrigger className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Open account menu">

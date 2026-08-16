@@ -19,6 +19,6 @@ public class AchievementDto {
     @NotBlank
     private String description;
 
-    @Size(max = 255)
-    private String imageKey;
+    // No imageKey: badge artwork ships with the frontend, keyed by the
+    // AchievementCatalog slug, so there is no storage key to carry here.
 }

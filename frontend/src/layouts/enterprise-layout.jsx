@@ -94,7 +94,7 @@ export default function EnterpriseLayout() {
               emptyMessage="Partnership and invitation updates will appear here."
               onItemOpen={notifications.open}
               onMarkAllRead={notifications.markAllRead}
-              onDelete={notifications.remove}
+              onDelete={(item) => notifications.remove(item.id)}
             />
 
 

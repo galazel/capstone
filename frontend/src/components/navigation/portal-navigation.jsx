@@ -289,7 +289,11 @@ export function PortalTopNavigation({ role, actions, organizationName, enterpris
   return (
     <>
       <header className="sticky top-0 z-40 border-b border-border/80 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/90">
-        <div className="mx-auto flex h-16 w-full max-w-[1480px] items-center gap-4 px-4 sm:px-6 lg:px-8">
+        {/* Cap and padding track `.rebyu-page` in index.css. The two are
+            independent declarations of the same gutter, so they have to move
+            together — widening the page alone left the brand and the nav links
+            indented relative to every heading underneath them. */}
+        <div className="mx-auto flex h-16 w-full max-w-[1800px] items-center gap-4 px-3 sm:px-5 lg:px-6">
           <Brand role={role} organizationName={organizationName} />
           {/* Left-aligned against the logo. Centred, the links floated in the
               middle of the bar and shifted horizontally whenever the brand or

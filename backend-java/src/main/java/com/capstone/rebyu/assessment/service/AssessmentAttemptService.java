@@ -15,6 +15,7 @@ import com.capstone.rebyu.billing.service.LearnerEntitlementService;
 import com.capstone.rebyu.bkt.service.BktOutboxService;
 import com.capstone.rebyu.gamification.RewardService;
 import com.capstone.rebyu.gamification.service.StreakService;
+import com.capstone.rebyu.progress.service.AchievementAwardService;
 import com.capstone.rebyu.certification.entity.Lesson;
 import com.capstone.rebyu.certification.repository.LessonRepository;
 import com.capstone.rebyu.common.BusinessRuleException;
@@ -49,6 +50,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.Supplier;
 
 /**
  * Transaction Two: assessment attempt lifecycle. Starts snapshot-based
@@ -89,6 +94,7 @@ public class AssessmentAttemptService {
     private final AssessmentEventProducer assessmentEventProducer;
     private final RewardService rewardService;
     private final StreakService streakService;
+    private final AchievementAwardService achievementAwardService;
 
     /**
      * Outcome-based assessment XP: 30 for finishing, 100 for passing, 200 for
@@ -376,6 +382,11 @@ public class AssessmentAttemptService {
             answersByQuestion.put(answer.getAttemptQuestion().getAttemptQuestionId(), answer);
         }
 
+        /* Every expensive grader for this paper, run per family and
+           concurrently within each, before a single answer is scored. The loop
+           below then reads the results instead of making the calls itself. */
+        GradingBatch gradingBatch = prepareGradingBatch(questions, answersByQuestion);
+
         BigDecimal totalPoints = BigDecimal.ZERO;
         BigDecimal earnedPoints = BigDecimal.ZERO;
 
@@ -390,7 +401,7 @@ public class AssessmentAttemptService {
             if (answer == null) {
                 continue;
             }
-            scoreAnswer(attemptQuestion, answer, points);
+            scoreAnswer(attemptQuestion, answer, points, gradingBatch);
             attemptAnswerRepository.save(answer);
             // Partial credit (AI-graded descriptive/critical-thinking, future
             // diagram grading) sets earnedPoints without isCorrect=TRUE, so
@@ -421,6 +432,10 @@ public class AssessmentAttemptService {
 
         awardAssessmentXp(attempt);
         streakService.recordActivity(attempt.getLearnerId());
+        // First Quiz / First Perfect Score / Exam Ready all hang off a submitted
+        // attempt, and the evaluation reads this one back from the row saved
+        // above. Idempotent, so a retake awards nothing twice.
+        achievementAwardService.evaluate(attempt.getLearnerId());
 
         recordLegacyExamResult(attempt);
         completeDiagnosticGateIfApplicable(attempt);
@@ -862,7 +877,8 @@ public class AssessmentAttemptService {
     private void scoreAnswer(
             AssessmentAttemptQuestion attemptQuestion,
             AssessmentAttemptAnswer answer,
-            BigDecimal points) {
+            BigDecimal points,
+            GradingBatch batch) {
 
         String type = attemptQuestion.getQuestionType();
         Question source = questionRepository
@@ -892,12 +908,26 @@ public class AssessmentAttemptService {
                 answer.setPendingManualEvaluation(false);
                 return;
             }
+
+            // AI_SEMANTIC short answers were falling straight through to
+            // pending. The grader they need already exists and
+            // `rubricGuidanceFor` is already written to return the reference
+            // answer for exactly this checking method -- only the branch
+            // routing them into it was missing, so a question authored to be
+            // marked by meaning rather than by string equality could never be
+            // marked at all. Graded against the same rubric path descriptive
+            // answers use.
+            if (config.isPresent()
+                    && "AI_SEMANTIC".equalsIgnoreCase(config.get().getCheckingMethod())
+                    && gradeDescriptiveAnswer(attemptQuestion, source, answer, points, batch)) {
+                return;
+            }
         }
 
         // AI grading (no admin review): descriptive answers scored against
         // their authored rubric, immediately finalized.
         if ("DESCRIPTIVE".equals(type) && source != null
-                && gradeDescriptiveAnswer(attemptQuestion, source, answer, points)) {
+                && gradeDescriptiveAnswer(attemptQuestion, source, answer, points, batch)) {
             return;
         }
 
@@ -908,16 +938,28 @@ public class AssessmentAttemptService {
             String criticalThinkingType = resolveCriticalThinkingType(source.getQuestionId());
 
             if (criticalThinkingType == null
-                    && gradeCriticalThinkingAnswer(attemptQuestion, source, answer, points)) {
+                    && gradeCriticalThinkingAnswer(attemptQuestion, source, answer, points, batch)) {
                 return;
             }
 
-            // Programming is graded deterministically via Judge0 at Check
-            // time (executeProgramming), not here — submit must never
-            // re-execute or overwrite that verdict (or the still-pending
-            // state if the learner never ran Check).
+            // Programming is graded deterministically via Judge0. A learner
+            // who ran Check already has that verdict and it is never
+            // re-executed or overwritten here. One who never ran Check used to
+            // be left pending forever, which meant submitting a finished
+            // solution without pressing a button scored nothing and waited on
+            // a manual review that nothing schedules -- so submit now grades
+            // it against the full test set.
             if ("PROGRAMMING".equals(criticalThinkingType)) {
-                return;
+                if (hasDefinitiveVerdict(answer)) {
+                    return;
+                }
+                gradeProgrammingOnSubmit(attemptQuestion, source, answer, points, batch);
+                // Judge0 unreachable, or no test cases authored. Falls through
+                // to the closing branch below so the item is still marked
+                // rather than left pending.
+                if (hasDefinitiveVerdict(answer)) {
+                    return;
+                }
             }
 
             // Deterministic structural grading against the admin's reference
@@ -928,12 +970,317 @@ public class AssessmentAttemptService {
             }
         }
 
-        // Unrubricked descriptive/critical-thinking, an unusable diagram
-        // reference, AI/grading failures, and non-exact short answers have
-        // no trustworthy automatic evaluator here — never fabricate a score.
-        answer.setIsCorrect(null);
-        answer.setEarnedPoints(null);
-        answer.setPendingManualEvaluation(true);
+        // An item with nothing submitted needs no evaluator of any kind. This
+        // used to fall into the pending branch below, so leaving a written item
+        // blank produced "awaiting manual review" rather than the zero it
+        // plainly is -- and held up the whole result waiting on a review of an
+        // empty box.
+        if (!hasSubmittedContent(answer)) {
+            answer.setIsCorrect(false);
+            answer.setEarnedPoints(BigDecimal.ZERO);
+            answer.setPendingManualEvaluation(false);
+            return;
+        }
+
+        /* Last resort: mark it rather than park it.
+         *
+         * Everything reaching this line has already been through every grader
+         * that applies to it, including a retry of the AI call and a
+         * rubric-free AI pass -- so this is a diagram with no reference
+         * authored, or a grading service that failed twice.
+         *
+         * The result is closed out at zero instead of pending. That is a
+         * product decision, made explicitly: a result that is complete the
+         * moment it is submitted is worth more here than one that is
+         * withheld for a manual review queue nothing drains. The cost is real
+         * and worth naming -- an item whose reference material was never
+         * authored now scores the learner zero rather than waiting for
+         * someone to author it.
+         *
+         * The feedback says so plainly, so the zero is never silent and a
+         * learner can raise it. `isCorrect=false` (not null) is what keeps it
+         * out of the pending count and inside the graded totals.
+         */
+        log.warn("No automatic grader produced a verdict for attemptQuestion {} (type {}); "
+                        + "closing it out at zero",
+                attemptQuestion.getAttemptQuestionId(), type);
+        answer.setIsCorrect(false);
+        answer.setEarnedPoints(BigDecimal.ZERO);
+        answer.setPendingManualEvaluation(false);
+        if (answer.getFeedback() == null || answer.getFeedback().isBlank()) {
+            answer.setFeedback("This answer could not be marked automatically and was scored "
+                    + "zero. If you believe it deserves credit, raise it with your instructor.");
+        }
+    }
+
+    /**
+     * Pre-computed results for one submission's expensive graders.
+     *
+     * Both maps are keyed by {@code attemptQuestionId}. An absent entry means
+     * nothing was pre-computed for that item, and the grader falls back to
+     * calling out directly -- so this is an optimisation that the correctness
+     * of grading never depends on.
+     */
+    private record GradingBatch(
+            Map<Long, AnswerGradingResultDto> aiResults,
+            Map<Long, CodeExecutionResultDto> codeResults) {
+    }
+
+    /** How many grading calls of one family may be in flight at once. */
+    private static final int GRADING_BATCH_CONCURRENCY = 4;
+
+    /**
+     * Runs one family of blocking grading calls concurrently.
+     *
+     * Only the network call runs off-thread. Nothing here touches an entity, a
+     * repository, or the EntityManager -- none of which are thread-safe, and
+     * the whole submission runs in one transaction bound to the calling thread,
+     * so every mutation stays on it. The suppliers are pure: request in, result
+     * out.
+     *
+     * A task that throws contributes no entry rather than failing the batch,
+     * which leaves its item to the ordinary sequential path and, in turn, to
+     * the retry and the closing fallback below it.
+     */
+    private <T> Map<Long, T> runGradingBatch(Map<Long, Supplier<Optional<T>>> tasks) {
+        if (tasks.isEmpty()) {
+            return Map.of();
+        }
+
+        // One item is not a batch -- a thread pool would cost more than it saves.
+        if (tasks.size() == 1) {
+            Map.Entry<Long, Supplier<Optional<T>>> only = tasks.entrySet().iterator().next();
+            try {
+                Optional<T> value = only.getValue().get();
+                Map<Long, T> single = new LinkedHashMap<>();
+                value.ifPresent(v -> single.put(only.getKey(), v));
+                return single;
+            } catch (RuntimeException ex) {
+                log.warn("Grading call failed for attemptQuestion {}: {}",
+                        only.getKey(), ex.toString());
+                return Map.of();
+            }
+        }
+
+        ExecutorService pool = Executors.newFixedThreadPool(
+                Math.min(tasks.size(), GRADING_BATCH_CONCURRENCY));
+        try {
+            Map<Long, CompletableFuture<Optional<T>>> futures = new LinkedHashMap<>();
+            for (Map.Entry<Long, Supplier<Optional<T>>> entry : tasks.entrySet()) {
+                Supplier<Optional<T>> task = entry.getValue();
+                Long key = entry.getKey();
+                futures.put(key, CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return task.get();
+                    } catch (RuntimeException ex) {
+                        log.warn("Grading call failed for attemptQuestion {}: {}",
+                                key, ex.toString());
+                        return Optional.<T>empty();
+                    }
+                }, pool));
+            }
+
+            Map<Long, T> results = new LinkedHashMap<>();
+            for (Map.Entry<Long, CompletableFuture<Optional<T>>> entry : futures.entrySet()) {
+                try {
+                    entry.getValue().join()
+                            .ifPresent(value -> results.put(entry.getKey(), value));
+                } catch (RuntimeException ex) {
+                    log.warn("Grading call failed for attemptQuestion {}: {}",
+                            entry.getKey(), ex.toString());
+                }
+            }
+            return results;
+        } finally {
+            pool.shutdown();
+        }
+    }
+
+    /**
+     * Groups a submission's answers by what actually grades them, and runs the
+     * two network-bound families concurrently before any scoring begins.
+     *
+     * Deterministic items -- multiple choice, exact-match short answers,
+     * structural diagram comparison -- are deliberately absent: they are
+     * in-process and finish faster than a request could be dispatched, so they
+     * are simply graded in the sequential pass that follows.
+     *
+     * The two families left each make one blocking call per item, and used to
+     * make them strictly one after another: a ten-question paper of written
+     * answers paid ten AI round trips end to end. They now overlap within their
+     * family, so a submission costs roughly the slowest call in each group
+     * rather than the sum of every call.
+     */
+    private GradingBatch prepareGradingBatch(
+            List<AssessmentAttemptQuestion> questions,
+            Map<Long, AssessmentAttemptAnswer> answersByQuestion) {
+
+        Map<Long, Supplier<Optional<AnswerGradingResultDto>>> aiTasks = new LinkedHashMap<>();
+        Map<Long, Supplier<Optional<CodeExecutionResultDto>>> codeTasks = new LinkedHashMap<>();
+
+        for (AssessmentAttemptQuestion attemptQuestion : questions) {
+            AssessmentAttemptAnswer answer =
+                    answersByQuestion.get(attemptQuestion.getAttemptQuestionId());
+            if (answer == null || !hasSubmittedContent(answer)) {
+                continue;
+            }
+
+            Long key = attemptQuestion.getAttemptQuestionId();
+            String type = attemptQuestion.getQuestionType();
+            Question source = questionRepository
+                    .findById(attemptQuestion.getSourceQuestionId()).orElse(null);
+            if (source == null) {
+                continue;
+            }
+            BigDecimal points = attemptQuestion.getPoints() == null
+                    ? BigDecimal.ONE : attemptQuestion.getPoints();
+
+            if ("DESCRIPTIVE".equals(type) || isAiSemanticShortAnswer(type, source)) {
+                AnswerGradingRequestDto request = descriptiveGradingRequest(
+                        attemptQuestion, source, answer, points);
+                aiTasks.put(key, () -> gradeWithRetry(request));
+                continue;
+            }
+
+            if ("CRITICAL_THINKING".equals(type)) {
+                String criticalThinkingType = resolveCriticalThinkingType(source.getQuestionId());
+
+                if (criticalThinkingType == null) {
+                    AnswerGradingRequestDto request =
+                            criticalThinkingGradingRequest(attemptQuestion, source, answer, points);
+                    if (request != null) {
+                        aiTasks.put(key, () -> gradeWithRetry(request));
+                    }
+                    continue;
+                }
+
+                if ("PROGRAMMING".equals(criticalThinkingType) && !hasDefinitiveVerdict(answer)) {
+                    List<TestCaseInputDto> inputs = programmingInputsFor(source);
+                    String code = answer.getSubmittedCode();
+                    String language = answer.getProgrammingLanguage();
+                    if (!inputs.isEmpty() && code != null && !code.isBlank()) {
+                        codeTasks.put(key, () -> Optional.ofNullable(
+                                codeExecutionService.execute(
+                                        new CodeExecutionRequestDto(language, code, inputs))));
+                    }
+                }
+            }
+        }
+
+        return new GradingBatch(runGradingBatch(aiTasks), runGradingBatch(codeTasks));
+    }
+
+    private boolean isAiSemanticShortAnswer(String type, Question source) {
+        return "SHORT_ANSWER".equals(type)
+                && textQuestionConfigRepository.findByQuestion_QuestionId(source.getQuestionId())
+                        .map(config -> "AI_SEMANTIC".equalsIgnoreCase(config.getCheckingMethod()))
+                        .orElse(false);
+    }
+
+    private List<TestCaseInputDto> programmingInputsFor(Question source) {
+        return loadIndexedProgrammingTestCases(source).stream()
+                .map(it -> new TestCaseInputDto(
+                        it.index(), it.testCase().isSample(),
+                        it.testCase().getInputData(), it.testCase().getExpectedOutput()))
+                .toList();
+    }
+
+    /** Whether the learner put anything at all into this item. */
+    private static boolean hasSubmittedContent(AssessmentAttemptAnswer answer) {
+        return (answer.getLearnerAnswer() != null && !answer.getLearnerAnswer().isBlank())
+                || answer.getSelectedChoiceId() != null
+                || (answer.getSubmittedCode() != null && !answer.getSubmittedCode().isBlank())
+                || (answer.getDiagramSubmissionData() != null
+                        && !answer.getDiagramSubmissionData().isBlank());
+    }
+
+    /** A Check already produced a real verdict for this answer. */
+    private static boolean hasDefinitiveVerdict(AssessmentAttemptAnswer answer) {
+        return !answer.isPendingManualEvaluation() && answer.getIsCorrect() != null;
+    }
+
+    /**
+     * Grades a programming item at submit time for a learner who never ran
+     * Check, using the same deterministic Judge0 path and the same
+     * passed/total scoring that Check applies.
+     *
+     * Separate from {@link #executeProgramming} rather than reusing it: that
+     * method is the interactive entry point and begins with
+     * {@code requireEditable(attempt)} plus an {@code upsertAnswers} write,
+     * both of which are wrong here -- at submit the attempt is already closed
+     * and the code is already persisted.
+     *
+     * Two cases still do not produce a score, and both leave the answer exactly
+     * as it was rather than inventing one:
+     *   - no code submitted, which is an unanswered item and is scored zero;
+     *   - no test cases authored, or Judge0 returning a non-definitive status
+     *     (UNAVAILABLE, UNSUPPORTED_LANGUAGE), where there is nothing to grade
+     *     against and a fabricated verdict would be worse than an honest
+     *     pending.
+     */
+    private void gradeProgrammingOnSubmit(
+            AssessmentAttemptQuestion attemptQuestion,
+            Question source,
+            AssessmentAttemptAnswer answer,
+            BigDecimal points,
+            GradingBatch batch) {
+
+        String code = answer.getSubmittedCode();
+        if (code == null || code.isBlank()) {
+            // Nothing was written. That is a zero, not something to review.
+            answer.setIsCorrect(false);
+            answer.setEarnedPoints(BigDecimal.ZERO);
+            answer.setPendingManualEvaluation(false);
+            return;
+        }
+
+        List<IndexedTestCase> testCases = loadIndexedProgrammingTestCases(source);
+        if (testCases.isEmpty()) {
+            return;
+        }
+
+        List<TestCaseInputDto> inputs = testCases.stream()
+                .map(it -> new TestCaseInputDto(
+                        it.index(), it.testCase().isSample(),
+                        it.testCase().getInputData(), it.testCase().getExpectedOutput()))
+                .toList();
+
+        // Normally already run by the batch, alongside every other code item.
+        CodeExecutionResultDto result =
+                batch.codeResults().get(attemptQuestion.getAttemptQuestionId());
+        if (result == null) {
+            try {
+                result = codeExecutionService.execute(new CodeExecutionRequestDto(
+                        answer.getProgrammingLanguage(), code, inputs));
+            } catch (RuntimeException ex) {
+                log.warn("Submit-time programming grading failed for attemptQuestion {}: {}",
+                        attemptQuestion.getAttemptQuestionId(), ex.toString());
+                return;
+            }
+        }
+
+        boolean definitive = "COMPLETED".equals(result.status())
+                || "COMPILE_ERROR".equals(result.status());
+        if (!definitive) {
+            return;
+        }
+
+        answer.setExecutionResult(serializeExecutionResult(
+                attemptQuestion.getAttemptQuestionId(),
+                AssessmentAttemptExecution.Mode.CHECK, result, hashCode(code)));
+
+        int total = result.totalTests() == null ? 0 : result.totalTests();
+        int passed = result.passedTests() == null ? 0 : result.passedTests();
+        if (total > 0) {
+            BigDecimal ratio = BigDecimal.valueOf(passed)
+                    .divide(BigDecimal.valueOf(total), 4, RoundingMode.HALF_UP);
+            answer.setEarnedPoints(points.multiply(ratio).setScale(2, RoundingMode.HALF_UP));
+            answer.setIsCorrect(passed == total);
+        } else {
+            answer.setEarnedPoints(BigDecimal.ZERO);
+            answer.setIsCorrect(false);
+        }
+        answer.setPendingManualEvaluation(false);
     }
 
     /**
@@ -1021,23 +1368,58 @@ public class AssessmentAttemptService {
     }
 
     /** True on a successful (or intentionally rubric-less) resolution; the caller returns either way. */
-    private boolean gradeDescriptiveAnswer(
+    /**
+     * One retry around the AI grader.
+     *
+     * The call is a network round trip to the Python service and its failures
+     * are mostly transient. A single retry converts most of them into a real
+     * mark, which matters more now that a failure no longer parks the item for
+     * a human — it falls through to the zero-with-explanation branch instead.
+     */
+    private Optional<AnswerGradingResultDto> gradeWithRetry(AnswerGradingRequestDto request) {
+        Optional<AnswerGradingResultDto> graded = aiAnswerGradingService.grade(request);
+        if (graded.isPresent()) {
+            return graded;
+        }
+        log.warn("AI grading returned nothing; retrying once");
+        return aiAnswerGradingService.grade(request);
+    }
+
+    /** The grading request for a descriptive or AI-semantic short answer. */
+    private AnswerGradingRequestDto descriptiveGradingRequest(
             AssessmentAttemptQuestion attemptQuestion,
             Question source,
             AssessmentAttemptAnswer answer,
             BigDecimal points) {
-        String rubricGuidance = rubricGuidanceFor(source.getQuestionId());
-        List<AnswerGradingRequestDto.RubricCriterionDto> criteria = rubricCriteriaFor(source.getQuestionId());
-        if ((rubricGuidance == null || rubricGuidance.isBlank()) && criteria.isEmpty()) {
-            // No rubric authored: nothing to grade against, leave pending.
-            return false;
-        }
-
         String learnerText = answer.getLearnerAnswer() == null ? "" : answer.getLearnerAnswer();
-        AnswerGradingRequestDto request = new AnswerGradingRequestDto(
-                attemptQuestion.getQuestionTextSnapshot(), points, rubricGuidance, criteria, learnerText, null);
+        return new AnswerGradingRequestDto(
+                attemptQuestion.getQuestionTextSnapshot(), points,
+                rubricGuidanceFor(source.getQuestionId()),
+                rubricCriteriaFor(source.getQuestionId()), learnerText, null);
+    }
 
-        Optional<AnswerGradingResultDto> graded = aiAnswerGradingService.grade(request);
+    private boolean gradeDescriptiveAnswer(
+            AssessmentAttemptQuestion attemptQuestion,
+            Question source,
+            AssessmentAttemptAnswer answer,
+            BigDecimal points,
+            GradingBatch batch) {
+
+        // No rubric authored is no longer a reason to stop. The question text
+        // is itself a standard to mark against, and an AI judgement of whether
+        // the answer actually answers the question beats parking the item for a
+        // review queue that nothing drains. A rubric, where one exists, still
+        // takes precedence -- this only changes what happens when there is none.
+        //
+        // The batch will normally have graded this already, concurrently with
+        // every other written answer on the paper; the direct call is the
+        // fallback for anything the batch did not cover.
+        Optional<AnswerGradingResultDto> graded = Optional.ofNullable(
+                batch.aiResults().get(attemptQuestion.getAttemptQuestionId()));
+        if (graded.isEmpty()) {
+            graded = gradeWithRetry(
+                    descriptiveGradingRequest(attemptQuestion, source, answer, points));
+        }
         if (graded.isEmpty()) {
             return false;
         }
@@ -1049,11 +1431,44 @@ public class AssessmentAttemptService {
         return true;
     }
 
-    private boolean gradeCriticalThinkingAnswer(
+    /**
+     * The grading request for an analytical critical-thinking item, or null
+     * when it has no sub-questions and therefore nothing to grade.
+     */
+    private AnswerGradingRequestDto criticalThinkingGradingRequest(
             AssessmentAttemptQuestion attemptQuestion,
             Question source,
             AssessmentAttemptAnswer answer,
             BigDecimal points) {
+        List<Question> subQuestions = questionRepository
+                .findByParentQuestion_QuestionIdOrderByQuestionIdAsc(source.getQuestionId());
+        if (subQuestions.isEmpty()) {
+            return null;
+        }
+        Map<Long, BigDecimal> pointSplit = splitPointsAcrossSubQuestions(subQuestions, points);
+        Map<Long, String> subAnswerText = parseSubAnswerText(answer.getLearnerAnswer());
+
+        List<SubQuestionGradingRequestDto> subRequests = new ArrayList<>();
+        for (Question sub : subQuestions) {
+            subRequests.add(new SubQuestionGradingRequestDto(
+                    sub.getQuestionId(), sub.getQuestionText(),
+                    pointSplit.get(sub.getQuestionId()),
+                    rubricGuidanceFor(sub.getQuestionId()),
+                    rubricCriteriaFor(sub.getQuestionId()),
+                    subAnswerText.getOrDefault(sub.getQuestionId(), "")));
+        }
+        return new AnswerGradingRequestDto(
+                attemptQuestion.getQuestionTextSnapshot(), points,
+                rubricGuidanceFor(source.getQuestionId()),
+                rubricCriteriaFor(source.getQuestionId()), null, subRequests);
+    }
+
+    private boolean gradeCriticalThinkingAnswer(
+            AssessmentAttemptQuestion attemptQuestion,
+            Question source,
+            AssessmentAttemptAnswer answer,
+            BigDecimal points,
+            GradingBatch batch) {
         List<Question> subQuestions = questionRepository
                 .findByParentQuestion_QuestionIdOrderByQuestionIdAsc(source.getQuestionId());
         if (subQuestions.isEmpty()) {
@@ -1074,12 +1489,14 @@ public class AssessmentAttemptService {
                     subAnswerText.getOrDefault(sub.getQuestionId(), "")));
         }
 
-        AnswerGradingRequestDto request = new AnswerGradingRequestDto(
-                attemptQuestion.getQuestionTextSnapshot(), points,
-                rubricGuidanceFor(source.getQuestionId()), rubricCriteriaFor(source.getQuestionId()),
-                null, subRequests);
-
-        Optional<AnswerGradingResultDto> graded = aiAnswerGradingService.grade(request);
+        Optional<AnswerGradingResultDto> graded = Optional.ofNullable(
+                batch.aiResults().get(attemptQuestion.getAttemptQuestionId()));
+        if (graded.isEmpty()) {
+            graded = gradeWithRetry(new AnswerGradingRequestDto(
+                    attemptQuestion.getQuestionTextSnapshot(), points,
+                    rubricGuidanceFor(source.getQuestionId()),
+                    rubricCriteriaFor(source.getQuestionId()), null, subRequests));
+        }
         if (graded.isEmpty()) {
             return false;
         }
