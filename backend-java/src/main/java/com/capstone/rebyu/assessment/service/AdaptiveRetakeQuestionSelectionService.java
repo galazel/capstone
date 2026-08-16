@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -113,6 +114,26 @@ public class AdaptiveRetakeQuestionSelectionService {
                 .map(AssessmentAttemptQuestion::getSourceQuestionId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
+        /* The questions the learner saw on their most recent attempt.
+           "Seen at some point" and "seen ten minutes ago" are very different
+           things to a retake: the second is the set the learner still
+           remembers. These are avoided ahead of everything else and only used
+           when the alternatives run out, which is what keeps a retake from
+           re-showing the paper that was just submitted while still guaranteeing
+           the target question count. */
+        Long latestAttemptId = pastAttempts.stream()
+                .filter(attempt -> attempt.getSubmittedAt() != null)
+                .max(Comparator.comparing(AssessmentAttempt::getSubmittedAt))
+                .map(AssessmentAttempt::getAssessmentAttemptId)
+                .orElse(null);
+        Set<Long> previousAttemptQuestionIds = latestAttemptId == null
+                ? Set.of()
+                : pastAttemptQuestions.stream()
+                        .filter(aq -> latestAttemptId.equals(
+                                aq.getAttempt().getAssessmentAttemptId()))
+                        .map(AssessmentAttemptQuestion::getSourceQuestionId)
+                        .collect(Collectors.toSet());
+
         Map<Long, Question> pastSourceQuestionsById = seenQuestionIds.isEmpty()
                 ? Map.of()
                 : questionRepository.findAllById(seenQuestionIds).stream()
@@ -168,6 +189,23 @@ public class AdaptiveRetakeQuestionSelectionService {
             shareTotal += share;
         }
 
+        /* Move share between difficulty tiers, per lesson.
+           Scaling each cell on its own accuracy can only make a lesson bigger
+           or smaller; it can never change the *shape* of that lesson's
+           difficulty mix. So a learner failing every Hard question kept being
+           handed the same number of Hard questions, just more of them overall.
+
+           Poor at Hard in this lesson -> part of Hard's share moves down into
+           Average and Easy, rebuilding the foundation. Strong at Easy and
+           Average -> part of their share moves up into Hard. Per lesson, and
+           only where there is evidence, so ability is never assumed to be
+           uniform across topics. */
+        applyDifficultyMigration(adjustedShares, weakness);
+        shareTotal = adjustedShares.values().stream().mapToDouble(Double::doubleValue).sum();
+        if (shareTotal <= 0) {
+            return new Selection(baselineQuestions, null);
+        }
+
         Map<Cell, Integer> targetCounts = new LinkedHashMap<>();
         int assigned = 0;
         Cell largestCell = null;
@@ -209,11 +247,12 @@ public class AdaptiveRetakeQuestionSelectionService {
             Collections.shuffle(pool);
         }
 
-        // --- 5. Fill each cell: unseen first, then seen, then scaffold -----
+        // --- 5. Fill each cell: unseen, then older, then last attempt -----
         List<Question> selected = new ArrayList<>();
         Set<Long> usedQuestionIds = new LinkedHashSet<>();
         for (Map.Entry<Cell, Integer> entry : targetCounts.entrySet()) {
-            fillCell(entry.getKey(), entry.getValue(), poolByCell, seenQuestionIds, usedQuestionIds, selected);
+            fillCell(entry.getKey(), entry.getValue(), poolByCell, seenQuestionIds,
+                    previousAttemptQuestionIds, usedQuestionIds, selected);
         }
 
         // --- 6. Last resort: top up from the exam's own baseline questions -
@@ -240,16 +279,27 @@ public class AdaptiveRetakeQuestionSelectionService {
         return new Selection(selected, basisJson);
     }
 
+    /** Preference order when drawing from a cell, best first. */
+    private enum Tier {
+        /** Never shown to this learner on this exam. */
+        UNSEEN,
+        /** Seen before, but not on the attempt they just submitted. */
+        OLDER,
+        /** On the previous attempt -- a last resort, so the count is still met. */
+        PREVIOUS
+    }
+
     private void fillCell(
             Cell cell, int count, Map<Cell, List<Question>> poolByCell, Set<Long> seenQuestionIds,
-            Set<Long> usedQuestionIds, List<Question> selected) {
+            Set<Long> previousAttemptQuestionIds, Set<Long> usedQuestionIds, List<Question> selected) {
         if (count <= 0) {
             return;
         }
         int remaining = count;
-        remaining -= takeFromCell(cell, remaining, poolByCell, seenQuestionIds, usedQuestionIds, selected, true);
-        if (remaining > 0) {
-            remaining -= takeFromCell(cell, remaining, poolByCell, seenQuestionIds, usedQuestionIds, selected, false);
+        for (Tier tier : Tier.values()) {
+            if (remaining <= 0) break;
+            remaining -= takeFromCell(cell, remaining, poolByCell, seenQuestionIds,
+                    previousAttemptQuestionIds, usedQuestionIds, selected, tier);
         }
         // Scaffold: fall back to progressively easier tiers in the same
         // lesson, then progressively harder ones, before giving up on this
@@ -259,14 +309,20 @@ public class AdaptiveRetakeQuestionSelectionService {
             int easierIndex = difficultyIndex - step;
             if (easierIndex >= 0) {
                 Cell easier = new Cell(cell.lessonId(), DIFFICULTY_ORDER.get(easierIndex));
-                remaining -= takeFromCell(easier, remaining, poolByCell, seenQuestionIds, usedQuestionIds, selected, true);
-                remaining -= takeFromCell(easier, remaining, poolByCell, seenQuestionIds, usedQuestionIds, selected, false);
+                for (Tier tier : Tier.values()) {
+                    if (remaining <= 0) break;
+                    remaining -= takeFromCell(easier, remaining, poolByCell, seenQuestionIds,
+                            previousAttemptQuestionIds, usedQuestionIds, selected, tier);
+                }
             }
             int harderIndex = difficultyIndex + step;
             if (remaining > 0 && harderIndex < DIFFICULTY_ORDER.size()) {
                 Cell harder = new Cell(cell.lessonId(), DIFFICULTY_ORDER.get(harderIndex));
-                remaining -= takeFromCell(harder, remaining, poolByCell, seenQuestionIds, usedQuestionIds, selected, true);
-                remaining -= takeFromCell(harder, remaining, poolByCell, seenQuestionIds, usedQuestionIds, selected, false);
+                for (Tier tier : Tier.values()) {
+                    if (remaining <= 0) break;
+                    remaining -= takeFromCell(harder, remaining, poolByCell, seenQuestionIds,
+                            previousAttemptQuestionIds, usedQuestionIds, selected, tier);
+                }
             }
         }
     }
@@ -274,7 +330,8 @@ public class AdaptiveRetakeQuestionSelectionService {
     /** @return how many questions were actually taken. */
     private int takeFromCell(
             Cell cell, int need, Map<Cell, List<Question>> poolByCell, Set<Long> seenQuestionIds,
-            Set<Long> usedQuestionIds, List<Question> selected, boolean unseenOnly) {
+            Set<Long> previousAttemptQuestionIds, Set<Long> usedQuestionIds,
+            List<Question> selected, Tier tier) {
         if (need <= 0) {
             return 0;
         }
@@ -285,14 +342,85 @@ public class AdaptiveRetakeQuestionSelectionService {
         int taken = 0;
         for (Question question : pool) {
             if (taken >= need) break;
-            if (usedQuestionIds.contains(question.getQuestionId())) continue;
-            boolean seen = seenQuestionIds.contains(question.getQuestionId());
-            if (unseenOnly && seen) continue;
-            usedQuestionIds.add(question.getQuestionId());
+            Long questionId = question.getQuestionId();
+            if (usedQuestionIds.contains(questionId)) continue;
+
+            boolean onPrevious = previousAttemptQuestionIds.contains(questionId);
+            boolean seen = seenQuestionIds.contains(questionId);
+            boolean matchesTier = switch (tier) {
+                case UNSEEN -> !seen;
+                case OLDER -> seen && !onPrevious;
+                case PREVIOUS -> onPrevious;
+            };
+            if (!matchesTier) continue;
+
+            usedQuestionIds.add(questionId);
             selected.add(question);
             taken++;
         }
         return taken;
+    }
+
+    /**
+     * Shifts share between difficulty tiers within each lesson.
+     *
+     * Only tiers with enough evidence move, and the share is conserved -- what
+     * Hard gives up is exactly what Average and Easy receive -- so this changes
+     * the shape of a lesson's question mix without changing how much of the
+     * paper that lesson occupies. That is deliberate: how much a lesson is
+     * worth is decided by the weak/strong boost above, and this decides what
+     * kind of questions fill it.
+     */
+    private void applyDifficultyMigration(
+            Map<Cell, Double> shares, Map<Cell, CellStat> weakness) {
+
+        Set<Long> lessonIds = shares.keySet().stream()
+                .map(Cell::lessonId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        for (Long lessonId : lessonIds) {
+            Cell easy = new Cell(lessonId, "EASY");
+            Cell average = new Cell(lessonId, "AVERAGE");
+            Cell hard = new Cell(lessonId, "HARD");
+
+            CellStat hardStat = weakness.get(hard);
+            double factor = properties.getDifficultyMigrationFactor();
+
+            // Struggling with Hard here: rebuild the foundation instead.
+            if (hardStat != null
+                    && hardStat.total() >= properties.getMinEvidencePerCell()
+                    && hardStat.accuracy() < properties.getWeakAccuracyThreshold()) {
+                double hardShare = shares.getOrDefault(hard, 0.0);
+                double moved = hardShare * factor;
+                if (moved > 0) {
+                    shares.put(hard, hardShare - moved);
+                    // Split toward Average first -- it is the nearer step down,
+                    // and dropping straight to Easy would under-serve a learner
+                    // who is merely short of Hard rather than lost.
+                    shares.merge(average, moved * 0.6, Double::sum);
+                    shares.merge(easy, moved * 0.4, Double::sum);
+                }
+                continue; // never promote and demote the same lesson at once
+            }
+
+            // Comfortable at the lower tiers: start stretching them.
+            CellStat easyStat = weakness.get(easy);
+            CellStat averageStat = weakness.get(average);
+            int lowerTotal = (easyStat == null ? 0 : easyStat.total())
+                    + (averageStat == null ? 0 : averageStat.total());
+            int lowerCorrect = (easyStat == null ? 0 : (int) Math.round(easyStat.accuracy() * easyStat.total()))
+                    + (averageStat == null ? 0 : (int) Math.round(averageStat.accuracy() * averageStat.total()));
+
+            if (lowerTotal >= properties.getMinEvidencePerCell()
+                    && (double) lowerCorrect / lowerTotal > properties.getStrongAccuracyThreshold()) {
+                double easyShare = shares.getOrDefault(easy, 0.0);
+                double moved = easyShare * factor;
+                if (moved > 0) {
+                    shares.put(easy, easyShare - moved);
+                    shares.merge(hard, moved, Double::sum);
+                }
+            }
+        }
     }
 
     private String buildRetakeBasisJson(

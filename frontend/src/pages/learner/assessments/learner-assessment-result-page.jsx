@@ -303,8 +303,21 @@ export default function LearnerAssessmentResultPage() {
               </Button>
             </>
           ) : null}
+          {/* Back to the certification this attempt belongs to, not the list of
+              every enrolled certification. The learner arrived here from one
+              course and wants to carry on with it; dropping them on the index
+              made them pick it out again. Falls back to the list only when the
+              attempt carries no certification id. */}
           <Button asChild>
-            <Link to="/learner/learning">Continue Learning</Link>
+            <Link
+              to={
+                result.certificationId != null
+                  ? `/learner/learning/${result.certificationId}`
+                  : "/learner/learning"
+              }
+            >
+              Continue Learning
+            </Link>
           </Button>
         </div>
 

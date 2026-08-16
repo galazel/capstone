@@ -1376,13 +1376,38 @@ public class AssessmentAttemptService {
      * mark, which matters more now that a failure no longer parks the item for
      * a human — it falls through to the zero-with-explanation branch instead.
      */
+    /** Attempts before an answer is closed out unmarked. */
+    private static final int GRADING_ATTEMPTS = 3;
+
+    /**
+     * Retries the AI grader, backing off between tries.
+     *
+     * Three attempts with a short pause rather than one immediate retry: the
+     * failures worth retrying are transient -- a rate limit, a cold model, a
+     * dropped connection -- and hammering the same instant twice mostly
+     * reproduces them. The learner is on a loading screen throughout, so a few
+     * seconds spent getting a real mark beats returning a zero nobody earned.
+     */
     private Optional<AnswerGradingResultDto> gradeWithRetry(AnswerGradingRequestDto request) {
-        Optional<AnswerGradingResultDto> graded = aiAnswerGradingService.grade(request);
-        if (graded.isPresent()) {
-            return graded;
+        for (int attempt = 1; attempt <= GRADING_ATTEMPTS; attempt++) {
+            Optional<AnswerGradingResultDto> graded = aiAnswerGradingService.grade(request);
+            if (graded.isPresent()) {
+                return graded;
+            }
+            if (attempt < GRADING_ATTEMPTS) {
+                log.warn("AI grading returned nothing (attempt {} of {}); retrying",
+                        attempt, GRADING_ATTEMPTS);
+                try {
+                    Thread.sleep(1000L * attempt);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
         }
-        log.warn("AI grading returned nothing; retrying once");
-        return aiAnswerGradingService.grade(request);
+        log.error("AI grading failed after {} attempts -- the answer will be closed out "
+                + "unmarked. Check the AI service is reachable.", GRADING_ATTEMPTS);
+        return Optional.empty();
     }
 
     /** The grading request for a descriptive or AI-semantic short answer. */

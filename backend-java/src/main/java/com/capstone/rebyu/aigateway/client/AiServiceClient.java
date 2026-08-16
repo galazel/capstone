@@ -18,6 +18,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.io.IOException;
 import java.util.List;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 
@@ -105,6 +106,18 @@ public class AiServiceClient {
         }
     }
 
+    /**
+     * How long to wait for one answer to be marked.
+     *
+     * Generous on purpose. Submission now blocks on grading and the learner is
+     * held on a loading screen while it runs, so the right trade here is to
+     * wait rather than to give up: an answer that takes twelve seconds to mark
+     * is a slow mark, while a timeout is a zero the learner did not earn.
+     * Grading runs concurrently per question, so this is the cost of the
+     * slowest single answer, not of the paper.
+     */
+    private static final Duration GRADING_TIMEOUT = Duration.ofSeconds(60);
+
     public Optional<AnswerGradingResultDto> gradeAnswer(AnswerGradingRequestDto request) {
         try {
             AnswerGradingResultDto result = webClient.post()
@@ -112,10 +125,16 @@ public class AiServiceClient {
                     .bodyValue(request)
                     .retrieve()
                     .bodyToMono(AnswerGradingResultDto.class)
-                    .block();
+                    .block(GRADING_TIMEOUT);
             return Optional.ofNullable(result);
         } catch (Exception e) {
-            log.warn("Answer grading request failed; leaving answer pending: {}", e.getMessage());
+            /* Logged with its type, not just its message. `getMessage()` alone
+               is empty or useless for most WebClient failures -- a timeout, a
+               connection refusal and a 500 from the AI service all arrived here
+               looking identical, which is why an answer being scored zero could
+               not be told apart from the service being down. */
+            log.warn("Answer grading request failed [{}]: {}",
+                    e.getClass().getSimpleName(), e.getMessage(), e);
             return Optional.empty();
         }
     }

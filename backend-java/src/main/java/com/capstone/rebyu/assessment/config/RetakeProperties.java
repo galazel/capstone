@@ -29,6 +29,17 @@ public class RetakeProperties {
     /** Minimum graded answers in a cell before its accuracy is trusted enough to adjust it. */
     private int minEvidencePerCell = 2;
 
+    /**
+     * How much of a difficulty tier's share moves to an adjacent tier when the
+     * learner's performance in that lesson calls for it.
+     *
+     * Half by default: enough to visibly change the mix of a retake, not so
+     * much that one bad run at Hard erases Hard from the lesson entirely. The
+     * migration is per lesson, so being weak at Hard in one lesson never makes
+     * another lesson easier.
+     */
+    private double difficultyMigrationFactor = 0.5;
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -71,6 +82,14 @@ public class RetakeProperties {
 
     public int getMinEvidencePerCell() {
         return minEvidencePerCell;
+    }
+
+    public double getDifficultyMigrationFactor() {
+        return difficultyMigrationFactor;
+    }
+
+    public void setDifficultyMigrationFactor(double difficultyMigrationFactor) {
+        this.difficultyMigrationFactor = difficultyMigrationFactor;
     }
 
     public void setMinEvidencePerCell(int minEvidencePerCell) {
