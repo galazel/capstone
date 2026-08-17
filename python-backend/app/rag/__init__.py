@@ -1,7 +1,7 @@
 """Retrieval-Augmented Generation infrastructure.
 
 Replaces the previous `app/services/ai/vector_db.py`, which had three
-compounding defects (see docs/phase2-python-architecture-review.md §0):
+compounding defects:
 
 1. `faiss` was never declared as a dependency, so every ingestion raised
    ImportError at runtime.
