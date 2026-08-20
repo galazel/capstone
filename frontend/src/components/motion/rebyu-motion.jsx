@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   AnimatePresence,
   animate,
@@ -264,6 +264,311 @@ export function HoverLift({ children, lift = -6, scale = 1.015, as = "div", ...p
       {children}
     </Component>
   )
+}
+
+/* ----------------------------------------------------------------- lettering */
+
+/**
+ * Types a line out one character at a time when it scrolls into view.
+ *
+ * Three things this has to get right, and only the first is the animation:
+ *
+ * 1. **No layout shift.** A span that grows from empty to full width reflows
+ *    everything beside it on every frame. The full string is rendered first as
+ *    an invisible spacer and the typed text is laid over it absolutely, so the
+ *    box is its final size before the first character lands.
+ * 2. **Screen readers get the sentence, not the performance.** The visual half
+ *    is `aria-hidden` and the full string is repeated in an `sr-only` span —
+ *    otherwise assistive tech announces a partial word on every keystroke.
+ * 3. **The caret retires.** A cursor that blinks forever beside finished copy
+ *    reads as a page still loading. It fades out shortly after the last
+ *    character.
+ *
+ * Reduced motion prints the whole line immediately: `MotionConfig` cannot help
+ * here because the typing is state, not a transition.
+ */
+export function Typewriter({
+  text,
+  as = "span",
+  className,
+  speed = 45,
+  startDelay = 0.2,
+  caret = true,
+  startOnMount = false,
+}) {
+  const Component = motion[as] ?? motion.span
+  const reduced = useReducedMotion()
+  const ref = useRef(null)
+  const inView = useInView(ref, { once: true, amount: 0.6 })
+  const [typed, setTyped] = useState(0)
+
+  /* `startOnMount` for anything in the fold. An observer cannot report an
+     element that was already on screen before it was created, so a hero line
+     gated on `inView` sits empty until the first scroll — which, on a page
+     whose first line this is, may be never. */
+  const active = startOnMount || inView
+  const done = typed >= text.length
+
+  useEffect(() => {
+    if (!active) return undefined
+    if (reduced) {
+      setTyped(text.length)
+      return undefined
+    }
+
+    setTyped(0)
+    let index = 0
+    let ticker
+
+    const opening = window.setTimeout(() => {
+      ticker = window.setInterval(() => {
+        index += 1
+        setTyped(index)
+        if (index >= text.length) window.clearInterval(ticker)
+      }, speed)
+    }, startDelay * 1000)
+
+    return () => {
+      window.clearTimeout(opening)
+      window.clearInterval(ticker)
+    }
+  }, [active, reduced, text, speed, startDelay])
+
+  return (
+    <Component ref={ref} className={className}>
+      <span className="sr-only">{text}</span>
+      <span aria-hidden="true" className="relative inline-block whitespace-pre">
+        <span className="invisible">{text}</span>
+        <span className="absolute inset-0">
+          {text.slice(0, typed)}
+          {caret && !reduced ? (
+            <motion.span
+              className="ml-0.5 inline-block w-[0.07em] self-stretch bg-current align-[-0.1em]"
+              style={{ height: "1em" }}
+              animate={done ? { opacity: 0 } : { opacity: [1, 1, 0, 0] }}
+              transition={
+                done
+                  ? { duration: 0.4, delay: 0.9, ease: EASE }
+                  : { duration: 0.9, repeat: Infinity, times: [0, 0.5, 0.5, 1] }
+              }
+            />
+          ) : null}
+        </span>
+      </span>
+    </Component>
+  )
+}
+
+/**
+ * One slot, several words, swapped on a timer.
+ *
+ * The words are all rendered stacked in a single grid cell — every one of them,
+ * invisibly — so the slot is as wide as the longest and as tall as the tallest
+ * before anything rotates. Sizing to the current word instead is what makes the
+ * sentence beside it twitch on every swap.
+ *
+ * `mode="wait"` so the outgoing word is gone before the next arrives: two words
+ * crossfading in the same cell is unreadable at any speed.
+ *
+ * Reduced motion holds the first word and never starts the timer. This is
+ * content that changes on its own, which is exactly what that setting is for.
+ */
+export function RotatingText({
+  words,
+  interval = 2400,
+  className,
+  itemClassName,
+  travel = "0.55em",
+}) {
+  const reduced = useReducedMotion()
+  const [index, setIndex] = useState(0)
+
+  useEffect(() => {
+    if (reduced || words.length < 2) return undefined
+
+    const timer = window.setInterval(() => {
+      setIndex((current) => (current + 1) % words.length)
+    }, interval)
+
+    return () => window.clearInterval(timer)
+  }, [reduced, words.length, interval])
+
+  return (
+    <span className={`inline-grid align-bottom ${className ?? ""}`}>
+      {words.map((word) => (
+        <span
+          key={word}
+          aria-hidden="true"
+          className={`invisible col-start-1 row-start-1 ${itemClassName ?? ""}`}
+        >
+          {word}
+        </span>
+      ))}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={words[index]}
+          className={`col-start-1 row-start-1 ${itemClassName ?? ""}`}
+          initial={{ opacity: 0, y: `-${travel}` }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: travel }}
+          transition={{ duration: 0.32, ease: EASE }}
+        >
+          {words[index]}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  )
+}
+
+/**
+ * A heading that arrives a word at a time.
+ *
+ * Split on words, never on characters: a headline dealt out letter by letter
+ * takes long enough that the reader starts reading before it finishes, and each
+ * character needs its own box, which breaks the line-breaking the type was set
+ * for. Words keep the wrap intact and still give the line its cadence.
+ *
+ * `inherit` hands the timing to an ancestor that is already running a stagger —
+ * the hero, where the eyebrow, claim, lead and buttons are one sequence. On its
+ * own it fires when scrolled into view.
+ */
+export function WordReveal({
+  text,
+  as = "span",
+  className,
+  wordClassName,
+  stagger = 0.055,
+  inherit = false,
+  once = true,
+}) {
+  const Component = motion[as] ?? motion.span
+  const words = text.split(" ")
+  const ref = useRef(null)
+  const inView = useInView(ref, { once, amount: 0.4 })
+  const [rescued, setRescued] = useState(false)
+
+  /* Safety net, and the reason this drives `animate` by hand instead of using
+     `whileInView`. Every heading on a page is hidden until an observer says
+     otherwise, so an observer that never reports is not a missed animation —
+     it is a page with no headings on it. Once, shortly after mount, anything
+     already inside the viewport is shown regardless. Headings further down are
+     left alone: they have a scroll coming that will report them normally.
+
+     `.rb-reveal` in the landing page does the same thing for the same reason. */
+  useEffect(() => {
+    if (inherit) return undefined
+
+    const timer = window.setTimeout(() => {
+      const node = ref.current
+      if (!node) return
+      const box = node.getBoundingClientRect()
+      if (box.top < window.innerHeight && box.bottom > 0) setRescued(true)
+    }, 1400)
+
+    return () => window.clearTimeout(timer)
+  }, [inherit])
+
+  const parent = staggerParent(stagger)
+  const child = {
+    hidden: { opacity: 0, y: "0.35em" },
+    show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: EASE } },
+  }
+
+  const driver = inherit
+    ? {}
+    : { initial: "hidden", animate: inView || rescued ? "show" : "hidden" }
+
+  return (
+    <Component ref={inherit ? undefined : ref} className={className} variants={parent} {...driver}>
+      {words.map((word, i) => (
+        /* `inline-block` on a wrapper that keeps the trailing space outside it:
+           a transformed inline box collapses its own whitespace, so words would
+           run together the moment they animated. */
+        <span key={`${word}-${i}`} className="inline-block whitespace-pre">
+          <motion.span variants={child} className={`inline-block ${wordClassName ?? ""}`}>
+            {word}
+          </motion.span>
+          {i < words.length - 1 ? " " : null}
+        </span>
+      ))}
+    </Component>
+  )
+}
+
+/**
+ * Hover response for something inline — a nav link, a footer link, a stat.
+ *
+ * `HoverLift` above is for cards: it moves the target up the page, which only
+ * makes sense for a block with room around it. Scaling in place is the inline
+ * equivalent, and `inline-block` is required — `transform` does nothing to a
+ * plain inline box.
+ */
+export function HoverScale({ children, scale = 1.06, as = "span", className, ...props }) {
+  const Component = motion[as] ?? motion.span
+
+  return (
+    <Component
+      className={`inline-block ${className ?? ""}`}
+      whileHover={{ scale }}
+      whileTap={{ scale: 1 + (scale - 1) * 0.4 }}
+      transition={HOVER_SPRING}
+      {...props}
+    >
+      {children}
+    </Component>
+  )
+}
+
+/**
+ * Turns the scroll through a section into a step counter and a fill.
+ *
+ * For a sequence whose whole point is its order — a four-step method, a
+ * pipeline — laid out as a row. A row reveals all of itself at once, which is
+ * the one thing an ordered list should not do: the reader is told "in this
+ * order, every time" and then handed four boxes that arrived together. Tying
+ * the steps to scroll position puts them back in sequence, and gives the
+ * section a progress bar that is the section's own progress.
+ *
+ * Returns `fill`, a 0–1 motion value for `style={{ scaleX }}` on the rail, and
+ * `active`, how many steps have been reached. `active` is state rather than a
+ * motion value because it drives class names, not just style.
+ *
+ * `Math.ceil` so step one lights the moment the section is entered rather than
+ * a quarter of the way through it — the first step of four should not need
+ * scrolling to earn.
+ *
+ * Reduced motion reports everything reached immediately. A reader who has asked
+ * for less movement still needs all four steps.
+ */
+export function useScrollSteps(ref, count, offset = ["start 72%", "end 62%"]) {
+  const reduced = useReducedMotion()
+  const { scrollYProgress } = useScroll({ target: ref, offset })
+  const smoothed = useSpring(scrollYProgress, { stiffness: 90, damping: 24, mass: 0.4 })
+  const fill = useTransform(smoothed, (value) =>
+    reduced ? 1 : Math.min(1, Math.max(0, value)),
+  )
+  const [active, setActive] = useState(0)
+
+  useEffect(() => {
+    if (reduced) {
+      setActive(count)
+      return undefined
+    }
+
+    const sync = (value) => {
+      const next = Math.min(count, Math.max(0, Math.ceil(value * count)))
+      setActive((current) => (current === next ? current : next))
+    }
+
+    /* Counted off the raw progress, not the spring. The spring exists to keep
+       the rail from stepping with the wheel's own quantisation; a step that
+       lights up is a discrete event, and running it through a spring only makes
+       it late. The bar eases, the count does not. */
+    sync(scrollYProgress.get())
+    return scrollYProgress.on("change", sync)
+  }, [scrollYProgress, count, reduced])
+
+  return { fill, active }
 }
 
 /**

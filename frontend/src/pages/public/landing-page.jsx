@@ -37,16 +37,25 @@ import {
   AnimatePresence,
   EASE,
   HoverLift,
+  HoverScale,
+  RotatingText,
+  Typewriter,
+  WordReveal,
   fadeUp,
   motion,
   staggerParent,
   useParallax,
+  useScrollSteps,
 } from "@/components/motion/rebyu-motion.jsx";
 import {
   DomainMasteryChart,
   MasteryChart,
   RetentionChart,
 } from "./landing-charts.jsx";
+
+/* Community is built but not part of the public story yet. Flip this back to
+   true to bring the section, its nav item and its footer link back at once. */
+const SHOW_COMMUNITY = false;
 
 const NAV_ITEMS = [
   { label: "about", href: "#about" },
@@ -55,7 +64,7 @@ const NAV_ITEMS = [
   { label: "certifications", href: "#certifications" },
   { label: "arenas", href: "#roadmap" },
   { label: "ai tutor", href: "#ai-tutor" },
-  { label: "community", href: "#community" },
+  ...(SHOW_COMMUNITY ? [{ label: "community", href: "#community" }] : []),
 ];
 
 const HOW_IT_WORKS = [
@@ -471,10 +480,17 @@ function HeroSection() {
         <div className="absolute left-[-40px] top-20 size-28 rounded-br-[999px] bg-rb-feather/10" />
         <div className="absolute bottom-16 right-[12%] size-16 rounded-tl-[999px] bg-rb-fox/15" />
 
-        {/* Two product fragments, not whole cards: a corner of the mastery
-            panel and a corner of the streak tile, cropped the way a screenshot
-            pinned to a moodboard would be. Whole cards here invite reading, and
-            anything readable beside a headline steals from it. */}
+        {/* Two product fragments, not whole cards: a corner of the learner's
+            readiness tile and a corner of the institution cohort panel, cropped
+            the way a screenshot pinned to a moodboard would be. Whole cards here
+            invite reading, and anything readable beside a headline steals from
+            it.
+
+            Both are lifted from real dashboards rather than invented for the
+            fold — readiness is the learner analytics gauge (`ReadinessTile`, and
+            "nearly ready" is a real band from `readinessMeta`), the cohort tile
+            is the enterprise analytics stat row. The fold should promise the two
+            screens the product is actually built around. */}
         {/* Sat beside the headline until measurement showed it overlapping the
             glyphs by 71px. Dropped below it instead: at this height the copy
             beside them is the lead and the buttons, both of which are far
@@ -492,9 +508,19 @@ function HeroSection() {
             what sit beside it, both far narrower. */}
         <div className="absolute left-8 top-1/2 mt-24 w-56 -translate-y-1/2 rotate-[-6deg] rounded-rb-card border-2 border-rb-swan bg-rb-snow p-4 shadow-[0_6px_0_var(--color-rb-swan)] 2xl:left-20">
           <span className="inline-flex items-center gap-1.5 rounded-rb-pill bg-rb-feather px-2.5 py-1 text-[0.6875rem] font-extrabold lowercase text-white">
-            <Target className="size-3" />
-            weakest first
+            <Gauge className="size-3" />
+            exam readiness
           </span>
+          <div className="mt-3 flex items-baseline gap-1">
+            <span className="font-rb-display text-2xl font-extrabold leading-none text-rb-eel">
+              68
+            </span>
+            <span className="text-sm font-extrabold text-rb-wolf">%</span>
+            <span className="ml-auto text-[0.6875rem] font-bold text-rb-feather">nearly ready</span>
+          </div>
+          <div className="mt-2 h-1.5 w-full rounded-full bg-rb-swan">
+            <div className="h-full w-[68%] rounded-full bg-rb-feather" />
+          </div>
           <div className="mt-3 space-y-2.5">
             {[["Normalization", 31, "bg-rb-cardinal"], ["Subnetting", 38, "bg-rb-fox"]].map(
               ([name, value, bar]) => (
@@ -514,24 +540,28 @@ function HeroSection() {
 
         <div className="absolute right-10 top-1/2 mt-10 w-44 -translate-y-1/2 rotate-[5deg] rounded-rb-card border-2 border-rb-swan bg-rb-snow p-4 shadow-[0_6px_0_var(--color-rb-swan)] 2xl:right-24">
           <div className="flex items-center gap-2.5">
-            <span className="grid size-9 place-items-center rounded-xl bg-rb-fox-wash text-rb-fox-lip">
-              <Trophy className="size-5" />
+            <span className="grid size-9 place-items-center rounded-xl bg-rb-macaw-wash text-rb-macaw-lip">
+              <Users className="size-5" />
             </span>
             <div>
               <div className="font-rb-display text-lg font-extrabold leading-none text-rb-eel">
-                12
+                128
               </div>
-              <div className="text-[0.625rem] font-bold text-rb-wolf">day streak</div>
+              <div className="text-[0.625rem] font-bold text-rb-wolf">learners tracked</div>
             </div>
           </div>
-          <div className="mt-3 flex gap-1">
-            {[1, 1, 1, 1, 1, 0, 0].map((done, i) => (
+          {/* The completion-distribution buckets from the cohort analytics
+              panel, read as a shape rather than as numbers: bars, no axis. */}
+          <div className="mt-3 flex h-8 items-end gap-1">
+            {[38, 62, 100, 74].map((height, i) => (
               <span
                 key={i}
-                className={`h-5 flex-1 rounded-sm ${done ? "bg-rb-feather" : "bg-rb-swan"}`}
+                className="flex-1 rounded-sm bg-rb-macaw/70"
+                style={{ height: `${height}%` }}
               />
             ))}
           </div>
+          <div className="mt-1.5 text-[0.625rem] font-bold text-rb-wolf">completion spread</div>
         </div>
       </div>
 
@@ -566,7 +596,11 @@ function HeroSection() {
             variants={fadeUp}
             className="text-[0.6875rem] font-extrabold uppercase tracking-[0.2em] text-rb-wolf sm:text-xs"
           >
-            for topcit, it passport &amp; fe exam candidates
+            {/* Typed rather than faded in. It is the first line of the page and
+                the shortest, which is the only place on the site where a reader
+                will sit through a line being written out — anything longer and
+                they are waiting on copy they could already have read. */}
+            <Typewriter text="for topcit, it passport & fe exam candidates" speed={34} startOnMount />
           </motion.p>
 
           {/* The heading names the outcome, the lead names the method. Said the
@@ -580,7 +614,7 @@ function HeroSection() {
               pulled to -0.04em because letterforms this big carry visibly more
               air between them than the same face at 3rem. */}
           <motion.h1
-            variants={fadeUp}
+            variants={staggerParent(0.055)}
             /* `!` on tracking and leading for the same reason as `!text-center`:
                `.rebyu-ds .rb-display` is unlayered, and an unlayered rule
                outranks every Tailwind layer no matter how specific the utility
@@ -588,7 +622,10 @@ function HeroSection() {
                system's -0.02em. */
             className="rb-display mt-5 !text-center text-[clamp(2.75rem,7.5vw,5.5rem)] !leading-[0.95] !tracking-[-0.04em]"
           >
-            pass it the first time.
+            {/* `inherit`: the words join the fold's existing chip → claim →
+                lead → buttons sequence rather than running a second one beside
+                it. Word-level, not character-level — see `WordReveal`. */}
+            <WordReveal text="pass it the first time." inherit />
           </motion.h1>
 
           <motion.p variants={fadeUp} className="rb-body-lg mx-auto mt-6 max-w-xl text-balance">
@@ -632,9 +669,11 @@ function AboutSection() {
       <div className="mx-auto max-w-[1280px]">
         <div data-landing-reveal className="max-w-3xl">
           <p className="rb-eyebrow">what rebyu is</p>
-          <h2 className="rb-display rb-display-lg mt-3">
-            one place to prepare for one exam.
-          </h2>
+          <WordReveal
+            as="h2"
+            className="rb-display rb-display-lg mt-3"
+            text="one place to prepare for one exam."
+          />
           <p className="rb-body-lg mt-5">
             Rebyu is a certification review platform for TOPCIT, IT Passport, and the FE exam. It
             holds the whole preparation cycle — a diagnostic that finds your gaps, lessons ordered
@@ -678,9 +717,11 @@ function ProblemSection() {
       <div className="mx-auto grid max-w-[1280px] items-center gap-12 lg:grid-cols-2 lg:gap-16">
         <div data-landing-reveal>
           <p className="rb-eyebrow">the problem</p>
-          <h2 className="rb-display rb-display-lg mt-3">
-            cramming feels productive. it isn't.
-          </h2>
+          <WordReveal
+            as="h2"
+            className="rb-display rb-display-lg mt-3"
+            text="cramming feels productive. it isn't."
+          />
           <p className="rb-body-lg mt-5">
             Most people prepare by reading everything once, a few weeks before the date. A month
             later almost none of it is left — and there was never a signal telling them which parts
@@ -748,9 +789,11 @@ function SolutionSection() {
 
         <div data-landing-reveal>
           <p className="rb-eyebrow">the solution</p>
-          <h2 className="rb-display rb-display-lg mt-3">
-            measure what you know. study what you don't.
-          </h2>
+          <WordReveal
+            as="h2"
+            className="rb-display rb-display-lg mt-3"
+            text="measure what you know. study what you don't."
+          />
           <p className="rb-body-lg mt-5">
             Rebyu turns preparation into a loop: answer, get corrected immediately, and let the
             result change what you see next. Nothing is left to memory or willpower.
@@ -790,32 +833,119 @@ function HowItWorksSection() {
     fox: "bg-rb-fox-wash text-rb-fox-lip",
   };
 
+  /* The line that joins one step to the next, in the colour of the step it
+     leads into. Only the DS tone faces — the wash is the tile, the face is the
+     thread. */
+  const TONE_LINE = {
+    macaw: "bg-rb-macaw",
+    beetle: "bg-rb-beetle",
+    feather: "bg-rb-feather",
+    fox: "bg-rb-fox",
+  };
+
+  /* The heading promises an order — "in this order, every time" — and a row of
+     four cards that all arrive together is the one layout that contradicts it.
+     The scroll through the section is the progress through the method: each
+     step turns on as it is reached. See `useScrollSteps`.
+
+     There is no separate stepper strip above the cards. One was tried: it put
+     a second set of numbers on screen directly above the card tiles that
+     already number themselves, in a single flat blue that ignored the tone each
+     step carries — the loudest element in the section, saying nothing the cards
+     were not already saying. The progress lives on the cards instead, and the
+     only new mark is a short thread in the gutter between them. */
+  const trackRef = useRef(null);
+  const { active } = useScrollSteps(trackRef, HOW_IT_WORKS.length);
+
   return (
     <section id="how-it-works" className="scroll-mt-24 bg-rb-polar px-5 py-20 lg:px-8 lg:py-28">
       <div className="mx-auto max-w-[1280px]">
         <div data-landing-reveal>
           <p className="rb-eyebrow">how it works</p>
-          <h2 className="rb-display rb-display-lg mt-3 max-w-2xl">
-            four steps, in this order, every time.
-          </h2>
+          <WordReveal
+            as="h2"
+            className="rb-display rb-display-lg mt-3 max-w-2xl"
+            text="four steps, in this order, every time."
+          />
         </div>
 
-        <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {HOW_IT_WORKS.map((item) => (
-            <HoverLift key={item.step} className="h-full">
-              <RebyuCard raised data-landing-reveal className="flex h-full flex-col">
-                <span
-                  className={`grid size-12 place-items-center rounded-2xl font-rb-display text-base font-extrabold ${
-                    TONE_CLASSES[item.tone]
-                  }`}
-                >
-                  {item.step}
-                </span>
-                <h3 className="rb-display rb-display-sm mt-5">{item.title}</h3>
-                <p className="rb-body mt-2 text-[0.9375rem]">{item.body}</p>
-              </RebyuCard>
-            </HoverLift>
-          ))}
+        <div ref={trackRef} className="mt-12">
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {HOW_IT_WORKS.map((item, i) => {
+              const reached = i < active;
+              const current = i === active - 1;
+
+              return (
+                /* `relative` for the thread, which hangs outside the card. */
+                <div key={item.step} className="relative h-full">
+                  {/* Sits in the gutter only — from the previous card's edge to
+                      this one's — at exactly the height of the tiles it joins:
+                      2px border + 24px card padding + half of a 48px tile. It
+                      never crosses a card, so it reads as a join rather than a
+                      rule drawn over the layout. Single-row widths only; where
+                      the cards wrap, a thread would leave one row and reappear
+                      at the start of the next. */}
+                  {i > 0 ? (
+                    <span
+                      aria-hidden="true"
+                      /* Carries the card's own 10px offset while the step is
+                         still ahead, so the thread stays on the tile's centre
+                         line through the reveal instead of sitting 10px proud
+                         of it. Transform rather than `top` — same reason
+                         everything else here animates on transform. */
+                      style={{
+                        top: "50px",
+                        transform: `translateY(calc(-50% + ${reached ? 0 : 10}px))`,
+                        transitionProperty: "transform",
+                        transitionDuration: "420ms",
+                      }}
+                      className="absolute right-full hidden h-1 w-5 overflow-hidden rounded-full bg-rb-swan lg:block"
+                    >
+                      <span
+                        className={`block h-full origin-left rounded-full transition-[scale] duration-500 ease-out ${
+                          TONE_LINE[item.tone]
+                        } ${reached ? "scale-x-100" : "scale-x-0"}`}
+                      />
+                    </span>
+                  ) : null}
+
+                  <HoverLift className="h-full">
+                    {/* Dimmed rather than hidden. A step that is not there yet
+                        cannot be read ahead of; a step that is merely quiet
+                        can, and someone skimming the section for step four
+                        should not have to scroll for it. */}
+                    <motion.div
+                      className="h-full"
+                      /* `initial={false}`: take the dimmed state on the first
+                         commit instead of animating into it, so the section
+                         does not flash four bright cards and then dim them on
+                         mount. */
+                      initial={false}
+                      animate={{ opacity: reached ? 1 : 0.45, y: reached ? 0 : 10 }}
+                      transition={{ duration: 0.42, ease: EASE }}
+                    >
+                      <RebyuCard raised className="flex h-full flex-col">
+                        <span
+                          /* The tile is the step marker: grey until reached,
+                             then its own tone, with a ring on the one the
+                             reader is on. This is the whole progress display —
+                             it is already numbered, already coloured per step,
+                             and already exactly where the eye is. */
+                          className={`grid size-12 place-items-center rounded-2xl font-rb-display text-base font-extrabold transition-colors duration-300 ${
+                            reached ? TONE_CLASSES[item.tone] : "bg-rb-swan text-rb-hare"
+                          } ${current ? "ring-2 ring-current ring-offset-2 ring-offset-rb-snow" : ""}`}
+                        >
+                          {item.step}
+                        </span>
+                        <h3 className="rb-display rb-display-sm mt-5">{item.title}</h3>
+                        <p className="rb-body mt-2 text-[0.9375rem]">{item.body}</p>
+                      </RebyuCard>
+                    </motion.div>
+                  </HoverLift>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </section>
@@ -838,10 +968,22 @@ function CertificationSection() {
     <section id="certifications" className="scroll-mt-24 bg-rb-snow px-5 py-20 lg:px-8 lg:py-28">
       <div className="mx-auto max-w-[1280px]">
         <div data-landing-reveal>
-          <p className="rb-eyebrow">certifications</p>
-          <h2 className="rb-display rb-display-lg mt-3 max-w-2xl">
-            three certifications, fully built out.
-          </h2>
+          {/* The eyebrow names the section, the tag beside it cycles the three
+              exams — the same three the cards below spell out. It rotates
+              because the claim in the heading is "three", and a slot that keeps
+              changing is the cheapest way to show a count. */}
+          <p className="rb-eyebrow flex flex-wrap items-center gap-2">
+            certifications
+            <RotatingText
+              words={CERTIFICATIONS.map((c) => c.title)}
+              itemClassName="rounded-rb-pill bg-rb-macaw-wash px-2.5 py-1 text-rb-macaw-lip"
+            />
+          </p>
+          <WordReveal
+            as="h2"
+            className="rb-display rb-display-lg mt-3 max-w-2xl"
+            text="three certifications, fully built out."
+          />
           <p className="rb-body-lg mt-4 max-w-xl">
             Every topic below has lessons, practice questions, and assessments already in the
             system — not a syllabus we plan to fill in later.
@@ -885,13 +1027,21 @@ function CertificationSection() {
                   <div className="mt-6 flex-1">
                     <p className="rb-eyebrow">Topics covered</p>
                     <ul className="mt-3 flex flex-wrap gap-2">
+                      {/* The chips are the only place on the card where the
+                          pointer can land on an individual fact, so they are
+                          the only place that answers it. A small scale and
+                          nothing else — these wrap onto several rows, and
+                          anything that moves a chip off its baseline shifts the
+                          row it shares. */}
                       {c.topics.map((topic) => (
-                        <li
+                        <HoverScale
+                          as="li"
                           key={topic}
+                          scale={1.05}
                           className={`rounded-rb-pill px-3.5 py-2 text-sm font-bold ${TONE[c.tone].chip}`}
                         >
                           {topic}
-                        </li>
+                        </HoverScale>
                       ))}
                     </ul>
                   </div>
@@ -939,7 +1089,11 @@ function OlympicsSection() {
       <div className="mx-auto max-w-[1280px]">
         <div data-landing-reveal className="max-w-2xl">
           <p className="rb-eyebrow">it olympics</p>
-          <h2 className="rb-display rb-display-lg mt-3">revision, but competitive.</h2>
+          <WordReveal
+            as="h2"
+            className="rb-display rb-display-lg mt-3"
+            text="revision, but competitive."
+          />
           <p className="rb-body-lg mt-4">
             Three arenas built on the same question banks you study from. Two you can run solo any
             time; the World Cup needs seven other people.
@@ -1436,7 +1590,11 @@ function AiTutorSection() {
       <div className="mx-auto grid max-w-[1280px] items-center gap-12 lg:grid-cols-2 lg:gap-16">
         <div data-landing-reveal>
           <p className="rb-eyebrow">ai tutor</p>
-          <h2 className="rb-display rb-display-lg mt-3">a tutor that sits with you in the lesson.</h2>
+          <WordReveal
+            as="h2"
+            className="rb-display rb-display-lg mt-3"
+            text="a tutor that sits with you in the lesson."
+          />
           <p className="rb-body-lg mt-4 max-w-lg">
             Stuck on something mid-lesson? Ask. The tutor explains the concept you are on, in the
             lesson's own vocabulary — then turns it into a quiz or a flashcard deck so it sticks.
@@ -1515,9 +1673,11 @@ function WeaknessSection() {
       <div className="mx-auto max-w-[1280px]">
         <div data-landing-reveal className="max-w-2xl">
           <p className="rb-eyebrow">mastery &amp; weak topics</p>
-          <h2 className="rb-display rb-display-lg mt-3">
-            it knows which topics you are weak at.
-          </h2>
+          <WordReveal
+            as="h2"
+            className="rb-display rb-display-lg mt-3"
+            text="it knows which topics you are weak at."
+          />
           <p className="rb-body-lg mt-4">
             Every answer updates a mastery level for the topic behind it, plus a confidence in that
             estimate. Low mastery with high confidence is the combination worth your next hour —
@@ -1705,9 +1865,11 @@ function CommunitySection() {
 
         <div data-landing-reveal>
           <p className="rb-eyebrow">community</p>
-          <h2 className="rb-display rb-display-lg mt-3">
-            the best reviewer is another student.
-          </h2>
+          <WordReveal
+            as="h2"
+            className="rb-display rb-display-lg mt-3"
+            text="the best reviewer is another student."
+          />
           <p className="rb-body-lg mt-4 max-w-lg">
             A feed built for revision. Post a practice set you made, upload your notes, ask the
             question you're stuck on — and attempt, download, or save what everyone else shares.
@@ -1793,7 +1955,11 @@ function AccessSection() {
       <div className="mx-auto max-w-[1280px]">
         <div data-landing-reveal className="max-w-2xl">
           <p className="rb-eyebrow">get access</p>
-          <h2 className="rb-display rb-display-lg mt-3">start on your own, or bring your school.</h2>
+          <WordReveal
+            as="h2"
+            className="rb-display rb-display-lg mt-3"
+            text="start on your own, or bring your school."
+          />
         </div>
 
         <div className="mt-12 grid gap-6 lg:grid-cols-2">
@@ -1851,7 +2017,7 @@ function Footer() {
       title: "discover",
       links: [
         ["How it works", "#how-it-works"],
-        ["Community", "#community"],
+        ...(SHOW_COMMUNITY ? [["Community", "#community"]] : []),
       ],
     },
     {
@@ -1889,12 +2055,15 @@ function Footer() {
                     <li key={href}>
                       {/* inline-block + padding keeps the tap target above the
                           24px pointer-target minimum on mobile */}
-                      <a
-                        href={href}
-                        className="inline-block py-1.5 text-sm font-medium text-rb-wolf underline-offset-4 transition-colors hover:text-rb-feather hover:underline"
-                      >
-                        {label}
-                      </a>
+                      {/* Scale, not lift: these sit in a tight column, and a
+                          link that travels upward on hover lands on the one
+                          above it. `origin-left` so the row grows away from the
+                          column edge instead of drifting across it. */}
+                      <HoverScale as="a" scale={1.045} className="origin-left" href={href}>
+                        <span className="inline-block py-1.5 text-sm font-medium text-rb-wolf underline-offset-4 transition-colors hover:text-rb-feather hover:underline">
+                          {label}
+                        </span>
+                      </HoverScale>
                     </li>
                   ))}
                 </ul>
@@ -1982,7 +2151,13 @@ export default function LandingPage() {
   }, []);
 
   return (
-    <div ref={rootRef} className="rebyu-ds min-h-screen overflow-x-hidden">
+    /* `overflow-x-clip`, never `overflow-x-hidden`: `hidden` on one axis
+       computes the other to `auto`, which makes this div a scroll container —
+       and a sticky header then sticks to *it* rather than to the viewport, so
+       the navbar scrolled away. `clip` does the same horizontal trimming (the
+       hero's rotated cards and offscreen blobs need it) without creating a
+       scroll container. */
+    <div ref={rootRef} className="rebyu-ds min-h-screen overflow-x-clip">
       <LandingNavbar />
       <main>
         <HeroSection />
@@ -1994,7 +2169,7 @@ export default function LandingPage() {
         <OlympicsSection />
         <AiTutorSection />
         <WeaknessSection />
-        <CommunitySection />
+        {SHOW_COMMUNITY ? <CommunitySection /> : null}
         <AccessSection />
       </main>
       <Footer />
