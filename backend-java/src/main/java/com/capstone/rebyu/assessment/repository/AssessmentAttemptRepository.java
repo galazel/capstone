@@ -35,4 +35,53 @@ public interface AssessmentAttemptRepository extends JpaRepository<AssessmentAtt
     /** Past graded attempts of this exam by this learner, for adaptive retake analysis. */
     List<AssessmentAttempt> findByExam_ExamIdAndLearnerIdAndStatus(
             Long examId, Long learnerId, AssessmentAttempt.Status status);
+
+    // --- Platform aggregates (admin dashboard) -----------------------------
+
+    long countByStatus(AssessmentAttempt.Status status);
+
+    long countByStatusAndPassed(AssessmentAttempt.Status status, Boolean passed);
+
+    /** Mean percentage across graded attempts. Null when nothing is graded yet. */
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT AVG(a.percentage) FROM AssessmentAttempt a
+            WHERE a.status = :status AND a.percentage IS NOT NULL
+            """)
+    Double averagePercentageByStatus(
+            @org.springframework.data.repository.query.Param("status") AssessmentAttempt.Status status);
+
+    long countByStatusAndSubmittedAtGreaterThanEqual(
+            AssessmentAttempt.Status status, java.time.LocalDateTime since);
+
+    // --- Per-learner rollups (enterprise dashboard) ------------------------
+
+    /** One row per learner. Projection interface so the rollup stays in SQL. */
+    interface LearnerAttemptStats {
+        Long getLearnerId();
+        long getAttempts();
+        long getPassedAttempts();
+        Double getAverageScore();
+        java.time.LocalDateTime getLastSubmittedAt();
+    }
+
+    /**
+     * Graded-attempt statistics for a whole roster in one query.
+     *
+     * Batched on purpose: the enterprise dashboard renders a row per member,
+     * and doing this per learner is the N+1 that makes a 200-seat organization's
+     * dashboard take seconds.
+     */
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT a.learnerId AS learnerId,
+                   COUNT(a) AS attempts,
+                   SUM(CASE WHEN a.passed = TRUE THEN 1 ELSE 0 END) AS passedAttempts,
+                   AVG(a.percentage) AS averageScore,
+                   MAX(a.submittedAt) AS lastSubmittedAt
+            FROM AssessmentAttempt a
+            WHERE a.learnerId IN :learnerIds AND a.status = :status
+            GROUP BY a.learnerId
+            """)
+    List<LearnerAttemptStats> statsByLearnerIds(
+            @org.springframework.data.repository.query.Param("learnerIds") java.util.Collection<Long> learnerIds,
+            @org.springframework.data.repository.query.Param("status") AssessmentAttempt.Status status);
 }

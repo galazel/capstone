@@ -18,4 +18,39 @@ public interface EnterpriseGroupAssigneeRepository extends JpaRepository<Enterpr
     // instead of colliding with it on re-add.
     Optional<EnterpriseGroupAssignee> findByEnterpriseGroupAndOrgCertLearner(
             EnterpriseGroup enterpriseGroup, OrganizationCertificationLearner orgCertLearner);
+
+    // --- Per-group rollups (enterprise member dashboard) -------------------
+
+    interface GroupProgress {
+        Long getEnterpriseGroupId();
+        String getGroupName();
+        long getLearners();
+        Double getAverageProgress();
+        long getCompletedLearners();
+    }
+
+    /**
+     * Completion per group across one enterprise, in one query.
+     *
+     * Only active assignees in active groups count: an archived assignment is
+     * history, and letting it drag a group's average down would misreport the
+     * people actually being taught right now.
+     */
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT g.enterpriseGroupId AS enterpriseGroupId,
+                   g.groupName AS groupName,
+                   COUNT(a) AS learners,
+                   AVG(l.progressPercentage) AS averageProgress,
+                   SUM(CASE WHEN l.completedAt IS NOT NULL THEN 1 ELSE 0 END) AS completedLearners
+            FROM EnterpriseGroupAssignee a
+            JOIN a.enterpriseGroup g
+            JOIN a.orgCertLearner l
+            WHERE g.enterprise.enterpriseId = :enterpriseId
+              AND a.status = com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroupAssignee.Status.active
+              AND g.status = com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup.Status.active
+            GROUP BY g.enterpriseGroupId, g.groupName
+            ORDER BY g.groupName
+            """)
+    List<GroupProgress> groupProgressByEnterprise(
+            @org.springframework.data.repository.query.Param("enterpriseId") Long enterpriseId);
 }

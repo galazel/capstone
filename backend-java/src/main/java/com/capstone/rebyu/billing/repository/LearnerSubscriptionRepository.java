@@ -17,4 +17,6 @@ public interface LearnerSubscriptionRepository extends JpaRepository<LearnerSubs
 
     /** Lookup subscription by PayMongo subscription ID. */
     Optional<LearnerSubscription> findByProviderSubscriptionId(String providerSubscriptionId);
+
+    long countByStatusIn(java.util.Collection<com.capstone.rebyu.billing.entity.BillingStatus> statuses);
 }

@@ -15,4 +15,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmailIgnoreCase(String email);
 
     List<User> findByUserType_UserTypeText(String userTypeText);
+
+    long countByAccountStatus(User.AccountStatus accountStatus);
+
+    long countByUserType_UserTypeText(String userTypeText);
 }

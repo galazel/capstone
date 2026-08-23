@@ -1447,12 +1447,16 @@ body.netacad-overlay-theme {
 }
 
 /* --- Chat surfaces --------------------------------------------------------- */
-/* The AI tutor and every message list were the last conversational surfaces
-   still on 12px corners with hairline borders, which read as a chat widget
-   bolted onto the product rather than part of it. Tile radius and the system's
-   2px border bring them in line with cards and inputs. No lip: a speech bubble
-   is a surface, not a key, and giving it press depth would imply it is
+/* Tile radius brings conversational surfaces in line with cards and inputs, so
+   they don't read as a chat widget bolted onto the product. No lip: a speech
+   bubble is a surface, not a key, and giving it press depth would imply it is
    clickable.
+
+   No `border-width` here either. This rule is unlayered, so a `border-width: 2px`
+   on it beat the utilities at the call site and outlined BOTH the bubble and
+   `message-content` -- the full-width row wrapper -- putting a grey box around
+   every message. Bubbles separate from the panel by fill, not by outline; if a
+   surface ever needs an edge, give it one at the call site.
 
    Caveat if the `ghost` Bubble variant ever gets used (nothing uses it today):
    it asks for square corners via a `*:` utility on the parent, and this rule is
@@ -1460,7 +1464,6 @@ body.netacad-overlay-theme {
    `rounded-none` on the content itself at the call site. */
 :root :is([data-slot="bubble-content"], [data-slot="message-content"]) {
     border-radius: var(--radius-rb-tile);
-    border-width: 2px;
 }
 
 /* A bubble that really is interactive keeps the travel, so the affordance

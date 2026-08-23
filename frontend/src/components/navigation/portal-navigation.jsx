@@ -93,8 +93,10 @@ const enterpriseGroups = [
     label: "Overview",
     icon: LayoutDashboard,
     items: [
+      // One entry, because there is one page. "Organization overview" and
+      // "Analytics" were two nav items onto what is now a single board -- the
+      // same shape as the learner portal, which lists Analytics once.
       { label: "Organization overview", href: "/enterprise/dashboard", icon: LayoutDashboard },
-      { label: "Analytics", href: "/enterprise/analytics", icon: BarChart3 },
     ],
   },
   {

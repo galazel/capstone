@@ -11,4 +11,6 @@ public interface InstitutionalLicenseRepository extends JpaRepository<Institutio
     List<InstitutionalLicense> findByEnterprise_EnterpriseIdOrderByCreatedAtDesc(Long enterpriseId);
 
     Optional<InstitutionalLicense> findFirstByEnterprise_EnterpriseIdOrderByCreatedAtDesc(Long enterpriseId);
+
+    long countByLicenseStatusIn(java.util.Collection<com.capstone.rebyu.billing.entity.BillingStatus> statuses);
 }

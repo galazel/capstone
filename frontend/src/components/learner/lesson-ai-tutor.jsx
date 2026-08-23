@@ -222,8 +222,8 @@ function GeminiTutorMessage({ message, learnerName, isFirstInGroup, isLastInGrou
               <BubbleContent
                   className={
                     isLearner
-                      ? `!rounded-2xl ${tailCorner} !border-0 !bg-rb-beetle !px-3.5 !py-2.5 !text-white !shadow-[0_3px_0_var(--color-rb-beetle-lip)]`
-                      : `!rounded-2xl ${tailCorner} ${message.action ? "!w-full" : ""} !border-2 !border-rb-swan !bg-rb-snow !px-3.5 !py-2.5 !text-rb-eel !shadow-[0_3px_0_var(--color-rb-swan)]`
+                      ? `!rounded-2xl ${tailCorner} !border-0 !bg-rb-beetle !px-3.5 !py-2.5 !text-white !shadow-none`
+                      : `!rounded-2xl ${tailCorner} ${message.action ? "!w-full" : ""} !border-0 !bg-rb-beetle-wash !px-3.5 !py-2.5 !text-rb-eel !shadow-none`
                   }
               >
                 <span className="whitespace-pre-wrap text-sm font-medium leading-6">
@@ -638,7 +638,7 @@ export function LessonAiTutor({
                                 </p>
 
                                 <Bubble variant="secondary">
-                                  <BubbleContent className="!flex !items-center !gap-2 !rounded-2xl !rounded-bl-md !border-2 !border-rb-swan !bg-rb-snow !px-3.5 !py-2.5 !text-sm !font-medium !text-rb-wolf !shadow-[0_3px_0_var(--color-rb-swan)]">
+                                  <BubbleContent className="!flex !items-center !gap-2 !rounded-2xl !rounded-bl-md !border-0 !bg-rb-beetle-wash !px-3.5 !py-2.5 !text-sm !font-medium !text-rb-wolf !shadow-none">
                                     <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                                     Thinking...
                                   </BubbleContent>

@@ -1,9 +1,16 @@
+import { useMemo } from "react"
 import { Link, useOutletContext } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import {
   BadgeCheckIcon,
+  BarChart3Icon,
+  BookOpenCheckIcon,
+  ClipboardListIcon,
   GraduationCapIcon,
   MailPlusIcon,
+  TargetIcon,
   TicketIcon,
+  UserCheck,
   UsersIcon,
 } from "@/components/icons"
 
@@ -18,192 +25,407 @@ import {
   EnterpriseStatusBadge,
   formatDateTime,
 } from "@/components/enterprise/enterprise-ui.jsx"
-import { BentoGrid, BentoHeading, BentoStat, BentoTile } from "@/components/commons/bento.jsx"
+import { BentoHeading, BentoStat, BentoTile } from "@/components/commons/bento.jsx"
+import { DashboardBoard } from "@/components/commons/dashboard-board.jsx"
+import { DashboardRearrangeControls } from "@/components/commons/dashboard-rearrange-controls.jsx"
+import { useDashboardLayout } from "@/hooks/use-dashboard-layout.js"
+import { useEnterpriseData } from "@/hooks/use-enterprise-data.js"
+import {
+  getEnterpriseGroupStats,
+  getEnterpriseLearningStats,
+} from "@/services/enterpriseLearningStatsService.js"
 import {
   BarBreakdownChart,
   DonutChart,
-  SampleChip,
-  TrendAreaChart,
-  TrendLineChart,
 } from "@/components/charts/rebyu-charts.jsx"
-import {
-  ENTERPRISE_ACTIVITY_TREND,
-  ENTERPRISE_COMPLETION_MIX,
-  ENTERPRISE_GROUP_PROGRESS,
-  ENTERPRISE_SEAT_TREND,
-} from "@/components/charts/sample-data.js"
-import {
-  getLearnerDisplayName,
-  useEnterpriseData,
-} from "@/hooks/use-enterprise-data.js"
+
+const PROGRESS_BUCKETS = [
+  { label: "0-25%", min: 0, max: 25 },
+  { label: "26-50%", min: 26, max: 50 },
+  { label: "51-75%", min: 51, max: 75 },
+  { label: "76-100%", min: 76, max: 100 },
+]
+
+/** Not-yet-measured reads as a dash. A zero would claim a fact we do not have. */
+function count(value) {
+  return value == null ? "—" : Number(value).toLocaleString()
+}
+
+function percent(value, digits = 0) {
+  return value == null ? "—" : `${Number(value).toFixed(digits)}%`
+}
+
+/** Relative-ish, but plain: a roster is scanned, not read. */
+function lastActive(value) {
+  if (!value) return "No activity yet"
+  return `Last active ${formatDateTime(value)}`
+}
 
 export default function EnterpriseDashboardPage() {
   const { enterprise, enterpriseLoading, enterpriseError, refetchEnterprise } =
     useOutletContext()
   const data = useEnterpriseData(enterprise?.enterpriseId)
+  const layout = useDashboardLayout("enterprise")
 
-  if (enterpriseLoading || (enterprise && data.isLoading)) {
-    return <EnterpriseLoadingSkeleton />
-  }
+  /* Learning statistics come from their own tenant-scoped endpoint rather than
+     being derived in the browser: progress lives on the assignment rows, but
+     lessons finished, graded attempts, pass rate and average score are rollups
+     over data the portal overview does not carry, and doing them per member
+     client-side would mean a request per learner. */
+  const statsQuery = useQuery({
+    queryKey: ["enterprise-learning-stats", enterprise?.enterpriseId],
+    queryFn: getEnterpriseLearningStats,
+    enabled: enterprise?.enterpriseId != null,
+    retry: 1,
+  })
 
-  if (enterpriseError) {
-    return (
-      <EnterpriseErrorState
-        title="Unable to load your organization"
-        onRetry={refetchEnterprise}
-      />
+  const groupStatsQuery = useQuery({
+    queryKey: ["enterprise-group-stats"],
+    queryFn: getEnterpriseGroupStats,
+    enabled: enterprise?.enterpriseId != null,
+    retry: 1,
+  })
+
+  const summary = statsQuery.data?.summary ?? {}
+  const members = useMemo(
+    () => (Array.isArray(statsQuery.data?.members) ? statsQuery.data.members : []),
+    [statsQuery.data]
+  )
+
+  const groupStats = useMemo(
+    () => (Array.isArray(groupStatsQuery.data) ? groupStatsQuery.data : []),
+    [groupStatsQuery.data]
+  )
+
+  /* The cohort shape the Analytics page used to draw, over the same roster the
+     members table below uses -- so the two can never disagree, which is what
+     happens when a second page recomputes the same thing from a different read. */
+  const cohort = useMemo(() => {
+    const buckets = PROGRESS_BUCKETS.map((bucket) => ({
+      name: bucket.label,
+      value: members.filter((member) => {
+        const progress = Number(member.averageProgress ?? 0)
+        return progress >= bucket.min && progress <= bucket.max
+      }).length,
+    }))
+
+    // Below 30% and still holding an active assignment: someone who finished
+    // and was archived is not "needing support", they are done.
+    const needingSupport = members.filter(
+      (member) =>
+        member.activeCertifications > 0 && Number(member.averageProgress ?? 0) < 30
     )
-  }
 
-  if (!enterprise) {
-    return (
-      <EnterpriseEmptyState
-        title="No organization found"
-        description="Once your organization is registered with REBYU, its dashboard will appear here."
-      />
-    )
-  }
+    return { buckets, needingSupport }
+  }, [members])
 
-  const totalSlots = data.orgCerts.reduce(
-    (sum, cert) => sum + (cert.totalSlots ?? 0),
-    0
+  const recentInvitations = useMemo(
+    () =>
+      [...data.invitations]
+        .sort((a, b) => new Date(b.sentAt ?? 0) - new Date(a.sentAt ?? 0))
+        .slice(0, 5),
+    [data.invitations]
   )
-  const usedSlots = data.orgCerts.reduce(
-    (sum, cert) => sum + (cert.usedSlots ?? 0),
-    0
-  )
-  const remainingSlots = Math.max(totalSlots - usedSlots, 0)
 
-  const activeLearners = data.assignments.filter(
-    (assignment) => assignment.status === "active"
-  )
-  const averageProgress = activeLearners.length
-    ? activeLearners.reduce(
-        (sum, assignment) => sum + Number(assignment.progressPercentage ?? 0),
-        0
-      ) / activeLearners.length
-    : null
+  const tiles = useMemo(() => {
+    const failed = statsQuery.isError
+    const seatsTotal = summary.seatsTotal ?? 0
+    const seatsUsed = summary.seatsUsed ?? 0
 
-  const recentInvitations = [...data.invitations]
-    .sort((a, b) => new Date(b.sentAt ?? 0) - new Date(a.sentAt ?? 0))
-    .slice(0, 5)
-
-  return (
-    <div className="space-y-6">
-      <EnterprisePageHeader
-        title={enterprise.enterpriseName}
-        subtitle="Overview of your organization's certifications, learners, and invitations."
-        actions={
-          <div className="flex items-center gap-2">
-            {enterprise.isVerified ? (
-              <Badge variant="default" className="gap-1">
-                <BadgeCheckIcon className="size-3.5" aria-hidden="true" />
-                Verified
-              </Badge>
-            ) : (
-              <Badge variant="secondary">Verification pending</Badge>
-            )}
-          </div>
-        }
-      />
-
-      {data.isError ? (
-        <EnterpriseErrorState onRetry={data.refetchAll} />
-      ) : (
-        /* Bento: tile size carries importance, counters are colour-blocked, and
-           the invitation feed sits in a tall right rail. Chart panels are fed
-           from components/charts/sample-data.js and chipped "sample data" —
-           swap each for its named endpoint. */
-        <BentoGrid>
+    return [
+      {
+        id: "ent-seats",
+        col: 2,
+        row: 2,
+        element: (
           <BentoStat
             tone="bee"
             col={2}
             row={2}
             icon={TicketIcon}
             label="Learner slots"
-            value={`${usedSlots} / ${totalSlots}`}
-            hint={`${remainingSlots} slot(s) remaining`}
+            value={failed ? "—" : `${seatsUsed} / ${seatsTotal}`}
+            hint={
+              failed
+                ? "Could not be loaded"
+                : `${Math.max(seatsTotal - seatsUsed, 0)} slot(s) remaining`
+            }
           />
-
-          <BentoTile col={4} row={2}>
-            <BentoHeading
-              title="Seat usage"
-              hint="Assigned against actually active"
-              chip={<SampleChip />}
-            />
-            <TrendLineChart
-              data={ENTERPRISE_SEAT_TREND}
-              xKey="month"
-              series={[
-                { key: "assigned", name: "Assigned" },
-                { key: "active", name: "Active" },
-              ]}
-              domain={[0, 140]}
-              height={168}
-              legendNote="Latest month"
-            />
-          </BentoTile>
-
+        ),
+      },
+      {
+        id: "ent-members",
+        col: 2,
+        row: 2,
+        element: (
+          <BentoStat
+            tone="macaw"
+            col={2}
+            row={2}
+            icon={UsersIcon}
+            label="Members"
+            value={failed ? "—" : count(summary.members)}
+            // "Active" here means they have actually done something -- a graded
+            // attempt or a finished lesson -- not merely that a seat was assigned.
+            hint={
+              failed
+                ? "Could not be loaded"
+                : `${count(summary.activeMembers)} active · ${count(summary.membersNotStarted)} not started`
+            }
+          />
+        ),
+      },
+      {
+        id: "ent-progress",
+        col: 2,
+        row: 2,
+        element: (
+          <BentoStat
+            tone="feather"
+            col={2}
+            row={2}
+            icon={TargetIcon}
+            label="Average progress"
+            value={failed ? "—" : percent(summary.averageProgress, 1)}
+            hint={failed ? "Could not be loaded" : "Across every assignment"}
+          />
+        ),
+      },
+      {
+        id: "ent-lessons",
+        col: 2,
+        row: 1,
+        element: (
+          <BentoStat
+            tone="beetle"
+            col={2}
+            row={1}
+            icon={BookOpenCheckIcon}
+            label="Lessons completed"
+            value={failed ? "—" : count(summary.lessonsCompleted)}
+          />
+        ),
+      },
+      {
+        id: "ent-attempts",
+        col: 2,
+        row: 1,
+        element: (
+          <BentoStat
+            tone="plain"
+            col={2}
+            row={1}
+            icon={ClipboardListIcon}
+            label="Graded attempts"
+            value={failed ? "—" : count(summary.gradedAttempts)}
+            hint={failed ? "Could not be loaded" : `${percent(summary.passRate)} pass rate`}
+          />
+        ),
+      },
+      {
+        id: "ent-score",
+        col: 2,
+        row: 1,
+        element: (
+          <BentoStat
+            tone="fox"
+            col={2}
+            row={1}
+            icon={UserCheck}
+            label="Average score"
+            value={failed ? "—" : percent(summary.averageScore)}
+            hint={failed ? "Could not be loaded" : "Weighted by attempts"}
+          />
+        ),
+      },
+      {
+        id: "ent-certs",
+        col: 1,
+        row: 1,
+        element: (
           <BentoStat
             tone="feather"
             col={1}
             row={1}
             icon={GraduationCapIcon}
             label="Certs"
-            value={data.orgCerts.filter((c) => c.status === "active").length}
+            value={data.orgCerts.filter((cert) => cert.status === "active").length}
           />
+        ),
+      },
+      {
+        id: "ent-pending-invites",
+        col: 1,
+        row: 1,
+        element: (
           <BentoStat
             tone="fox"
             col={1}
             row={1}
             icon={MailPlusIcon}
             label="Pending"
-            value={data.invitations.filter((inv) => inv.status === "PENDING").length}
+            value={data.invitations.filter((invite) => invite.status === "PENDING").length}
           />
+        ),
+      },
+      {
+        id: "ent-needing-support",
+        col: 2,
+        row: 1,
+        element: (
           <BentoStat
-            tone="macaw"
+            tone="fox"
             col={2}
             row={1}
-            icon={UsersIcon}
-            label="Active learners"
-            value={activeLearners.length}
-            hint={
-              averageProgress != null
-                ? `Average progress ${averageProgress.toFixed(0)}%`
-                : "No learner progress recorded yet"
-            }
+            icon={BarChart3Icon}
+            label="Needing support"
+            value={failed ? "—" : cohort.needingSupport.length}
+            hint={failed ? "Could not be loaded" : "Active members below 30% progress"}
           />
-          <BentoStat
-            tone="beetle"
-            col={2}
-            row={1}
-            icon={TicketIcon}
-            label="Allocations"
-            value={data.orgCerts.length}
-            hint="Certification allocations in total"
-          />
-
-          <BentoTile col={4} row={2}>
+        ),
+      },
+      {
+        id: "ent-completion-distribution",
+        col: 3,
+        row: 2,
+        element: (
+          <BentoTile col={3} row={2}>
             <BentoHeading
-              title="Weekly activity"
-              hint="Completed items per week"
-              chip={<SampleChip />}
+              title="Completion distribution"
+              hint="How member progress is spread across the roster"
             />
-            <TrendAreaChart
-              data={ENTERPRISE_ACTIVITY_TREND}
-              xKey="week"
-              series={[
-                { key: "lessons", name: "Lessons" },
-                { key: "practice", name: "Practice" },
-                { key: "assessments", name: "Assessments" },
-              ]}
-              height={160}
-              legendNote="Latest week"
+            <DonutChart
+              data={cohort.buckets.filter((bucket) => bucket.value > 0)}
+              height={168}
+              centerValue={String(members.length)}
+              centerLabel={members.length === 1 ? "member" : "members"}
             />
           </BentoTile>
+        ),
+      },
+      {
+        id: "ent-group-completion",
+        col: 3,
+        row: 2,
+        element: (
+          <BentoTile col={3} row={2}>
+            <BentoHeading
+              title="Completion by group"
+              hint="Average progress across each group's active learners"
+            />
+            {groupStatsQuery.isError ? (
+              <p className="mt-4 text-sm text-muted-foreground">
+                Group completion could not be loaded.
+              </p>
+            ) : (
+              <BarBreakdownChart
+                data={groupStats.map((group) => ({
+                  group: group.groupName,
+                  completion: Number(group.averageProgress ?? 0),
+                }))}
+                categoryKey="group"
+                valueKey="completion"
+                unit="%"
+                target={60}
+                height={168}
+                categoryWidth={96}
+              />
+            )}
+          </BentoTile>
+        ),
+      },
+      {
+        id: "ent-member-table",
+        col: 6,
+        row: 3,
+        element: (
+          <BentoTile col={6} row={3} className="!p-0">
+            <div className="flex min-h-0 flex-1 flex-col p-5 sm:p-6">
+              <BentoHeading
+                title="Members"
+                hint="Least progress first — the people most likely to need a nudge."
+              />
 
-          {/* Right of the activity chart — invitations are scanned. */}
-          <BentoTile col={2} row={2} className="!p-0">
+              {statsQuery.isError ? (
+                <p className="text-sm text-muted-foreground">
+                  Learning statistics could not be loaded.
+                </p>
+              ) : members.length === 0 ? (
+                <div className="text-sm text-muted-foreground">
+                  No learners assigned yet.
+                  <div className="mt-3">
+                    <Button asChild size="sm" variant="outline" className="rounded-full">
+                      <Link to="/enterprise/certifications">Assign a learner</Link>
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                /* Its own horizontal scroll container: a six-column table inside
+                   a tile must never be what makes the page scroll sideways. */
+                <div className="-mr-2 min-h-0 flex-1 overflow-auto pr-2">
+                  <table className="w-full min-w-[640px] border-collapse text-sm">
+                    <thead className="sticky top-0 bg-background">
+                      <tr className="border-b-2 border-border text-left text-xs text-muted-foreground">
+                        <th className="py-2 pr-3 font-bold">Member</th>
+                        <th className="py-2 pr-3 font-bold">Progress</th>
+                        <th className="py-2 pr-3 text-right font-bold">Lessons</th>
+                        <th className="py-2 pr-3 text-right font-bold">Attempts</th>
+                        <th className="py-2 pr-3 text-right font-bold">Pass rate</th>
+                        <th className="py-2 text-right font-bold">Avg score</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {members.map((member) => (
+                        <tr key={member.learnerId} className="border-b border-border">
+                          <td className="py-2.5 pr-3">
+                            <p className="truncate font-bold">{member.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {lastActive(member.lastActivityAt)}
+                            </p>
+                          </td>
+
+                          <td className="py-2.5 pr-3">
+                            <div className="flex min-w-[120px] items-center gap-2">
+                              <Progress
+                                value={Number(member.averageProgress ?? 0)}
+                                aria-label={`${member.name} progress`}
+                                className="min-w-[70px]"
+                              />
+                              <span className="shrink-0 tabular-nums text-xs text-muted-foreground">
+                                {percent(member.averageProgress)}
+                              </span>
+                            </div>
+                          </td>
+
+                          <td className="py-2.5 pr-3 text-right tabular-nums">
+                            {count(member.lessonsCompleted)}
+                          </td>
+                          <td className="py-2.5 pr-3 text-right tabular-nums">
+                            {count(member.gradedAttempts)}
+                          </td>
+                          <td className="py-2.5 pr-3 text-right tabular-nums">
+                            {percent(member.passRate)}
+                          </td>
+                          <td className="py-2.5 text-right tabular-nums">
+                            {percent(member.averageScore)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </BentoTile>
+        ),
+      },
+      {
+        id: "ent-invitations",
+        col: 3,
+        row: 2,
+        element: (
+          <BentoTile col={3} row={2} className="!p-0">
             <div className="flex min-h-0 flex-1 flex-col p-5 sm:p-6">
               <BentoHeading
                 title="Recent invitations"
@@ -239,40 +461,14 @@ export default function EnterpriseDashboardPage() {
               )}
             </div>
           </BentoTile>
-
-          <BentoTile col={2} row={2}>
-            <BentoHeading
-              title="Where your learners are"
-              hint="Across all allocations"
-              chip={<SampleChip />}
-            />
-            <DonutChart
-              data={ENTERPRISE_COMPLETION_MIX}
-              height={168}
-              centerValue="120"
-              centerLabel="learners"
-            />
-          </BentoTile>
-
-          <BentoTile col={2} row={2}>
-            <BentoHeading
-              title="Completion by group"
-              hint="Share of assigned work done"
-              chip={<SampleChip />}
-            />
-            <BarBreakdownChart
-              data={ENTERPRISE_GROUP_PROGRESS}
-              categoryKey="group"
-              valueKey="completion"
-              unit="%"
-              target={60}
-              height={150}
-              categoryWidth={88}
-            />
-          </BentoTile>
-
-          {/* Real data, not a preview: slot usage per allocation. */}
-          <BentoTile col={2} row={2} className="!p-0">
+        ),
+      },
+      {
+        id: "ent-allocations",
+        col: 3,
+        row: 2,
+        element: (
+          <BentoTile col={3} row={2} className="!p-0">
             <div className="flex min-h-0 flex-1 flex-col p-5 sm:p-6">
               <BentoHeading
                 title="Certification allocations"
@@ -309,7 +505,89 @@ export default function EnterpriseDashboardPage() {
               )}
             </div>
           </BentoTile>
-        </BentoGrid>
+        ),
+      },
+    ]
+  }, [
+    statsQuery.isError,
+    groupStatsQuery.isError,
+    summary,
+    members,
+    cohort,
+    groupStats,
+    data.orgCerts,
+    data.invitations,
+    data.certificationById,
+    recentInvitations,
+  ])
+
+  if (enterpriseLoading || (enterprise && data.isLoading)) {
+    return <EnterpriseLoadingSkeleton />
+  }
+
+  if (enterpriseError) {
+    return (
+      <EnterpriseErrorState
+        title="Unable to load your organization"
+        onRetry={refetchEnterprise}
+      />
+    )
+  }
+
+  if (!enterprise) {
+    return (
+      <EnterpriseEmptyState
+        title="No organization found"
+        description="Once your organization is registered with REBYU, its dashboard will appear here."
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <EnterprisePageHeader
+        title={enterprise.enterpriseName}
+        subtitle="How your members are progressing across their assigned certifications."
+        actions={
+          <div className="flex items-center gap-2">
+            {enterprise.isVerified ? (
+              <Badge variant="default" className="gap-1">
+                <BadgeCheckIcon className="size-3.5" aria-hidden="true" />
+                Verified
+              </Badge>
+            ) : (
+              <Badge variant="secondary">Verification pending</Badge>
+            )}
+          </div>
+        }
+      />
+
+      {data.isError ? (
+        <EnterpriseErrorState onRetry={data.refetchAll} />
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <DashboardRearrangeControls
+              rearranging={layout.rearranging}
+              onStart={layout.startRearranging}
+              onFinish={layout.finishRearranging}
+              onCancel={layout.cancelRearranging}
+              onReset={layout.resetLayout}
+            />
+          </div>
+
+          {/* The four chart panels that used to sit here were fed from
+              components/charts/sample-data.js -- invented months, invented group
+              names, a donut whose centre read "120 learners" regardless of the
+              roster. They are replaced by the organization's own figures rather
+              than kept behind a "sample data" chip. */}
+          <DashboardBoard
+            tiles={tiles}
+            layout={layout.tileLayout}
+            editing={layout.rearranging}
+            onLayoutChange={layout.handleLayoutChange}
+          />
+        </>
       )}
     </div>
   )

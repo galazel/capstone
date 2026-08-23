@@ -132,6 +132,11 @@ export default function CertificationAssessmentsSection({
             action: "Start Assessment",
           }
           const lastAttempt = attempts[0] ?? null
+          // The diagnostic is a one-time placement check, so once it has been
+          // sat there is no "Retake" to offer. The server refuses the start
+          // anyway (`resolveLockReason`); offering the button just walked the
+          // learner into an error toast.
+          const diagnosticSpent = typeText === "DIAGNOSTIC" && attempts.length > 0
           return (
             <article
               key={exam.examId}
@@ -180,19 +185,21 @@ export default function CertificationAssessmentsSection({
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
-                {enrolled ? (
+                {!enrolled ? (
+                  <Button size="sm" variant="outline" disabled>
+                    Enroll to take this assessment
+                  </Button>
+                ) : diagnosticSpent ? (
+                  <Button size="sm" variant="outline" disabled>
+                    Diagnostic completed
+                  </Button>
+                ) : (
                   <Button
                     size="sm"
                     onClick={() => setStartTarget({ exam, typeText, copy })}
                     disabled={questionCount === 0}
                   >
-                    {attempts.length > 0
-                      ? "Retake"
-                      : copy.action}
-                  </Button>
-                ) : (
-                  <Button size="sm" variant="outline" disabled>
-                    Enroll to take this assessment
+                    {attempts.length > 0 ? "Retake" : copy.action}
                   </Button>
                 )}
                 {lastAttempt && learnerId != null ? (

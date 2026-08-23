@@ -177,9 +177,18 @@ public class AssessmentAttemptService {
                     "A learner profile is required to start an assessment.");
         }
 
+        // Idempotency dedupes a double-fired start, so it only ever hands back an
+        // attempt that is still open. It used to return whatever the key mapped
+        // to, which sat ABOVE the lock check below and so was a way around it:
+        // the client keeps this key in sessionStorage past submit, so re-entering
+        // a finished assessment in the same tab reopened the submitted attempt
+        // instead of being refused. That is a retake of a one-time diagnostic in
+        // everything but name. A finished/abandoned attempt now falls through to
+        // the normal path, where `resolveLockReason` gets its say.
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             Optional<AssessmentAttempt> byKey = attemptRepository.findByIdempotencyKey(idempotencyKey);
-            if (byKey.isPresent()) {
+            if (byKey.isPresent()
+                    && byKey.get().getStatus() == AssessmentAttempt.Status.IN_PROGRESS) {
                 return buildStartResponse(byKey.get(), true);
             }
         }

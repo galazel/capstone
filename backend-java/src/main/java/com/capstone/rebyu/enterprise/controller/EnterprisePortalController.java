@@ -5,8 +5,11 @@ import com.capstone.rebyu.auth.dto.CurrentUserDto;
 import com.capstone.rebyu.auth.service.CognitoAuthService;
 import com.capstone.rebyu.enterprise.service.EnterpriseMemberProvisioningService;
 import com.capstone.rebyu.enterprise.service.EnterpriseMemberProvisioningService.InviteResult;
+import com.capstone.rebyu.enterprise.service.EnterpriseLearningStatsService;
 import com.capstone.rebyu.enterprise.service.EnterprisePortalService;
 import com.capstone.rebyu.enterprise.dto.EnterpriseMemberInviteRequestDto;
+import com.capstone.rebyu.enterprise.dto.EnterpriseLearningStatsDtos.EnterpriseLearningStatsDto;
+import com.capstone.rebyu.enterprise.dto.EnterpriseLearningStatsDtos.GroupProgressDto;
 import com.capstone.rebyu.enterprise.dto.EnterprisePortalDtos.OverviewDto;
 import com.capstone.rebyu.organization.dto.EnterpriseDto;
 import com.capstone.rebyu.organization.dto.EnterpriseMemberDto;
@@ -37,6 +40,7 @@ import java.util.List;
 public class EnterprisePortalController {
 
     private final EnterprisePortalService portalService;
+    private final EnterpriseLearningStatsService learningStatsService;
     private final EnterpriseService enterpriseService;
     private final EnterpriseMemberService enterpriseMemberService;
     private final EnterpriseMemberProvisioningService enterpriseMemberProvisioningService;
@@ -52,6 +56,22 @@ public class EnterprisePortalController {
     @GetMapping("/overview")
     public OverviewDto overview(@AuthenticationPrincipal Jwt jwt) {
         return portalService.overview(myEnterpriseId(jwt));
+    }
+
+    /**
+     * Learning statistics for the caller's own organization: a roster-wide
+     * rollup plus a row per member (progress, lessons finished, graded attempts,
+     * pass rate, average score, last activity).
+     */
+    @GetMapping("/learning-stats")
+    public EnterpriseLearningStatsDto learningStats(@AuthenticationPrincipal Jwt jwt) {
+        return learningStatsService.learningStats(myEnterpriseId(jwt));
+    }
+
+    /** Completion per learning group, for the group-analytics panels. */
+    @GetMapping("/group-stats")
+    public List<GroupProgressDto> groupStats(@AuthenticationPrincipal Jwt jwt) {
+        return learningStatsService.groupProgress(myEnterpriseId(jwt));
     }
 
     /** Every member of the caller's own organization (owners, managers, staff). */

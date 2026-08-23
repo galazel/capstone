@@ -16,4 +16,6 @@ public interface CertificationRepository extends JpaRepository<Certification, Lo
             WHERE c.certificationId = :id
             """)
     Optional<Certification> findByIdWithFullTree(@Param("id") Long id);
+
+    long countByStatus(Certification.CertificationStatus status);
 }

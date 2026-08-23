@@ -16,7 +16,19 @@ export default function VerifyEmailPage() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const [email, setEmail] = useState(location.state?.email ?? "")
+  /* The address is carried over from registration. When it is there, the field
+     is shown but not editable: the code was sent to that specific address, so
+     letting it be typed over only produces a confirmation attempt against an
+     account the code was never issued for -- which fails with a message about
+     the code rather than about the address, and reads as a broken code.
+
+     Still editable when nothing was carried over, which happens when someone
+     opens /verify-email directly or reloads the page. Locking an empty box
+     would strand them with no way to proceed. */
+  const presetEmail = location.state?.email ?? ""
+  const emailLocked = presetEmail !== ""
+
+  const [email, setEmail] = useState(presetEmail)
   const [code, setCode] = useState("")
   const [error, setError] = useState("")
   const [pending, setPending] = useState(false)
@@ -68,14 +80,31 @@ export default function VerifyEmailPage() {
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="verify-email">Email</Label>
+          {/* `readOnly`, not `disabled`: a disabled input is dropped from form
+              submission and skipped by keyboard navigation, so the address
+              would vanish from the payload and screen readers would never
+              announce it. Read-only keeps it submitted, focusable and read
+              aloud, while refusing edits. */}
           <Input
             id="verify-email"
             type="email"
             autoComplete="email"
             required
+            readOnly={emailLocked}
+            aria-describedby={emailLocked ? "verify-email-hint" : undefined}
+            className={
+              emailLocked
+                ? "bg-muted text-muted-foreground focus-visible:ring-0"
+                : undefined
+            }
             value={email}
             onChange={(event) => setEmail(event.target.value)}
           />
+          {emailLocked ? (
+            <p id="verify-email-hint" className="text-xs text-muted-foreground">
+              We sent your code to this address.
+            </p>
+          ) : null}
         </div>
         <div className="space-y-2">
           <Label htmlFor="verify-code">Verification code</Label>

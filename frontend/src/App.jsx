@@ -59,7 +59,6 @@ const EnterpriseCertificationViewerPage = lazy(() => import("./pages/enterprise/
 const EnterpriseAssessmentBuilderPage = lazy(() => import("./pages/enterprise/certifications/enterprise-assessment-builder-page.jsx"))
 const EnterpriseGroupsPage = lazy(() => import("./pages/enterprise/groups/enterprise-groups-page.jsx"))
 const EnterpriseLicensePage = lazy(() => import("./pages/enterprise/account/enterprise-license-page.jsx"))
-const EnterpriseAnalyticsPage = lazy(() => import("./pages/enterprise/dashboard/enterprise-analytics-page.jsx"))
 const EnterprisePartnershipPage = lazy(() => import("./pages/enterprise/account/enterprise-partnership-page.jsx"))
 const EnterpriseBillingPage = lazy(() => import("./pages/enterprise/account/enterprise-billing-page.jsx"))
 const EnterpriseFilesPage = lazy(() => import("./pages/enterprise/account/enterprise-files-page.jsx"))
@@ -376,7 +375,13 @@ export function App() {
                     />
                     <Route path="question-bank" element={<EnterpriseQuestionBankPage />} />
                     <Route path="license" element={<EnterpriseLicensePage />} />
-                    <Route path="analytics" element={<EnterpriseAnalyticsPage />} />
+                    {/* Analytics is not a second page. It was a separate route
+                        that recomputed the same cohort figures from a second read
+                        of the same data, next to trend panels on placeholder
+                        series -- so the two could disagree and one of them was
+                        invented. Same arrangement as the learner portal, where
+                        /learner/dashboard and /learner/analytics are one board. */}
+                    <Route path="analytics" element={<Navigate to="/enterprise/dashboard" replace />} />
                     <Route path="partnership" element={<EnterprisePartnershipPage />} />
                     <Route path="billing" element={<EnterpriseBillingPage />} />
                     <Route path="files" element={<EnterpriseFilesPage />} />
