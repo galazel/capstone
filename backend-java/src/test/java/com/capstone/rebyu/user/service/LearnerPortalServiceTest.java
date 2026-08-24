@@ -9,6 +9,9 @@ import com.capstone.rebyu.enrollment.repository.LearnerCertificationRepository;
 import com.capstone.rebyu.enrollment.repository.OrganizationCertificationLearnerRepository;
 import com.capstone.rebyu.organization.entity.OrganizationCertificate;
 import com.capstone.rebyu.organization.mapper.OrganizationCertificateMapper;
+import com.capstone.rebyu.gamification.RewardService;
+import com.capstone.rebyu.progress.analytics.service.ProgressAnalyticsService;
+import com.capstone.rebyu.progress.service.AchievementAwardService;
 import com.capstone.rebyu.progress.mapper.ActivityLogMapper;
 import com.capstone.rebyu.progress.mapper.LearnerCompletedLessonMapper;
 import com.capstone.rebyu.progress.repository.ActivityLogRepository;
@@ -44,6 +47,7 @@ class LearnerPortalServiceTest {
     private ExamResultRepository examResultRepository;
     private OrganizationCertificationLearnerRepository orgCertLearnerRepository;
     private OrganizationCertificateMapper orgCertMapper;
+    private RewardService rewardService;
     private LearnerPortalService service;
 
     @BeforeEach
@@ -57,11 +61,18 @@ class LearnerPortalServiceTest {
         orgCertLearnerRepository = mock(OrganizationCertificationLearnerRepository.class);
         orgCertMapper = mock(OrganizationCertificateMapper.class);
 
+        rewardService = mock(RewardService.class);
+        // The portal reports XP/coins/credits now; without a balance it NPEs
+        // before it reaches anything these tests are actually asserting.
+        when(rewardService.balance(LEARNER_ID)).thenReturn(new RewardService.Balance(0L, 0L, 0));
+
         service = new LearnerPortalService(learnerRepository, mock(LearnerMapper.class), userRepository,
                 mock(UserMapper.class), learnerCertRepository, mock(LearnerCertificationMapper.class),
                 completedLessonRepository, mock(LearnerCompletedLessonMapper.class), activityLogRepository,
                 mock(ActivityLogMapper.class), examResultRepository, mock(ExamResultMapper.class),
-                orgCertLearnerRepository, mock(OrganizationCertificationLearnerMapper.class), orgCertMapper);
+                orgCertLearnerRepository, mock(OrganizationCertificationLearnerMapper.class), orgCertMapper,
+                rewardService, mock(AchievementAwardService.class),
+                mock(ProgressAnalyticsService.class));
 
         when(learnerRepository.findById(LEARNER_ID)).thenReturn(Optional.empty());
         when(userRepository.findById(USER_ID)).thenReturn(Optional.empty());

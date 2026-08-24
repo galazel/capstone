@@ -37,6 +37,10 @@ import {
 import {
   BarBreakdownChart,
   DonutChart,
+  RadialGauge,
+  readinessColor,
+  readinessInk,
+  useChartTheme,
 } from "@/components/charts/rebyu-charts.jsx"
 
 const PROGRESS_BUCKETS = [
@@ -59,6 +63,44 @@ function percent(value, digits = 0) {
 function lastActive(value) {
   if (!value) return "No activity yet"
   return `Last active ${formatDateTime(value)}`
+}
+
+/**
+ * One supporting figure on the "At a glance" strip.
+ *
+ * Deliberately smaller than a `BentoStat`: these are the numbers you read after
+ * the three gauges, not instead of them, and giving each one a card of its own
+ * was what turned the top of this board into a wall of boxes. No border, no
+ * fill -- the strip's own tile is the container, and the icon is muted so a row
+ * of five does not read as five buttons.
+ */
+function Figure({ icon: Icon, label, value, hint, alert = false }) {
+  return (
+    <div className="flex min-w-0 items-start gap-3">
+      {Icon ? (
+        <span
+          className={`mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl ${
+            alert ? "bg-rb-fox-wash text-rb-fox-lip" : "bg-muted text-muted-foreground"
+          }`}
+        >
+          <Icon className="size-4" aria-hidden="true" />
+        </span>
+      ) : null}
+      <div className="min-w-0">
+        <dt className="truncate text-xs font-semibold text-muted-foreground">{label}</dt>
+        <dd
+          className={`mt-0.5 font-rb-display text-2xl font-extrabold leading-none tabular-nums ${
+            alert ? "text-rb-fox-lip" : "text-foreground"
+          }`}
+        >
+          {value}
+        </dd>
+        {hint ? (
+          <p className="mt-1 truncate text-[11px] leading-4 text-muted-foreground">{hint}</p>
+        ) : null}
+      </div>
+    </div>
+  )
 }
 
 export default function EnterpriseDashboardPage() {
@@ -127,6 +169,15 @@ export default function EnterpriseDashboardPage() {
     [data.invitations]
   )
 
+  const pendingInvitations = useMemo(
+    () => data.invitations.filter((invite) => invite.status === "PENDING").length,
+    [data.invitations]
+  )
+
+  // Read once here rather than inside the tiles: `useChartTheme` is a hook and
+  // the tiles are built inside a useMemo callback, which is not a component.
+  const chartTheme = useChartTheme()
+
   const tiles = useMemo(() => {
     const failed = statsQuery.isError
     const seatsTotal = summary.seatsTotal ?? 0
@@ -138,6 +189,12 @@ export default function EnterpriseDashboardPage() {
         col: 2,
         row: 2,
         element: (
+          /* A two-row tile carrying one number left most of its height empty.
+             Seat utilisation is a proportion, and a proportion is the one thing
+             a number alone reads worst: "3 / 20" needs arithmetic before it
+             means anything, where an arc is read at a glance. The number is
+             kept -- the gauge tells you how full, the number tells you how
+             many, and a manager buying seats needs both. */
           <BentoStat
             tone="bee"
             col={2}
@@ -150,7 +207,15 @@ export default function EnterpriseDashboardPage() {
                 ? "Could not be loaded"
                 : `${Math.max(seatsTotal - seatsUsed, 0)} slot(s) remaining`
             }
-          />
+          >
+            {!failed && seatsTotal > 0 ? (
+              <RadialGauge
+                value={(seatsUsed / seatsTotal) * 100}
+                label="filled"
+                height={132}
+              />
+            ) : null}
+          </BentoStat>
         ),
       },
       {
@@ -172,7 +237,22 @@ export default function EnterpriseDashboardPage() {
                 ? "Could not be loaded"
                 : `${count(summary.activeMembers)} active · ${count(summary.membersNotStarted)} not started`
             }
-          />
+          >
+            {/* Started vs not started, because that split is the one a manager
+                acts on: a member who has never opened anything is a chase-up,
+                and a headline count of members hides them entirely. Drawn only
+                when there is a roster -- an empty donut asserts a shape that
+                does not exist yet. */}
+            {!failed && summary.members > 0 ? (
+              <DonutChart
+                data={[
+                  { name: "Started", value: summary.activeMembers ?? 0 },
+                  { name: "Not started", value: summary.membersNotStarted ?? 0 },
+                ]}
+                height={132}
+              />
+            ) : null}
+          </BentoStat>
         ),
       },
       {
@@ -188,100 +268,75 @@ export default function EnterpriseDashboardPage() {
             label="Average progress"
             value={failed ? "—" : percent(summary.averageProgress, 1)}
             hint={failed ? "Could not be loaded" : "Across every assignment"}
-          />
+          >
+            {/* Banded with the shared readiness scale rather than a flat accent,
+                so 30% and 80% are not the same colour on a board a manager
+                scans rather than reads. Null progress means nothing has been
+                measured -- that is not 0%, and it must not be drawn as one. */}
+            {!failed && summary.averageProgress != null ? (
+              <RadialGauge
+                value={Number(summary.averageProgress)}
+                label="complete"
+                height={132}
+                color={readinessColor(chartTheme, Number(summary.averageProgress))}
+                valueInk={readinessInk(chartTheme, Number(summary.averageProgress))}
+              />
+            ) : null}
+          </BentoStat>
         ),
       },
       {
-        id: "ent-lessons",
-        col: 2,
+        /* Six one-row stat boxes used to sit here -- lessons, attempts, score,
+           certs, pending invitations, needing support -- each with its own
+           border, its own icon chip and its own 48px number. Side by side they
+           read as six things of equal weight, which is exactly what they are
+           not: they are the supporting figures under the three gauges above.
+           One strip states them in a row, so the board has three headline
+           tiles and one line of detail rather than nine competing boxes. */
+        id: "ent-key-figures",
+        col: 6,
         row: 1,
         element: (
-          <BentoStat
-            tone="beetle"
-            col={2}
-            row={1}
-            icon={BookOpenCheckIcon}
-            label="Lessons completed"
-            value={failed ? "—" : count(summary.lessonsCompleted)}
-          />
-        ),
-      },
-      {
-        id: "ent-attempts",
-        col: 2,
-        row: 1,
-        element: (
-          <BentoStat
-            tone="plain"
-            col={2}
-            row={1}
-            icon={ClipboardListIcon}
-            label="Graded attempts"
-            value={failed ? "—" : count(summary.gradedAttempts)}
-            hint={failed ? "Could not be loaded" : `${percent(summary.passRate)} pass rate`}
-          />
-        ),
-      },
-      {
-        id: "ent-score",
-        col: 2,
-        row: 1,
-        element: (
-          <BentoStat
-            tone="fox"
-            col={2}
-            row={1}
-            icon={UserCheck}
-            label="Average score"
-            value={failed ? "—" : percent(summary.averageScore)}
-            hint={failed ? "Could not be loaded" : "Weighted by attempts"}
-          />
-        ),
-      },
-      {
-        id: "ent-certs",
-        col: 1,
-        row: 1,
-        element: (
-          <BentoStat
-            tone="feather"
-            col={1}
-            row={1}
-            icon={GraduationCapIcon}
-            label="Certs"
-            value={data.orgCerts.filter((cert) => cert.status === "active").length}
-          />
-        ),
-      },
-      {
-        id: "ent-pending-invites",
-        col: 1,
-        row: 1,
-        element: (
-          <BentoStat
-            tone="fox"
-            col={1}
-            row={1}
-            icon={MailPlusIcon}
-            label="Pending"
-            value={data.invitations.filter((invite) => invite.status === "PENDING").length}
-          />
-        ),
-      },
-      {
-        id: "ent-needing-support",
-        col: 2,
-        row: 1,
-        element: (
-          <BentoStat
-            tone="fox"
-            col={2}
-            row={1}
-            icon={BarChart3Icon}
-            label="Needing support"
-            value={failed ? "—" : cohort.needingSupport.length}
-            hint={failed ? "Could not be loaded" : "Active members below 30% progress"}
-          />
+          <BentoTile col={6} row={1}>
+            <BentoHeading
+              title="At a glance"
+              hint="Learning activity across the whole organization."
+            />
+            <dl className="grid flex-1 grid-cols-2 items-center gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-5">
+              <Figure
+                icon={BookOpenCheckIcon}
+                label="Lessons completed"
+                value={failed ? "—" : count(summary.lessonsCompleted)}
+              />
+              <Figure
+                icon={ClipboardListIcon}
+                label="Graded attempts"
+                value={failed ? "—" : count(summary.gradedAttempts)}
+                hint={failed ? null : `${percent(summary.passRate)} pass rate`}
+              />
+              <Figure
+                icon={UserCheck}
+                label="Average score"
+                value={failed ? "—" : percent(summary.averageScore)}
+                hint={failed ? null : "Weighted by attempts"}
+              />
+              <Figure
+                icon={GraduationCapIcon}
+                label="Active certifications"
+                value={data.orgCerts.filter((cert) => cert.status === "active").length}
+              />
+              <Figure
+                icon={BarChart3Icon}
+                label="Needing support"
+                value={failed ? "—" : cohort.needingSupport.length}
+                hint={failed ? null : "Active, below 30%"}
+                /* The one figure on this strip that is a call to action rather
+                   than a record of what happened, so it is the one allowed to
+                   carry colour. */
+                alert={!failed && cohort.needingSupport.length > 0}
+              />
+            </dl>
+          </BentoTile>
         ),
       },
       {
@@ -430,6 +485,16 @@ export default function EnterpriseDashboardPage() {
               <BentoHeading
                 title="Recent invitations"
                 hint="The latest learner invitations sent."
+                /* The pending count used to be a stat box of its own. It is a
+                   property of this list, so it rides on this list's heading. */
+                chip={
+                  pendingInvitations > 0 ? (
+                    <Badge variant="secondary" className="gap-1">
+                      <MailPlusIcon className="size-3" aria-hidden="true" />
+                      {pendingInvitations} pending
+                    </Badge>
+                  ) : null
+                }
               />
 
               {recentInvitations.length === 0 ? (
@@ -473,6 +538,11 @@ export default function EnterpriseDashboardPage() {
               <BentoHeading
                 title="Certification allocations"
                 hint="Slot usage per certification your organization has access to."
+                chip={
+                  data.orgCerts.length > 0 ? (
+                    <Badge variant="secondary">{data.orgCerts.length}</Badge>
+                  ) : null
+                }
               />
 
               {data.orgCerts.length === 0 ? (
@@ -509,6 +579,7 @@ export default function EnterpriseDashboardPage() {
       },
     ]
   }, [
+    chartTheme,
     statsQuery.isError,
     groupStatsQuery.isError,
     summary,
@@ -516,9 +587,9 @@ export default function EnterpriseDashboardPage() {
     cohort,
     groupStats,
     data.orgCerts,
-    data.invitations,
     data.certificationById,
     recentInvitations,
+    pendingInvitations,
   ])
 
   if (enterpriseLoading || (enterprise && data.isLoading)) {

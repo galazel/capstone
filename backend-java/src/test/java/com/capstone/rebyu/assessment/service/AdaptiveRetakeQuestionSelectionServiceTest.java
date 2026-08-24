@@ -11,6 +11,7 @@ import com.capstone.rebyu.assessment.repository.AssessmentAttemptAnswerRepositor
 import com.capstone.rebyu.assessment.repository.AssessmentAttemptQuestionRepository;
 import com.capstone.rebyu.assessment.repository.AssessmentAttemptRepository;
 import com.capstone.rebyu.assessment.repository.QuestionRepository;
+import com.capstone.rebyu.assessment.repository.QuestionSelectionView;
 import com.capstone.rebyu.bkt.config.BktProperties;
 import com.capstone.rebyu.bkt.service.BktEventFactory;
 import com.capstone.rebyu.certification.entity.Lesson;
@@ -22,6 +23,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -46,21 +50,33 @@ class AdaptiveRetakeQuestionSelectionServiceTest {
     private AdaptiveRetakeQuestionSelectionService service;
     private Lesson lesson;
 
+    /**
+     * Every question this test has invented, by id. The selector now sifts
+     * projections and only loads whole entities for what it picked, so the
+     * mocks have to be able to answer both ways for the same question.
+     */
+    private final Map<Long, Question> bank = new LinkedHashMap<>();
+
     @BeforeEach
     void setUp() {
-        service = new AdaptiveRetakeQuestionSelectionService(
-                attemptRepository, attemptQuestionRepository, attemptAnswerRepository,
-                questionRepository, eligibleQuestionService,
-                new BktEventFactory(new BktProperties()),
-                new RetakeProperties(),
-                new ObjectMapper());
+        service = newService(new RetakeProperties());
 
         lesson = new Lesson();
         lesson.setLessonId(LESSON_ID);
     }
 
+    private AdaptiveRetakeQuestionSelectionService newService(RetakeProperties properties) {
+        return new AdaptiveRetakeQuestionSelectionService(
+                attemptRepository, attemptQuestionRepository, attemptAnswerRepository,
+                questionRepository, eligibleQuestionService,
+                new BktEventFactory(new BktProperties()),
+                properties,
+                new ObjectMapper());
+    }
+
+    /** Registers a question in the bank so both mocks can resolve it later. */
     private Question question(long id, String difficulty) {
-        return Question.builder()
+        Question question = Question.builder()
                 .questionId(id)
                 .questionType("MCQ")
                 .difficultyLevel(difficulty)
@@ -68,20 +84,49 @@ class AdaptiveRetakeQuestionSelectionServiceTest {
                 .lesson(lesson)
                 .totalPoints(BigDecimal.ONE)
                 .build();
+        bank.put(id, question);
+        return question;
+    }
+
+    /** Flat projection over a registered question, as the repository would return. */
+    private QuestionSelectionView view(long id) {
+        return new TestView(bank.get(id));
+    }
+
+    private List<QuestionSelectionView> views(long... ids) {
+        List<QuestionSelectionView> result = new ArrayList<>();
+        for (long id : ids) {
+            result.add(view(id));
+        }
+        return result;
+    }
+
+    /**
+     * Stubs both id-driven lookups off {@link #bank}, so a test only has to say
+     * which questions exist rather than which query returns what.
+     */
+    @SuppressWarnings("unchecked")
+    private void stubBankLookups() {
+        when(questionRepository.findSelectionViewsByIdIn(any())).thenAnswer(invocation ->
+                ((Collection<Long>) invocation.getArgument(0)).stream()
+                        .filter(bank::containsKey)
+                        .map(this::view)
+                        .toList());
+        when(questionRepository.findForAttemptByIdIn(any())).thenAnswer(invocation ->
+                ((Collection<Long>) invocation.getArgument(0)).stream()
+                        .filter(bank::containsKey)
+                        .map(bank::get)
+                        .toList());
     }
 
     @Test
     void boostsTheWeakDifficultyTierAndReducesTheStrongOne() {
         // Baseline exam: 2 EASY + 2 AVERAGE questions.
-        Question baselineEasy1 = question(1L, "EASY");
-        Question baselineEasy2 = question(2L, "EASY");
-        Question baselineAvg1 = question(3L, "AVERAGE");
-        Question baselineAvg2 = question(4L, "AVERAGE");
         List<ExamQuestion> baseline = List.of(
-                ExamQuestion.builder().examQuestionId(1L).question(baselineEasy1).displayOrder(1).build(),
-                ExamQuestion.builder().examQuestionId(2L).question(baselineEasy2).displayOrder(2).build(),
-                ExamQuestion.builder().examQuestionId(3L).question(baselineAvg1).displayOrder(3).build(),
-                ExamQuestion.builder().examQuestionId(4L).question(baselineAvg2).displayOrder(4).build());
+                ExamQuestion.builder().examQuestionId(1L).question(question(1L, "EASY")).displayOrder(1).build(),
+                ExamQuestion.builder().examQuestionId(2L).question(question(2L, "EASY")).displayOrder(2).build(),
+                ExamQuestion.builder().examQuestionId(3L).question(question(3L, "AVERAGE")).displayOrder(3).build(),
+                ExamQuestion.builder().examQuestionId(4L).question(question(4L, "AVERAGE")).displayOrder(4).build());
 
         Exam exam = Exam.builder().examId(9L).lesson(lesson).totalQuestions(4).build();
 
@@ -109,15 +154,16 @@ class AdaptiveRetakeQuestionSelectionServiceTest {
         when(attemptAnswerRepository.findByAttempt_AssessmentAttemptIdIn(List.of(500L)))
                 .thenReturn(pastAnswers);
 
-        when(questionRepository.findAllById(any()))
-                .thenReturn(List.of(baselineEasy1, baselineEasy2, baselineAvg1, baselineAvg2));
-
         // Question bank has a real surplus pool to draw fresh questions from.
-        List<Question> pool = List.of(
-                question(1L, "EASY"), question(2L, "EASY"), question(10L, "EASY"), question(11L, "EASY"),
-                question(3L, "AVERAGE"), question(4L, "AVERAGE"), question(12L, "AVERAGE"), question(13L, "AVERAGE"),
-                question(14L, "HARD"), question(15L, "HARD"));
-        when(eligibleQuestionService.resolveScope(any(), any(), any(), anyLong())).thenReturn(pool);
+        question(10L, "EASY");
+        question(11L, "EASY");
+        question(12L, "AVERAGE");
+        question(13L, "AVERAGE");
+        question(14L, "HARD");
+        question(15L, "HARD");
+        stubBankLookups();
+        when(eligibleQuestionService.resolveScopeViews(any(), any(), any(), anyLong()))
+                .thenReturn(views(1L, 2L, 10L, 11L, 3L, 4L, 12L, 13L, 14L, 15L));
 
         AdaptiveRetakeQuestionSelectionService.Selection selection = service.select(exam, 2L, baseline);
 
@@ -137,15 +183,11 @@ class AdaptiveRetakeQuestionSelectionServiceTest {
     void neverFailsToFillTheTargetCountWhenTheWeakTierHasNoFreshSupply() {
         // Baseline: 2 EASY + 2 AVERAGE. Only the exact same 4 questions exist
         // anywhere -- no surplus pool at all.
-        Question e1 = question(1L, "EASY");
-        Question e2 = question(2L, "EASY");
-        Question a1 = question(3L, "AVERAGE");
-        Question a2 = question(4L, "AVERAGE");
         List<ExamQuestion> baseline = List.of(
-                ExamQuestion.builder().examQuestionId(1L).question(e1).displayOrder(1).build(),
-                ExamQuestion.builder().examQuestionId(2L).question(e2).displayOrder(2).build(),
-                ExamQuestion.builder().examQuestionId(3L).question(a1).displayOrder(3).build(),
-                ExamQuestion.builder().examQuestionId(4L).question(a2).displayOrder(4).build());
+                ExamQuestion.builder().examQuestionId(1L).question(question(1L, "EASY")).displayOrder(1).build(),
+                ExamQuestion.builder().examQuestionId(2L).question(question(2L, "EASY")).displayOrder(2).build(),
+                ExamQuestion.builder().examQuestionId(3L).question(question(3L, "AVERAGE")).displayOrder(3).build(),
+                ExamQuestion.builder().examQuestionId(4L).question(question(4L, "AVERAGE")).displayOrder(4).build());
 
         Exam exam = Exam.builder().examId(9L).lesson(lesson).totalQuestions(4).build();
 
@@ -169,13 +211,51 @@ class AdaptiveRetakeQuestionSelectionServiceTest {
                         answer(pastAttemptQuestions.get(1), false),
                         answer(pastAttemptQuestions.get(2), false),
                         answer(pastAttemptQuestions.get(3), false)));
-        when(questionRepository.findAllById(any())).thenReturn(List.of(e1, e2, a1, a2));
-        when(eligibleQuestionService.resolveScope(any(), any(), any(), anyLong())).thenReturn(List.of(e1, e2, a1, a2));
+        stubBankLookups();
+        when(eligibleQuestionService.resolveScopeViews(any(), any(), any(), anyLong()))
+                .thenReturn(views(1L, 2L, 3L, 4L));
 
         AdaptiveRetakeQuestionSelectionService.Selection selection = service.select(exam, 2L, baseline);
 
         assertEquals(4, selection.questions().size(),
                 "must still assemble exactly 4 questions by repeating/falling back to baseline even with zero fresh supply");
+    }
+
+    /**
+     * The paper's order is decided before the entities are fetched, and an
+     * {@code IN} query returns rows in whatever order it likes. If the selector
+     * ever trusts the repository's order, a retake's shuffle silently becomes
+     * primary-key order -- which looks fine in every count-based assertion
+     * above and is wrong on the learner's screen.
+     */
+    @Test
+    void keepsTheChosenOrderRatherThanTheOrderTheDatabaseReturns() {
+        List<ExamQuestion> baseline = List.of(
+                ExamQuestion.builder().examQuestionId(1L).question(question(3L, "EASY")).displayOrder(1).build(),
+                ExamQuestion.builder().examQuestionId(2L).question(question(1L, "EASY")).displayOrder(2).build(),
+                ExamQuestion.builder().examQuestionId(3L).question(question(2L, "AVERAGE")).displayOrder(3).build());
+
+        Exam exam = Exam.builder().examId(9L).lesson(lesson).totalQuestions(3).build();
+
+        // Adaptive selection off: select() returns the baseline list straight
+        // through, so the only thing under test is the ordering guarantee.
+        RetakeProperties disabled = new RetakeProperties();
+        disabled.setEnabled(false);
+
+        // The repository answers in ascending id order -- deliberately NOT the
+        // order the exam asked for.
+        when(questionRepository.findForAttemptByIdIn(any())).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            Collection<Long> ids = invocation.getArgument(0);
+            return ids.stream().sorted().map(bank::get).toList();
+        });
+
+        AdaptiveRetakeQuestionSelectionService.Selection selection =
+                newService(disabled).select(exam, 2L, baseline);
+
+        assertEquals(List.of(3L, 1L, 2L),
+                selection.questions().stream().map(Question::getQuestionId).toList(),
+                "questions must come back in the exam's order, not the database's");
     }
 
     private static AssessmentAttemptQuestion attemptQuestion(long id, AssessmentAttempt attempt, long sourceQuestionId) {
@@ -196,5 +276,33 @@ class AdaptiveRetakeQuestionSelectionServiceTest {
                 .isCorrect(correct)
                 .pendingManualEvaluation(false)
                 .build();
+    }
+
+    /** Stands in for the interface projection Spring Data would materialize. */
+    private record TestView(Question question) implements QuestionSelectionView {
+        @Override
+        public Long getQuestionId() {
+            return question.getQuestionId();
+        }
+
+        @Override
+        public Long getLessonId() {
+            return question.getLesson().getLessonId();
+        }
+
+        @Override
+        public String getDifficultyLevel() {
+            return question.getDifficultyLevel();
+        }
+
+        @Override
+        public String getQuestionText() {
+            return question.getQuestionText();
+        }
+
+        @Override
+        public Long getOwnerGroupId() {
+            return null;
+        }
     }
 }

@@ -14,6 +14,7 @@ import {
   CircleHelp,
   Loader2,
   Lock,
+  RotateCcw,
   Trophy,
   Zap,
 } from "@/components/icons"
@@ -372,6 +373,15 @@ function PathNode({ node, index, onSelect, onLocked }) {
   const done = state === "done"
   const current = state === "current"
 
+  /* A finished exam is not finished the way a finished topic is. Reading a
+     topic is done once; an assessment can always be sat again, and the whole
+     point of the retake loop is that sitting it again is what a learner does
+     next. A check told them there was nothing left here. This says the stop is
+     still live -- every exam on this road (unit exams and the final mock) is
+     retakeable, and the one-shot diagnostic is a gate rather than a node, so it
+     never reaches this. */
+  const retakeable = done && node.kind === "exam"
+
   function press() {
     if (locked) {
       // The dialog explains the lock, but it opens elsewhere on screen. The
@@ -442,12 +452,16 @@ function PathNode({ node, index, onSelect, onLocked }) {
           <button
             type="button"
             onClick={press}
-            aria-label={`${node.label}${locked ? " (locked)" : ""}`}
+            aria-label={`${node.label}${
+              locked ? " (locked)" : retakeable ? " (already sat -- retake)" : ""
+            }`}
             className={`relative grid place-items-center rounded-full border-[3px] shadow-[0_9px_0_var(--node-lip)] transition-[transform,box-shadow] duration-100 active:translate-y-[5px] active:shadow-[0_4px_0_var(--node-lip)] ${face}`}
             style={{ width: NODE_SIZE, height: NODE_SIZE, "--node-lip": lip }}
           >
             {locked ? (
               <Lock className="size-10" aria-hidden="true" />
+            ) : retakeable ? (
+              <RotateCcw className="size-10" aria-hidden="true" />
             ) : done ? (
               <Check className="size-12" aria-hidden="true" />
             ) : (
@@ -620,7 +634,20 @@ function UnitBanner({ major, locked, exam, open, onToggle, onLocked, takenExamId
  * result for it. `current` is decided by the caller across the whole
  * certification, because there is only ever one place you are up to.
  */
-function unitNodes(major, takenExamIds) {
+/**
+ * The " · 2 attempts" tail on an exam's meta line, or "" before it is ever sat.
+ *
+ * Left off at zero deliberately: "0 attempts" is the same statement the absence
+ * of the phrase already makes, and it would put a number on every unsat exam on
+ * the road for nothing.
+ */
+function attemptsSuffix(attemptsByExamId, examId) {
+  const count = attemptsByExamId?.get(String(examId)) ?? 0
+  if (count <= 0) return ""
+  return ` · ${count} ${count === 1 ? "attempt" : "attempts"}`
+}
+
+function unitNodes(major, takenExamIds, attemptsByExamId) {
   const nodes = major.middles.map((middle, index) => {
     const total = middle.lessons.length
     const done = total > 0 && middle.done === total
@@ -656,7 +683,10 @@ function unitNodes(major, takenExamIds) {
       tone: "fox",
       icon: ClipboardCheck,
       label: major.assessment.title,
-      meta: `unit exam · ${major.assessment.totalQuestions} questions`,
+      meta: `unit exam · ${major.assessment.totalQuestions} questions${attemptsSuffix(
+        attemptsByExamId,
+        major.assessment.examId,
+      )}`,
       xp: ASSESSMENT_MAX_XP,
       done: Boolean(takenExamIds?.has(String(major.assessment.examId))),
     })
@@ -832,6 +862,25 @@ export default function LearnerCertificationCurriculumPage() {
     [data?.examResults],
   )
 
+  /* How many times each exam has been sat, for the road to say under the node.
+     There is one result row per attempt, so this reads the highest `attemptNo`
+     rather than counting rows: the count is what the learner's NEXT sitting
+     would be numbered from, and a single result row that never got written
+     would quietly make a tally disagree with the attempt the server hands
+     back. Rows with no attemptNo still contribute 1 so an exam known to be sat
+     never reports zero. */
+  const attemptsByExamId = useMemo(() => {
+    const counts = new Map()
+    for (const result of data?.examResults ?? []) {
+      if (result?.examId == null) continue
+      const key = String(result.examId)
+      const attemptNo = Number(result.attemptNo)
+      const seen = Number.isFinite(attemptNo) && attemptNo > 0 ? attemptNo : 1
+      counts.set(key, Math.max(counts.get(key) ?? 0, seen))
+    }
+    return counts
+  }, [data?.examResults])
+
   /* ------------------------------------------------------------------ road
    *
    * The whole certification as one ordered list of stops -- each unit's topics
@@ -847,7 +896,7 @@ export default function LearnerCertificationCurriculumPage() {
   const { sections, finalNode, currentUnitId } = useMemo(() => {
     const built = (curriculum?.majors ?? []).map((major) => ({
       major,
-      nodes: unitNodes(major, takenExamIds),
+      nodes: unitNodes(major, takenExamIds, attemptsByExamId),
     }))
 
     const mock = curriculum?.mockExam
@@ -858,7 +907,10 @@ export default function LearnerCertificationCurriculumPage() {
           tone: "fox",
           icon: Trophy,
           label: curriculum.mockExam.title,
-          meta: `final · ${curriculum.mockExam.totalQuestions} questions`,
+          meta: `final · ${curriculum.mockExam.totalQuestions} questions${attemptsSuffix(
+            attemptsByExamId,
+            curriculum.mockExam.examId,
+          )}`,
           xp: ASSESSMENT_MAX_XP,
           done: Boolean(takenExamIds?.has(String(curriculum.mockExam.examId))),
         }
@@ -891,7 +943,7 @@ export default function LearnerCertificationCurriculumPage() {
     )
 
     return { sections: built, finalNode: mock, currentUnitId: currentSection?.major.id ?? null }
-  }, [curriculum, takenExamIds, diagnosticDone])
+  }, [curriculum, takenExamIds, attemptsByExamId, diagnosticDone])
 
   /* Which units are unrolled.
    *

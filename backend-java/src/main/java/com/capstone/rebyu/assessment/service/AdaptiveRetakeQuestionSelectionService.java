@@ -11,6 +11,7 @@ import com.capstone.rebyu.assessment.repository.AssessmentAttemptAnswerRepositor
 import com.capstone.rebyu.assessment.repository.AssessmentAttemptQuestionRepository;
 import com.capstone.rebyu.assessment.repository.AssessmentAttemptRepository;
 import com.capstone.rebyu.assessment.repository.QuestionRepository;
+import com.capstone.rebyu.assessment.repository.QuestionSelectionView;
 import com.capstone.rebyu.bkt.service.BktEventFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -48,6 +50,13 @@ import java.util.stream.Collectors;
  *       tier in the same lesson, then to the original baseline questions --
  *       so the target question count is always met.</li>
  * </ol>
+ *
+ * <p>Every step above runs on {@link QuestionSelectionView} projections rather
+ * than {@code Question} entities, and only the questions actually chosen are
+ * loaded whole at the end. That is not a micro-optimization: a {@code Question}
+ * entity drags three eagerly-fetched one-to-one configs behind it, so sifting a
+ * certification's bank as entities cost three extra round trips per candidate
+ * to end up using a few dozen of them.
  */
 @Slf4j
 @Service
@@ -82,15 +91,20 @@ public class AdaptiveRetakeQuestionSelectionService {
      */
     @Transactional(readOnly = true)
     public Selection select(Exam exam, Long learnerId, List<ExamQuestion> baselineExamQuestions) {
-        List<Question> baselineQuestions = baselineExamQuestions.stream()
-                .map(ExamQuestion::getQuestion)
+        /* Reading only the id off each ExamQuestion's question keeps the lazy
+           proxies uninitialized -- the whole point of selecting on projections
+           is undone the moment something dereferences these entities. */
+        List<Long> baselineQuestionIds = baselineExamQuestions.stream()
+                .map(examQuestion -> examQuestion.getQuestion().getQuestionId())
+                .filter(Objects::nonNull)
+                .distinct()
                 .toList();
         int targetTotal = exam.getTotalQuestions() != null
                 ? exam.getTotalQuestions()
-                : baselineQuestions.size();
+                : baselineQuestionIds.size();
 
         if (!properties.isEnabled()) {
-            return new Selection(baselineQuestions, null);
+            return new Selection(loadInOrder(baselineQuestionIds), null);
         }
 
         List<AssessmentAttempt> pastAttempts = attemptRepository.findByExam_ExamIdAndLearnerIdAndStatus(
@@ -98,7 +112,7 @@ public class AdaptiveRetakeQuestionSelectionService {
         if (pastAttempts.isEmpty()) {
             // Nothing to adapt from yet (shouldn't normally happen for a
             // retake, but never block the attempt on it).
-            return new Selection(baselineQuestions, null);
+            return new Selection(loadInOrder(baselineQuestionIds), null);
         }
 
         List<Long> pastAttemptIds = pastAttempts.stream()
@@ -135,10 +149,10 @@ public class AdaptiveRetakeQuestionSelectionService {
                         .map(AssessmentAttemptQuestion::getSourceQuestionId)
                         .collect(Collectors.toSet());
 
-        Map<Long, Question> pastSourceQuestionsById = seenQuestionIds.isEmpty()
+        Map<Long, QuestionSelectionView> pastSourceQuestionsById = seenQuestionIds.isEmpty()
                 ? Map.of()
-                : questionRepository.findAllById(seenQuestionIds).stream()
-                        .collect(Collectors.toMap(Question::getQuestionId, q -> q));
+                : questionRepository.findSelectionViewsByIdIn(seenQuestionIds).stream()
+                        .collect(Collectors.toMap(QuestionSelectionView::getQuestionId, v -> v));
 
         // --- 1. Weakness matrix: accuracy per (lesson, difficulty) --------
         Map<Cell, int[]> tally = new LinkedHashMap<>(); // [correct, total]
@@ -147,7 +161,7 @@ public class AdaptiveRetakeQuestionSelectionService {
             if (answer == null || answer.isPendingManualEvaluation() || answer.getIsCorrect() == null) {
                 continue; // unanswered / pending grading -- not usable evidence
             }
-            Question sourceQuestion = pastSourceQuestionsById.get(attemptQuestion.getSourceQuestionId());
+            QuestionSelectionView sourceQuestion = pastSourceQuestionsById.get(attemptQuestion.getSourceQuestionId());
             String difficulty = bktEventFactory.normalizeDifficulty(
                     sourceQuestion == null ? null : sourceQuestion.getDifficultyLevel());
             Cell cell = new Cell(attemptQuestion.getLessonId(), difficulty);
@@ -161,20 +175,24 @@ public class AdaptiveRetakeQuestionSelectionService {
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> new CellStat(e.getValue()[0], e.getValue()[1])));
 
         // --- 2. Baseline distribution from the exam's current fixed mix ---
+        List<QuestionSelectionView> baselineQuestions = baselineQuestionIds.isEmpty()
+                ? List.of()
+                : orderViewsBy(baselineQuestionIds,
+                        questionRepository.findSelectionViewsByIdIn(baselineQuestionIds));
+
         Map<Cell, Integer> baselineCounts = new LinkedHashMap<>();
-        for (Question question : baselineQuestions) {
+        for (QuestionSelectionView question : baselineQuestions) {
             Cell cell = new Cell(
-                    question.getLesson().getLessonId(),
+                    question.getLessonId(),
                     bktEventFactory.normalizeDifficulty(question.getDifficultyLevel()));
             baselineCounts.merge(cell, 1, Integer::sum);
         }
         if (baselineCounts.isEmpty()) {
-            return new Selection(baselineQuestions, null);
+            return new Selection(loadInOrder(baselineQuestionIds), null);
         }
 
         // --- 3. Target distribution: boost weak cells, reduce strong ones -
         Map<Cell, Double> adjustedShares = new LinkedHashMap<>();
-        double shareTotal = 0.0;
         for (Map.Entry<Cell, Integer> entry : baselineCounts.entrySet()) {
             double baselineShare = (double) entry.getValue() / baselineQuestions.size();
             CellStat stat = weakness.get(entry.getKey());
@@ -187,7 +205,6 @@ public class AdaptiveRetakeQuestionSelectionService {
                 }
             }
             adjustedShares.put(entry.getKey(), share);
-            shareTotal += share;
         }
 
         /* Move share between difficulty tiers, per lesson.
@@ -202,9 +219,9 @@ public class AdaptiveRetakeQuestionSelectionService {
            only where there is evidence, so ability is never assumed to be
            uniform across topics. */
         applyDifficultyMigration(adjustedShares, weakness);
-        shareTotal = adjustedShares.values().stream().mapToDouble(Double::doubleValue).sum();
+        double shareTotal = adjustedShares.values().stream().mapToDouble(Double::doubleValue).sum();
         if (shareTotal <= 0) {
-            return new Selection(baselineQuestions, null);
+            return new Selection(loadInOrder(baselineQuestionIds), null);
         }
 
         Map<Cell, Integer> targetCounts = new LinkedHashMap<>();
@@ -226,25 +243,25 @@ public class AdaptiveRetakeQuestionSelectionService {
         }
 
         // --- 4. Candidate pool for the exam's whole curriculum scope -------
-        List<Question> candidatePool = eligibleQuestionService.resolveScope(
+        Long ownerGroupId = exam.getOwnerGroup() != null ? exam.getOwnerGroup().getEnterpriseGroupId() : null;
+        List<QuestionSelectionView> candidatePool = eligibleQuestionService.resolveScopeViews(
                 exam.getCertification() != null ? exam.getCertification().getCertificationId() : null,
                 exam.getMajorCategory() != null ? exam.getMajorCategory().getMajorCategoryId() : null,
                 exam.getMiddleCategory() != null ? exam.getMiddleCategory().getMiddleCategoryId() : null,
                 exam.getLesson() != null ? exam.getLesson().getLessonId() : null);
-        Long ownerGroupId = exam.getOwnerGroup() != null ? exam.getOwnerGroup().getEnterpriseGroupId() : null;
         candidatePool = candidatePool.stream()
-                .filter(q -> q.getOwnerGroup() == null
-                        || Objects.equals(q.getOwnerGroup().getEnterpriseGroupId(), ownerGroupId))
+                .filter(q -> q.getOwnerGroupId() == null
+                        || Objects.equals(q.getOwnerGroupId(), ownerGroupId))
                 .toList();
 
-        Map<Cell, List<Question>> poolByCell = candidatePool.stream()
+        Map<Cell, List<QuestionSelectionView>> poolByCell = candidatePool.stream()
                 .collect(Collectors.groupingBy(q -> new Cell(
-                        q.getLesson().getLessonId(),
+                        q.getLessonId(),
                         bktEventFactory.normalizeDifficulty(q.getDifficultyLevel())),
                         LinkedHashMap::new, Collectors.toList()));
         // Randomize each cell's candidate order so repeated retakes don't
         // always draw the same "first N" questions from a lesson's pool.
-        for (List<Question> pool : poolByCell.values()) {
+        for (List<QuestionSelectionView> pool : poolByCell.values()) {
             Collections.shuffle(pool);
         }
 
@@ -257,12 +274,12 @@ public class AdaptiveRetakeQuestionSelectionService {
 
         // --- 6. Last resort: top up from the exam's own baseline questions -
         if (picked.size() < targetTotal) {
-            for (Question question : baselineQuestions) {
+            for (QuestionSelectionView question : baselineQuestions) {
                 if (picked.size() >= targetTotal) break;
                 picked.add(question);
             }
         }
-        List<Question> selected = picked.questions();
+        List<QuestionSelectionView> selected = picked.questions();
         if (selected.size() > targetTotal) {
             selected = selected.subList(0, targetTotal);
         }
@@ -275,7 +292,49 @@ public class AdaptiveRetakeQuestionSelectionService {
         log.info("Adaptive retake selection for exam {} learner {}: {} questions ({} unseen)",
                 exam.getExamId(), learnerId, selected.size(),
                 selected.stream().filter(q -> !seenQuestionIds.contains(q.getQuestionId())).count());
-        return new Selection(selected, basisJson);
+
+        // Only now, for the paper's worth of questions that survived, is the
+        // full entity (choices and type configs included) worth fetching.
+        List<Long> selectedIds = selected.stream().map(QuestionSelectionView::getQuestionId).toList();
+        return new Selection(loadInOrder(selectedIds), basisJson);
+    }
+
+    /**
+     * Loads whole questions for the given ids, in the order given.
+     *
+     * <p>The order is the paper's order, so it cannot be left to the database:
+     * an {@code IN} query returns rows however it likes, and the retake's
+     * shuffle would be silently replaced by primary-key order.
+     */
+    private List<Question> loadInOrder(List<Long> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, Question> byId = questionRepository.findForAttemptByIdIn(ids).stream()
+                .collect(Collectors.toMap(Question::getQuestionId, q -> q, (a, b) -> a));
+        List<Question> ordered = new ArrayList<>(ids.size());
+        for (Long id : ids) {
+            Question question = byId.get(id);
+            if (question != null) {
+                ordered.add(question);
+            }
+        }
+        return ordered;
+    }
+
+    /** Same ordering guarantee as {@link #loadInOrder}, for projections. */
+    private List<QuestionSelectionView> orderViewsBy(
+            List<Long> ids, Collection<QuestionSelectionView> views) {
+        Map<Long, QuestionSelectionView> byId = views.stream()
+                .collect(Collectors.toMap(QuestionSelectionView::getQuestionId, v -> v, (a, b) -> a));
+        List<QuestionSelectionView> ordered = new ArrayList<>(ids.size());
+        for (Long id : ids) {
+            QuestionSelectionView view = byId.get(id);
+            if (view != null) {
+                ordered.add(view);
+            }
+        }
+        return ordered;
     }
 
     /**
@@ -289,12 +348,12 @@ public class AdaptiveRetakeQuestionSelectionService {
      * a repeat however the bank got into that state.
      */
     private static final class Picked {
-        private final List<Question> questions = new ArrayList<>();
+        private final List<QuestionSelectionView> questions = new ArrayList<>();
         private final Set<Long> ids = new LinkedHashSet<>();
         private final Set<String> stems = new HashSet<>();
 
         /** @return false when this question (or its twin) is already picked. */
-        boolean add(Question question) {
+        boolean add(QuestionSelectionView question) {
             Long id = question.getQuestionId();
             String stem = stemOf(question);
             if ((id != null && ids.contains(id)) || (!stem.isEmpty() && stems.contains(stem))) {
@@ -310,7 +369,7 @@ public class AdaptiveRetakeQuestionSelectionService {
             return true;
         }
 
-        boolean contains(Question question) {
+        boolean contains(QuestionSelectionView question) {
             Long id = question.getQuestionId();
             String stem = stemOf(question);
             return (id != null && ids.contains(id)) || (!stem.isEmpty() && stems.contains(stem));
@@ -320,7 +379,7 @@ public class AdaptiveRetakeQuestionSelectionService {
             return questions.size();
         }
 
-        List<Question> questions() {
+        List<QuestionSelectionView> questions() {
             return new ArrayList<>(questions);
         }
     }
@@ -334,7 +393,7 @@ public class AdaptiveRetakeQuestionSelectionService {
      * was meant to be asked. This catches the copies that are genuinely
      * identical, which is what the bank actually contains.
      */
-    private static String stemOf(Question question) {
+    private static String stemOf(QuestionSelectionView question) {
         String text = question.getQuestionText();
         if (text == null) {
             return "";
@@ -361,7 +420,7 @@ public class AdaptiveRetakeQuestionSelectionService {
     }
 
     private void fillCell(
-            Cell cell, int count, Map<Cell, List<Question>> poolByCell, Set<Long> seenQuestionIds,
+            Cell cell, int count, Map<Cell, List<QuestionSelectionView>> poolByCell, Set<Long> seenQuestionIds,
             Set<Long> previousAttemptQuestionIds, Picked picked) {
         if (count <= 0) {
             return;
@@ -400,17 +459,17 @@ public class AdaptiveRetakeQuestionSelectionService {
 
     /** @return how many questions were actually taken. */
     private int takeFromCell(
-            Cell cell, int need, Map<Cell, List<Question>> poolByCell, Set<Long> seenQuestionIds,
+            Cell cell, int need, Map<Cell, List<QuestionSelectionView>> poolByCell, Set<Long> seenQuestionIds,
             Set<Long> previousAttemptQuestionIds, Picked picked, Tier tier) {
         if (need <= 0) {
             return 0;
         }
-        List<Question> pool = poolByCell.get(cell);
+        List<QuestionSelectionView> pool = poolByCell.get(cell);
         if (pool == null) {
             return 0;
         }
         int taken = 0;
-        for (Question question : pool) {
+        for (QuestionSelectionView question : pool) {
             if (taken >= need) break;
             Long questionId = question.getQuestionId();
             // Skips a question already picked *or* one whose text is already on
@@ -479,8 +538,8 @@ public class AdaptiveRetakeQuestionSelectionService {
             CellStat averageStat = weakness.get(average);
             int lowerTotal = (easyStat == null ? 0 : easyStat.total())
                     + (averageStat == null ? 0 : averageStat.total());
-            int lowerCorrect = (easyStat == null ? 0 : (int) Math.round(easyStat.accuracy() * easyStat.total()))
-                    + (averageStat == null ? 0 : (int) Math.round(averageStat.accuracy() * averageStat.total()));
+            int lowerCorrect = (easyStat == null ? 0 : easyStat.correct())
+                    + (averageStat == null ? 0 : averageStat.correct());
 
             if (lowerTotal >= properties.getMinEvidencePerCell()
                     && (double) lowerCorrect / lowerTotal > properties.getStrongAccuracyThreshold()) {

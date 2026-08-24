@@ -12,6 +12,28 @@ export async function getProgressAnalytics(certificationId) {
   return base(`learners/me/certifications/${certificationId}/progress-analytics`)
 }
 
+/**
+ * Query-string parameter carrying the certification the analytics board is
+ * showing. Read by the learner shell before its own portal request resolves,
+ * so the board's data can be fetched in parallel with it rather than after.
+ */
+export const PROGRESS_ANALYTICS_PARAM = "certification"
+
+/**
+ * The one definition of the analytics query key.
+ *
+ * <p>Shared because the shell prefetches under this key and the board reads
+ * under it, and React Query only joins the two into a single request when the
+ * keys match exactly -- if these ever drifted apart the prefetch would silently
+ * become a second, wasted request instead of a head start.
+ */
+export function progressAnalyticsQueryKey(certificationId) {
+  return ["learner-progress-analytics", certificationId]
+}
+
+/** How long an analytics response stays fresh, for both readers above. */
+export const PROGRESS_ANALYTICS_STALE_TIME = 30_000
+
 // ---------------------------------------------------------------------------
 // BKT analytics. The browser only ever calls Spring Boot; Spring Boot proxies
 // the internal FastAPI BKT service.

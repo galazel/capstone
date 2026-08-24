@@ -1,5 +1,6 @@
 package com.capstone.rebyu.certification.service;
 
+import com.capstone.rebyu.aigateway.client.WorkflowClient;
 import com.capstone.rebyu.assessment.entity.Exam;
 import com.capstone.rebyu.assessment.entity.ExamType;
 import com.capstone.rebyu.assessment.repository.ExamQuestionRepository;
@@ -35,6 +36,7 @@ class CertificationServiceExamLinkingTest {
     @Mock private EntityManager entityManager;
     @Mock private ExamRepository examRepository;
     @Mock private ExamQuestionRepository examQuestionRepository;
+    @Mock private WorkflowClient workflowClient;
 
     private CertificationService service;
 
@@ -42,7 +44,7 @@ class CertificationServiceExamLinkingTest {
     void setUp() {
         service = new CertificationService(
                 certificationRepository, certificationMapper, entityManager,
-                examRepository, examQuestionRepository);
+                examRepository, examQuestionRepository, workflowClient);
     }
 
     @Test

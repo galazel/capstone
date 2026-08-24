@@ -7,8 +7,10 @@ import com.capstone.rebyu.enrollment.dto.OrganizationCertificationLearnerDto;
 import com.capstone.rebyu.enrollment.entity.OrganizationCertificationLearner;
 import com.capstone.rebyu.enrollment.mapper.OrganizationCertificationLearnerMapper;
 import com.capstone.rebyu.enrollment.repository.OrganizationCertificationLearnerRepository;
+import com.capstone.rebyu.enterprise.dto.EnterprisePortalDtos.GroupMembershipDto;
 import com.capstone.rebyu.enterprise.dto.EnterprisePortalDtos.LearnerSummaryDto;
 import com.capstone.rebyu.enterprise.dto.EnterprisePortalDtos.OverviewDto;
+import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupAssigneeRepository;
 import jakarta.persistence.EntityNotFoundException;
 import com.capstone.rebyu.organization.dto.OrganizationCertificateDto;
 import com.capstone.rebyu.organization.mapper.OrganizationCertificateMapper;
@@ -44,6 +46,7 @@ public class EnterprisePortalService {
     private final EnterpriseInvoiceMapper invoiceMapper;
     private final LearnerRepository learnerRepository;
     private final EnterpriseInvitationService invitationService;
+    private final EnterpriseGroupAssigneeRepository groupAssigneeRepository;
     private final ExamResultRepository examResultRepository;
     private final ExamResultMapper examResultMapper;
 
@@ -69,8 +72,17 @@ public class EnterprisePortalService {
                 invoiceRepository.findByEnterprise_EnterpriseId(enterpriseId).stream()
                         .map(invoiceMapper::toDto).toList();
 
+        /* Which group each assignment sits in. One query for the whole
+           enterprise rather than one per learner -- the roster names the group
+           on every row, and doing that per row is a request per learner. */
+        List<GroupMembershipDto> groupMemberships =
+                groupAssigneeRepository.assignmentGroupsByEnterprise(enterpriseId).stream()
+                        .map(row -> new GroupMembershipDto(
+                                row.getOrgCertLearnerId(), row.getEnterpriseGroupId(), row.getGroupName()))
+                        .toList();
+
         return new OverviewDto(orgCerts, assignments, learners,
-                invitationService.listInvitations(enterpriseId), invoices);
+                invitationService.listInvitations(enterpriseId), invoices, groupMemberships);
     }
 
     /**

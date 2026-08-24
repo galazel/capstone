@@ -1,9 +1,11 @@
 package com.capstone.rebyu.learningtools.service;
 
 import com.capstone.rebyu.certification.service.S3StorageService;
+import com.capstone.rebyu.learningtools.repository.LearnerMistakeReviewRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -27,6 +29,7 @@ public class LearnerToolsService {
 
     private final JdbcTemplate jdbc;
     private final S3StorageService s3StorageService;
+    private final LearnerMistakeReviewRepository mistakeReviewRepository;
 
     public record LibraryRequest(
             String itemType, String title, String description, String resourceUrl,
@@ -165,17 +168,12 @@ public class LearnerToolsService {
                 """, this::mapMistake, learnerId);
     }
 
+    @Transactional
     public void markReviewed(Long learnerId, Long questionId, boolean reviewed) {
         if (reviewed) {
-            jdbc.update("""
-                    INSERT INTO learner_mistake_reviews(learner_id, source_question_id)
-                    VALUES (?, ?)
-                    ON CONFLICT (learner_id, source_question_id) DO UPDATE SET reviewed_at = now()
-                    """, learnerId, questionId);
+            mistakeReviewRepository.markReviewed(learnerId, questionId);
         } else {
-            jdbc.update(
-                    "DELETE FROM learner_mistake_reviews WHERE learner_id = ? AND source_question_id = ?",
-                    learnerId, questionId);
+            mistakeReviewRepository.deleteById_LearnerIdAndId_SourceQuestionId(learnerId, questionId);
         }
     }
 

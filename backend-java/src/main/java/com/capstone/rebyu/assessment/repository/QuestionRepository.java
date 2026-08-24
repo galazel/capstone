@@ -1,11 +1,13 @@
 package com.capstone.rebyu.assessment.repository;
 
 import com.capstone.rebyu.assessment.entity.Question;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -31,6 +33,79 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
 
     List<Question> findByParentQuestionIsNullAndLesson_MiddleCategory_MajorCategory_Certification_CertificationIdOrderByQuestionIdAsc(
             Long certificationId);
+
+    // ------------------------------------------------------------------
+    // Selection projections
+    // ------------------------------------------------------------------
+    // Same four scopes as above, as flat projections. See QuestionSelectionView
+    // for why loading these as entities costs 1 + 3N queries instead of 1.
+    // ownerGroup is LEFT JOINed: official questions have none, and an inner
+    // join would silently drop every one of them from the candidate pool.
+
+    @Query("""
+            SELECT q.questionId AS questionId, l.lessonId AS lessonId,
+                   q.difficultyLevel AS difficultyLevel, q.questionText AS questionText,
+                   og.enterpriseGroupId AS ownerGroupId
+            FROM Question q JOIN q.lesson l LEFT JOIN q.ownerGroup og
+            WHERE q.parentQuestion IS NULL AND l.lessonId = :lessonId
+            ORDER BY q.questionId ASC
+            """)
+    List<QuestionSelectionView> findSelectionViewsByLesson(@Param("lessonId") Long lessonId);
+
+    @Query("""
+            SELECT q.questionId AS questionId, l.lessonId AS lessonId,
+                   q.difficultyLevel AS difficultyLevel, q.questionText AS questionText,
+                   og.enterpriseGroupId AS ownerGroupId
+            FROM Question q JOIN q.lesson l LEFT JOIN q.ownerGroup og
+            WHERE q.parentQuestion IS NULL AND l.middleCategory.middleCategoryId = :middleCategoryId
+            ORDER BY q.questionId ASC
+            """)
+    List<QuestionSelectionView> findSelectionViewsByMiddleCategory(
+            @Param("middleCategoryId") Long middleCategoryId);
+
+    @Query("""
+            SELECT q.questionId AS questionId, l.lessonId AS lessonId,
+                   q.difficultyLevel AS difficultyLevel, q.questionText AS questionText,
+                   og.enterpriseGroupId AS ownerGroupId
+            FROM Question q JOIN q.lesson l LEFT JOIN q.ownerGroup og
+            WHERE q.parentQuestion IS NULL
+              AND l.middleCategory.majorCategory.majorCategoryId = :majorCategoryId
+            ORDER BY q.questionId ASC
+            """)
+    List<QuestionSelectionView> findSelectionViewsByMajorCategory(
+            @Param("majorCategoryId") Long majorCategoryId);
+
+    @Query("""
+            SELECT q.questionId AS questionId, l.lessonId AS lessonId,
+                   q.difficultyLevel AS difficultyLevel, q.questionText AS questionText,
+                   og.enterpriseGroupId AS ownerGroupId
+            FROM Question q JOIN q.lesson l LEFT JOIN q.ownerGroup og
+            WHERE q.parentQuestion IS NULL
+              AND l.middleCategory.majorCategory.certification.certificationId = :certificationId
+            ORDER BY q.questionId ASC
+            """)
+    List<QuestionSelectionView> findSelectionViewsByCertification(
+            @Param("certificationId") Long certificationId);
+
+    @Query("""
+            SELECT q.questionId AS questionId, l.lessonId AS lessonId,
+                   q.difficultyLevel AS difficultyLevel, q.questionText AS questionText,
+                   og.enterpriseGroupId AS ownerGroupId
+            FROM Question q JOIN q.lesson l LEFT JOIN q.ownerGroup og
+            WHERE q.questionId IN :ids
+            """)
+    List<QuestionSelectionView> findSelectionViewsByIdIn(@Param("ids") Collection<Long> ids);
+
+    /**
+     * Loads whole questions with everything an attempt snapshot reads, in one
+     * query. The three configs are named explicitly because they are EAGER
+     * either way -- naming them turns three SELECTs per question into three
+     * joins on the one query. Only ever call this for a paper's worth of ids.
+     */
+    @EntityGraph(attributePaths = {
+            "choices", "diagramQuestionConfig", "programmingQuestionConfig", "textQuestionConfig"})
+    @Query("SELECT DISTINCT q FROM Question q WHERE q.questionId IN :ids")
+    List<Question> findForAttemptByIdIn(@Param("ids") Collection<Long> ids);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM Question q WHERE q.questionId = :id")

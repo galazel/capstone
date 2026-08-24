@@ -140,6 +140,14 @@ export function BentoStat({ tone = "plain", col = 2, row = 1, icon: Icon, label,
         ) : null}
       </div>
 
+      {/* An optional mark -- a gauge, a donut, a sparkline -- placed ABOVE the
+          number rather than below it. The number carries `mt-auto`, so it is
+          pinned to the bottom of the tile and everything else shares the space
+          left over; a child rendered after it would be pushed past the bottom
+          edge, and the tile clips. Here it fills exactly the gap that a tall
+          tile with a single figure would otherwise leave blank. */}
+      {children ? <div className="mt-3 min-w-0">{children}</div> : null}
+
       {/* The number is the point of the tile, so it is sized to fill whatever
           width the tile has. A one-column tile is only about 120px of content
           wide, so it stops one step short of the full display size — far enough
@@ -168,8 +176,6 @@ export function BentoStat({ tone = "plain", col = 2, row = 1, icon: Icon, label,
           {hint}
         </p>
       ) : null}
-
-      {children}
     </BentoTile>
   )
 }

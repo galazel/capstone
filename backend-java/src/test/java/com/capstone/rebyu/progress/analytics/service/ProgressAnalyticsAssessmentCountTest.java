@@ -51,7 +51,7 @@ class ProgressAnalyticsAssessmentCountTest {
         // repositories belong to the aggregation around them.
         service = new ProgressAnalyticsService(
                 null, null, null, null, null, null, null, null,
-                null, null, null, null, null, eventFactory);
+                null, null, null, null, null, eventFactory, Runnable::run);
     }
 
     private static ExamType type(String text) {

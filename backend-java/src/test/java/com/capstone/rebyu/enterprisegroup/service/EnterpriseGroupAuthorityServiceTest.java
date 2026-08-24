@@ -8,6 +8,9 @@ import com.capstone.rebyu.enterprisegroup.mapper.EnterpriseGroupAuthorityMapper;
 import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupAuthorityRepository;
 import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupRepository;
 import com.capstone.rebyu.organization.entity.Enterprise;
+import com.capstone.rebyu.organization.repository.EnterpriseMemberRepository;
+import com.capstone.rebyu.user.repository.UserRepository;
+import com.capstone.rebyu.user.repository.UserTypeRepository;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,7 +46,9 @@ class EnterpriseGroupAuthorityServiceTest {
         groupRepository = mock(EnterpriseGroupRepository.class);
         mapper = mock(EnterpriseGroupAuthorityMapper.class);
 
-        service = new EnterpriseGroupAuthorityService(authorityRepository, groupRepository, mapper);
+        service = new EnterpriseGroupAuthorityService(authorityRepository, groupRepository, mapper,
+                mock(UserRepository.class), mock(UserTypeRepository.class),
+                mock(EnterpriseMemberRepository.class));
 
         when(mapper.toDto(any(EnterpriseGroupAuthority.class))).thenAnswer(inv -> {
             EnterpriseGroupAuthority entity = inv.getArgument(0);

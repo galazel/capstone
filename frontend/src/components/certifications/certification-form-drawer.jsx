@@ -24,7 +24,6 @@ import {
 import CertificationDetails from "@/components/certifications/certification-details"
 import CertificationModules from "@/components/certifications/certification-modules"
 import { DocumentUploadStep } from "@/components/certifications/document-upload-step.jsx"
-import { InlineGenerationMonitor } from "@/components/certifications/inline-generation-monitor.jsx"
 
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -325,9 +324,6 @@ export default function CertificationFormDrawer({
     const [moduleCategories, setModuleCategories] = useState([])
     const [detailsErrors, setDetailsErrors] = useState({})
     const [submissionError, setSubmissionError] = useState("")
-    // Set once generation is queued. The modal then shows the run's live
-    // transcript in place of the form, so the admin never leaves the flow.
-    const [generatingCertificationId, setGeneratingCertificationId] = useState(null)
     const [submissionDialog, setSubmissionDialog] = useState(
         emptySubmissionDialog
     )
@@ -592,25 +588,28 @@ export default function CertificationFormDrawer({
 
             await onSaved?.(savedCertification)
 
-            const newId = getCertificationId(savedCertification)
+            /* Queued, so this drawer's job is done: get out of the way.
 
-            // Hand the run to the monitor in this same modal rather than
-            // navigating away. Generation is a long conversation the admin
-            // steers — it pauses for their review repeatedly — and sending them
-            // to another page mid-flow loses the thread of what they were doing.
-            if (newId != null) {
-                setGeneratingCertificationId(newId)
-                return
-            }
+               It used to swap the form for the live transcript and keep the
+               admin here, on the theory that generation is a conversation they
+               steer. In practice the first thing it shows is a single running
+               step under a screenful of empty space, and it holds the whole
+               panel hostage to a build that runs on the server whether anyone
+               watches or not. The certification appears in the list marked
+               "Generating" with its own View progress, which is where watching
+               belongs -- and leaves the admin free to start the next one.
 
-            // No id to follow: announce it rather than opening a monitor with
-            // nothing to attach to.
-            setSubmissionDialog({
-                open: true,
-                title: "Generation started",
+               Closed directly rather than through `handleModalChange`, whose
+               guard refuses to close while a mutation is in flight: whether
+               that guard sees the settled value depends on which render's
+               closure is running, and this close must not be a coin toss. */
+            onOpenChange(false)
+            resetForm()
+
+            toast.info("Generating the certification", {
                 description:
-                    "The certification was saved and its curriculum is being generated in the " +
-                    "background. You'll get a notification here when it's ready to review.",
+                    "This runs on the server and keeps going if you leave. " +
+                    "Open it from the list to watch its progress.",
             })
         } catch (error) {
             const message = getErrorMessage(error)
@@ -687,31 +686,21 @@ export default function CertificationFormDrawer({
                     the title against it. */}
                 <DrawerHeader className="relative gap-1 border-b border-border px-5 py-4 pr-14 text-left sm:px-6">
                     <DrawerTitle className="text-lg">
-                        {generatingCertificationId
-                            ? "Generating certification"
-                            : isEditing
-                                ? "Edit Certification"
-                                : "Create Certification"}
+                        {isEditing ? "Edit Certification" : "Create Certification"}
                     </DrawerTitle>
 
-                    {/* No subheading while generating: the step counter is
-                        meaningful for the form, but a generation has no steps
-                        to count and the timeline speaks for itself.
-
-                        Rendered either way, sr-only when there is nothing to
+                    {/* Rendered either way, sr-only when there is nothing to
                         show: vaul is Radix Dialog underneath, which warns when
                         a panel has no description, and an unlabelled panel is
                         a real gap for a screen reader rather than just noise
                         in the console. */}
-                    {!generatingCertificationId && isEditing ? (
+                    {isEditing ? (
                         <DrawerDescription className="text-xs">
                             {`${EDIT_STEP_LABELS[page - 1]} · step ${page} of ${totalSteps}`}
                         </DrawerDescription>
                     ) : (
                         <DrawerDescription className="sr-only">
-                            {generatingCertificationId
-                                ? "Progress of the certification being generated."
-                                : "Certification details and source documents."}
+                            Certification details and source documents.
                         </DrawerDescription>
                     )}
 
@@ -731,157 +720,139 @@ export default function CertificationFormDrawer({
                     steps get the padded, scrollable body instead -- one wrapper
                     each rather than the nested pair that used to double up the
                     scroll containers. */}
-                {generatingCertificationId ? (
-                    <InlineGenerationMonitor
-                        certificationId={generatingCertificationId}
-                        onClose={() => {
-                            setGeneratingCertificationId(null)
-                            handleModalChange(false)
-                            // Closing does not stop the run — it keeps going in
-                            // the Python consumer. Refreshing the list is what
-                            // puts the certification on screen with its
-                            // "Generating" label instead of leaving it absent
-                            // until the list happens to go stale.
-                            onSaved?.()
-                        }}
-                    />
-                ) : (
-                    <>
-                        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 sm:px-6">
-                            {!isEditing ? (
-                                /* One column, one scroll: what the
-                                   certification is, then the documents to build
-                                   it from, in the order you would say them. */
-                                <div className="space-y-8">
-                                    <CertificationDetails
-                                        value={certificationDetails}
-                                        onChange={handleDetailsChange}
-                                        errors={detailsErrors}
-                                        mode={mode}
-                                    />
-
-                                    <div className="border-t border-border pt-8">
-                                        <DocumentUploadStep
-                                            disabled={isBusy}
-                                            onFilesChange={handleDocumentsChange}
-                                        />
-                                    </div>
-                                </div>
-                            ) : page === 1 ? (
+                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 sm:px-6">
+                        {!isEditing ? (
+                            /* One column, one scroll: what the
+                               certification is, then the documents to build
+                               it from, in the order you would say them. */
+                            <div className="space-y-8">
                                 <CertificationDetails
                                     value={certificationDetails}
                                     onChange={handleDetailsChange}
                                     errors={detailsErrors}
                                     mode={mode}
                                 />
-                            ) : (
-                                <CertificationModules
-                                    certificationId={certificationId}
-                                    value={moduleCategories}
-                                    onChange={handleModulesChange}
-                                    onCreateMiddleExam={() => {}}
-                                    onGenerationStarted={setGeneratingCertificationId}
-                                />
-                            )}
-                        </div>
 
-                        {/* A plain footer rather than `DialogFooter`: that
-                            primitive is a right-aligned button row, and this
-                            needs an error alert stacked above split Previous /
-                            Next controls. Using it meant overriding its
-                            direction at two breakpoints to get there. */}
-                        <div className="flex flex-col gap-3 border-t border-border bg-background px-5 py-4 sm:px-6">
-                            {submissionError && (
-                                <Alert variant="destructive" className="relative pr-12">
-                                    <CircleAlert className="h-4 w-4" />
-
-                                    <AlertTitle>
-                                        Cannot{" "}
-                                        {isEditing ? "update" : "create"}{" "}
-                                        certification
-                                    </AlertTitle>
-
-                                    <AlertDescription>
-                                        {submissionError}
-                                    </AlertDescription>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => setSubmissionError("")}
-                                        aria-label="Dismiss error"
-                                        className="absolute top-3 right-3 rounded-md p-1 text-destructive transition hover:bg-destructive/10"
-                                    >
-                                        <X className="h-4 w-4" />
-                                    </button>
-                                </Alert>
-                            )}
-
-                            {/* Real byte progress while the documents upload:
-                                ten 10 MB PDFs is a slow request, and a button
-                                stuck on "Starting…" cannot say whether anything
-                                is moving. */}
-                            {isQueueingGeneration && (
-                                <div className="space-y-1.5">
-                                    <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                                        <span>
-                                            {uploadPercent < 100
-                                                ? `Uploading ${sourceDocuments.length} document${sourceDocuments.length === 1 ? "" : "s"}…`
-                                                : "Queuing generation…"}
-                                        </span>
-                                        <span className="font-mono tabular-nums">
-                                            {uploadPercent}%
-                                        </span>
-                                    </div>
-
-                                    <Progress value={uploadPercent} className="h-1.5" />
+                                <div className="border-t border-border pt-8">
+                                    <DocumentUploadStep
+                                        disabled={isBusy}
+                                        onFilesChange={handleDocumentsChange}
+                                    />
                                 </div>
-                            )}
+                            </div>
+                        ) : page === 1 ? (
+                            <CertificationDetails
+                                value={certificationDetails}
+                                onChange={handleDetailsChange}
+                                errors={detailsErrors}
+                                mode={mode}
+                            />
+                        ) : (
+                            <CertificationModules
+                                certificationId={certificationId}
+                                value={moduleCategories}
+                                onChange={handleModulesChange}
+                                onCreateMiddleExam={() => {}}
+                                onGenerationStarted={setGeneratingCertificationId}
+                            />
+                        )}
+                    </div>
 
-                            <div className="flex items-center justify-between gap-3">
-                                {/* Only where there is a step to go back to.
-                                    A permanently disabled Previous on a
-                                    one-page form is furniture. */}
-                                {totalSteps > 1 ? (
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={handlePrevious}
-                                        disabled={isFirstStep || isBusy}
-                                        className="min-w-[118px] gap-2"
-                                    >
-                                        <ArrowLeft className="h-4 w-4" />
-                                        Previous
-                                    </Button>
-                                ) : (
-                                    <span />
-                                )}
+                    {/* A plain footer rather than `DialogFooter`: that
+                        primitive is a right-aligned button row, and this
+                        needs an error alert stacked above split Previous /
+                        Next controls. Using it meant overriding its
+                        direction at two breakpoints to get there. */}
+                    <div className="flex flex-col gap-3 border-t border-border bg-background px-5 py-4 sm:px-6">
+                        {submissionError && (
+                            <Alert variant="destructive" className="relative pr-12">
+                                <CircleAlert className="h-4 w-4" />
 
+                                <AlertTitle>
+                                    Cannot{" "}
+                                    {isEditing ? "update" : "create"}{" "}
+                                    certification
+                                </AlertTitle>
+
+                                <AlertDescription>
+                                    {submissionError}
+                                </AlertDescription>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setSubmissionError("")}
+                                    aria-label="Dismiss error"
+                                    className="absolute top-3 right-3 rounded-md p-1 text-destructive transition hover:bg-destructive/10"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </Alert>
+                        )}
+
+                        {/* Real byte progress while the documents upload:
+                            ten 10 MB PDFs is a slow request, and a button
+                            stuck on "Starting…" cannot say whether anything
+                            is moving. */}
+                        {isQueueingGeneration && (
+                            <div className="space-y-1.5">
+                                <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                                    <span>
+                                        {uploadPercent < 100
+                                            ? `Uploading ${sourceDocuments.length} document${sourceDocuments.length === 1 ? "" : "s"}…`
+                                            : "Queuing generation…"}
+                                    </span>
+                                    <span className="font-mono tabular-nums">
+                                        {uploadPercent}%
+                                    </span>
+                                </div>
+
+                                <Progress value={uploadPercent} className="h-1.5" />
+                            </div>
+                        )}
+
+                        <div className="flex items-center justify-between gap-3">
+                            {/* Only where there is a step to go back to.
+                                A permanently disabled Previous on a
+                                one-page form is furniture. */}
+                            {totalSteps > 1 ? (
                                 <Button
                                     type="button"
-                                    onClick={handleMainAction}
-                                    disabled={isBusy}
-                                    className="min-w-[185px] gap-2"
+                                    variant="outline"
+                                    onClick={handlePrevious}
+                                    disabled={isFirstStep || isBusy}
+                                    className="min-w-[118px] gap-2"
                                 >
-                                    {isBusy ? (
-                                        isEditing ? "Saving..." : "Starting..."
-                                    ) : !isLastStep ? (
-                                        <>
-                                            Next
-                                            <ArrowRight className="h-4 w-4" />
-                                        </>
-                                    ) : isEditing ? (
-                                        "Save Changes"
-                                    ) : (
-                                        <>
-                                            <Sparkles className="h-4 w-4" />
-                                            Generate Certification
-                                        </>
-                                    )}
+                                    <ArrowLeft className="h-4 w-4" />
+                                    Previous
                                 </Button>
-                            </div>
+                            ) : (
+                                <span />
+                            )}
+
+                            <Button
+                                type="button"
+                                onClick={handleMainAction}
+                                disabled={isBusy}
+                                className="min-w-[185px] gap-2"
+                            >
+                                {isBusy ? (
+                                    isEditing ? "Saving..." : "Starting..."
+                                ) : !isLastStep ? (
+                                    <>
+                                        Next
+                                        <ArrowRight className="h-4 w-4" />
+                                    </>
+                                ) : isEditing ? (
+                                    "Save Changes"
+                                ) : (
+                                    <>
+                                        <Sparkles className="h-4 w-4" />
+                                        Generate Certification
+                                    </>
+                                )}
+                            </Button>
                         </div>
-                    </>
-                )}
+                    </div>
             </DrawerContent>
 
             <AlertDialog

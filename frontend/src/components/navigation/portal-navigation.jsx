@@ -9,11 +9,9 @@ import {
   CircleHelp,
   Command,
   FileQuestion,
-  Files,
   Handshake,
   LayoutDashboard,
   Menu,
-  ReceiptText,
   ServerCog,
   Sparkles,
   Search,
@@ -103,10 +101,12 @@ const enterpriseGroups = [
     label: "Learning",
     icon: BookOpenCheck,
     items: [
+      // No "Learners" entry. A learner belongs to the certification they were
+      // invited to, and that is the only place the roster means anything -- so
+      // they are reached through it ("View learners" on a certification card),
+      // not from a top-level list of everyone in the organization.
       { label: "Certifications", href: "/enterprise/certifications", icon: Award },
-      { label: "Learners", href: "/enterprise/learners", icon: Users },
       { label: "Question Bank", href: "/enterprise/question-bank", icon: FileQuestion },
-      { label: "Files", href: "/enterprise/files", icon: Files },
     ],
   },
   {
@@ -114,10 +114,22 @@ const enterpriseGroups = [
     icon: Building2,
     ownerOnly: true,
     items: [
-      { label: "Partnership", href: "/enterprise/partnership", icon: Handshake },
-      { label: "License", href: "/enterprise/license", icon: Award },
-      { label: "Billing", href: "/enterprise/billing", icon: ReceiptText },
-      { label: "Profile", href: "/enterprise/organization", icon: Building2 },
+      // One entry, because there is one page. Profile, Partnership, License,
+      // Billing and Files were five short routes behind a five-item menu; they
+      // are now tabs on /enterprise/organization, and the old paths still open
+      // their own tab. `match` keeps the header underlined on all of them.
+      {
+        label: "Organization",
+        href: "/enterprise/organization",
+        icon: Building2,
+        match: [
+          "/enterprise/organization",
+          "/enterprise/partnership",
+          "/enterprise/license",
+          "/enterprise/billing",
+          "/enterprise/files",
+        ],
+      },
     ],
   },
 ]

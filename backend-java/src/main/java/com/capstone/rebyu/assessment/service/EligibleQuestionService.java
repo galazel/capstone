@@ -4,6 +4,7 @@ import com.capstone.rebyu.assessment.dto.EligibleQuestionDto;
 import com.capstone.rebyu.assessment.entity.Question;
 import com.capstone.rebyu.assessment.repository.ExamQuestionRepository;
 import com.capstone.rebyu.assessment.repository.QuestionRepository;
+import com.capstone.rebyu.assessment.repository.QuestionSelectionView;
 import com.capstone.rebyu.certification.entity.Lesson;
 import com.capstone.rebyu.certification.entity.MajorCategory;
 import com.capstone.rebyu.certification.entity.MiddleCategory;
@@ -78,6 +79,34 @@ public class EligibleQuestionService {
         if (certificationId != null) {
             return questionRepository
                     .findByParentQuestionIsNullAndLesson_MiddleCategory_MajorCategory_Certification_CertificationIdOrderByQuestionIdAsc(certificationId);
+        }
+        throw new IllegalArgumentException(
+                "Provide a certificationId, majorId, middleId, or lessonId to resolve eligible questions.");
+    }
+
+    /**
+     * The same scope resolution as {@link #resolveScope}, returning flat
+     * projections instead of entities.
+     *
+     * <p>Prefer this wherever the caller is sifting a candidate pool rather
+     * than using every question it gets back. Resolving a scope as entities
+     * costs three extra queries per question (see {@link QuestionSelectionView});
+     * over a whole certification's bank that is thousands of round trips to
+     * choose a few dozen questions.
+     */
+    public List<QuestionSelectionView> resolveScopeViews(
+            Long certificationId, Long majorId, Long middleId, Long lessonId) {
+        if (lessonId != null) {
+            return questionRepository.findSelectionViewsByLesson(lessonId);
+        }
+        if (middleId != null) {
+            return questionRepository.findSelectionViewsByMiddleCategory(middleId);
+        }
+        if (majorId != null) {
+            return questionRepository.findSelectionViewsByMajorCategory(majorId);
+        }
+        if (certificationId != null) {
+            return questionRepository.findSelectionViewsByCertification(certificationId);
         }
         throw new IllegalArgumentException(
                 "Provide a certificationId, majorId, middleId, or lessonId to resolve eligible questions.");

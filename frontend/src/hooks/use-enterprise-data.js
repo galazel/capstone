@@ -45,6 +45,16 @@ export function useEnterpriseData(enterpriseId) {
 
     const orgCertById = new Map(orgCerts.map((cert) => [cert.orgCertId, cert]))
 
+    /* Group name per assignment row, keyed by orgCertLearnerId -- the same id
+       the assignment carries, so a roster row looks its group up directly. A
+       learner in no active group is simply absent from this map. */
+    const groupByOrgCertLearnerId = new Map(
+      asArray(overview.groupMemberships).map((membership) => [
+        membership.orgCertLearnerId,
+        membership,
+      ])
+    )
+
     return {
       orgCerts,
       orgCertById,
@@ -52,6 +62,7 @@ export function useEnterpriseData(enterpriseId) {
       invitations: asArray(overview.invitations),
       assignments: asArray(overview.assignments),
       learnerById,
+      groupByOrgCertLearnerId,
       invoices: asArray(overview.invoices),
     }
   }, [certificationsQuery.data, overviewQuery.data])

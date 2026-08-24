@@ -1,18 +1,25 @@
+import { useMemo } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import {
   ArrowLeftIcon,
   BookOpen,
+  ClipboardListIcon,
   GaugeIcon,
+  TargetIcon,
   SparklesIcon,
   TrendingDownIcon,
-  TrendingUpIcon,
 } from "@/components/icons"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
+import {
+  BarBreakdownChart,
+  ChartEmpty,
+  ChartPanel,
+} from "@/components/charts/rebyu-charts.jsx"
 import {
   EnterpriseEmptyState,
   EnterpriseErrorState,
@@ -37,23 +44,6 @@ function toPercent(value) {
 function formatPercent(value) {
   const percent = toPercent(value)
   return percent == null ? "—" : `${Math.round(percent)}%`
-}
-
-/** A labelled bar. Used for every 0-100 figure on this page so they read alike. */
-function MeterRow({ label, value, hint }) {
-  const percent = toPercent(value)
-  return (
-    <div>
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="text-sm font-medium text-foreground">{label}</span>
-        <span className="text-sm tabular-nums text-muted-foreground">
-          {percent == null ? "—" : `${Math.round(percent)}%`}
-        </span>
-      </div>
-      <Progress value={percent == null ? 0 : Math.min(100, Math.max(0, percent))} className="mt-2 h-2" />
-      {hint ? <p className="mt-1.5 text-xs text-muted-foreground">{hint}</p> : null}
-    </div>
-  )
 }
 
 function TopicList({ title, description, icon: Icon, topics, tone }) {
@@ -137,6 +127,27 @@ export default function EnterpriseGroupLearnerPage() {
 
   const backToGroup = `/enterprise/groups/${groupId}?tab=learners`
 
+
+  /* One bar per graded attempt, oldest first.
+     `scoreTrend` already excludes the AI tutor's practice quizzes and
+     flashcards -- the backend drops anything `tutorPracticeMarker` recognises
+     before building it -- so this is the curriculum's own assessments only.
+     Labelled by title and attempt number because a retake of the same exam is
+     a different bar, and two bars reading "Mock Exam" would be unreadable. */
+  const assessmentScores = useMemo(
+    () =>
+      (analytics?.scoreTrend ?? [])
+        .filter((point) => point.percentage != null)
+        .map((point) => ({
+          label:
+            point.attemptNumber && point.attemptNumber > 1
+              ? `${point.examTitle ?? "Assessment"} (try ${point.attemptNumber})`
+              : point.examTitle ?? "Assessment",
+          score: Number(point.percentage),
+        })),
+    [analytics?.scoreTrend]
+  )
+
   if (analyticsQuery.isLoading || rosterQuery.isLoading) {
     return (
       <div className="space-y-6">
@@ -162,9 +173,12 @@ export default function EnterpriseGroupLearnerPage() {
   }
 
   const weakestTopics = analytics?.weakestTopics ?? []
-  const strongestTopics = analytics?.strongestTopics ?? []
+
   const completedLessons = analytics?.completedLessonCount ?? 0
   const totalLessons = analytics?.totalLessonCount ?? 0
+  const passedAssessments = analytics?.passedAssessmentCount ?? 0
+  const totalAssessments = analytics?.totalAssessmentCount ?? 0
+  const totalAttempts = analytics?.totalAssessmentAttempts ?? 0
 
   return (
     <div className="space-y-6">
@@ -197,6 +211,16 @@ export default function EnterpriseGroupLearnerPage() {
         />
       ) : null}
 
+      {/* Four figures: curriculum progress, assessments passed, average score,
+          readiness. Average score and the assessment counts are returned by
+          this endpoint (`averageAssessmentScore`, `passedAssessmentCount`,
+          `totalAssessmentCount`) and were being dropped on the floor -- nothing
+          on the page read them.
+
+          Confidence and overall mastery used to sit here too, alongside a
+          meter card and a three-gauge row that restated readiness and
+          curriculum completion a second and third time. One figure, stated
+          once. */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <EnterpriseStatCard
           icon={BookOpen}
@@ -209,102 +233,71 @@ export default function EnterpriseGroupLearnerPage() {
           }
         />
         <EnterpriseStatCard
+          icon={ClipboardListIcon}
+          label="Assessments passed"
+          value={`${passedAssessments}/${totalAssessments}`}
+          hint={
+            totalAssessments
+              ? `${totalAttempts} attempt${totalAttempts === 1 ? "" : "s"} on this certification`
+              : "No published assessments yet"
+          }
+        />
+        <EnterpriseStatCard
+          icon={TargetIcon}
+          label="Average score"
+          /* Across graded attempts, not across assessments: an unattempted
+             assessment has no score to average in, and counting it as zero
+             would report a failure that has not happened. */
+          value={formatPercent(analytics?.averageAssessmentScore)}
+          hint={
+            totalAttempts
+              ? `Mean of ${totalAttempts} graded attempt${totalAttempts === 1 ? "" : "s"}`
+              : "No graded attempt yet"
+          }
+        />
+        <EnterpriseStatCard
           icon={GaugeIcon}
           label="Readiness"
           value={formatPercent(analytics?.readinessPercentage)}
           hint="Weighted likelihood of passing"
         />
-        <EnterpriseStatCard
-          icon={SparklesIcon}
-          label="Confidence"
-          value={formatPercent(analytics?.confidencePercentage)}
-          hint="Self-reported vs measured"
-        />
-        <EnterpriseStatCard
-          icon={TrendingUpIcon}
-          label="Overall mastery"
-          value={formatPercent(analytics?.overallMasteryPercentage)}
-          hint={`${analytics?.masteredTopicCount ?? 0} mastered · ${analytics?.weakTopicCount ?? 0} weak`}
-        />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Progress against the curriculum</CardTitle>
-          <CardDescription>
-            How far through this certification the learner is, and how ready they are for it.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <MeterRow
-            label="Curriculum completed"
-            value={analytics?.completionPercentage}
-            hint={`${completedLessons} of ${totalLessons} lesson${totalLessons === 1 ? "" : "s"}`}
-          />
-          <MeterRow
-            label="Readiness"
-            value={analytics?.readinessPercentage}
-          />
-          <MeterRow
-            label="Confidence"
-            value={analytics?.confidencePercentage}
-          />
-          {analytics?.unassessedTopicCount ? (
-            <p className="text-xs text-muted-foreground">
-              {analytics.unassessedTopicCount} topic
-              {analytics.unassessedTopicCount === 1 ? " has" : "s have"} not been assessed yet, so
-              mastery for {analytics.unassessedTopicCount === 1 ? "it" : "them"} is unknown.
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
+      <TopicList
+        title="Weakest topics"
+        description="Where this learner needs the most help — lowest mastery first."
+        icon={TrendingDownIcon}
+        topics={weakestTopics}
+        tone="weak"
+      />
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <TopicList
-          title="Weakest topics"
-          description="Where this learner needs the most help — lowest mastery first."
-          icon={TrendingDownIcon}
-          topics={weakestTopics}
-          tone="weak"
-        />
-        <TopicList
-          title="Strongest topics"
-          description="Already mastered — safe to move past in review sessions."
-          icon={TrendingUpIcon}
-          topics={strongestTopics}
-          tone="strong"
-        />
-      </div>
-
-      {analytics?.categoryMastery?.length ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Mastery by category</CardTitle>
-            <CardDescription>
-              Average mastery across each major area of the curriculum.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-4">
-              {analytics.categoryMastery.map((category, index) => (
-                <li key={category.categoryId ?? index}>
-                  <MeterRow
-                    label={category.title ?? `Category ${index + 1}`}
-                    value={category.masteryPercentage}
-                    hint={
-                      category.totalLessonCount
-                        ? `${category.completedLessonCount ?? 0} of ${category.totalLessonCount} lesson${
-                            category.totalLessonCount === 1 ? "" : "s"
-                          } completed${category.masteryLevel ? ` · ${category.masteryLevel}` : ""}`
-                        : category.masteryLevel ?? undefined
-                    }
-                  />
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      ) : null}
+      <ChartPanel
+        title="score on every assessment"
+        subtitle={
+          analytics?.averageAssessmentScore == null
+            ? "Each graded attempt on this certification, oldest first. Practice the learner generated in the AI tutor is not counted."
+            : `Each graded attempt on this certification, oldest first — averaging ${formatPercent(analytics.averageAssessmentScore)}. Practice the learner generated in the AI tutor is not counted.`
+        }
+        footnote={
+          assessmentScores.length
+            ? "Bars at or above the 75% line are passes at the usual threshold."
+            : undefined
+        }
+      >
+        {assessmentScores.length === 0 ? (
+          <ChartEmpty message="No assessment has been graded yet." />
+        ) : (
+          <BarBreakdownChart
+            data={assessmentScores}
+            categoryKey="label"
+            valueKey="score"
+            unit="%"
+            target={75}
+            height={Math.max(220, assessmentScores.length * 38)}
+            categoryWidth={150}
+          />
+        )}
+      </ChartPanel>
 
       <p className="text-xs text-muted-foreground">
         Monitoring view only.{" "}

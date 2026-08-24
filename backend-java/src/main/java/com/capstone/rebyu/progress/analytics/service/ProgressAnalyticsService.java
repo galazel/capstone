@@ -3,13 +3,13 @@ package com.capstone.rebyu.progress.analytics.service;
 import com.capstone.rebyu.assessment.entity.AssessmentAttempt;
 import com.capstone.rebyu.assessment.entity.AssessmentAttemptAnswer;
 import com.capstone.rebyu.assessment.entity.AssessmentAttemptQuestion;
-import com.capstone.rebyu.assessment.entity.Question;
 import com.capstone.rebyu.assessment.repository.AssessmentAttemptAnswerRepository;
 import com.capstone.rebyu.assessment.repository.AssessmentAttemptQuestionRepository;
 import com.capstone.rebyu.assessment.entity.Exam;
 import com.capstone.rebyu.assessment.repository.AssessmentAttemptRepository;
 import com.capstone.rebyu.assessment.repository.ExamRepository;
 import com.capstone.rebyu.assessment.repository.QuestionRepository;
+import com.capstone.rebyu.assessment.repository.QuestionSelectionView;
 import com.capstone.rebyu.bkt.dto.LessonPriorityView;
 import com.capstone.rebyu.bkt.dto.MasteryHistoryView;
 import com.capstone.rebyu.bkt.service.BktEventFactory;
@@ -40,8 +40,8 @@ import com.capstone.rebyu.progress.analytics.dto.ProgressAnalyticsDtos.Recommend
 import com.capstone.rebyu.progress.analytics.dto.ProgressAnalyticsDtos.ScoreTrendPoint;
 import com.capstone.rebyu.progress.analytics.dto.ProgressAnalyticsDtos.TopicRow;
 import jakarta.persistence.EntityNotFoundException;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,6 +59,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -69,7 +72,6 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class ProgressAnalyticsService {
 
     private static final double MASTERED_THRESHOLD = 0.85;
@@ -93,6 +95,52 @@ public class ProgressAnalyticsService {
     private final LearnerCompletedLessonRepository learnerCompletedLessonRepository;
     private final LearnerMasteryService learnerMasteryService;
     private final BktEventFactory bktEventFactory;
+
+    /**
+     * Pool for the BKT fan-out below. Injected rather than created here so a
+     * test can pass {@code Runnable::run} and get the old, fully sequential
+     * ordering back -- the concurrency is a latency optimisation, never
+     * something a result depends on.
+     */
+    private final Executor bktExecutor;
+
+    public ProgressAnalyticsService(
+            CertificationRepository certificationRepository,
+            LearnerCertificationRepository learnerCertificationRepository,
+            AssessmentAttemptRepository assessmentAttemptRepository,
+            AssessmentAttemptQuestionRepository attemptQuestionRepository,
+            AssessmentAttemptAnswerRepository attemptAnswerRepository,
+            QuestionRepository questionRepository,
+            ExamRepository examRepository,
+            StreakService streakService,
+            ChallengeSessionRepository challengeSessionRepository,
+            LessonRepository lessonRepository,
+            OrganizationCertificationLearnerRepository organizationCertificationLearnerRepository,
+            LearnerCompletedLessonRepository learnerCompletedLessonRepository,
+            LearnerMasteryService learnerMasteryService,
+            BktEventFactory bktEventFactory,
+            @Qualifier("bktAnalyticsExecutor") Executor bktExecutor) {
+        this.certificationRepository = certificationRepository;
+        this.learnerCertificationRepository = learnerCertificationRepository;
+        this.assessmentAttemptRepository = assessmentAttemptRepository;
+        this.attemptQuestionRepository = attemptQuestionRepository;
+        this.attemptAnswerRepository = attemptAnswerRepository;
+        this.questionRepository = questionRepository;
+        this.examRepository = examRepository;
+        this.streakService = streakService;
+        this.challengeSessionRepository = challengeSessionRepository;
+        this.lessonRepository = lessonRepository;
+        this.organizationCertificationLearnerRepository = organizationCertificationLearnerRepository;
+        this.learnerCompletedLessonRepository = learnerCompletedLessonRepository;
+        this.learnerMasteryService = learnerMasteryService;
+        this.bktEventFactory = bktEventFactory;
+        this.bktExecutor = bktExecutor;
+    }
+
+    /** Starts one BKT read on the fan-out pool. */
+    private <T> CompletableFuture<T> bktAsync(Supplier<T> read) {
+        return CompletableFuture.supplyAsync(read, bktExecutor);
+    }
 
     /**
      * The lesson and assessment counts behind a certification's progress, with
@@ -185,6 +233,26 @@ public class ProgressAnalyticsService {
             throw new EntityNotFoundException("No active enrollment in this certification");
         }
 
+        /* The BKT reads start here, before any of the work below, because none
+           of them needs any of it -- lesson priorities, confidence and mastery
+           history are answers to (learner, certification) and nothing else.
+           Asked one at a time, as they were, the board paid four sequential
+           round trips to the FastAPI service on top of its own queries. Started
+           together they overlap both each other and every query that follows,
+           so the board waits for the slowest single call rather than the sum.
+           Each future is joined immediately above the first line that reads it.
+
+           Safe off the request thread: these are pure HTTP with no database,
+           no transaction and no security context, and LearnerMasteryService
+           converts a BKT outage into an empty result rather than an exception,
+           so a join never surfaces a failure the sequential version swallowed. */
+        CompletableFuture<LearnerMasteryService.LessonPrioritiesResult> prioritiesFuture =
+                bktAsync(() -> learnerMasteryService.getLessonPrioritiesForAnalytics(learnerId, certificationId));
+        CompletableFuture<LearnerMasteryService.ConfidenceResult> confidenceFuture =
+                bktAsync(() -> learnerMasteryService.getConfidenceForAnalytics(learnerId, certificationId));
+        CompletableFuture<LearnerMasteryService.MasteryHistoryResult> historyFuture =
+                bktAsync(() -> learnerMasteryService.getMasteryHistoryForAnalytics(learnerId, certificationId));
+
         List<AssessmentAttempt> attempts = assessmentAttemptRepository
                 .findByLearnerIdAndExam_Certification_CertificationIdAndStatus(
                         learnerId, certificationId, AssessmentAttempt.Status.SUBMITTED);
@@ -202,10 +270,18 @@ public class ProgressAnalyticsService {
         Set<Long> sourceQuestionIds = questions.stream()
                 .map(AssessmentAttemptQuestion::getSourceQuestionId)
                 .collect(Collectors.toSet());
-        Map<Long, Question> questionById = sourceQuestionIds.isEmpty()
+        /* Only the difficulty of each answered question is needed below, so this
+           reads projections rather than entities. A Question drags three EAGER
+           inverse-side one-to-one configs behind it, which Hibernate cannot
+           proxy -- loading them whole cost three extra queries apiece to read a
+           single string, across every question the learner has ever answered in
+           this certification. */
+        Map<Long, String> difficultyByQuestionId = sourceQuestionIds.isEmpty()
                 ? Map.of()
-                : questionRepository.findAllById(sourceQuestionIds).stream()
-                        .collect(Collectors.toMap(Question::getQuestionId, q -> q));
+                : questionRepository.findSelectionViewsByIdIn(sourceQuestionIds).stream()
+                        .collect(Collectors.toMap(
+                                QuestionSelectionView::getQuestionId,
+                                QuestionSelectionView::getDifficultyLevel));
 
         Map<String, int[]> byDifficulty = new LinkedHashMap<>();
         Map<String, int[]> byQuestionType = new LinkedHashMap<>();
@@ -225,9 +301,8 @@ public class ProgressAnalyticsService {
                 totalIncorrect++;
             }
 
-            Question sourceQuestion = questionById.get(question.getSourceQuestionId());
             String difficulty = bktEventFactory.normalizeDifficulty(
-                    sourceQuestion == null ? null : sourceQuestion.getDifficultyLevel());
+                    difficultyByQuestionId.get(question.getSourceQuestionId()));
             String questionType = question.getQuestionType();
             AssessmentAttempt attempt = attemptById.get(question.getAttempt().getAssessmentAttemptId());
             String assessmentType = (attempt != null && attempt.getExam() != null && attempt.getExam().getExamType() != null)
@@ -239,13 +314,37 @@ public class ProgressAnalyticsService {
         }
 
         int totalAssessmentAttempts = attempts.size();
-        Double averageAssessmentScore = average(attempts.stream()
+        /* Scores exclude the AI tutor's practice quizzes and flashcards.
+         *
+         * The assessment COUNTS below already exclude them --
+         * `assessmentExclusionReason` drops anything `tutorPracticeMarker`
+         * recognises -- but the score figures were built straight off
+         * `attempts`, so a certification reported "2 of 5 assessments passed"
+         * next to a score trend containing eleven points, most of them practice
+         * a learner generated for themselves in the tutor. The two numbers
+         * described different sets and neither said which.
+         *
+         * Practice is self-directed, unproctored and retakeable at will, so
+         * averaging it into a learner's score tells a manager reading the group
+         * view how much practice they did, not how well they are doing on the
+         * curriculum's own assessments.
+         *
+         * `tutorPracticeMarker` alone is the right test here rather than the
+         * full `assessmentExclusionReason`: it keys only on the exam, so it can
+         * run at this point in the method, before the official-curriculum id
+         * sets the fuller check needs have been built.
+         */
+        List<AssessmentAttempt> curriculumAttempts = attempts.stream()
+                .filter(a -> a.getExam() == null || tutorPracticeMarker(a.getExam()) == null)
+                .toList();
+
+        Double averageAssessmentScore = average(curriculumAttempts.stream()
                 .map(AssessmentAttempt::getPercentage)
                 .filter(Objects::nonNull)
                 .map(BigDecimal::doubleValue)
                 .toList());
 
-        List<ScoreTrendPoint> scoreTrend = attempts.stream()
+        List<ScoreTrendPoint> scoreTrend = curriculumAttempts.stream()
                 .filter(a -> a.getSubmittedAt() != null)
                 .sorted(Comparator.comparing(AssessmentAttempt::getSubmittedAt))
                 .map(a -> new ScoreTrendPoint(
@@ -292,8 +391,17 @@ public class ProgressAnalyticsService {
         Double completionPercentage = totalLessonCount == 0 ? null
                 : (completedLessonCount * 100.0 / totalLessonCount);
 
-        LearnerMasteryService.LessonPrioritiesResult bktResult =
-                learnerMasteryService.getLessonPrioritiesForAnalytics(learnerId, certificationId);
+        /* Readiness is the one BKT read with prerequisites -- it is scored from
+           the learner's attempts, lesson progress and streak -- so it starts at
+           the first point those are all known, which is here, rather than at
+           the top with the other three. It still overlaps everything below it. */
+        Map<String, Object> readinessRequest = buildReadinessRequest(
+                learnerId, certLessons, attempts, totalLessonCount, completedLessonCount);
+        CompletableFuture<Map<String, Object>> readinessFuture = readinessRequest == null
+                ? CompletableFuture.completedFuture(null)
+                : bktAsync(() -> learnerMasteryService.getReadiness(readinessRequest));
+
+        LearnerMasteryService.LessonPrioritiesResult bktResult = prioritiesFuture.join();
         boolean bktAvailable = bktResult.available();
         List<LessonPriorityView> lessonPriorities = bktResult.lessons();
         Map<Long, LessonPriorityView> priorityByLessonId = lessonPriorities.stream()
@@ -316,8 +424,7 @@ public class ProgressAnalyticsService {
         int weakTopicCount = (int) assessedMasteries.stream().filter(m -> m < WEAK_THRESHOLD).count();
         int highestPriorityTopicCount = (int) assessedMasteries.stream().filter(m -> m < HIGHEST_PRIORITY_THRESHOLD).count();
 
-        LearnerMasteryService.ConfidenceResult confidenceResult =
-                learnerMasteryService.getConfidenceForAnalytics(learnerId, certificationId);
+        LearnerMasteryService.ConfidenceResult confidenceResult = confidenceFuture.join();
         Double confidencePercentage = (confidenceResult.available() && confidenceResult.confidence() != null)
                 ? confidenceResult.confidence().confidenceScore() : null;
 
@@ -405,8 +512,7 @@ public class ProgressAnalyticsService {
                 .filter(exam -> passedExamIds.contains(exam.getExamId()))
                 .count();
 
-        Double readinessPercentage = computeReadiness(
-                learnerId, certLessons, attempts, totalLessonCount, completedLessonCount);
+        Double readinessPercentage = readinessScore(readinessFuture.join());
 
         List<CategoryMasteryRow> categoryMastery = buildCategoryMastery(certLessons, priorityByLessonId, completedLessons);
 
@@ -435,8 +541,7 @@ public class ProgressAnalyticsService {
                 .map(l -> toTopicRow(l, lessonById))
                 .toList();
 
-        LearnerMasteryService.MasteryHistoryResult historyResult =
-                learnerMasteryService.getMasteryHistoryForAnalytics(learnerId, certificationId);
+        LearnerMasteryService.MasteryHistoryResult historyResult = historyFuture.join();
         List<MasteryTrendPoint> masteryTrend = historyResult.history().stream()
                 .map(h -> new MasteryTrendPoint(
                         parseDateTime(h.createdAt()),
@@ -645,7 +750,15 @@ public class ProgressAnalyticsService {
         return null;
     }
 
-    private Double computeReadiness(
+    /**
+     * The readiness request, or {@code null} when there is nothing to score.
+     *
+     * <p>Split from the call itself so the request can be built on the request
+     * thread -- it needs the attempts, lesson counts and streak that only the
+     * database can supply -- while the call it feeds runs concurrently with the
+     * rest of the board. {@link #readinessScore} reads the answer back.
+     */
+    private Map<String, Object> buildReadinessRequest(
             Long learnerId,
             List<Lesson> certLessons,
             List<AssessmentAttempt> attempts,
@@ -694,7 +807,11 @@ public class ProgressAnalyticsService {
                 (double) streakDays / STREAK_TARGET_DAYS * 100.0);
         request.put("streak_score", streakScore);
 
-        Map<String, Object> response = learnerMasteryService.getReadiness(request);
+        return request;
+    }
+
+    /** Readiness percentage from the BKT response, or null when unavailable. */
+    private Double readinessScore(Map<String, Object> response) {
         if (response == null || "TEMPORARILY_UNAVAILABLE".equals(response.get("status"))) {
             return null;
         }

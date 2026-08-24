@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
@@ -58,6 +59,58 @@ _OPEN_ENDED_STEMS = (
     "what do you think",
     "how would you",
     "what are the implications",
+)
+
+#: The other shape that cannot be exact-matched: a question asking for a *set*
+#: of things rather than one thing.
+#:
+#: A live run produced "What are the five core activities of the requirements
+#: definition process?" as SHORT_ANSWER. It passes every check above -- no
+#: open-ended stem, and an answer like "Elicitation, analysis, specification,
+#: validation, management" is five words, inside the word limit -- yet no
+#: learner will ever reproduce that exact string, in that exact order, with
+#: that exact punctuation. An enumeration has many correct spellings and no
+#: canonical one, which is precisely what exact matching cannot handle.
+#:
+#: Matched on the stem rather than the answer on purpose. The answer to a
+#: legitimate expansion question ("What does ACID stand for?") is also a
+#: comma-separated list, but it has one canonical form and is a fair exact
+#: match; the difference lives in what was asked, not in how the answer is
+#: punctuated.
+_ENUMERATION_STEMS = (
+    "what are the",
+    "which are the",
+    "name the",
+    "list the",
+    "list three",
+    "list four",
+    "list five",
+    "enumerate",
+    "state the",
+    "identify the",
+    "give the",
+    "what steps",
+    "what phases",
+    "what stages",
+)
+
+#: "the five core activities", "the 3 phases" -- a counted set, whatever verb
+#: introduces it. Catches enumerations the stem list above misses, e.g.
+#: "A requirements process has the five activities of ...?".
+#: Units are excluded, and that exclusion is not hypothetical: three live
+#: questions ask "...long-term goals, typically spanning 3-5 years?" with the
+#: one-term answer "Strategic objectives". Without the carve-out, "5 years"
+#: reads as a counted set and a perfectly good exact-match question loses its
+#: exact matching. A quantity of time or size is a measurement, never a set of
+#: concepts to enumerate.
+_COUNTED_UNIT_NOUNS = (
+    "years", "months", "weeks", "days", "hours", "minutes", "seconds",
+    "decades", "times", "bytes", "bits", "digits", "characters", "percent", "points", "marks",
+)
+
+_COUNTED_SET_PATTERN = re.compile(
+    r"\b(?:two|three|four|five|six|seven|eight|nine|ten|[2-9]|10)\s+"
+    r"(?!(?:" + "|".join(_COUNTED_UNIT_NOUNS) + r")\b)\w+s\b"
 )
 
 #: A genuine short answer is a term, name, value, or acronym -- "Normalization",
@@ -145,17 +198,35 @@ class QuestionDraft(BaseModel):
 
         stem = self.question.strip().lower()
         matched = next((phrase for phrase in _OPEN_ENDED_STEMS if phrase in stem), None)
+        enumeration = next(
+            (phrase for phrase in _ENUMERATION_STEMS if phrase in stem), None
+        )
+        counted = None
+        if enumeration is None:
+            counted_match = _COUNTED_SET_PATTERN.search(stem)
+            counted = counted_match.group(0) if counted_match else None
         too_long = len((self.correct_answer or "").split()) > SHORT_ANSWER_MAX_WORDS
 
-        if matched is None and not too_long:
+        if matched is None and enumeration is None and counted is None and not too_long:
             return self
 
-        reason = (
-            f"the stem asks an open-ended question ({matched!r})"
-            if matched
-            else f"its answer is longer than {SHORT_ANSWER_MAX_WORDS} words, so no exact "
-            "match is possible"
-        )
+        if matched:
+            reason = f"the stem asks an open-ended question ({matched!r})"
+        elif enumeration:
+            reason = (
+                f"the stem asks for a set of things ({enumeration!r}), which has no "
+                "single canonical spelling to match against"
+            )
+        elif counted:
+            reason = (
+                f"the stem asks for a counted set ({counted!r}), which has no single "
+                "canonical spelling to match against"
+            )
+        else:
+            reason = (
+                f"its answer is longer than {SHORT_ANSWER_MAX_WORDS} words, so no exact "
+                "match is possible"
+            )
         logger.info(
             "Reclassifying SHORT_ANSWER as DESCRIPTIVE -- %s: %.80s", reason, self.question
         )

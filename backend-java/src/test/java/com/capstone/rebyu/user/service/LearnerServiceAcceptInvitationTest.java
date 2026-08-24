@@ -16,6 +16,7 @@ import com.capstone.rebyu.user.dto.AcceptInvitationResponse;
 import com.capstone.rebyu.user.entity.Learner;
 import com.capstone.rebyu.user.mapper.LearnerMapper;
 import com.capstone.rebyu.user.repository.LearnerRepository;
+import com.capstone.rebyu.user.service.LearnerDeletionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -52,6 +53,7 @@ class LearnerServiceAcceptInvitationTest {
                 learnerRepository, mock(LearnerMapper.class), invitationRepository,
                 enrollmentRepository, orgCertRepository, new InvitationTokenService(),
                 mock(EnterpriseGroupAssigneeRepository.class),
+                mock(LearnerDeletionService.class),
                 mock(EnterpriseGroupRepository.class),
                 mock(NotificationService.class));
     }

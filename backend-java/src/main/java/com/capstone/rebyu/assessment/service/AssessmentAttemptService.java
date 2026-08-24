@@ -21,7 +21,9 @@ import com.capstone.rebyu.certification.entity.Lesson;
 import com.capstone.rebyu.certification.repository.LessonRepository;
 import com.capstone.rebyu.common.BusinessRuleException;
 import com.capstone.rebyu.enrollment.entity.LearnerCertification;
+import com.capstone.rebyu.enrollment.entity.OrganizationCertificationLearner;
 import com.capstone.rebyu.enrollment.repository.LearnerCertificationRepository;
+import com.capstone.rebyu.enrollment.repository.OrganizationCertificationLearnerRepository;
 import com.capstone.rebyu.execution.dto.CodeExecutionRequestDto;
 import com.capstone.rebyu.execution.dto.CodeExecutionRequestDto.TestCaseInputDto;
 import com.capstone.rebyu.execution.dto.CodeExecutionResultDto;
@@ -50,12 +52,10 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /**
  * Transaction Two: assessment attempt lifecycle. Starts snapshot-based
@@ -82,6 +82,7 @@ public class AssessmentAttemptService {
     private final AssessmentAttemptQuestionRepository attemptQuestionRepository;
     private final AssessmentAttemptAnswerRepository attemptAnswerRepository;
     private final LearnerCertificationRepository learnerCertificationRepository;
+    private final OrganizationCertificationLearnerRepository organizationCertificationLearnerRepository;
     private final ExamResultRepository examResultRepository;
     private final AssessmentAttemptExecutionRepository executionRepository;
     private final QuestionRubricCriterionRepository rubricCriterionRepository;
@@ -92,6 +93,7 @@ public class AssessmentAttemptService {
     private final AiAnswerGradingService aiAnswerGradingService;
     private final CodeExecutionService codeExecutionService;
     private final DiagramGradingService diagramGradingService;
+    private final AttemptGradingBatchService gradingBatchService;
     private final AdaptiveRetakeQuestionSelectionService adaptiveRetakeQuestionSelectionService;
     private final AssessmentEventProducer assessmentEventProducer;
     private final RewardService rewardService;
@@ -255,7 +257,20 @@ public class AssessmentAttemptService {
             questionsToUse = selection.questions();
             retakeBasisJson = selection.retakeBasisJson();
         } else {
-            questionsToUse = examQuestions.stream().map(ExamQuestion::getQuestion).toList();
+            /* Fetched in one query with choices and the type configs, rather
+               than by dereferencing each ExamQuestion's lazy question. Question
+               owns three EAGER inverse-side one-to-ones, so walking the proxies
+               costs three round trips per question on top of the choices --
+               about four times the queries needed to build one paper. */
+            List<Long> baselineIds = examQuestions.stream()
+                    .map(examQuestion -> examQuestion.getQuestion().getQuestionId())
+                    .toList();
+            Map<Long, Question> baselineById = questionRepository.findForAttemptByIdIn(baselineIds).stream()
+                    .collect(Collectors.toMap(Question::getQuestionId, q -> q, (a, b) -> a));
+            questionsToUse = baselineIds.stream()
+                    .map(baselineById::get)
+                    .filter(Objects::nonNull)
+                    .toList();
         }
 
         LocalDateTime now = LocalDateTime.now();
@@ -738,7 +753,30 @@ public class AssessmentAttemptService {
         Optional<LearnerCertification> enrollment = learnerCertificationRepository
                 .findFirstByLearner_LearnerIdAndCertification_CertificationIdAndStatus(
                         learnerId, certificationId, LearnerCertification.Status.active);
-        if (enrollment.isEmpty()) {
+
+        /* Two ways to hold a certification, and both must open its assessments.
+         *
+         * A learner who buys it themselves gets a `learner_certifications` row.
+         * One an organization sponsors gets only an
+         * `organization_certification_learners` row -- `LearnerService
+         * .acceptInvitation` never writes the former, and cannot: that table's
+         * `order_detail_id` is NOT NULL, so it models a *purchase* and a
+         * sponsored seat has no order behind it.
+         *
+         * Checking only the first told every invited learner to "enroll in this
+         * certification" for a certification they had just been invited to and
+         * accepted -- the diagnostic, and therefore the whole curriculum behind
+         * it, was unreachable for anyone an institution sponsored.
+         *
+         * `ProgressAnalyticsService.getProgressAnalytics` already tests both
+         * routes for exactly this reason; this is the same test, applied at the
+         * gate that decides whether an assessment can be opened at all.
+         */
+        boolean organizationSponsored = organizationCertificationLearnerRepository
+                .existsByLearner_LearnerIdAndOrgCert_Certification_CertificationIdAndStatus(
+                        learnerId, certificationId, OrganizationCertificationLearner.Status.active);
+
+        if (enrollment.isEmpty() && !organizationSponsored) {
             return "Enroll in this certification before taking its assessments.";
         }
         String type = exam.getExamType().getExamTypeText();
@@ -751,7 +789,7 @@ public class AssessmentAttemptService {
                         learnerId, Entitlements.MOCK_EXAM_ACCESS, certificationId)) {
             return "This mock exam requires REBYU Pro or an eligible institutional license.";
         }
-        boolean diagnosticSat = diagnosticSat(enrollment.get(), learnerId, certificationId);
+        boolean diagnosticSat = diagnosticSat(enrollment.orElse(null), learnerId, certificationId);
 
         // The diagnostic is a one-time placement check, not a retakeable quiz:
         // once it has completed the enrollment's gate, block starting another.
@@ -789,7 +827,11 @@ public class AssessmentAttemptService {
      * flag on submit, which keeps the common path a single field read.
      */
     private boolean diagnosticSat(LearnerCertification enrollment, Long learnerId, Long certificationId) {
-        if (enrollment.getDiagnosticCompletedAt() != null) {
+        // Null for a sponsored learner: they hold the certification through an
+        // organization allocation, which has no enrollment row to cache the
+        // flag on. The submitted-attempt check below is the real evidence
+        // anyway -- the flag is only ever a shortcut past it.
+        if (enrollment != null && enrollment.getDiagnosticCompletedAt() != null) {
             return true;
         }
         return attemptRepository
@@ -1055,7 +1097,7 @@ public class AssessmentAttemptService {
             // Deterministic structural grading against the admin's reference
             // diagram, immediately finalized — no AI, no admin review.
             if ("DIAGRAM".equals(criticalThinkingType)
-                    && gradeDiagramAnswer(attemptQuestion, source, answer, points)) {
+                    && gradeDiagramAnswer(attemptQuestion, source, answer, points, batch)) {
                 return;
             }
         }
@@ -1104,109 +1146,30 @@ public class AssessmentAttemptService {
     }
 
     /**
-     * Pre-computed results for one submission's expensive graders.
+     * Groups a submission's answers by what actually grades them, and runs
+     * every family concurrently before any scoring begins.
      *
-     * Both maps are keyed by {@code attemptQuestionId}. An absent entry means
-     * nothing was pre-computed for that item, and the grader falls back to
-     * calling out directly -- so this is an optimisation that the correctness
-     * of grading never depends on.
-     */
-    private record GradingBatch(
-            Map<Long, AnswerGradingResultDto> aiResults,
-            Map<Long, CodeExecutionResultDto> codeResults) {
-    }
-
-    /** How many grading calls of one family may be in flight at once. */
-    private static final int GRADING_BATCH_CONCURRENCY = 4;
-
-    /**
-     * Runs one family of blocking grading calls concurrently.
+     * Purely deterministic in-process items -- multiple choice, exact-match
+     * short answers -- are deliberately absent: they are decided by a field
+     * comparison that finishes faster than a task could be handed to a thread,
+     * so they are simply graded in the sequential pass that follows.
      *
-     * Only the network call runs off-thread. Nothing here touches an entity, a
-     * repository, or the EntityManager -- none of which are thread-safe, and
-     * the whole submission runs in one transaction bound to the calling thread,
-     * so every mutation stays on it. The suppliers are pure: request in, result
-     * out.
+     * Everything else is queued here by family and dispatched by
+     * {@link AttemptGradingBatchService}, which starts all three at once.
+     * Diagrams join them not because a graph comparison is slow on its own, but
+     * because it is the one remaining grader that ran strictly one at a time
+     * inside the scoring loop -- so a paper of diagrams paid for every
+     * comparison in sequence while the AI family sat finished and idle.
      *
-     * A task that throws contributes no entry rather than failing the batch,
-     * which leaves its item to the ordinary sequential path and, in turn, to
-     * the retry and the closing fallback below it.
-     */
-    private <T> Map<Long, T> runGradingBatch(Map<Long, Supplier<Optional<T>>> tasks) {
-        if (tasks.isEmpty()) {
-            return Map.of();
-        }
-
-        // One item is not a batch -- a thread pool would cost more than it saves.
-        if (tasks.size() == 1) {
-            Map.Entry<Long, Supplier<Optional<T>>> only = tasks.entrySet().iterator().next();
-            try {
-                Optional<T> value = only.getValue().get();
-                Map<Long, T> single = new LinkedHashMap<>();
-                value.ifPresent(v -> single.put(only.getKey(), v));
-                return single;
-            } catch (RuntimeException ex) {
-                log.warn("Grading call failed for attemptQuestion {}: {}",
-                        only.getKey(), ex.toString());
-                return Map.of();
-            }
-        }
-
-        ExecutorService pool = Executors.newFixedThreadPool(
-                Math.min(tasks.size(), GRADING_BATCH_CONCURRENCY));
-        try {
-            Map<Long, CompletableFuture<Optional<T>>> futures = new LinkedHashMap<>();
-            for (Map.Entry<Long, Supplier<Optional<T>>> entry : tasks.entrySet()) {
-                Supplier<Optional<T>> task = entry.getValue();
-                Long key = entry.getKey();
-                futures.put(key, CompletableFuture.supplyAsync(() -> {
-                    try {
-                        return task.get();
-                    } catch (RuntimeException ex) {
-                        log.warn("Grading call failed for attemptQuestion {}: {}",
-                                key, ex.toString());
-                        return Optional.<T>empty();
-                    }
-                }, pool));
-            }
-
-            Map<Long, T> results = new LinkedHashMap<>();
-            for (Map.Entry<Long, CompletableFuture<Optional<T>>> entry : futures.entrySet()) {
-                try {
-                    entry.getValue().join()
-                            .ifPresent(value -> results.put(entry.getKey(), value));
-                } catch (RuntimeException ex) {
-                    log.warn("Grading call failed for attemptQuestion {}: {}",
-                            entry.getKey(), ex.toString());
-                }
-            }
-            return results;
-        } finally {
-            pool.shutdown();
-        }
-    }
-
-    /**
-     * Groups a submission's answers by what actually grades them, and runs the
-     * two network-bound families concurrently before any scoring begins.
-     *
-     * Deterministic items -- multiple choice, exact-match short answers,
-     * structural diagram comparison -- are deliberately absent: they are
-     * in-process and finish faster than a request could be dispatched, so they
-     * are simply graded in the sequential pass that follows.
-     *
-     * The two families left each make one blocking call per item, and used to
-     * make them strictly one after another: a ten-question paper of written
-     * answers paid ten AI round trips end to end. They now overlap within their
-     * family, so a submission costs roughly the slowest call in each group
-     * rather than the sum of every call.
+     * This method does every repository read the tasks need, because it runs on
+     * the transaction-bound thread and the tasks do not. What it hands over are
+     * closures over plain values.
      */
     private GradingBatch prepareGradingBatch(
             List<AssessmentAttemptQuestion> questions,
             Map<Long, AssessmentAttemptAnswer> answersByQuestion) {
 
-        Map<Long, Supplier<Optional<AnswerGradingResultDto>>> aiTasks = new LinkedHashMap<>();
-        Map<Long, Supplier<Optional<CodeExecutionResultDto>>> codeTasks = new LinkedHashMap<>();
+        AttemptGradingBatchService.Workload workload = new AttemptGradingBatchService.Workload();
 
         for (AssessmentAttemptQuestion attemptQuestion : questions) {
             AssessmentAttemptAnswer answer =
@@ -1228,7 +1191,7 @@ public class AssessmentAttemptService {
             if ("DESCRIPTIVE".equals(type) || isAiSemanticShortAnswer(type, source)) {
                 AnswerGradingRequestDto request = descriptiveGradingRequest(
                         attemptQuestion, source, answer, points);
-                aiTasks.put(key, () -> gradeWithRetry(request));
+                workload.ai(key, () -> gradeWithRetry(request));
                 continue;
             }
 
@@ -1239,7 +1202,7 @@ public class AssessmentAttemptService {
                     AnswerGradingRequestDto request =
                             criticalThinkingGradingRequest(attemptQuestion, source, answer, points);
                     if (request != null) {
-                        aiTasks.put(key, () -> gradeWithRetry(request));
+                        workload.ai(key, () -> gradeWithRetry(request));
                     }
                     continue;
                 }
@@ -1249,15 +1212,46 @@ public class AssessmentAttemptService {
                     String code = answer.getSubmittedCode();
                     String language = answer.getProgrammingLanguage();
                     if (!inputs.isEmpty() && code != null && !code.isBlank()) {
-                        codeTasks.put(key, () -> Optional.ofNullable(
+                        workload.code(key, () -> Optional.ofNullable(
                                 codeExecutionService.execute(
                                         new CodeExecutionRequestDto(language, code, inputs))));
                     }
+                    continue;
+                }
+
+                if ("DIAGRAM".equals(criticalThinkingType)) {
+                    // Queued only when a usable reference exists. The config
+                    // read has to happen here anyway -- it is a repository call,
+                    // and the task itself may not make one -- and it doubles as
+                    // the check that stops us dispatching work whose only
+                    // possible outcome is INVALID_REFERENCE.
+                    diagramGradingRequest(source, answer, points).ifPresent(request ->
+                            workload.diagram(key, () -> Optional.ofNullable(
+                                    diagramGradingService.grade(request))));
                 }
             }
         }
 
-        return new GradingBatch(runGradingBatch(aiTasks), runGradingBatch(codeTasks));
+        return gradingBatchService.run(workload);
+    }
+
+    /**
+     * The comparison request for a diagram answer, or empty when there is
+     * nothing to compare against.
+     *
+     * An absent or blank reference diagram is an authoring gap, never the
+     * learner's fault, and it is the same condition {@link #gradeDiagramAnswer}
+     * treats as "no verdict" -- so recognising it here just avoids paying for
+     * the grader to reach the same conclusion.
+     */
+    private Optional<DiagramGradingRequestDto> diagramGradingRequest(
+            Question source, AssessmentAttemptAnswer answer, BigDecimal points) {
+        return diagramQuestionConfigRepository
+                .findByQuestion_QuestionId(source.getQuestionId())
+                .map(DiagramQuestionConfig::getReferenceDiagramXml)
+                .filter(xml -> xml != null && !xml.isBlank())
+                .map(xml -> new DiagramGradingRequestDto(
+                        xml, answer.getDiagramSubmissionData(), points));
     }
 
     private boolean isAiSemanticShortAnswer(String type, Question source) {
@@ -1384,16 +1378,21 @@ public class AssessmentAttemptService {
             AssessmentAttemptQuestion attemptQuestion,
             Question source,
             AssessmentAttemptAnswer answer,
-            BigDecimal points) {
-        Optional<DiagramQuestionConfig> config = diagramQuestionConfigRepository
-                .findByQuestion_QuestionId(source.getQuestionId());
-        if (config.isEmpty() || config.get().getReferenceDiagramXml() == null
-                || config.get().getReferenceDiagramXml().isBlank()) {
-            return false;
-        }
+            BigDecimal points,
+            GradingBatch batch) {
 
-        DiagramGradingResultDto result = diagramGradingService.grade(new DiagramGradingRequestDto(
-                config.get().getReferenceDiagramXml(), answer.getDiagramSubmissionData(), points));
+        // Normally already compared by the batch, alongside every other family.
+        // The direct call is the fallback for anything the batch did not cover.
+        DiagramGradingResultDto result =
+                batch.diagramResults().get(attemptQuestion.getAttemptQuestionId());
+        if (result == null) {
+            Optional<DiagramGradingRequestDto> request =
+                    diagramGradingRequest(source, answer, points);
+            if (request.isEmpty()) {
+                return false;
+            }
+            result = diagramGradingService.grade(request.get());
+        }
 
         if ("INVALID_REFERENCE".equals(result.status())) {
             // The admin's own reference diagram isn't gradeable — an

@@ -57,6 +57,20 @@ public class GeneratedAssessmentService {
      */
     public static final String GENERATED_TARGET_SCOPE = "GENERATED";
 
+    /**
+     * Longest answer that can fairly be marked by exact string comparison.
+     *
+     * Mirrors {@code SHORT_ANSWER_MAX_WORDS} in the Python generator's
+     * {@code question_schema.py}, which reclassifies any longer short answer
+     * as DESCRIPTIVE for exactly this reason: past a handful of words an
+     * answer is prose, and prose has many correct spellings and no canonical
+     * one. This path never goes through that schema -- flashcards are built
+     * here, in Java, straight from the tutor's response -- so the same limit
+     * has to be applied here or the rule holds on one generation path and not
+     * the other.
+     */
+    private static final int EXACT_MATCH_MAX_WORDS = 6;
+
     private final LessonRepository lessons;
     private final ExamTypeRepository examTypes;
     private final ExamRepository exams;
@@ -179,11 +193,26 @@ public class GeneratedAssessmentService {
             throw new IllegalArgumentException("Every flashcard needs an answer");
         }
 
+        /* A flashcard answer is whatever the tutor wrote, and for a "define
+         * X" card that is a sentence, not a term. Marked by exact string
+         * comparison it is unanswerable -- the learner has to reproduce the
+         * model's wording verbatim, punctuation included -- so a long answer
+         * is graded on meaning instead. `AssessmentAttemptService#scoreAnswer`
+         * already routes SHORT_ANSWER + AI_SEMANTIC through the same grader
+         * descriptive answers use; the card stays a card, it just stops being
+         * impossible.
+         *
+         * Short answers keep EXACT_MATCH: "3NF" or "404" should be marked on
+         * the string, not sent to a model that might accept a near miss.
+         */
+        String answer = item.answer().trim();
+        boolean exactlyMatchable = answer.split("\\s+").length <= EXACT_MATCH_MAX_WORDS;
+
         Question question = newQuestion(lesson, "SHORT_ANSWER", item);
         question.setTextQuestionConfig(TextQuestionConfig.builder()
                 .question(question)
-                .correctAnswer(item.answer().trim())
-                .checkingMethod("EXACT_MATCH")
+                .correctAnswer(answer)
+                .checkingMethod(exactlyMatchable ? "EXACT_MATCH" : "AI_SEMANTIC")
                 .build());
         return question;
     }

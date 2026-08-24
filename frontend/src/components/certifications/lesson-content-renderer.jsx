@@ -2,7 +2,7 @@
 import { motion } from "framer-motion"
 import { getFileViewUrl } from "@/services/fileService.js"
 import { parseLessonStructure } from "@/services/learnerService.js"
-import { RotateCcw } from "@/components/icons"
+import { Maximize, RotateCcw } from "@/components/icons"
 import { Card } from "@/components/ui/card"
 import {
   Accordion,
@@ -11,6 +11,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 
 // Shared, presentational lesson-body renderer -- extracted verbatim from
 // the learner lesson page so the enterprise content viewer renders lessons
@@ -161,6 +162,97 @@ function ImageAttribution({ sourceUrl, sourceName }) {
   )
 }
 
+/**
+ * One fixed box for every lightbox, image and video alike.
+ *
+ * The first version sized the panel to the picture (`w-auto` up to 95vw/90vh),
+ * which meant the viewer's size was decided by whatever the AI happened to
+ * source: a wide org chart took the entire screen while a smaller one opened
+ * barely larger than it had been in the lesson. Opening two diagrams in a row
+ * looked like two different features.
+ *
+ * A fixed panel with `object-contain` inside makes every image land in the same
+ * place at the same size, letterboxing where the aspect does not match -- the
+ * same reasoning the lesson body already applies to its inline media box, just
+ * at viewer scale. Capped at 1000px rather than the viewport so it reads as a
+ * focused viewer rather than a full-screen takeover.
+ */
+//: `p-6` is the gap between the picture and the panel edge. It has to be
+//: explicit and generous because the media is `h-full w-full`: it fills the
+//: content box exactly, so the padding is the *only* thing separating it from
+//: the frame. At `p-4` against an image with a pale background of its own the
+//: two read as one edge-to-edge block with no frame at all.
+//:
+//: The panel keeps DialogContent's own surface -- `bg-popover`, border, rounded
+//: corners, shadow. An earlier version stripped all three to `bg-transparent`,
+//: which looked right only for an image that happened to fill the box exactly:
+//: `object-contain` letterboxes everything else, and with no background those
+//: bands showed the dimmed lesson page straight through. An image with its own
+//: alpha channel washed out against it too. A viewer needs a surface to sit on.
+//:
+//: `place-items-center` because DialogContent is a grid: its only in-flow child
+//: is the media (the title and close control are `sr-only`, so absolutely
+//: positioned and out of flow), and centring it explicitly avoids depending on
+//: how a stretched item resolves `h-full` inside an auto-sized row.
+//: `!max-w-none` is important-flagged to beat the base `sm:max-w-lg` -- that is
+//: a different variant group, so tailwind-merge does not treat it as a conflict
+//: and would otherwise leave it applied above 640px.
+const LIGHTBOX_PANEL =
+    "!max-w-none w-[min(92vw,1000px)] h-[min(78vh,660px)] grid place-items-center p-6"
+const LIGHTBOX_MEDIA = "h-full w-full object-contain"
+
+/**
+ * A lesson image, openable full-screen.
+ *
+ * Every image block sizes its picture to a fixed box (`aspect-video` and
+ * `object-contain`) so a run of them reads as one column rather than a ragged
+ * stack. That is right for the page and wrong for the picture: lesson images
+ * are mostly diagrams, and a diagram letterboxed into a 16:9 slot on a laptop
+ * renders its labels too small to read. This is the way out -- the layout keeps
+ * its uniform box, and the learner can open the image at its own size.
+ *
+ * The lightbox is per-image local state rather than one shared viewer. The
+ * renderer has two entry points -- `LessonContent` for a whole lesson and
+ * `LessonTool` for a single block (the topic page and the admin preview both
+ * use the latter) -- so a viewer hoisted to the top would exist for one and not
+ * the other. A closed Dialog renders nothing, so the cost of one per image is
+ * a boolean.
+ */
+function LessonImage({ imageKey, alt = "", className, sourceUrl, sourceName }) {
+  const [open, setOpen] = useState(false)
+  const src = resolveMediaSrc(imageKey)
+
+  return (
+      <div>
+        {/* A button, not an `onClick` on the img: this has to be reachable by
+            keyboard and announce itself to a screen reader, and only a real
+            control does both for free. `cursor-zoom-in` is the affordance --
+            without it nothing on the page suggests the image opens. */}
+        <button
+            type="button"
+            onClick={() => setOpen(true)}
+            aria-label={alt ? `View "${alt}" full size` : "View image full size"}
+            className="group relative block w-full cursor-zoom-in rounded-[var(--radius-rb-tile)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          <img src={src} alt={alt} className={className} />
+          <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 rounded-[var(--radius-rb-tile)] bg-foreground/0 transition-colors group-hover:bg-foreground/5"
+          />
+        </button>
+
+        <ImageAttribution sourceUrl={sourceUrl} sourceName={sourceName} />
+
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent className={LIGHTBOX_PANEL}>
+            <DialogTitle className="sr-only">{alt || "Lesson image"}</DialogTitle>
+            <img src={src} alt={alt} className={LIGHTBOX_MEDIA} />
+          </DialogContent>
+        </Dialog>
+      </div>
+  )
+}
+
 function getYouTubeEmbedUrl(url) {
   try {
     const parsed = new URL(url)
@@ -178,24 +270,71 @@ function getYouTubeEmbedUrl(url) {
 }
 
 /** Renders a video key as a native player, or an iframe embed for YouTube links. */
+/**
+ * A lesson video, openable full-screen -- the same affordance as
+ * {@link LessonImage}, reached a different way.
+ *
+ * A video cannot use the image's click-anywhere gesture: both players own
+ * their surface. A click on the YouTube iframe belongs to YouTube, and a click
+ * on `<video controls>` is play/pause. So the way in is an explicit control in
+ * the corner instead, which is also why it carries an icon and a label where
+ * the image needs neither.
+ *
+ * The inline player is UNMOUNTED while the lightbox is open. Leaving it
+ * mounted means two copies of the same video exist at once, and if the learner
+ * had it playing when they expanded, its audio keeps going behind the overlay
+ * with no visible way to stop it. The cost is that playback restarts from the
+ * beginning in the lightbox -- the right trade against two soundtracks at once.
+ */
 function VideoBlock({ videoKey, className }) {
+  const [expanded, setExpanded] = useState(false)
   const src = resolveMediaSrc(videoKey)
   if (!src) return null
 
   const embedUrl = getYouTubeEmbedUrl(src)
-  if (embedUrl) {
-    return (
-        <iframe
-            src={embedUrl}
-            title="Lesson video"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            className={className}
-        />
-    )
-  }
+  const player = (playerClassName) =>
+      embedUrl ? (
+          <iframe
+              src={embedUrl}
+              title="Lesson video"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              className={playerClassName}
+          />
+      ) : (
+          <video controls className={playerClassName} src={src} />
+      )
 
-  return <video controls className={className} src={src} />
+  return (
+      <div className="relative">
+        {expanded ? (
+            <div
+                className={`${className} grid place-items-center text-sm text-muted-foreground`}
+                aria-hidden="true"
+            >
+              Playing full size
+            </div>
+        ) : (
+            player(className)
+        )}
+
+        <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            aria-label="View video full size"
+            className="absolute right-3 top-3 z-10 grid size-9 place-items-center rounded-full border-2 border-border/70 bg-background/90 text-foreground shadow-sm transition-colors hover:bg-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          <Maximize className="size-4" />
+        </button>
+
+        <Dialog open={expanded} onOpenChange={setExpanded}>
+          <DialogContent className={LIGHTBOX_PANEL}>
+            <DialogTitle className="sr-only">Lesson video</DialogTitle>
+            {player(`${LIGHTBOX_MEDIA} rounded-[var(--radius-rb-tile)] bg-foreground`)}
+          </DialogContent>
+        </Dialog>
+      </div>
+  )
 }
 
 function renderText(text, className) {
@@ -501,12 +640,12 @@ function LessonTool({ tool, index = 0 }) {
               edges -- exactly the part a learner needs. Contain fits the whole
               image and lets the Muted backing show where the aspect does not
               match. */}
-          <img
-              src={resolveMediaSrc(data.imageKey)}
-              alt=""
+          <LessonImage
+              imageKey={data.imageKey}
               className="aspect-video w-full rounded-[var(--radius-rb-tile)] border-2 border-border/70 bg-muted object-contain"
+              sourceUrl={data.imageSourceUrl}
+              sourceName={data.imageSourceName}
           />
-          <ImageAttribution sourceUrl={data.imageSourceUrl} sourceName={data.imageSourceName} />
         </div>
     ) : null
   }
@@ -522,14 +661,13 @@ function LessonTool({ tool, index = 0 }) {
 
   if (tool.type === "image-left-text" || tool.type === "image-right-text") {
     const image = data.imageKey ? (
-        <div>
-          <img
-              src={resolveMediaSrc(data.imageKey)}
-              alt={data.title ?? ""}
-              className="h-full min-h-72 w-full rounded-[var(--radius-rb-tile)] border-2 border-border/70 bg-muted object-contain"
-          />
-          <ImageAttribution sourceUrl={data.imageSourceUrl} sourceName={data.imageSourceName} />
-        </div>
+        <LessonImage
+            imageKey={data.imageKey}
+            alt={data.title ?? ""}
+            className="h-full min-h-72 w-full rounded-[var(--radius-rb-tile)] border-2 border-border/70 bg-muted object-contain"
+            sourceUrl={data.imageSourceUrl}
+            sourceName={data.imageSourceName}
+        />
     ) : (
         <div className="flex h-full min-h-72 items-center justify-center rounded-[var(--radius-rb-tile)] border-2 border-dashed border-border bg-muted text-muted-foreground">
           No image
@@ -590,12 +728,12 @@ function LessonTool({ tool, index = 0 }) {
                     an image inside a card is still an image, and sizing it by
                     a different rule is what made two of them next to each
                     other look mismatched. */}
-                <img
-                    src={resolveMediaSrc(data.imageKey)}
-                    alt=""
+                <LessonImage
+                    imageKey={data.imageKey}
                     className="aspect-video w-full rounded-[var(--radius-rb-tile)] border-2 border-border/70 bg-muted object-contain"
+                    sourceUrl={data.imageSourceUrl}
+                    sourceName={data.imageSourceName}
                 />
-                <ImageAttribution sourceUrl={data.imageSourceUrl} sourceName={data.imageSourceName} />
               </div>
           ) : null}
         </Card>
@@ -608,12 +746,12 @@ function LessonTool({ tool, index = 0 }) {
           <SectionIntro smallHeader={data.smallHeader} description={data.description} accent={accent} />
           {tool.type === "image-feature-grid" && data.imageKey ? (
               <div>
-                <img
-                    src={resolveMediaSrc(data.imageKey)}
-                    alt=""
+                <LessonImage
+                    imageKey={data.imageKey}
                     className="max-h-[420px] w-full rounded-[var(--radius-rb-tile)] border-2 border-border/70 bg-muted object-contain"
+                    sourceUrl={data.imageSourceUrl}
+                    sourceName={data.imageSourceName}
                 />
-                <ImageAttribution sourceUrl={data.imageSourceUrl} sourceName={data.imageSourceName} />
               </div>
           ) : null}
           <div className="grid auto-rows-fr gap-4 sm:grid-cols-2">
@@ -689,14 +827,13 @@ function LessonTool({ tool, index = 0 }) {
                 </div>
             )
         ) : data.imageKey ? (
-            <div>
-              <img
-                  src={resolveMediaSrc(data.imageKey)}
-                  alt={data.supportingTitle ?? ""}
-                  className="h-full min-h-72 w-full rounded-[var(--radius-rb-tile)] border-2 border-border/70 bg-muted object-contain"
-              />
-              <ImageAttribution sourceUrl={data.imageSourceUrl} sourceName={data.imageSourceName} />
-            </div>
+            <LessonImage
+                imageKey={data.imageKey}
+                alt={data.supportingTitle ?? ""}
+                className="h-full min-h-72 w-full rounded-[var(--radius-rb-tile)] border-2 border-border/70 bg-muted object-contain"
+                sourceUrl={data.imageSourceUrl}
+                sourceName={data.imageSourceName}
+            />
         ) : (
             <div className="flex h-full min-h-72 items-center justify-center rounded-[var(--radius-rb-tile)] border-2 border-dashed border-border bg-muted text-muted-foreground">
               No media

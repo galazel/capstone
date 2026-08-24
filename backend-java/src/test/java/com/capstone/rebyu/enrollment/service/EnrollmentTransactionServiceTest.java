@@ -1,6 +1,7 @@
 package com.capstone.rebyu.enrollment.service;
 
 import com.capstone.rebyu.certification.entity.Certification;
+import com.capstone.rebyu.progress.service.AchievementAwardService;
 import com.capstone.rebyu.certification.repository.CertificationRepository;
 import com.capstone.rebyu.common.BusinessRuleException;
 import com.capstone.rebyu.enrollment.dto.PurchaseDtos.PurchaseTransactionDto;
@@ -35,6 +36,7 @@ class EnrollmentTransactionServiceTest {
     @Mock private LearnerOrderDetailRepository orderDetailRepository;
     @Mock private LearnerCertificationRepository enrollmentRepository;
     @Mock private PaymentVerificationService paymentVerificationService;
+    @Mock private AchievementAwardService achievementAwardService;
 
     private EnrollmentTransactionService service;
 
@@ -45,7 +47,7 @@ class EnrollmentTransactionServiceTest {
     void setUp() {
         service = new EnrollmentTransactionService(
                 certificationRepository, learnerRepository, orderRepository,
-                orderDetailRepository, enrollmentRepository, paymentVerificationService);
+                orderDetailRepository, enrollmentRepository, paymentVerificationService, achievementAwardService);
 
         certification = new Certification();
         certification.setCertificationId(1L);

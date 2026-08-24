@@ -37,6 +37,25 @@ Rules:
   the scope of the problem domain?" is NOT a SHORT_ANSWER -- make it
   DESCRIPTIVE.
 
+  NEVER ask a SHORT_ANSWER question that wants a LIST or a SET of things.
+  The answer must be ONE item, not several. A set has many correct spellings
+  and orderings and no canonical one, so exact matching cannot mark it. Never
+  use: what are the, which are the, list, name the, enumerate, state the,
+  identify the, what steps/phases/stages, or any counted set ("the five
+  activities", "the three layers"). "What are the five core activities of the
+  requirements definition process?" is NOT a SHORT_ANSWER -- make it
+  DESCRIPTIVE, or narrow it to one item ("Which activity of the requirements
+  definition process produces the requirements specification?").
+
+  The one exception is an expansion with a single canonical form, such as
+  "What does ACID stand for?" -- that has exactly one accepted answer even
+  though it is written with commas.
+
+  Case is not significant: the learner's answer is compared lower-cased and
+  trimmed, so "3nf", "3NF" and " 3NF " all mark correct. Do not add
+  capitalisation or whitespace variants to accepted_variations -- use those
+  only for genuinely different wordings ("SQL" / "Structured Query Language").
+
 - DESCRIPTIVE is the type for open-ended questions -- explanation, reasoning,
   analysis, judgement. It is graded on meaning, not exact text, so this is
   where "explain", "why", "discuss", and "compare" questions belong. Set

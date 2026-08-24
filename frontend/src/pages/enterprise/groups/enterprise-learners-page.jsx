@@ -1,11 +1,10 @@
 import { useMemo, useState } from "react"
-import { Link, useOutletContext } from "react-router-dom"
-import { Search, UsersIcon } from "@/components/icons"
+import { Link, useOutletContext, useSearchParams } from "react-router-dom"
+import { ArrowLeftIcon, Search, UsersIcon } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Progress } from "@/components/ui/progress"
 import {
   Select,
   SelectContent,
@@ -25,7 +24,6 @@ import {
   EnterpriseEmptyState,
   EnterpriseErrorState,
   EnterpriseLoadingSkeleton,
-  EnterprisePageHeader,
   EnterpriseStatusBadge,
   formatDate,
 } from "@/components/enterprise/enterprise-ui.jsx"
@@ -40,8 +38,27 @@ export default function EnterpriseLearnersPage() {
   const data = useEnterpriseData(enterprise?.enterpriseId)
 
   const [search, setSearch] = useState("")
-  const [certificationFilter, setCertificationFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
+
+  /* The certification filter lives in the URL rather than in component state.
+     A learner belongs to the certification they were invited to, and that is
+     how they are reached -- the Certifications page links here as
+     ?certification=<id>. Held in `useState` (which is what this was) that
+     parameter was accepted by the router and then silently dropped, so
+     "View learners" on a specific certification always opened the unscoped
+     roster of everyone in the organization. */
+  const [searchParams, setSearchParams] = useSearchParams()
+  const certificationFilter = searchParams.get("certification") ?? "all"
+  const setCertificationFilter = (value) => {
+    setSearchParams(
+      (params) => {
+        if (value === "all") params.delete("certification")
+        else params.set("certification", value)
+        return params
+      },
+      { replace: true }
+    )
+  }
 
   const rows = useMemo(() => {
     return data.assignments
@@ -51,10 +68,12 @@ export default function EnterpriseLearnersPage() {
           ? data.certificationById.get(orgCert.certificationId)
           : null
         const learner = data.learnerById.get(assignment.learnerId)
+        const group = data.groupByOrgCertLearnerId.get(assignment.orgCertLearnerId)
         return {
           assignment,
           learner,
           certification,
+          group,
           name: getLearnerDisplayName(learner),
         }
       })
@@ -74,6 +93,7 @@ export default function EnterpriseLearnersPage() {
             row.name,
             row.learner?.username,
             row.certification?.title,
+            row.group?.groupName,
           ]
             .filter(Boolean)
             .join(" ")
@@ -95,6 +115,15 @@ export default function EnterpriseLearnersPage() {
     return [...seen.entries()]
   }, [data])
 
+  /* Named rather than merely filtered: arriving from one certification, the
+     page has to say which one, or a short roster is indistinguishable from the
+     organization having only one learner. */
+  const scopedCertification =
+    certificationFilter === "all"
+      ? null
+      : (certificationOptions.find(([id]) => String(id) === certificationFilter)?.[1] ??
+        null)
+
   if (enterpriseLoading || (enterprise && data.isLoading)) {
     return <EnterpriseLoadingSkeleton />
   }
@@ -112,10 +141,32 @@ export default function EnterpriseLearnersPage() {
 
   return (
     <div className="space-y-6">
-      <EnterprisePageHeader
-        title="Learners"
-        subtitle="Learners assigned to your organization's certifications."
-      />
+      {scopedCertification ? (
+        <div>
+          <Link
+            to="/enterprise/certifications"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeftIcon className="size-4" aria-hidden="true" />
+            Certifications
+          </Link>
+          <h1 className="mt-2 font-rb-display text-2xl font-extrabold tracking-tight">
+            {scopedCertification} learners
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Learners invited to this certification.
+          </p>
+        </div>
+      ) : (
+        <div>
+          <h1 className="font-rb-display text-2xl font-extrabold tracking-tight">
+            Learners
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Learners assigned to your organization's certifications.
+          </p>
+        </div>
+      )}
 
       {data.isError ? (
         <EnterpriseErrorState onRetry={data.refetchAll} />
@@ -188,19 +239,18 @@ export default function EnterpriseLearnersPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      {/* No Progress column and no per-row drill-in. This is a
+                          roster -- who is on this certification and which group
+                          they are taught in -- not a performance report. */}
                       <TableHead>Learner</TableHead>
                       <TableHead>Certification</TableHead>
-                      <TableHead>Progress</TableHead>
+                      <TableHead>Group</TableHead>
                       <TableHead>Assigned</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {rows.map((row) => {
-                      const progress = Number(
-                        row.assignment.progressPercentage ?? 0
-                      )
                       return (
                         <TableRow key={row.assignment.orgCertLearnerId}>
                           <TableCell>
@@ -214,17 +264,17 @@ export default function EnterpriseLearnersPage() {
                           <TableCell className="max-w-[220px] truncate">
                             {row.certification?.title ?? "—"}
                           </TableCell>
-                          <TableCell className="w-[180px]">
-                            <div className="flex items-center gap-2">
-                              <Progress
-                                value={progress}
-                                className="w-24"
-                                aria-label="Learner progress"
-                              />
-                              <span className="text-xs tabular-nums text-muted-foreground">
-                                {progress.toFixed(0)}%
+                          <TableCell>
+                            {row.group ? (
+                              /* Named, not linked. The group workspace is where
+                                 a leader teaches -- this roster only says which
+                                 group the learner belongs to. */
+                              row.group.groupName
+                            ) : (
+                              <span className="text-sm text-muted-foreground">
+                                Not in a group
                               </span>
-                            </div>
+                            )}
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
                             {formatDate(row.assignment.assignedAt)}
@@ -233,15 +283,6 @@ export default function EnterpriseLearnersPage() {
                             <EnterpriseStatusBadge
                               status={row.assignment.status}
                             />
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button asChild variant="ghost" size="sm">
-                              <Link
-                                to={`/enterprise/learners/${row.assignment.learnerId}`}
-                              >
-                                View
-                              </Link>
-                            </Button>
                           </TableCell>
                         </TableRow>
                       )

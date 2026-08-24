@@ -53,4 +53,35 @@ public interface EnterpriseGroupAssigneeRepository extends JpaRepository<Enterpr
             """)
     List<GroupProgress> groupProgressByEnterprise(
             @org.springframework.data.repository.query.Param("enterpriseId") Long enterpriseId);
+
+    // --- Group membership per assignment (enterprise learner roster) --------
+
+    interface AssignmentGroup {
+        Long getOrgCertLearnerId();
+        Long getEnterpriseGroupId();
+        String getGroupName();
+    }
+
+    /**
+     * The group each assignment belongs to, across one enterprise, in one query.
+     *
+     * Active assignees in active groups only, matching groupProgressByEnterprise
+     * above: an archived membership is history, and showing it on the roster
+     * would name a group the learner is no longer being taught in. A learner
+     * with no active membership simply has no row here -- the roster reads that
+     * as "not in a group" rather than inventing one.
+     */
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT l.orgCertLearnerId AS orgCertLearnerId,
+                   g.enterpriseGroupId AS enterpriseGroupId,
+                   g.groupName AS groupName
+            FROM EnterpriseGroupAssignee a
+            JOIN a.enterpriseGroup g
+            JOIN a.orgCertLearner l
+            WHERE g.enterprise.enterpriseId = :enterpriseId
+              AND a.status = com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroupAssignee.Status.active
+              AND g.status = com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup.Status.active
+            """)
+    List<AssignmentGroup> assignmentGroupsByEnterprise(
+            @org.springframework.data.repository.query.Param("enterpriseId") Long enterpriseId);
 }

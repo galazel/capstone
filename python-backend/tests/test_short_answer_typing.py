@@ -64,6 +64,69 @@ def test_an_open_ended_short_answer_becomes_descriptive(question):
     assert draft.question_type == "DESCRIPTIVE", question
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        # The exact question from the live run: passes the open-ended stem list
+        # and, at five words, the answer-length limit -- yet no learner will
+        # reproduce that string, in that order, with that punctuation.
+        "What are the five core activities of the requirements definition process?",
+        "What are the layers of the OSI model?",
+        "Which are the ACID properties?",
+        "Name the three phases of the compiler front end.",
+        "List the four pillars of OOP.",
+        "Enumerate the SOLID principles.",
+        "State the normalization forms up to BCNF.",
+        "Identify the components of a URL.",
+        "What steps make up the software development life cycle?",
+        "What phases does the waterfall model have?",
+        # Counted set with no listing verb to give it away.
+        "A TCP handshake consists of three messages in what order?",
+    ],
+)
+def test_an_enumeration_short_answer_becomes_descriptive(question):
+    draft = _short(question, "Elicitation, analysis, specification, validation, management")
+    assert draft.question_type == "DESCRIPTIVE", question
+
+
+@pytest.mark.parametrize(
+    ("question", "answer"),
+    [
+        # An expansion has one canonical form, so it is a fair exact match even
+        # though the answer is comma-separated. The rule keys on what was asked.
+        ("What does ACID stand for?", "Atomicity, Consistency, Isolation, Durability"),
+        ("Which HTTP status code means Not Found?", "404"),
+        ("Which normal form eliminates transitive dependencies?", "3NF"),
+        ("What is the time complexity of binary search?", "O(log n)"),
+    ],
+)
+def test_a_single_answer_question_is_not_mistaken_for_an_enumeration(question, answer):
+    draft = _short(question, answer)
+    assert draft.question_type == "SHORT_ANSWER", question
+    assert draft.correct_answer == answer
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        # Three of these are live in the question bank (#104, #107, #112) with
+        # the one-term answer "Strategic objectives". A number followed by a
+        # unit is a measurement, not a set to enumerate, and reclassifying them
+        # would cost a good question its exact matching.
+        "What type of business objective defines long-term goals, typically "
+        "spanning 3-5 years?",
+        "What type of objectives are long-term goals, typically spanning 3-5 "
+        "years, that define an organization's overall direction?",
+        "Which cache eviction policy evicts the entry unused for the most "
+        "minutes?",
+        "What is the maximum payload in 4 bytes?",
+    ],
+)
+def test_a_quantity_of_units_is_not_an_enumeration(question):
+    draft = _short(question, "Strategic objectives")
+    assert draft.question_type == "SHORT_ANSWER", question
+
+
 def test_the_question_text_survives_reclassification():
     """The content is good -- only the type was wrong."""
     question = "What is the importance of defining the scope of the problem domain?"

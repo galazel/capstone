@@ -37,12 +37,15 @@ agent's own system prompt already specifies the structure it produces -- so
 nothing downstream lost information it was actually using.
 """
 
+import logging
 import math
 from typing import Annotated, Any, List
 
 from pydantic import BaseModel, BeforeValidator, WithJsonSchema, model_validator
 
 from app.core.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 def _coerce_str_list(value: Any) -> Any:
@@ -236,6 +239,70 @@ def required_total_lessons() -> int:
     return max(1, math.ceil(smallest_ask * _LESSON_FLOOR_RATIO))
 
 
+def _enforce_ceiling(majors: List[Any]) -> List[Any]:
+    """Trims a plan down to `curriculum_max_*`.
+
+    The max settings were only ever interpolated into the planner's prompt
+    (`agents.certification.curriculum_agent`) and never checked against what
+    came back, so they were a request the model was free to ignore -- and did.
+    A run configured for 2 major categories returned 5 majors / 25 middles /
+    125 lessons on 2026-08-24, reached lesson 77, and died on a 402 with the
+    account balance exhausted having persisted nothing. The knob read like a
+    budget control and was not one.
+
+    Truncated rather than rejected, for the same reason the SHORT_ANSWER
+    reclassification repairs instead of raising: a ValueError here is treated
+    as malformed output and resamples the whole curriculum, which costs another
+    planning call to fix something that is not a quality problem. The plan is
+    good, there is simply more of it than was asked for -- and the caller who
+    set the cap wants the smaller run, not a retry loop. Truncation is free and
+    always succeeds.
+
+    Order is preserved, so what survives is the planner's own leading material,
+    which it writes most-fundamental-first.
+    """
+    settings = get_settings()
+    max_majors = settings.curriculum_max_majors
+    max_middles = settings.curriculum_max_middles
+    max_lessons = settings.curriculum_max_lessons
+
+    def _count(nodes: List[Any]) -> tuple[int, int, int]:
+        mids = [
+            mid
+            for major in nodes
+            if isinstance(major, dict)
+            for mid in (major.get("middleCategories") or [])
+            if isinstance(mid, dict)
+        ]
+        lessons = sum(len(mid.get("lessons") or []) for mid in mids)
+        return len(nodes), len(mids), lessons
+
+    before = _count(majors)
+
+    trimmed: List[Any] = []
+    for major in majors[:max_majors]:
+        if not isinstance(major, dict):
+            trimmed.append(major)
+            continue
+        middles = [
+            {**mid, "lessons": (mid.get("lessons") or [])[:max_lessons]}
+            if isinstance(mid, dict)
+            else mid
+            for mid in (major.get("middleCategories") or [])[:max_middles]
+        ]
+        trimmed.append({**major, "middleCategories": middles})
+
+    after = _count(trimmed)
+    if before != after:
+        logger.warning(
+            "Curriculum exceeded the configured ceiling and was trimmed: "
+            "%d majors/%d middles/%d lessons -> %d/%d/%d "
+            "(caps: %d/%d/%d). The planner does not honour the ask on its own.",
+            *before, *after, max_majors, max_middles, max_lessons,
+        )
+    return trimmed
+
+
 def _require_breadth(majors: List[Any]) -> None:
     lessons = sum(
         len(middle.get("lessons") or [])
@@ -324,6 +391,10 @@ class Curriculum(BaseModel):
             raise ValueError("Curriculum contains no lessons.")
 
         if majors:
+            # Ceiling before floor: trimming can only reduce the plan, and the
+            # floor has to judge what will actually be built, not what the
+            # planner proposed and never gets used.
+            repaired = _enforce_ceiling(repaired)
             _require_breadth(repaired)
 
         return {**value, "majorCategories": repaired}

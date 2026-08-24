@@ -13,6 +13,9 @@ import com.capstone.rebyu.certification.repository.LessonRepository;
 import com.capstone.rebyu.enrollment.entity.LearnerCertification;
 import com.capstone.rebyu.enrollment.repository.LearnerCertificationRepository;
 import com.capstone.rebyu.diagram.service.DiagramGradingService;
+import com.capstone.rebyu.gamification.RewardService;
+import com.capstone.rebyu.gamification.service.StreakService;
+import com.capstone.rebyu.progress.service.AchievementAwardService;
 import com.capstone.rebyu.diagram.service.DiagramGraphExtractor;
 import com.capstone.rebyu.execution.dto.CodeExecutionResultDto;
 import com.capstone.rebyu.execution.service.CodeExecutionService;
@@ -57,6 +60,9 @@ class AssessmentAttemptServiceTest {
     @Mock private CodeExecutionService codeExecutionService;
     @Mock private AdaptiveRetakeQuestionSelectionService adaptiveRetakeQuestionSelectionService;
     @Mock private AssessmentEventProducer assessmentEventProducer;
+    @Mock private RewardService rewardService;
+    @Mock private StreakService streakService;
+    @Mock private AchievementAwardService achievementAwardService;
 
     private AssessmentAttemptService service;
 
@@ -75,7 +81,9 @@ class AssessmentAttemptServiceTest {
                 lessonRepository, learnerEntitlementService, bktOutboxService,
                 new ObjectMapper(), aiAnswerGradingService, codeExecutionService,
                 new DiagramGradingService(new DiagramGraphExtractor()),
-                adaptiveRetakeQuestionSelectionService, assessmentEventProducer);
+                new AttemptGradingBatchService(8, 4, 4),
+                adaptiveRetakeQuestionSelectionService, assessmentEventProducer,
+                rewardService, streakService, achievementAwardService);
 
         Certification certification = new Certification();
         certification.setCertificationId(1L);
@@ -147,6 +155,12 @@ class AssessmentAttemptServiceTest {
                 .examQuestionId(50L).exam(exam).question(mcqQuestion).displayOrder(1).build();
         when(examQuestionRepository.findByExam_ExamIdOrderByDisplayOrderAsc(5L))
                 .thenReturn(List.of(link));
+        // A first attempt now fetches its questions whole in one query rather
+        // than walking each ExamQuestion's lazy proxy (Question drags three
+        // EAGER one-to-one configs behind it, so the proxy walk cost three
+        // extra round trips per question).
+        when(questionRepository.findForAttemptByIdIn(List.of(100L)))
+                .thenReturn(List.of(mcqQuestion));
         when(attemptRepository.save(any())).thenAnswer(inv -> {
             AssessmentAttempt attempt = inv.getArgument(0);
             attempt.setAssessmentAttemptId(77L);

@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react"
-import { useNavigate, useOutletContext } from "react-router-dom"
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import React, { useCallback, useEffect, useMemo, useState } from "react"
+import { useNavigate, useOutletContext, useSearchParams } from "react-router-dom"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { certificationProgressPercent } from "@/lib/certification-progress.js"
 import { toast } from "sonner"
 import {
@@ -50,8 +50,13 @@ import {
 import { FEATURES } from "@/services/subscriptionService.js"
 import {
   PRIORITY_META,
+  PROGRESS_ANALYTICS_PARAM as CERTIFICATION_PARAM,
+  PROGRESS_ANALYTICS_STALE_TIME,
   getProgressAnalytics,
+  progressAnalyticsQueryKey,
 } from "@/services/learnerAnalyticsService.js"
+import { useStudyPlanGate } from "@/components/learner/use-study-plan-gate.jsx"
+import { isDiagnosticCompleted } from "@/pages/learner/learning/learner-learning-page.jsx"
 import {
   DASHBOARD_LAYOUT_KEY,
   getDashboardLayout,
@@ -475,10 +480,41 @@ export default function LearnerProgressPage() {
   const publishedCertifications = data.enrolledCertifications ?? []
   const allLessons = data.lessons ?? []
 
-  const [selectedCertificationId, setSelectedCertificationId] = useState(
-    publishedCertifications[0]?.certificationId
-      ? String(publishedCertifications[0].certificationId)
-      : ""
+  /* The selected certification lives in the URL rather than in component
+     state, and that is a load-time decision, not a routing nicety.
+
+     The learner shell gates this whole page behind its portal request -- until
+     that resolves, `<Outlet>` renders a skeleton and nothing here has mounted.
+     When the selection came from `publishedCertifications[0]`, the analytics
+     request could not even be described until the portal answered, so the two
+     ran strictly one after the other and a refresh paid both in series.
+
+     With the id in the query string it is known before any request completes,
+     which lets the shell start the analytics fetch alongside the portal fetch
+     (see the prefetch in learner-layout.jsx). By the time the gate opens the
+     response is already in flight or in cache. The list below still has the
+     final say on whether the id is one the learner may actually open. */
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedCertificationId = searchParams.get(CERTIFICATION_PARAM) ?? ""
+
+  const setSelectedCertificationId = useCallback(
+    (certificationId) => {
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current)
+          if (certificationId) {
+            next.set(CERTIFICATION_PARAM, String(certificationId))
+          } else {
+            next.delete(CERTIFICATION_PARAM)
+          }
+          return next
+        },
+        // Switching certification is not a navigation the back button should
+        // have to walk through one board at a time.
+        { replace: true }
+      )
+    },
+    [setSearchParams]
   )
 
   useEffect(() => {
@@ -494,10 +530,13 @@ export default function LearnerProgressPage() {
       (certification) => String(certification.certificationId) === selectedCertificationId
     )
 
+    /* Also the correction for a stale or hand-edited `?certification=`: an id
+       the learner has no active enrollment in 404s at the backend, so it is
+       replaced with one they do hold rather than left to fail. */
     if (!selectedStillExists) {
       setSelectedCertificationId(String(publishedCertifications[0].certificationId))
     }
-  }, [publishedCertifications, selectedCertificationId])
+  }, [publishedCertifications, selectedCertificationId, setSelectedCertificationId])
 
   const selectedCertification = useMemo(() => {
     return publishedCertifications.find(
@@ -505,25 +544,29 @@ export default function LearnerProgressPage() {
     )
   }, [publishedCertifications, selectedCertificationId])
 
+  const { openCertification, studyPlanDialog } = useStudyPlanGate()
+
   const analyticsQuery = useQuery({
-    queryKey: ["learner-progress-analytics", selectedCertificationId],
+    queryKey: progressAnalyticsQueryKey(selectedCertificationId),
     queryFn: () => getProgressAnalytics(selectedCertificationId),
     enabled: Boolean(selectedCertificationId),
-    staleTime: 30_000,
+    staleTime: PROGRESS_ANALYTICS_STALE_TIME,
     /* Coming back to this page should not cost a full load again. This response
-       is expensive -- three round trips to the BKT service on top of the
-       certification's attempts, lessons and exams -- and the default five-minute
+       is expensive -- four calls to the BKT service, now made concurrently but
+       still on top of the certification's attempts, lessons and exams -- and
+       the default five-minute
        cache lifetime meant leaving the page for longer than that and returning
        started from an empty board. The data is a learner's own history, so an
        hour-old copy on screen for the second it takes to refresh is fine. */
     gcTime: 60 * 60_000,
-    /* Switching certification changes the query key, which is a *new* query with
-       no data -- so the whole board was replaced by the skeleton every time,
-       even though the previous certification's board was still on screen and
-       still valid. Keeping it means the switch reads as the numbers updating
-       rather than the page reloading; `analyticsQuery.isPlaceholderData` marks
-       the moment for the subtle cue below. */
-    placeholderData: keepPreviousData,
+    /* Deliberately no `placeholderData: keepPreviousData` here. Carrying the
+       previous board across a key change made the switch read as the numbers
+       updating rather than the page reloading -- but what a learner actually
+       saw was another certification's mastery, readiness and weakest topic
+       sitting under the name of the one they had just picked. Numbers that are
+       wrong for the certification on screen are worse than no numbers, however
+       briefly they show. A new certification is a new query with no data, so
+       the board falls to `AnalyticsLoadingSkeleton` until its own data lands. */
     // Mastery numbers land asynchronously after a diagnostic or assessment --
     // poll while the BKT service hasn't caught up yet so the banner below
     // clears itself the moment it does, instead of needing a manual refresh.
@@ -531,7 +574,9 @@ export default function LearnerProgressPage() {
     // Ten seconds, not four: each of these requests makes the BKT service calls
     // again, and when that service is the thing not answering, a four-second
     // poll queues up requests that each wait on its timeout -- the page gets
-    // slower the longer it fails.
+    // slower the longer it fails. Running those calls concurrently caps one
+    // failed attempt at a single timeout rather than four, which shortens the
+    // pile-up but does not remove it.
     refetchInterval: (query) => (query.state.data?.bktAvailable === false ? 10_000 : false),
   })
   const analytics = analyticsQuery.data
@@ -571,17 +616,39 @@ export default function LearnerProgressPage() {
    * a click that goes nowhere.
    */
   const goToLesson = (lesson) => {
-    if (lesson?.certificationId && lesson?.middleCategoryId) {
-      const query = lesson.lessonId == null ? "" : `?lesson=${lesson.lessonId}`
-      navigate(
-        `/learner/learning/${lesson.certificationId}/topics/${lesson.middleCategoryId}${query}`,
-      )
+    const lessonPath =
+      lesson?.certificationId && lesson?.middleCategoryId
+        ? `/learner/learning/${lesson.certificationId}/topics/${lesson.middleCategoryId}` +
+          (lesson.lessonId == null ? "" : `?lesson=${lesson.lessonId}`)
+        : null
+
+    if (!lessonPath && !selectedCertificationId) {
       return
     }
 
-    if (selectedCertificationId) {
-      navigate(`/learner/learning/${selectedCertificationId}`)
-    }
+    /* Through the shared gate, not straight to the lesson.
+     *
+     * This board was a third way into a curriculum, and the only one that
+     * skipped `useStudyPlanGate` -- the same failure its own comment records
+     * about the certifications page ("two entry points, one of them silently
+     * missing the gate"). A learner who had sat no diagnostic and built no
+     * study plan pressed "study now" here and landed inside a lesson, past
+     * both.
+     *
+     * The deep link is only offered once the diagnostic is behind them. Before
+     * that, `to` is left undefined so the gate falls back to the curriculum,
+     * which is the screen that keeps every stop locked and offers the
+     * diagnostic itself -- deep-linking into a topic jumps exactly that.
+     */
+    const diagnosticDone = isDiagnosticCompleted(selectedCertification, data)
+
+    openCertification(
+      selectedCertification ?? { certificationId: selectedCertificationId },
+      {
+        diagnosticCompleted: diagnosticDone,
+        to: diagnosticDone ? (lessonPath ?? undefined) : undefined,
+      },
+    )
   }
 
   const resumeNextLesson = () => {
@@ -1483,11 +1550,12 @@ export default function LearnerProgressPage() {
             the page. `ml-auto` on the picker holds them to the right now that
             nothing occupies the left of the row. */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* The board below stays on the previous certification's numbers while
-              the new ones load, so this is what says the page heard the switch.
-              A spinner in the control that was just used, rather than a skeleton
-              where the board was. */}
-          {analyticsQuery.isPlaceholderData || analyticsQuery.isFetching ? (
+          {/* A switch now shows the skeleton, so this no longer marks that.
+              What is left for it to say is that an already-rendered board is
+              refreshing in the background -- a poll for late-arriving BKT
+              mastery, or a return to the page -- where there is nothing else
+              on screen to show it. */}
+          {analyticsQuery.isFetching && !analyticsQuery.isLoading ? (
             <span className="ml-auto flex items-center gap-2 text-xs font-medium text-muted-foreground">
               <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
               Updating
@@ -1602,6 +1670,10 @@ export default function LearnerProgressPage() {
             />
           </>
         )}
+
+        {/* The gate's own dialog. Without it mounted, `openCertification` can
+            offer a study plan on this page and have nothing to render it in. */}
+        {studyPlanDialog}
       </div>
     </LearnerPremiumGuard>
   )

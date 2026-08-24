@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from "react"
+import React, { useEffect, useMemo, useState } from "react"
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   CalendarDays,
   LogOutIcon,
@@ -25,7 +25,13 @@ import {
   getLearnerDisplayName,
 } from "@/components/learner/learner-ui.jsx"
 import { LearnerStatusStrip } from "@/components/learner/learner-status-strip.jsx"
-import { getLearnerPortalData } from "@/services/learnerAnalyticsService.js"
+import {
+  PROGRESS_ANALYTICS_PARAM,
+  PROGRESS_ANALYTICS_STALE_TIME,
+  getLearnerPortalData,
+  getProgressAnalytics,
+  progressAnalyticsQueryKey,
+} from "@/services/learnerAnalyticsService.js"
 import { useAuth } from "@/context/auth-context.jsx"
 import { NotificationBell } from "@/components/notification-bell.jsx"
 import { getLearnerInvitations } from "@/services/enterpriseService.js"
@@ -79,6 +85,41 @@ export default function LearnerLayout() {
        return is instant and the refresh happens behind the page already drawn. */
     gcTime: 60 * 60_000,
   })
+
+  /* Start the analytics board's own request now, next to the portal request,
+     instead of after it.
+
+     `query` below gates `<Outlet>`: until the portal responds every page under
+     this shell is a skeleton and none of them has mounted, so the analytics
+     board could not begin loading until the portal had finished -- two waits in
+     series on every refresh, each of them a round trip to a database an ocean
+     away plus the board's own calls to the BKT service.
+
+     The board keeps its certification in the query string precisely so it can
+     be read here, before anything has resolved. Prefetching under the shared
+     key means the `useQuery` the board runs when it finally mounts attaches to
+     this same request rather than starting a second one -- so the two waits
+     overlap and the refresh costs the slower of them, not their sum.
+
+     Only for the board's own route: no other page reads this key, and
+     prefetching it elsewhere would be a request nobody is going to render. */
+  const queryClient = useQueryClient()
+  const isProgressBoardRoute = /^\/learner\/(analytics|progress)\/?$/.test(location.pathname)
+  const prefetchCertificationId = isProgressBoardRoute
+    ? new URLSearchParams(location.search).get(PROGRESS_ANALYTICS_PARAM)
+    : null
+
+  useEffect(() => {
+    if (!prefetchCertificationId) {
+      return
+    }
+
+    queryClient.prefetchQuery({
+      queryKey: progressAnalyticsQueryKey(prefetchCertificationId),
+      queryFn: () => getProgressAnalytics(prefetchCertificationId),
+      staleTime: PROGRESS_ANALYTICS_STALE_TIME,
+    })
+  }, [queryClient, prefetchCertificationId])
 
   const displayName = getLearnerDisplayName(query.data)
   const email = query.data?.user?.email ?? query.data?.identity?.email ?? ""

@@ -52,17 +52,15 @@ const EnterpriseMemberDashboardPage = lazy(() => import("./pages/enterprise/dash
 const EnterpriseGroupWorkspacePage = lazy(() => import("./pages/enterprise/groups/enterprise-group-workspace-page.jsx"))
 const EnterpriseGroupLearnerPage = lazy(() => import("./pages/enterprise/groups/enterprise-group-learner-page.jsx"))
 const EnterpriseLearnersPage = lazy(() => import("./pages/enterprise/groups/enterprise-learners-page.jsx"))
-const EnterpriseLearnerDetailPage = lazy(() => import("./pages/enterprise/groups/enterprise-learner-detail-page.jsx"))
 const EnterpriseCertificationsPage = lazy(() => import("./pages/enterprise/certifications/enterprise-certifications-page.jsx"))
 const EnterpriseCertificationDetailPage = lazy(() => import("./pages/enterprise/certifications/enterprise-certification-detail-page.jsx"))
 const EnterpriseCertificationViewerPage = lazy(() => import("./pages/enterprise/certifications/enterprise-certification-viewer-page.jsx"))
 const EnterpriseAssessmentBuilderPage = lazy(() => import("./pages/enterprise/certifications/enterprise-assessment-builder-page.jsx"))
 const EnterpriseGroupsPage = lazy(() => import("./pages/enterprise/groups/enterprise-groups-page.jsx"))
-const EnterpriseLicensePage = lazy(() => import("./pages/enterprise/account/enterprise-license-page.jsx"))
-const EnterprisePartnershipPage = lazy(() => import("./pages/enterprise/account/enterprise-partnership-page.jsx"))
-const EnterpriseBillingPage = lazy(() => import("./pages/enterprise/account/enterprise-billing-page.jsx"))
-const EnterpriseFilesPage = lazy(() => import("./pages/enterprise/account/enterprise-files-page.jsx"))
-const EnterpriseOrganizationPage = lazy(() => import("./pages/enterprise/account/enterprise-organization-page.jsx"))
+// Profile, Partnership, License, Billing and Files are one tabbed page --
+// see enterprise-account-page.jsx. The five paths are kept so existing links
+// still resolve; each one opens its own tab.
+const EnterpriseAccountPage = lazy(() => import("./pages/enterprise/account/enterprise-account-page.jsx"))
 const EnterpriseQuestionBankPage = lazy(() => import("./pages/enterprise/certifications/enterprise-question-bank-page.jsx"))
 const EnterpriseRequestAccessPage = lazy(() => import("./pages/public/enterprise-request-access-page.jsx"))
 const CompilerArea = lazy(() => import("./pages/challenges/compiler-area-page.jsx"))
@@ -331,11 +329,13 @@ export function App() {
                     {/* Enterprise Member (group leader) home; the per-group
                         workspace route is defined alongside the groups routes below. */}
                     <Route path="member" element={<EnterpriseMemberDashboardPage />} />
+                    {/* The roster only. Its per-learner detail page was reached
+                        from a "View" action that no longer exists -- an
+                        organization sees who is on a certification and which
+                        group teaches them, not an individual's performance
+                        record. The group workspace is where a leader works with
+                        a learner. */}
                     <Route path="learners" element={<EnterpriseLearnersPage />} />
-                    <Route
-                        path="learners/:learnerId"
-                        element={<EnterpriseLearnerDetailPage />}
-                    />
                     <Route
                         path="certifications"
                         element={<EnterpriseCertificationsPage />}
@@ -374,7 +374,7 @@ export function App() {
                         element={<EnterpriseCertificationViewerPage />}
                     />
                     <Route path="question-bank" element={<EnterpriseQuestionBankPage />} />
-                    <Route path="license" element={<EnterpriseLicensePage />} />
+                    <Route path="license" element={<EnterpriseAccountPage />} />
                     {/* Analytics is not a second page. It was a separate route
                         that recomputed the same cohort figures from a second read
                         of the same data, next to trend panels on placeholder
@@ -382,10 +382,10 @@ export function App() {
                         invented. Same arrangement as the learner portal, where
                         /learner/dashboard and /learner/analytics are one board. */}
                     <Route path="analytics" element={<Navigate to="/enterprise/dashboard" replace />} />
-                    <Route path="partnership" element={<EnterprisePartnershipPage />} />
-                    <Route path="billing" element={<EnterpriseBillingPage />} />
-                    <Route path="files" element={<EnterpriseFilesPage />} />
-                    <Route path="organization" element={<EnterpriseOrganizationPage />} />
+                    <Route path="partnership" element={<EnterpriseAccountPage />} />
+                    <Route path="billing" element={<EnterpriseAccountPage />} />
+                    <Route path="files" element={<EnterpriseAccountPage />} />
+                    <Route path="organization" element={<EnterpriseAccountPage />} />
                 </Route>
             </Route>
 

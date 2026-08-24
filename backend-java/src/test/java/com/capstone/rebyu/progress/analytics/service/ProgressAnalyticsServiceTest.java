@@ -9,7 +9,9 @@ import com.capstone.rebyu.assessment.entity.Question;
 import com.capstone.rebyu.assessment.repository.AssessmentAttemptAnswerRepository;
 import com.capstone.rebyu.assessment.repository.AssessmentAttemptQuestionRepository;
 import com.capstone.rebyu.assessment.repository.AssessmentAttemptRepository;
+import com.capstone.rebyu.assessment.repository.ExamRepository;
 import com.capstone.rebyu.assessment.repository.QuestionRepository;
+import com.capstone.rebyu.assessment.repository.QuestionSelectionView;
 import com.capstone.rebyu.bkt.dto.ConfidenceView;
 import com.capstone.rebyu.bkt.dto.LessonPriorityView;
 import com.capstone.rebyu.bkt.dto.MasteryHistoryView;
@@ -25,7 +27,10 @@ import com.capstone.rebyu.challenge.entity.ChallengeMode;
 import com.capstone.rebyu.challenge.entity.ChallengeSession;
 import com.capstone.rebyu.challenge.repository.ChallengeSessionRepository;
 import com.capstone.rebyu.enrollment.entity.LearnerCertification;
+import com.capstone.rebyu.enrollment.entity.OrganizationCertificationLearner;
 import com.capstone.rebyu.enrollment.repository.LearnerCertificationRepository;
+import com.capstone.rebyu.enrollment.repository.OrganizationCertificationLearnerRepository;
+import com.capstone.rebyu.gamification.service.StreakService;
 import com.capstone.rebyu.progress.entity.LearnerCompletedLesson;
 import com.capstone.rebyu.progress.entity.LearnerCompletedLessonId;
 import com.capstone.rebyu.progress.repository.LearnerCompletedLessonRepository;
@@ -64,8 +69,11 @@ class ProgressAnalyticsServiceTest {
     private AssessmentAttemptQuestionRepository attemptQuestionRepository;
     private AssessmentAttemptAnswerRepository attemptAnswerRepository;
     private QuestionRepository questionRepository;
+    private ExamRepository examRepository;
+    private StreakService streakService;
     private ChallengeSessionRepository challengeSessionRepository;
     private LessonRepository lessonRepository;
+    private OrganizationCertificationLearnerRepository organizationCertificationLearnerRepository;
     private LearnerCompletedLessonRepository learnerCompletedLessonRepository;
     private LearnerMasteryService learnerMasteryService;
     private BktEventFactory bktEventFactory;
@@ -80,8 +88,11 @@ class ProgressAnalyticsServiceTest {
         attemptQuestionRepository = mock(AssessmentAttemptQuestionRepository.class);
         attemptAnswerRepository = mock(AssessmentAttemptAnswerRepository.class);
         questionRepository = mock(QuestionRepository.class);
+        examRepository = mock(ExamRepository.class);
+        streakService = mock(StreakService.class);
         challengeSessionRepository = mock(ChallengeSessionRepository.class);
         lessonRepository = mock(LessonRepository.class);
+        organizationCertificationLearnerRepository = mock(OrganizationCertificationLearnerRepository.class);
         learnerCompletedLessonRepository = mock(LearnerCompletedLessonRepository.class);
         learnerMasteryService = mock(LearnerMasteryService.class);
         bktEventFactory = mock(BktEventFactory.class);
@@ -93,11 +104,19 @@ class ProgressAnalyticsServiceTest {
                 attemptQuestionRepository,
                 attemptAnswerRepository,
                 questionRepository,
+                examRepository,
+                streakService,
                 challengeSessionRepository,
                 lessonRepository,
+                organizationCertificationLearnerRepository,
                 learnerCompletedLessonRepository,
                 learnerMasteryService,
-                bktEventFactory);
+                bktEventFactory,
+                /* Same thread, so the BKT fan-out inside the service runs in
+                   submission order and these tests stay deterministic. The
+                   concurrency is a latency optimisation; no assertion here
+                   depends on it. */
+                Runnable::run);
 
         // Default happy-path wiring; individual tests override as needed.
         when(certificationRepository.findById(CERT_ID)).thenReturn(Optional.of(certification(CERT_ID, "Cert")));
@@ -105,8 +124,15 @@ class ProgressAnalyticsServiceTest {
                 eq(LEARNER_ID), eq(CERT_ID), eq(LearnerCertification.Status.active))).thenReturn(true);
         when(assessmentAttemptRepository.findByLearnerIdAndExam_Certification_CertificationIdAndStatus(
                 eq(LEARNER_ID), eq(CERT_ID), eq(AssessmentAttempt.Status.SUBMITTED))).thenReturn(List.of());
+        when(organizationCertificationLearnerRepository
+                .existsByLearner_LearnerIdAndOrgCert_Certification_CertificationIdAndStatus(
+                        eq(LEARNER_ID), eq(CERT_ID), eq(OrganizationCertificationLearner.Status.active)))
+                .thenReturn(false);
+        when(examRepository.findByCertification_CertificationId(CERT_ID)).thenReturn(List.of());
+        when(streakService.getStreak(LEARNER_ID))
+                .thenReturn(new StreakService.StreakView(0, 0, null, null));
         when(challengeSessionRepository.findByLearner_LearnerId(LEARNER_ID)).thenReturn(List.of());
-        when(lessonRepository.findAllWithCategoriesByCertificationId(CERT_ID)).thenReturn(List.of());
+        when(lessonRepository.findByMiddleCategory_MajorCategory_Certification_CertificationIdAndMiddleCategory_MajorCategory_OwnerGroupIsNull(CERT_ID)).thenReturn(List.of());
         when(learnerCompletedLessonRepository
                 .findByLearner_LearnerIdAndLesson_MiddleCategory_MajorCategory_Certification_CertificationId(
                         LEARNER_ID, CERT_ID)).thenReturn(List.of());
@@ -202,9 +228,18 @@ class ProgressAnalyticsServiceTest {
                 .build();
     }
 
-    private Question question(Long id, String difficulty) {
-        return Question.builder().questionId(id).questionType("MULTIPLE_CHOICE")
-                .difficultyLevel(difficulty).questionText("q").totalPoints(BigDecimal.ONE).build();
+    /**
+     * Analytics reads difficulty off a projection now, not a whole Question --
+     * loading the entity cost three extra queries per row for one string.
+     */
+    private QuestionSelectionView difficultyView(Long id, String difficulty) {
+        return new QuestionSelectionView() {
+            @Override public Long getQuestionId() { return id; }
+            @Override public Long getLessonId() { return null; }
+            @Override public String getDifficultyLevel() { return difficulty; }
+            @Override public String getQuestionText() { return "q"; }
+            @Override public Long getOwnerGroupId() { return null; }
+        };
     }
 
     private LessonPriorityView priority(Long lessonId, String title, Double mastery, String tag, Integer evidenceCount) {
@@ -293,7 +328,7 @@ class ProgressAnalyticsServiceTest {
         MiddleCategory middle = middleCategory(1L, "Middle", major);
         Lesson lessonA = lesson(10L, "Lesson A", middle);
         Lesson lessonB = lesson(11L, "Lesson B", middle);
-        when(lessonRepository.findAllWithCategoriesByCertificationId(CERT_ID)).thenReturn(List.of(lessonA, lessonB));
+        when(lessonRepository.findByMiddleCategory_MajorCategory_Certification_CertificationIdAndMiddleCategory_MajorCategory_OwnerGroupIsNull(CERT_ID)).thenReturn(List.of(lessonA, lessonB));
         when(learnerMasteryService.getLessonPrioritiesForAnalytics(LEARNER_ID, CERT_ID))
                 .thenReturn(new LearnerMasteryService.LessonPrioritiesResult(
                         List.of(priority(10L, "Lesson A", 0.9, "STRONG", 5)), true));
@@ -311,7 +346,7 @@ class ProgressAnalyticsServiceTest {
         MajorCategory major = majorCategory(1L, "Major");
         MiddleCategory middle = middleCategory(1L, "Middle", major);
         Lesson onlyLesson = lesson(20L, "Untouched", middle);
-        when(lessonRepository.findAllWithCategoriesByCertificationId(CERT_ID)).thenReturn(List.of(onlyLesson));
+        when(lessonRepository.findByMiddleCategory_MajorCategory_Certification_CertificationIdAndMiddleCategory_MajorCategory_OwnerGroupIsNull(CERT_ID)).thenReturn(List.of(onlyLesson));
         when(learnerMasteryService.getLessonPrioritiesForAnalytics(LEARNER_ID, CERT_ID))
                 .thenReturn(new LearnerMasteryService.LessonPrioritiesResult(List.of(), true));
 
@@ -332,8 +367,15 @@ class ProgressAnalyticsServiceTest {
                 eq(LEARNER_ID), eq(otherCertId), eq(LearnerCertification.Status.active))).thenReturn(true);
         when(assessmentAttemptRepository.findByLearnerIdAndExam_Certification_CertificationIdAndStatus(
                 eq(LEARNER_ID), eq(otherCertId), eq(AssessmentAttempt.Status.SUBMITTED))).thenReturn(List.of());
+        when(organizationCertificationLearnerRepository
+                .existsByLearner_LearnerIdAndOrgCert_Certification_CertificationIdAndStatus(
+                        eq(LEARNER_ID), eq(CERT_ID), eq(OrganizationCertificationLearner.Status.active)))
+                .thenReturn(false);
+        when(examRepository.findByCertification_CertificationId(CERT_ID)).thenReturn(List.of());
+        when(streakService.getStreak(LEARNER_ID))
+                .thenReturn(new StreakService.StreakView(0, 0, null, null));
         when(challengeSessionRepository.findByLearner_LearnerId(LEARNER_ID)).thenReturn(List.of());
-        when(lessonRepository.findAllWithCategoriesByCertificationId(otherCertId)).thenReturn(List.of());
+        when(lessonRepository.findByMiddleCategory_MajorCategory_Certification_CertificationIdAndMiddleCategory_MajorCategory_OwnerGroupIsNull(otherCertId)).thenReturn(List.of());
         when(learnerCompletedLessonRepository
                 .findByLearner_LearnerIdAndLesson_MiddleCategory_MajorCategory_Certification_CertificationId(
                         LEARNER_ID, otherCertId)).thenReturn(List.of());
@@ -360,7 +402,7 @@ class ProgressAnalyticsServiceTest {
         MiddleCategory middle = middleCategory(1L, "Middle", major);
         Lesson assessed = lesson(30L, "Assessed", middle);
         Lesson unassessed = lesson(31L, "Unassessed", middle);
-        when(lessonRepository.findAllWithCategoriesByCertificationId(CERT_ID)).thenReturn(List.of(assessed, unassessed));
+        when(lessonRepository.findByMiddleCategory_MajorCategory_Certification_CertificationIdAndMiddleCategory_MajorCategory_OwnerGroupIsNull(CERT_ID)).thenReturn(List.of(assessed, unassessed));
         when(learnerMasteryService.getLessonPrioritiesForAnalytics(LEARNER_ID, CERT_ID))
                 .thenReturn(new LearnerMasteryService.LessonPrioritiesResult(
                         List.of(priority(30L, "Assessed", 0.6, "MEDIUM_PRIORITY", 3)), true));
@@ -419,8 +461,9 @@ class ProgressAnalyticsServiceTest {
                 answer(pendingQ, null, true)
                 // unansweredQ has no answer row at all
         ));
-        when(questionRepository.findAllById(any())).thenReturn(List.of(
-                question(101L, "EASY"), question(102L, "HARD"), question(103L, "EASY"), question(104L, "EASY")));
+        when(questionRepository.findSelectionViewsByIdIn(any())).thenReturn(List.of(
+                difficultyView(101L, "EASY"), difficultyView(102L, "HARD"),
+                difficultyView(103L, "EASY"), difficultyView(104L, "EASY")));
 
         ProgressAnalyticsResponse response = service.getProgressAnalytics(LEARNER_ID, CERT_ID);
 
