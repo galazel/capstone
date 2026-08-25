@@ -3,6 +3,7 @@ services:
 
   postgres:
     image: postgres:16-alpine
+    profiles: ["local"]
     environment:
       POSTGRES_DB: rebyu
       POSTGRES_USER: rebyu
@@ -69,12 +70,6 @@ services:
     env_file:
       - backend-java/.env
     environment:
-      DB_URL: jdbc:postgresql://postgres:5432/rebyu
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_DATABASE: rebyu
-      DB_USERNAME: rebyu
-      DB_PASSWORD: rebyu
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
       RABBITMQ_USERNAME: guest
@@ -88,8 +83,6 @@ services:
       retries: 20
       start_period: 100s
     depends_on:
-      postgres:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     networks:
@@ -113,7 +106,6 @@ services:
     env_file:
       - python-backend/.env
     environment:
-      DATABASE_URL: postgresql+psycopg://rebyu:rebyu@postgres:5432/rebyu
       DB_SCHEMA: bkt
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
@@ -125,8 +117,6 @@ services:
       - ./python-backend:/app
       - python_artifacts:/app/artifacts
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
@@ -144,7 +134,6 @@ services:
     env_file:
       - python-backend/.env
     environment:
-      DATABASE_URL: postgresql+psycopg://rebyu:rebyu@postgres:5432/rebyu
       DB_SCHEMA: bkt
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
@@ -156,8 +145,6 @@ services:
       - ./python-backend:/app
       - python_artifacts:/app/artifacts
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
@@ -178,7 +165,6 @@ services:
     env_file:
       - python-backend/.env
     environment:
-      DATABASE_URL: postgresql+psycopg://rebyu:rebyu@postgres:5432/rebyu
       DB_SCHEMA: bkt
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
@@ -190,8 +176,6 @@ services:
       - ./python-backend:/app
       - python_artifacts:/app/artifacts
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
@@ -209,6 +193,7 @@ services:
   # Safe to re-run -- skips any table that already has rows.
   db-seed:
     image: postgres:16-alpine
+    profiles: ["local"]
     entrypoint: ["sh", "/seed/seed.sh"]
     environment:
       DB_HOST: postgres
