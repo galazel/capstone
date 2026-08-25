@@ -1,6 +1,6 @@
 package com.capstone.rebyu.billing.entity;
 
-import com.capstone.rebyu.organization.entity.Enterprise;
+import com.capstone.rebyu.organization.entity.Institution;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/** An enterprise's (B2B) institutional license to an institution plan. */
+/** An institution's (B2B) institutional license to an institution plan. */
 @Entity
 @Table(name = "institutional_licenses")
 @Data
@@ -23,8 +23,8 @@ public class InstitutionalLicense {
     private Long institutionalLicenseId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "enterprise_id", nullable = false)
-    private Enterprise enterprise;
+    @JoinColumn(name = "institution_id", nullable = false)
+    private Institution institution;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "subscription_plan_id", nullable = false)

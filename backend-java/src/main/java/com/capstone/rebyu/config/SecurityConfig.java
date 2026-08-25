@@ -54,29 +54,29 @@ public class SecurityConfig {
                         // Progress analytics resolves the learner strictly from
                         // the validated token — never from a client-supplied id.
                         .requestMatchers("/api/learners/me/**").authenticated()
-                        // Admin partnership review, enterprise group/authority/
+                        // Admin partnership review, institution group/authority/
                         // assignee management, and invitation sending all now
-                        // resolve the caller's identity/enterprise from the
-                        // token — never from client-supplied enterpriseId/
+                        // resolve the caller's identity/institution from the
+                        // token — never from client-supplied institutionId/
                         // createdBy/assignedBy fields.
                         .requestMatchers("/api/admin/partnership-requests/**").authenticated()
-                        .requestMatchers("/api/enterprise-groups/**").authenticated()
-                        .requestMatchers("/api/enterprise-group-authorities/**").authenticated()
-                        .requestMatchers("/api/enterprise-group-assignees/**").authenticated()
-                        .requestMatchers("/api/enterprise/invitations/**").authenticated()
-                        .requestMatchers("/api/enterprise/certification-access").authenticated()
-                        .requestMatchers("/api/enterprise/partnership-requests/**").authenticated()
-                        // Tenant-scoped enterprise portal reads: enterpriseId is resolved
+                        .requestMatchers("/api/institution-groups/**").authenticated()
+                        .requestMatchers("/api/institution-group-authorities/**").authenticated()
+                        .requestMatchers("/api/institution-group-assignees/**").authenticated()
+                        .requestMatchers("/api/institution/invitations/**").authenticated()
+                        .requestMatchers("/api/institution/certification-access").authenticated()
+                        .requestMatchers("/api/institution/partnership-requests/**").authenticated()
+                        // Tenant-scoped institution portal reads: institutionId is resolved
                         // from the caller's JWT and every list is filtered to that tenant
                         // server-side, replacing the old browser-side filtering of global lists.
-                        .requestMatchers("/api/enterprise/me/**").authenticated()
-                        // License/entitlement reads: enterpriseId is JWT-derived at the
+                        .requestMatchers("/api/institution/me/**").authenticated()
+                        // License/entitlement reads: institutionId is JWT-derived at the
                         // controller now, but this path previously had no auth requirement
                         // here either -- any unauthenticated caller could read any
-                        // enterprise's billing/entitlement data by guessing an id. Block
+                        // institution's billing/entitlement data by guessing an id. Block
                         // anonymous access here too.
-                        .requestMatchers("/api/enterprise/license", "/api/enterprise/license/**",
-                                "/api/enterprise/entitlements").authenticated()
+                        .requestMatchers("/api/institution/license", "/api/institution/license/**",
+                                "/api/institution/entitlements").authenticated()
                         // Tenant/user-scoped portal reads (JWT-derived learnerId/userId).
                         .requestMatchers("/api/learners/me/portal").authenticated()
                         // Flat cross-tenant/cross-user lists that no scoped flow uses anymore --
@@ -94,15 +94,15 @@ public class SecurityConfig {
                                 "/api/learner-certifications", "/api/learner-certifications/*").authenticated()
                         // These controllers had NO auth anywhere -- neither here nor at the
                         // controller -- until this pass: every learner record, every
-                        // enterprise's profile/billing/verification/invoice data, and every
+                        // institution's profile/billing/verification/invoice data, and every
                         // learner's per-question exam detail row was readable and writable
                         // by any unauthenticated caller. Now admin-only at the controller;
                         // block anonymous access here too.
                         .requestMatchers("/api/learners", "/api/learners/*").authenticated()
-                        .requestMatchers("/api/enterprises/**").authenticated()
-                        .requestMatchers("/api/enterprise-members/**").authenticated()
-                        .requestMatchers("/api/enterprise-verification-documents/**").authenticated()
-                        .requestMatchers("/api/enterprise-invoices/**").authenticated()
+                        .requestMatchers("/api/institutions/**").authenticated()
+                        .requestMatchers("/api/institution-members/**").authenticated()
+                        .requestMatchers("/api/institution-verification-documents/**").authenticated()
+                        .requestMatchers("/api/institution-invoices/**").authenticated()
                         .requestMatchers("/api/learner-exam-details/**").authenticated()
                         // A user's own in-app notifications -- never public.
                         .requestMatchers("/api/notifications/**").authenticated()
@@ -133,13 +133,13 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/gamification-settings/**").authenticated()
                         // The question bank (including choices/correct answers) had no
                         // auth at all -- anyone could read, create, edit, or delete any
-                        // question. Now admin- or enterprise-scoped at the controller;
+                        // question. Now admin- or institution-scoped at the controller;
                         // block anonymous access here too.
                         .requestMatchers("/api/questions/**").authenticated()
                         // Same defect on the per-type answer-key endpoints (choices,
                         // short-answer/descriptive keys, programming test cases, diagram
                         // reference answers) -- had zero auth, now admin- or
-                        // enterprise-scoped at the controller; block anonymous access here too.
+                        // institution-scoped at the controller; block anonymous access here too.
                         .requestMatchers("/api/choices/**").authenticated()
                         .requestMatchers("/api/text-question-configs/**").authenticated()
                         .requestMatchers("/api/programming-question-configs/**").authenticated()

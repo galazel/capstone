@@ -35,7 +35,7 @@ import { extractDiagramData } from "@/utils/diagram-graph.js"
  * The five question-type editors (MCQ, Short Answer, Descriptive, Programming,
  * Diagram) and their shared building blocks, extracted verbatim from the
  * admin Question Bank builder (pages/admin/question-bank-page.jsx) so any other
- * question-authoring surface (e.g. the Enterprise assessment builder) gets
+ * question-authoring surface (e.g. the Institution assessment builder) gets
  * the exact same layout, image upload, correct-answer marking, test cases,
  * sub-questions, and diagram editor -- not a re-implementation.
  *
@@ -1193,7 +1193,7 @@ export function QuestionTypeButton({ questionType, onAdd, disabled }) {
  * saveProgrammingQuestion/saveDiagramQuestion), parametrized by totalPoints
  * (admin hardcodes 1; callers configuring points per-question pass their
  * own) and ownerGroupId (undefined for official/admin-authored questions,
- * a group id to author the question as that Enterprise group's own).
+ * a group id to author the question as that Institution group's own).
  */
 export async function saveAuthoredQuestion(
   question,

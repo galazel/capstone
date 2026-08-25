@@ -41,7 +41,7 @@ public class StudyPracticeService {
     private final PracticeMasteryEvidenceService masteryEvidence;
 
     public record StudyItem(Long id, String type, String questionText, String choicesJson,
-                            String explanation, String difficulty, int order) {}
+                            String correctAnswer, String explanation, String difficulty, int order) {}
     public record StudySet(Long id, String type, String title, Long certificationId, Long lessonId,
                            List<StudyItem> items) {}
     public record Attempt(Long id, Long studySetId, String status, int totalItems) {}
@@ -76,7 +76,7 @@ public class StudyPracticeService {
         return new AttemptReview(toAttemptHistory(row), reviewAnswers);
     }
 
-    /** Persists validated AI output as an answerable study set; never expose answer fields to the client. */
+    /** Persists validated AI output as an answerable study set. */
     @Transactional
     public StudySet createGeneratedStudySet(Long learnerId, String studyType, String title, Long lessonId,
                                             List<GeneratedItem> items) {
@@ -238,6 +238,7 @@ public class StudyPracticeService {
     private StudySet toStudySet(GeneratedStudySet set) {
         List<StudyItem> items = set.getItems().stream()
                 .map(i -> new StudyItem(i.getStudyItemId(), i.getItemType(), i.getQuestionText(), i.getChoicesJson(),
+                        "FLASHCARD".equals(set.getStudyType()) ? i.getCorrectAnswer() : null,
                         i.getExplanation(), i.getDifficulty(), i.getDisplayOrder()))
                 .toList();
         return new StudySet(set.getStudySetId(), set.getStudyType(), set.getTitle(),

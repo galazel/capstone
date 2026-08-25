@@ -2,6 +2,7 @@ package com.capstone.rebyu.learningtools.controller;
 
 import com.capstone.rebyu.learningtools.service.GeneratedAssessmentService;
 import com.capstone.rebyu.learningtools.service.LearnerToolsService;
+import com.capstone.rebyu.learningtools.service.StudyPracticeService;
 
 import com.capstone.rebyu.aigateway.client.AiServiceClient;
 import com.capstone.rebyu.auth.dto.CurrentUserDto;
@@ -30,6 +31,7 @@ public class LearnerToolsController {
     private final CognitoAuthService auth;
     private final AiServiceClient aiServiceClient;
     private final GeneratedAssessmentService generatedAssessmentService;
+    private final StudyPracticeService studyPracticeService;
     private final ObjectMapper objectMapper;
 
     public record StudyAidRequest(String type, String lessonName, Long lessonId, String requestId) {}
@@ -90,12 +92,46 @@ public class LearnerToolsController {
         // path itself is being tested end to end -- re-enable
         // `rewards.spendAiCredit(learnerId, requestId)` / `refundAiCredit` (see
         // git history) once generation is verified working.
+        if ("flashcard".equals(type)) {
+            var generatedSet = persistGeneratedFlashcards(
+                    learnerId, lesson, request.lessonId(), aiResult);
+            return service.createLibraryItem(learnerId,
+                    new LearnerToolsService.LibraryRequest(type, generatedSet.title(),
+                            "Generated from " + lesson + ". Open it to begin studying.",
+                            "/learner/flashcards/" + generatedSet.id(),
+                            generatedSet.certificationId(), request.lessonId()));
+        }
+
         var generatedExam = persistGeneratedExam(learnerId, type, lesson, request.lessonId(), aiResult);
         return service.createLibraryItem(learnerId,
                 new LearnerToolsService.LibraryRequest(type, generatedExam.title(),
                         "Generated from " + lesson + ". Open it to begin an attempt.",
                         "/learner/assessments/" + generatedExam.examId(),
                         generatedExam.certificationId(), request.lessonId()));
+    }
+
+    private StudyPracticeService.StudySet persistGeneratedFlashcards(
+            Long learnerId, String lesson, Long lessonId, Map<String, Object> aiResult) {
+        JsonNode root = objectMapper.valueToTree(aiResult == null ? Map.of() : aiResult);
+        String title = root.path("title").asText("Flashcards: " + lesson);
+        JsonNode nodes = root.path("items");
+        if (!nodes.isArray()) {
+            throw new IllegalArgumentException("The AI response did not contain study items");
+        }
+
+        List<StudyPracticeService.GeneratedItem> items = new java.util.ArrayList<>();
+        for (JsonNode node : nodes) {
+            items.add(new StudyPracticeService.GeneratedItem(
+                            "FLASHCARD",
+                            node.path("question").asText(),
+                            null,
+                            node.path("answer").asText(node.path("correctAnswer").asText(null)),
+                            null,
+                            node.path("explanation").asText(null),
+                            node.path("difficulty").asText("AVERAGE")));
+        }
+        return studyPracticeService.createGeneratedStudySet(
+                        learnerId, "FLASHCARD", title, lessonId, items);
     }
 
     /** Same real exam schema every other assessment lives in: quiz items become

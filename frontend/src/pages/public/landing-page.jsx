@@ -228,7 +228,7 @@ const LEARNER_POINTS = [
   "Join certification discussions and study circles",
 ];
 
-const ENTERPRISE_POINTS = [
+const INSTITUTION_POINTS = [
   "Request a partnership and select certifications",
   "Configure learner slots and invite participants",
   "Assign certification access and track participation",
@@ -489,7 +489,7 @@ function HeroSection() {
             Both are lifted from real dashboards rather than invented for the
             fold — readiness is the learner analytics gauge (`ReadinessTile`, and
             "nearly ready" is a real band from `readinessMeta`), the cohort tile
-            is the enterprise analytics stat row. The fold should promise the two
+            is the institution analytics stat row. The fold should promise the two
             screens the product is actually built around. */}
         {/* Sat beside the headline until measurement showed it overlapping the
             glyphs by 71px. Dropped below it instead: at this height the copy
@@ -1976,9 +1976,9 @@ function AccessSection() {
             icon={Building2}
             title="for institutions"
             description="Give your learners certification access through a managed partnership."
-            points={ENTERPRISE_POINTS}
+            points={INSTITUTION_POINTS}
             cta="request partnership"
-            to="/enterprise/request-access"
+            to="/institution/request-access"
             tone="humpback"
           />
         </div>
@@ -2010,7 +2010,7 @@ function Footer() {
       links: [
         ["Learner login", "/login"],
         ["Create account", "/register"],
-        ["Institution access", "/enterprise/request-access"],
+        ["Institution access", "/institution/request-access"],
       ],
     },
     {

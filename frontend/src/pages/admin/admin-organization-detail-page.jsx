@@ -20,21 +20,21 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
-  EnterpriseEmptyState,
-  EnterpriseErrorState,
-  EnterpriseLoadingSkeleton,
-  EnterprisePageHeader,
-  EnterpriseStatCard,
-  EnterpriseStatusBadge,
+  InstitutionEmptyState,
+  InstitutionErrorState,
+  InstitutionLoadingSkeleton,
+  InstitutionPageHeader,
+  InstitutionStatCard,
+  InstitutionStatusBadge,
   formatDate,
-} from "@/components/enterprise/enterprise-ui.jsx"
+} from "@/components/institution/institution-ui.jsx"
 import { getAllCertifications } from "@/services/certificationService.js"
 import { getAllLearners } from "@/services/adminLearnerService.js"
 import {
   getAllOrganizationCertificates,
   getAllOrganizationCertificationLearners,
-  getEnterpriseById,
-} from "@/services/enterpriseService.js"
+  getInstitutionById,
+} from "@/services/institutionService.js"
 
 function asArray(value) {
   return Array.isArray(value) ? value : []
@@ -48,12 +48,12 @@ function getLearnerDisplayName(learner) {
 
 export default function AdminOrganizationDetail() {
   const { id } = useParams()
-  const enterpriseId = Number(id)
+  const institutionId = Number(id)
 
-  const enterpriseQuery = useQuery({
-    queryKey: ["admin-enterprise", enterpriseId],
-    queryFn: () => getEnterpriseById(enterpriseId),
-    enabled: Number.isFinite(enterpriseId),
+  const institutionQuery = useQuery({
+    queryKey: ["admin-institution", institutionId],
+    queryFn: () => getInstitutionById(institutionId),
+    enabled: Number.isFinite(institutionId),
     retry: 1,
   })
 
@@ -82,13 +82,13 @@ export default function AdminOrganizationDetail() {
   })
 
   const isLoading =
-    enterpriseQuery.isLoading ||
+    institutionQuery.isLoading ||
     orgCertsQuery.isLoading ||
     orgCertLearnersQuery.isLoading ||
     certificationsQuery.isLoading ||
     learnersQuery.isLoading
 
-  const enterprise = enterpriseQuery.data
+  const institution = institutionQuery.data
 
   const certificationById = useMemo(
     () => new Map(asArray(certificationsQuery.data).map((c) => [c.certificationId, c])),
@@ -103,9 +103,9 @@ export default function AdminOrganizationDetail() {
   const orgCerts = useMemo(
     () =>
       asArray(orgCertsQuery.data).filter(
-        (orgCert) => orgCert.enterpriseId === enterpriseId
+        (orgCert) => orgCert.institutionId === institutionId
       ),
-    [orgCertsQuery.data, enterpriseId]
+    [orgCertsQuery.data, institutionId]
   )
 
   const orgCertIds = useMemo(
@@ -131,9 +131,9 @@ export default function AdminOrganizationDetail() {
     [orgCertLearners]
   )
 
-  if (isLoading) return <EnterpriseLoadingSkeleton />
+  if (isLoading) return <InstitutionLoadingSkeleton />
 
-  if (enterpriseQuery.isError || !enterprise) {
+  if (institutionQuery.isError || !institution) {
     return (
       <div className="space-y-6">
         <Link
@@ -143,7 +143,7 @@ export default function AdminOrganizationDetail() {
           <ArrowLeftIcon className="size-4" aria-hidden="true" />
           Back to Organizations
         </Link>
-        <EnterpriseErrorState onRetry={enterpriseQuery.refetch} />
+        <InstitutionErrorState onRetry={institutionQuery.refetch} />
       </div>
     )
   }
@@ -158,32 +158,32 @@ export default function AdminOrganizationDetail() {
         Back to Organizations
       </Link>
 
-      <EnterprisePageHeader
-        title={enterprise.enterpriseName}
-        subtitle={`${enterprise.industry ?? "General"} · ${
-          enterprise.primaryContactName ?? "No contact assigned"
+      <InstitutionPageHeader
+        title={institution.institutionName}
+        subtitle={`${institution.industry ?? "General"} · ${
+          institution.primaryContactName ?? "No contact assigned"
         }`}
-        actions={<EnterpriseStatusBadge status={enterprise.status} />}
+        actions={<InstitutionStatusBadge status={institution.status} />}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <EnterpriseStatCard
+        <InstitutionStatCard
           icon={UsersIcon}
           label="Enrolled learners"
           value={distinctLearnerCount}
         />
-        <EnterpriseStatCard
+        <InstitutionStatCard
           icon={AwardIcon}
           label="Certification allocations"
           value={orgCerts.length}
         />
-        <EnterpriseStatCard
+        <InstitutionStatCard
           icon={Building2Icon}
           label="Primary contact"
-          value={enterprise.primaryContactName ?? "—"}
-          hint={enterprise.primaryContactEmail}
+          value={institution.primaryContactName ?? "—"}
+          hint={institution.primaryContactEmail}
         />
-        <EnterpriseStatCard label="Joined" value={formatDate(enterprise.joinedAt)} />
+        <InstitutionStatCard label="Joined" value={formatDate(institution.joinedAt)} />
       </div>
 
       <Card>
@@ -195,7 +195,7 @@ export default function AdminOrganizationDetail() {
         </CardHeader>
         <CardContent className="p-0">
           {orgCerts.length === 0 ? (
-            <EnterpriseEmptyState
+            <InstitutionEmptyState
               icon={AwardIcon}
               title="No certification allocations"
               description="This organization has no active partnership allocations yet."
@@ -233,7 +233,7 @@ export default function AdminOrganizationDetail() {
                         {formatDate(orgCert.accessExpiryDate)}
                       </TableCell>
                       <TableCell>
-                        <EnterpriseStatusBadge status={orgCert.status} />
+                        <InstitutionStatusBadge status={orgCert.status} />
                       </TableCell>
                     </TableRow>
                   )
@@ -253,7 +253,7 @@ export default function AdminOrganizationDetail() {
         </CardHeader>
         <CardContent className="p-0">
           {orgCertLearners.length === 0 ? (
-            <EnterpriseEmptyState
+            <InstitutionEmptyState
               icon={UsersIcon}
               title="No learners yet"
               description="Learners appear here once they accept an invitation to this organization."
@@ -291,7 +291,7 @@ export default function AdminOrganizationDetail() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <EnterpriseStatusBadge status={row.status} />
+                        <InstitutionStatusBadge status={row.status} />
                       </TableCell>
                     </TableRow>
                   )

@@ -11,7 +11,7 @@ import com.capstone.rebyu.enrollment.entity.LearnerCertification;
 import com.capstone.rebyu.enrollment.entity.LearnerOrder;
 import com.capstone.rebyu.enrollment.repository.LearnerCertificationRepository;
 import com.capstone.rebyu.enrollment.repository.LearnerOrderRepository;
-import com.capstone.rebyu.organization.repository.EnterpriseRepository;
+import com.capstone.rebyu.organization.repository.InstitutionRepository;
 import com.capstone.rebyu.partnership.entity.PartnershipRequest;
 import com.capstone.rebyu.partnership.repository.PartnershipRequestRepository;
 import com.capstone.rebyu.user.entity.User;
@@ -49,7 +49,7 @@ public class AdminMetricsService {
 
     private final UserRepository userRepository;
     private final LearnerRepository learnerRepository;
-    private final EnterpriseRepository enterpriseRepository;
+    private final InstitutionRepository institutionRepository;
     private final CertificationRepository certificationRepository;
     private final LearnerCertificationRepository learnerCertificationRepository;
     private final PartnershipRequestRepository partnershipRequestRepository;
@@ -178,7 +178,7 @@ public class AdminMetricsService {
         long pending = partnershipRequestRepository.countByStatus(PartnershipRequest.Status.PENDING)
                 + partnershipRequestRepository.countByStatus(PartnershipRequest.Status.UNDER_REVIEW);
         return new CatalogMetrics(
-                enterpriseRepository.count(),
+                institutionRepository.count(),
                 certificationRepository.count(),
                 certificationRepository.countByStatus(Certification.CertificationStatus.PUBLISHED),
                 pending);

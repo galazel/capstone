@@ -27,7 +27,7 @@ public class CognitoClientConfig {
                 .build();
     }
 
-    // Admin operations (AdminCreateUser to provision approved enterprise
+    // Admin operations (AdminCreateUser to provision approved institution
     // accounts) require real IAM credentials. Reuses the same AWS key wired
     // for S3.
     @Bean

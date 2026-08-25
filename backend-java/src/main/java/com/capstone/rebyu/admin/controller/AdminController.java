@@ -20,7 +20,7 @@ public class AdminController {
    * Every counter on the admin dashboard, in one payload.
    *
    * The page used to assemble these in the browser by fetching /learners,
-   * /enterprises, /certifications, /partnership-requests,
+   * /institutions, /certifications, /partnership-requests,
    * /learner-certifications and /exam-results in full and calling .length on
    * each. That ships the whole platform to one laptop to produce six numbers,
    * and it has no ceiling. These are COUNT/SUM queries.

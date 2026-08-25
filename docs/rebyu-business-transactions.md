@@ -23,8 +23,8 @@ excluded. Counts are tables *written*; tables read for validation are not counte
 | T4 | Purchase a certification | Enrollment | 2 | Working (simulated payment) |
 | T5 | Confirm payment and grant access | Enrollment | 3 | Working (simulated payment) |
 | T6 | Apply a payment-provider webhook | Billing | 2 | Endpoint live, provider not verified |
-| T7 | Invite a learner to an organization | Enterprise | 4 | Working |
-| T8 | Accept an enterprise invitation | Enterprise | 5 | Working |
+| T7 | Invite a learner to an organization | Institution | 4 | Working |
+| T8 | Accept an institution invitation | Institution | 5 | Working |
 | T9 | Submit a partnership request | Partnerships | 4 | Working |
 | T10 | Persist an AI-generated certification | Generation | 11 | Working (phased, not atomic) |
 | T11 | Complete a practice attempt | Practice | 4 | Working |
@@ -117,21 +117,21 @@ repeatable.
 
 ---
 
-## Enterprise and partnerships
+## Institution and partnerships
 
 ### T7 — Invite a learner to an organization
-`EnterpriseInvitationService` — **4 tables**
+`InstitutionInvitationService` — **4 tables**
 
 Validates the seat allocation, records the invitation against a certificate and group, and
 notifies the recipient. The token is generated inside the transaction so an invitation can
 never reference a row that was rolled back.
 
-**Writes:** `learner_invitations`, `notifications`, `enterprise_group_authorities`, `users`
+**Writes:** `learner_invitations`, `notifications`, `institution_group_authorities`, `users`
 
 > **Known gap.** The email is sent outside the database transaction. A commit that fails
 > after the send would leave a delivered email referencing no invitation.
 
-### T8 — Accept an enterprise invitation
+### T8 — Accept an institution invitation
 `LearnerService.acceptInvitation` — **5 tables**
 
 The moment a person becomes a sponsored learner. Consumes the single-use token, provisions
@@ -139,7 +139,7 @@ or links the learner, allocates them against the organization's certificate, ass
 to their group, and notifies the group's leader — all or nothing.
 
 **Writes:** `learner_invitations`, `learners`, `organization_certification_learners`,
-`enterprise_group_assignees`, `notifications`
+`institution_group_assignees`, `notifications`
 
 **Guarantees:** single-use token, expiry checked inside the transaction.
 
@@ -150,7 +150,7 @@ An organization requests a set of certifications. The request header and one lin
 certification are written together, so a request can never exist with no items or with a
 partial selection.
 
-**Writes:** `partnership_requests`, `partnership_request_items`, `enterprises`,
+**Writes:** `partnership_requests`, `partnership_request_items`, `institutions`,
 `notifications`
 
 ---

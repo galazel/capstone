@@ -19,7 +19,7 @@ public class EmailService {
     @Value("${app.frontend-url}")
     private String frontendUrl;
 
-    public void sendEnterpriseInvitation(
+    public void sendInstitutionInvitation(
             String recipientEmail,
             String organizationName,
             String certificationTitle,

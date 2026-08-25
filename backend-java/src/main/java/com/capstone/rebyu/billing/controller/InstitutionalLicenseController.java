@@ -12,15 +12,15 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Set;
 
 /**
- * Enterprise-facing license + entitlement reads. enterpriseId is always
+ * Institution-facing license + entitlement reads. institutionId is always
  * resolved from the caller's validated JWT, never a client-supplied
- * parameter -- previously this took enterpriseId as a plain @RequestParam
+ * parameter -- previously this took institutionId as a plain @RequestParam
  * with no ownership check and no security-config authentication requirement,
- * so any unauthenticated caller could read any enterprise's license/billing
+ * so any unauthenticated caller could read any institution's license/billing
  * data by guessing an id.
  */
 @RestController
-@RequestMapping("/api/enterprise")
+@RequestMapping("/api/institution")
 @RequiredArgsConstructor
 public class InstitutionalLicenseController {
 
@@ -29,27 +29,27 @@ public class InstitutionalLicenseController {
 
     @GetMapping("/license")
     public InstitutionalLicenseDto getLicense(@AuthenticationPrincipal Jwt jwt) {
-        return institutionalEntitlementService.getLicenseUsageSummary(myEnterpriseId(jwt));
+        return institutionalEntitlementService.getLicenseUsageSummary(myInstitutionId(jwt));
     }
 
     @GetMapping("/license/usage")
     public InstitutionalLicenseDto getLicenseUsage(@AuthenticationPrincipal Jwt jwt) {
-        return institutionalEntitlementService.getLicenseUsageSummary(myEnterpriseId(jwt));
+        return institutionalEntitlementService.getLicenseUsageSummary(myInstitutionId(jwt));
     }
 
     @GetMapping("/entitlements")
     public Set<String> getEntitlements(@AuthenticationPrincipal Jwt jwt) {
-        return institutionalEntitlementService.getInstitutionalEntitlements(myEnterpriseId(jwt)).keySet();
+        return institutionalEntitlementService.getInstitutionalEntitlements(myInstitutionId(jwt)).keySet();
     }
 
-    private Long myEnterpriseId(Jwt jwt) {
+    private Long myInstitutionId(Jwt jwt) {
         if (jwt == null) {
             throw new IllegalArgumentException("Authentication is required");
         }
         CurrentUserDto user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
-        if (user.enterpriseId() == null) {
-            throw new IllegalArgumentException("An enterprise account is required");
+        if (user.institutionId() == null) {
+            throw new IllegalArgumentException("An institution account is required");
         }
-        return user.enterpriseId();
+        return user.institutionId();
     }
 }

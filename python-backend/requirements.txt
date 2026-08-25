@@ -10,6 +10,9 @@ alembic>=1.18,<2.0
 celery[redis]==5.6.3
 redis>=5.2,<7.0
 
+# Cryptography library for AES encryption
+cryptography>=3.1,<42.0
+
 # Async RabbitMQ consumer client (Phase 6) -- connects to the same
 # rebyu.exchange topology the Java backend's producers publish to.
 aio-pika>=9.4,<10.0
@@ -32,6 +35,13 @@ matplotlib>=3.8,<4.0
 joblib>=1.4,<2.0
 
 langgraph
+# Supplies `langgraph.checkpoint.postgres`, which app/utils/helpers.py imports
+# for AsyncPostgresSaver -- the checkpointer behind the checkpoints/
+# checkpoint_blobs/checkpoint_writes tables. Ships separately from `langgraph`
+# (which only brings the in-memory `langgraph-checkpoint` base), so without
+# this line every import of app.main dies on ModuleNotFoundError. Pulls
+# psycopg-pool as its only extra dependency.
+langgraph-checkpoint-postgres>=3.0,<4.0
 # Every agent reaches its model through OpenRouter, whose API is the OpenAI
 # chat-completions API -- so one client class covers Claude, Gemini, GPT and
 # Llama, and picking a different model per task (see app/ai/tasks.py) is a
@@ -45,6 +55,9 @@ langchain-openai>=1.0,<2.0
 # That made the entire pytest suite un-collectable, not just the AI parts.
 langchain-core>=1.0,<2.0
 langchain-text-splitters>=1.0,<2.0
+# app.agents.assessment.grading_agent imports create_agent from this directly;
+# pin to the same 1.x line as langchain-core above.
+langchain>=1.0,<2.0
 
 # --- RAG (Phase 2a) ------------------------------------------------------
 # Vectors live in Qdrant, one collection per certification. It replaced local

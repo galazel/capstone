@@ -14,7 +14,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.util.List;
 import java.util.Map;
 
-/** The signed-in user's own notifications -- any role (admin/enterprise/learner). */
+/** The signed-in user's own notifications -- any role (admin/institution/learner). */
 @RestController
 @RequestMapping("/api/notifications")
 @RequiredArgsConstructor

@@ -32,7 +32,7 @@ import java.util.UUID;
  * Transaction One (public): an organization representative — with no account —
  * submits a partnership request from the landing page. The request stores the
  * organization details and requested certification slots, is saved atomically
- * as PENDING, and grants NO enterprise account, role, or access. The Enterprise
+ * as PENDING, and grants NO institution account, role, or access. The Institution
  * record is created only when an admin approves (Transaction Two).
  */
 @Slf4j
@@ -62,7 +62,7 @@ public class PublicPartnershipService {
         // This is a public, unauthenticated endpoint: there is no client session to
         // persist a client-supplied key across retries the way
         // PartnershipRequestTransactionService.submit() does for authenticated
-        // enterprise clients. Instead, derive a deterministic key from the
+        // institution clients. Instead, derive a deterministic key from the
         // submission content itself (organization email + name + the current day
         // bucket), so a genuine double-click or network retry within the same day
         // collides with the first request, while the same organization submitting

@@ -6,7 +6,7 @@ import { roleHomePath, useAuth } from "./context/auth-context.jsx"
 
 const DashboardLayout = lazy(() => import("./layouts/DashboardLayout"))
 const LearnerLayout = lazy(() => import("./layouts/learner-layout.jsx"))
-const EnterpriseLayout = lazy(() => import("./layouts/enterprise-layout.jsx"))
+const InstitutionLayout = lazy(() => import("./layouts/institution-layout.jsx"))
 const LoginPage = lazy(() => import("./pages/auth/login-page.jsx"))
 const RegisterPage = lazy(() => import("./pages/auth/register-page.jsx"))
 const VerifyEmailPage = lazy(() => import("./pages/auth/verify-email-page.jsx"))
@@ -22,7 +22,7 @@ const AdminDashboard = lazy(() => import("./pages/admin/admin-dashboard-page.jsx
 const PartnershipRequests = lazy(() => import("./pages/admin/partnership-requests-page.jsx"))
 const BktDeliveryStatus = lazy(() => import("./pages/admin/bkt-delivery-status-page.jsx"))
 const GamificationSettings = lazy(() => import("./pages/admin/gamification-settings-page.jsx"))
-const AcceptEnterpriseInvitationPage = lazy(() => import("./pages/admin/accept-enterprise-invitation-page.jsx"))
+const AcceptInstitutionInvitationPage = lazy(() => import("./pages/admin/accept-institution-invitation-page.jsx"))
 const LandingPage = lazy(() => import("./pages/public/landing-page.jsx"))
 const CreateLessons = lazy(() => import("./pages/admin/create-lessons-page.jsx"))
 const LearnerProgressPage = lazy(() => import("./pages/learner/dashboard/learner-progress-page.jsx"))
@@ -45,24 +45,25 @@ const AttemptPreviewPage = lazy(() => import("./pages/dev/attempt-preview-page.j
 const LearnerAssessmentResultPage = lazy(() => import("./pages/learner/assessments/learner-assessment-result-page.jsx"))
 const LearnerAssessmentHistoryPage = lazy(() => import("./pages/learner/assessments/learner-assessment-history-page.jsx"))
 const LearnerPracticeAttemptPage = lazy(() => import("./pages/learner/practice/learner-practice-attempt-page.jsx"))
+const LearnerFlashcardAttemptPage = lazy(() => import("./pages/learner/practice/learner-flashcard-attempt-page.jsx"))
 const LearnerPracticeHistoryPage = lazy(() => import("./pages/learner/practice/learner-practice-history-page.jsx"))
 const LearnerPracticeReviewPage = lazy(() => import("./pages/learner/practice/learner-practice-review-page.jsx"))
-const EnterpriseDashboardPage = lazy(() => import("./pages/enterprise/dashboard/enterprise-dashboard-page.jsx"))
-const EnterpriseMemberDashboardPage = lazy(() => import("./pages/enterprise/dashboard/enterprise-member-dashboard-page.jsx"))
-const EnterpriseGroupWorkspacePage = lazy(() => import("./pages/enterprise/groups/enterprise-group-workspace-page.jsx"))
-const EnterpriseGroupLearnerPage = lazy(() => import("./pages/enterprise/groups/enterprise-group-learner-page.jsx"))
-const EnterpriseLearnersPage = lazy(() => import("./pages/enterprise/groups/enterprise-learners-page.jsx"))
-const EnterpriseCertificationsPage = lazy(() => import("./pages/enterprise/certifications/enterprise-certifications-page.jsx"))
-const EnterpriseCertificationDetailPage = lazy(() => import("./pages/enterprise/certifications/enterprise-certification-detail-page.jsx"))
-const EnterpriseCertificationViewerPage = lazy(() => import("./pages/enterprise/certifications/enterprise-certification-viewer-page.jsx"))
-const EnterpriseAssessmentBuilderPage = lazy(() => import("./pages/enterprise/certifications/enterprise-assessment-builder-page.jsx"))
-const EnterpriseGroupsPage = lazy(() => import("./pages/enterprise/groups/enterprise-groups-page.jsx"))
+const InstitutionDashboardPage = lazy(() => import("./pages/institution/dashboard/institution-dashboard-page.jsx"))
+const InstitutionMemberDashboardPage = lazy(() => import("./pages/institution/dashboard/institution-member-dashboard-page.jsx"))
+const InstitutionGroupWorkspacePage = lazy(() => import("./pages/institution/groups/institution-group-workspace-page.jsx"))
+const InstitutionGroupLearnerPage = lazy(() => import("./pages/institution/groups/institution-group-learner-page.jsx"))
+const InstitutionLearnersPage = lazy(() => import("./pages/institution/groups/institution-learners-page.jsx"))
+const InstitutionCertificationsPage = lazy(() => import("./pages/institution/certifications/institution-certifications-page.jsx"))
+const InstitutionCertificationDetailPage = lazy(() => import("./pages/institution/certifications/institution-certification-detail-page.jsx"))
+const InstitutionCertificationViewerPage = lazy(() => import("./pages/institution/certifications/institution-certification-viewer-page.jsx"))
+const InstitutionAssessmentBuilderPage = lazy(() => import("./pages/institution/certifications/institution-assessment-builder-page.jsx"))
+const InstitutionGroupsPage = lazy(() => import("./pages/institution/groups/institution-groups-page.jsx"))
 // Profile, Partnership, License, Billing and Files are one tabbed page --
-// see enterprise-account-page.jsx. The five paths are kept so existing links
+// see institution-account-page.jsx. The five paths are kept so existing links
 // still resolve; each one opens its own tab.
-const EnterpriseAccountPage = lazy(() => import("./pages/enterprise/account/enterprise-account-page.jsx"))
-const EnterpriseQuestionBankPage = lazy(() => import("./pages/enterprise/certifications/enterprise-question-bank-page.jsx"))
-const EnterpriseRequestAccessPage = lazy(() => import("./pages/public/enterprise-request-access-page.jsx"))
+const InstitutionAccountPage = lazy(() => import("./pages/institution/account/institution-account-page.jsx"))
+const InstitutionQuestionBankPage = lazy(() => import("./pages/institution/certifications/institution-question-bank-page.jsx"))
+const InstitutionRequestAccessPage = lazy(() => import("./pages/public/institution-request-access-page.jsx"))
 const CompilerArea = lazy(() => import("./pages/challenges/compiler-area-page.jsx"))
 const CodeStrikePage = lazy(() => import("./pages/learner/challenges/codestrike-page.jsx"))
 const BlueprintArenaPage = lazy(() => import("./pages/learner/challenges/blueprint-arena-page.jsx"))
@@ -77,12 +78,12 @@ const NotificationsPage = lazy(() => import("./pages/notifications-page.jsx"))
 const NotFoundPage = lazy(() => import("./pages/public/not-found-page.jsx"))
 const ForbiddenPage = lazy(() => import("./pages/public/forbidden-page.jsx"))
 
-// Owners land on the institution dashboard; Enterprise Members (group leaders)
+// Owners land on the institution dashboard; Institution Members (group leaders)
 // land on their own "My Groups" workspace list -- they never see the
 // institution-wide dashboard.
-function EnterpriseHome() {
+function InstitutionHome() {
     const { user } = useAuth()
-    const target = user?.enterpriseMemberRole === "owner" ? "dashboard" : "member"
+    const target = user?.institutionMemberRole === "owner" ? "dashboard" : "member"
     return <Navigate to={target} replace />
 }
 
@@ -100,11 +101,11 @@ function GuestOnlyRoute({ children }) {
     return children
 }
 
-function EnterpriseDashboardEntry() {
+function InstitutionDashboardEntry() {
     const { user } = useAuth()
-    return user?.enterpriseMemberRole === "owner"
-        ? <EnterpriseDashboardPage />
-        : <EnterpriseMemberDashboardPage />
+    return user?.institutionMemberRole === "owner"
+        ? <InstitutionDashboardPage />
+        : <InstitutionMemberDashboardPage />
 }
 
 /**
@@ -165,15 +166,15 @@ export function App() {
             <Route path="/forgot-password" element={<GuestOnlyRoute><ForgotPasswordPage /></GuestOnlyRoute>} />
             <Route path="/set-new-password" element={<GuestOnlyRoute><SetNewPasswordPage /></GuestOnlyRoute>} />
 
-            {/* Public: organization representatives request Enterprise access with no account. */}
+            {/* Public: organization representatives request Institution access with no account. */}
             <Route
-                path="/enterprise/request-access"
-                element={<EnterpriseRequestAccessPage />}
+                path="/institution/request-access"
+                element={<InstitutionRequestAccessPage />}
             />
 
             <Route
                 path="/invitations/accept"
-                element={<AcceptEnterpriseInvitationPage />}
+                element={<AcceptInstitutionInvitationPage />}
             />
 
             {/* ---------------------------------------------------------------
@@ -304,6 +305,7 @@ export function App() {
                     element={<LearnerAssessmentHistoryPage />}
                 />
                 <Route path="/learner/practice/:studySetId" element={<LearnerPracticeAttemptPage />} />
+                <Route path="/learner/flashcards/:studySetId" element={<LearnerFlashcardAttemptPage />} />
                 <Route path="/learner/practice-history" element={<LearnerPracticeHistoryPage />} />
                 <Route path="/learner/practice-review/:attemptId" element={<LearnerPracticeReviewPage />} />
 
@@ -322,79 +324,79 @@ export function App() {
                 />
             </Route>
 
-            <Route element={<ProtectedRoute allowedRoles={["ENTERPRISE", "ENTERPRISE_MEMBER"]} />}>
-                <Route path="/enterprise" element={<EnterpriseLayout />}>
-                    <Route index element={<EnterpriseHome />} />
-                    <Route path="dashboard" element={<EnterpriseDashboardEntry />} />
-                    {/* Enterprise Member (group leader) home; the per-group
+            <Route element={<ProtectedRoute allowedRoles={["INSTITUTION", "INSTITUTION_MEMBER"]} />}>
+                <Route path="/institution" element={<InstitutionLayout />}>
+                    <Route index element={<InstitutionHome />} />
+                    <Route path="dashboard" element={<InstitutionDashboardEntry />} />
+                    {/* Institution Member (group leader) home; the per-group
                         workspace route is defined alongside the groups routes below. */}
-                    <Route path="member" element={<EnterpriseMemberDashboardPage />} />
+                    <Route path="member" element={<InstitutionMemberDashboardPage />} />
                     {/* The roster only. Its per-learner detail page was reached
                         from a "View" action that no longer exists -- an
                         organization sees who is on a certification and which
                         group teaches them, not an individual's performance
                         record. The group workspace is where a leader works with
                         a learner. */}
-                    <Route path="learners" element={<EnterpriseLearnersPage />} />
+                    <Route path="learners" element={<InstitutionLearnersPage />} />
                     <Route
                         path="certifications"
-                        element={<EnterpriseCertificationsPage />}
+                        element={<InstitutionCertificationsPage />}
                     />
                     {/* Curriculum, groups, and invitations for one certification
                         allocation -- content, group creation, and invitations all
                         live within the certification they belong to. */}
                     <Route
                         path="certifications/:orgCertId"
-                        element={<EnterpriseCertificationDetailPage />}
+                        element={<InstitutionCertificationDetailPage />}
                     />
                     {/* Deep-linked from a specific certification on the
                         Certifications page (?orgCertId=...) -- groups are
                         always created/viewed in the context of one
                         certification allocation. */}
-                    <Route path="groups" element={<EnterpriseGroupsPage />} />
-                    <Route path="groups/:groupId" element={<EnterpriseGroupWorkspacePage />} />
+                    <Route path="groups" element={<InstitutionGroupsPage />} />
+                    <Route path="groups/:groupId" element={<InstitutionGroupWorkspacePage />} />
                     <Route
                         path="groups/:groupId/learners/:learnerId"
-                        element={<EnterpriseGroupLearnerPage />}
+                        element={<InstitutionGroupLearnerPage />}
                     />
                     {/* Full-page assessment builder (details + question builder),
                         replacing the old modal. Edit reuses the same page. */}
                     <Route
                         path="groups/:groupId/assessments/new"
-                        element={<EnterpriseAssessmentBuilderPage />}
+                        element={<InstitutionAssessmentBuilderPage />}
                     />
                     <Route
                         path="groups/:groupId/assessments/:examId/edit"
-                        element={<EnterpriseAssessmentBuilderPage />}
+                        element={<InstitutionAssessmentBuilderPage />}
                     />
                     {/* Read-only Cisco-style two-pane content reader (outline +
                         lesson body). ?groupId= mixes in the group's own content. */}
                     <Route
                         path="certifications/:certificationId/view"
-                        element={<EnterpriseCertificationViewerPage />}
+                        element={<InstitutionCertificationViewerPage />}
                     />
-                    <Route path="question-bank" element={<EnterpriseQuestionBankPage />} />
-                    <Route path="license" element={<EnterpriseAccountPage />} />
+                    <Route path="question-bank" element={<InstitutionQuestionBankPage />} />
+                    <Route path="license" element={<InstitutionAccountPage />} />
                     {/* Analytics is not a second page. It was a separate route
                         that recomputed the same cohort figures from a second read
                         of the same data, next to trend panels on placeholder
                         series -- so the two could disagree and one of them was
                         invented. Same arrangement as the learner portal, where
                         /learner/dashboard and /learner/analytics are one board. */}
-                    <Route path="analytics" element={<Navigate to="/enterprise/dashboard" replace />} />
-                    <Route path="partnership" element={<EnterpriseAccountPage />} />
-                    <Route path="billing" element={<EnterpriseAccountPage />} />
-                    <Route path="files" element={<EnterpriseAccountPage />} />
-                    <Route path="organization" element={<EnterpriseAccountPage />} />
+                    <Route path="analytics" element={<Navigate to="/institution/dashboard" replace />} />
+                    <Route path="partnership" element={<InstitutionAccountPage />} />
+                    <Route path="billing" element={<InstitutionAccountPage />} />
+                    <Route path="files" element={<InstitutionAccountPage />} />
+                    <Route path="organization" element={<InstitutionAccountPage />} />
                 </Route>
             </Route>
 
             {/* The notification feed is per-user, not per-portal, so admin,
-                enterprise, and learner all share this one page. */}
+                institution, and learner all share this one page. */}
             <Route
                 element={
                     <ProtectedRoute
-                        allowedRoles={["ADMIN", "ENTERPRISE", "ENTERPRISE_MEMBER", "LEARNER"]}
+                        allowedRoles={["ADMIN", "INSTITUTION", "INSTITUTION_MEMBER", "LEARNER"]}
                     />
                 }
             >

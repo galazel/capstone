@@ -7,14 +7,14 @@ public record CurrentUserDto(
         String email,
         String role,
         Long learnerId,
-        // Present when the account belongs to an enterprise, so the frontend
-        // scopes the enterprise portal to that organization.
-        Long enterpriseId,
-        // "owner" | "manager" | "staff" -- present only alongside enterpriseId.
+        // Present when the account belongs to an institution, so the frontend
+        // scopes the institution portal to that organization.
+        Long institutionId,
+        // "owner" | "manager" | "staff" -- present only alongside institutionId.
         // The frontend uses this to tell the org owner's dashboard apart from a
         // group leader's (owner sees billing/org settings/partnership/member
         // management; a leader sees only their own assigned groups/learners).
-        String enterpriseMemberRole,
+        String institutionMemberRole,
         String firstName,
         String lastName,
         String displayName

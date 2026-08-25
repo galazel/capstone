@@ -1,7 +1,7 @@
 import { base } from "./base"
 
 /**
- * Admin endpoint: retrieve all learners across all enterprises.
+ * Admin endpoint: retrieve all learners across all institutions.
  * Learners read their own record via /api/learners/me/portal.
  */
 export const getAllLearners = () => base("learners")

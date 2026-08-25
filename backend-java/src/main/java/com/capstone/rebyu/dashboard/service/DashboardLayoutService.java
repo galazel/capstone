@@ -19,7 +19,7 @@ import java.util.Set;
  *
  * The same tile-placement shape the learner analytics board already persists, so
  * the frontend board component works unchanged across all three dashboards; only
- * the storage differs, because admins and enterprise managers have no learner row
+ * the storage differs, because admins and institution managers have no learner row
  * for the learner-keyed table to hang off.
  */
 @Service
@@ -31,7 +31,7 @@ public class DashboardLayoutService {
      * lands in a UNIQUE key, and letting the client name it means one typo (or one
      * loop) fills the table with rows nothing will ever read again.
      */
-    private static final Set<String> KNOWN_BOARDS = Set.of("admin", "enterprise");
+    private static final Set<String> KNOWN_BOARDS = Set.of("admin", "institution");
 
     private final UserDashboardLayoutRepository layoutRepository;
     private final EntityManager entityManager;

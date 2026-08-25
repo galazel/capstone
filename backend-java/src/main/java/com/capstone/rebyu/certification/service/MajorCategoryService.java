@@ -7,9 +7,9 @@ import com.capstone.rebyu.certification.mapper.MajorCategoryMapper;
 import com.capstone.rebyu.certification.entity.MajorCategory;
 import com.capstone.rebyu.certification.repository.MajorCategoryRepository;
 import com.capstone.rebyu.common.BusinessRuleException;
-import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup;
-import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupRepository;
-import com.capstone.rebyu.enterprisegroup.service.EnterpriseGroupService;
+import com.capstone.rebyu.institutiongroup.entity.InstitutionGroup;
+import com.capstone.rebyu.institutiongroup.repository.InstitutionGroupRepository;
+import com.capstone.rebyu.institutiongroup.service.InstitutionGroupService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,7 +22,7 @@ import java.util.Objects;
 /**
  * MajorCategory is the ROOT of the ownership chain: {@code ownerGroup} is
  * null for official, platform-wide content (admin-authored, unchanged
- * behavior) or set to one EnterpriseGroup for Enterprise-Member-authored
+ * behavior) or set to one InstitutionGroup for Institution-Member-authored
  * content. MiddleCategory/Lesson don't carry their own owner column -- they
  * inherit it by walking up to their MajorCategory (see MiddleCategoryService/
  * LessonService), so ownership only ever needs to be decided in one place.
@@ -34,8 +34,8 @@ import java.util.Objects;
 public class MajorCategoryService {
     private final MajorCategoryRepository majorCategoryRepository;
     private final MajorCategoryMapper majorCategoryMapper;
-    private final EnterpriseGroupRepository enterpriseGroupRepository;
-    private final EnterpriseGroupService enterpriseGroupService;
+    private final InstitutionGroupRepository institutionGroupRepository;
+    private final InstitutionGroupService institutionGroupService;
 
     public List<MajorCategoryDto> getAll() {
         log.debug("Fetching all major categories");
@@ -50,7 +50,7 @@ public class MajorCategoryService {
     /**
      * @param isAdmin            an admin creates official content; ownerGroupId
      *                           must be null in that case.
-     * @param callerEnterpriseId ignored when isAdmin.
+     * @param callerInstitutionId ignored when isAdmin.
      * @param callerUserId       ignored when isAdmin.
      * @param callerIsOwner      whether the caller is the institution owner
      *                           (ignored when isAdmin).
@@ -58,18 +58,18 @@ public class MajorCategoryService {
      *                           belongs to. The caller must be that group's
      *                           active leader or the institution owner, and the
      *                           group's own certification allocation must match
-     *                           dto.certificationId -- an Enterprise Member can
+     *                           dto.certificationId -- an Institution Member can
      *                           only add content to the certification their
      *                           group is actually under, never an unrelated one.
      */
     public MajorCategoryDto create(
             MajorCategoryDto dto, boolean isAdmin,
-            Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner, Long ownerGroupId) {
+            Long callerInstitutionId, Long callerUserId, boolean callerIsOwner, Long ownerGroupId) {
         log.info("Creating new major category (ownerGroupId={})", ownerGroupId);
         MajorCategory entity = majorCategoryMapper.toEntity(dto);
         entity.setMajorCategoryId(null);
         entity.setOwnerGroup(resolveAndAuthorizeOwnerGroup(
-                isAdmin, callerEnterpriseId, callerUserId, callerIsOwner, ownerGroupId, dto.getCertificationId()));
+                isAdmin, callerInstitutionId, callerUserId, callerIsOwner, ownerGroupId, dto.getCertificationId()));
         MajorCategoryDto result = majorCategoryMapper.toDto(majorCategoryRepository.save(entity));
         log.info("MajorCategory created with id: {}", result.getMajorCategoryId());
         return result;
@@ -77,10 +77,10 @@ public class MajorCategoryService {
 
     public MajorCategoryDto update(
             Long id, MajorCategoryDto dto,
-            boolean isAdmin, Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner) {
+            boolean isAdmin, Long callerInstitutionId, Long callerUserId, boolean callerIsOwner) {
         log.info("Updating major category id: {}", id);
         MajorCategory existing = findEntity(id);
-        requireCanActOn(existing.getOwnerGroup(), isAdmin, callerEnterpriseId, callerUserId, callerIsOwner);
+        requireCanActOn(existing.getOwnerGroup(), isAdmin, callerInstitutionId, callerUserId, callerIsOwner);
         MajorCategory entity = majorCategoryMapper.toEntity(dto);
         entity.setMajorCategoryId(id);
         entity.setOwnerGroup(existing.getOwnerGroup());
@@ -89,23 +89,23 @@ public class MajorCategoryService {
         return result;
     }
 
-    public void delete(Long id, boolean isAdmin, Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner) {
+    public void delete(Long id, boolean isAdmin, Long callerInstitutionId, Long callerUserId, boolean callerIsOwner) {
         log.info("Deleting major category id: {}", id);
         MajorCategory existing = findEntity(id);
-        requireCanActOn(existing.getOwnerGroup(), isAdmin, callerEnterpriseId, callerUserId, callerIsOwner);
+        requireCanActOn(existing.getOwnerGroup(), isAdmin, callerInstitutionId, callerUserId, callerIsOwner);
         majorCategoryRepository.delete(existing);
         log.info("MajorCategory id: {} deleted", id);
     }
 
     /**
-     * Resolves the managed EnterpriseGroup for a NEW major category and checks
+     * Resolves the managed InstitutionGroup for a NEW major category and checks
      * the caller may actually create content under it. Public so
      * MiddleCategoryService/LessonService (same package) and ExamService
      * (assessment package -- an Exam's ownership follows the identical rule)
      * can reuse the exact same check instead of re-implementing it.
      */
-    public EnterpriseGroup resolveAndAuthorizeOwnerGroup(
-            boolean isAdmin, Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner,
+    public InstitutionGroup resolveAndAuthorizeOwnerGroup(
+            boolean isAdmin, Long callerInstitutionId, Long callerUserId, boolean callerIsOwner,
             Long ownerGroupId, Long targetCertificationId) {
         if (ownerGroupId == null) {
             if (!isAdmin) {
@@ -115,16 +115,16 @@ public class MajorCategoryService {
             return null;
         }
         // Reuses the exact tenant + owner-or-active-leader check
-        // EnterpriseGroupController already relies on -- throws EntityNotFoundException
-        // if the group belongs to a different enterprise, or the caller can't act on it.
-        enterpriseGroupService.getAccessibleById(ownerGroupId, callerEnterpriseId, callerUserId, callerIsOwner);
+        // InstitutionGroupController already relies on -- throws EntityNotFoundException
+        // if the group belongs to a different institution, or the caller can't act on it.
+        institutionGroupService.getAccessibleById(ownerGroupId, callerInstitutionId, callerUserId, callerIsOwner);
 
-        EnterpriseGroup group = enterpriseGroupRepository.findById(ownerGroupId)
+        InstitutionGroup group = institutionGroupRepository.findById(ownerGroupId)
                 .orElseThrow(() -> new EntityNotFoundException("Group not found: " + ownerGroupId));
         Long groupCertificationId = group.getOrgCert() != null && group.getOrgCert().getCertification() != null
                 ? group.getOrgCert().getCertification().getCertificationId() : null;
         if (!Objects.equals(groupCertificationId, targetCertificationId)) {
-            throw new BusinessRuleException.EnterpriseGroupRuleException(
+            throw new BusinessRuleException.InstitutionGroupRuleException(
                     "This group's certification does not match the certification you're adding content to.");
         }
         return group;
@@ -132,8 +132,8 @@ public class MajorCategoryService {
 
     /** Same rule as {@link #resolveAndAuthorizeOwnerGroup}, for editing/deleting existing content. */
     public void requireCanActOn(
-            EnterpriseGroup ownerGroup, boolean isAdmin,
-            Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner) {
+            InstitutionGroup ownerGroup, boolean isAdmin,
+            Long callerInstitutionId, Long callerUserId, boolean callerIsOwner) {
         if (ownerGroup == null) {
             if (!isAdmin) {
                 throw new IllegalArgumentException("Only an admin may modify official (platform-wide) content.");
@@ -143,8 +143,8 @@ public class MajorCategoryService {
         if (isAdmin) {
             return;
         }
-        enterpriseGroupService.getAccessibleById(
-                ownerGroup.getEnterpriseGroupId(), callerEnterpriseId, callerUserId, callerIsOwner);
+        institutionGroupService.getAccessibleById(
+                ownerGroup.getInstitutionGroupId(), callerInstitutionId, callerUserId, callerIsOwner);
     }
 
     private MajorCategory findEntity(Long id) {

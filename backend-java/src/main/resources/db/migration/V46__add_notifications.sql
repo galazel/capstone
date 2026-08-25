@@ -1,6 +1,6 @@
 -- Generic in-app notification, one row per (user, event) -- unlike
 -- learner_community_notifications (learner-only, community events), this is
--- keyed to any User so ADMIN and ENTERPRISE accounts can receive
+-- keyed to any User so ADMIN and INSTITUTION accounts can receive
 -- notifications too (partnership requests, invitations, and so on).
 CREATE TABLE IF NOT EXISTS notifications (
     notification_id BIGSERIAL PRIMARY KEY,

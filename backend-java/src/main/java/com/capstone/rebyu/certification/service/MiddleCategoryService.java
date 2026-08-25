@@ -46,10 +46,10 @@ public class MiddleCategoryService {
     }
 
     public MiddleCategoryDto create(
-            MiddleCategoryDto dto, boolean isAdmin, Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner) {
+            MiddleCategoryDto dto, boolean isAdmin, Long callerInstitutionId, Long callerUserId, boolean callerIsOwner) {
         log.info("Creating new middle category under majorCategoryId={}", dto.getMajorCategoryId());
         MajorCategory parent = findParent(dto.getMajorCategoryId());
-        majorCategoryService.requireCanActOn(parent.getOwnerGroup(), isAdmin, callerEnterpriseId, callerUserId, callerIsOwner);
+        majorCategoryService.requireCanActOn(parent.getOwnerGroup(), isAdmin, callerInstitutionId, callerUserId, callerIsOwner);
 
         MiddleCategory entity = middleCategoryMapper.toEntity(dto);
         entity.setMiddleCategoryId(null);
@@ -61,17 +61,17 @@ public class MiddleCategoryService {
 
     public MiddleCategoryDto update(
             Long id, MiddleCategoryDto dto,
-            boolean isAdmin, Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner) {
+            boolean isAdmin, Long callerInstitutionId, Long callerUserId, boolean callerIsOwner) {
         log.info("Updating middle category id: {}", id);
         MiddleCategory existing = findEntity(id);
         majorCategoryService.requireCanActOn(
-                existing.getMajorCategory().getOwnerGroup(), isAdmin, callerEnterpriseId, callerUserId, callerIsOwner);
+                existing.getMajorCategory().getOwnerGroup(), isAdmin, callerInstitutionId, callerUserId, callerIsOwner);
 
         // A middle category can't be moved to a major category with a
         // DIFFERENT owner -- that would silently change who owns it.
         MajorCategory targetParent = findParent(dto.getMajorCategoryId());
         if (!Objects.equals(ownerGroupId(existing.getMajorCategory()), ownerGroupId(targetParent))) {
-            throw new BusinessRuleException.EnterpriseGroupRuleException(
+            throw new BusinessRuleException.InstitutionGroupRuleException(
                     "This content can't be moved to a major category owned by someone else.");
         }
 
@@ -83,17 +83,17 @@ public class MiddleCategoryService {
         return result;
     }
 
-    public void delete(Long id, boolean isAdmin, Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner) {
+    public void delete(Long id, boolean isAdmin, Long callerInstitutionId, Long callerUserId, boolean callerIsOwner) {
         log.info("Deleting middle category id: {}", id);
         MiddleCategory existing = findEntity(id);
         majorCategoryService.requireCanActOn(
-                existing.getMajorCategory().getOwnerGroup(), isAdmin, callerEnterpriseId, callerUserId, callerIsOwner);
+                existing.getMajorCategory().getOwnerGroup(), isAdmin, callerInstitutionId, callerUserId, callerIsOwner);
         middleCategoryRepository.delete(existing);
         log.info("MiddleCategory id: {} deleted", id);
     }
 
     private Long ownerGroupId(MajorCategory major) {
-        return major.getOwnerGroup() != null ? major.getOwnerGroup().getEnterpriseGroupId() : null;
+        return major.getOwnerGroup() != null ? major.getOwnerGroup().getInstitutionGroupId() : null;
     }
 
     private MajorCategory findParent(Long majorCategoryId) {

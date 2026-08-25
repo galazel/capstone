@@ -8,11 +8,11 @@ import java.util.Optional;
 
 public interface OrganizationCertificateRepository extends JpaRepository<OrganizationCertificate, Long> {
 
-    Optional<OrganizationCertificate> findByEnterprise_EnterpriseIdAndCertification_CertificationId(
-            Long enterpriseId, Long certificationId);
+    Optional<OrganizationCertificate> findByInstitution_InstitutionIdAndCertification_CertificationId(
+            Long institutionId, Long certificationId);
 
-    List<OrganizationCertificate> findByEnterprise_EnterpriseId(Long enterpriseId);
+    List<OrganizationCertificate> findByInstitution_InstitutionId(Long institutionId);
 
-    long countByEnterprise_EnterpriseIdAndStatus(
-            Long enterpriseId, OrganizationCertificate.Status status);
+    long countByInstitution_InstitutionIdAndStatus(
+            Long institutionId, OrganizationCertificate.Status status);
 }

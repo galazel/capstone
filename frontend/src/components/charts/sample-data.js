@@ -83,12 +83,12 @@ export const CHALLENGE_ARENA_MIX = [
 
 // replace with: GET /api/admin/analytics/growth
 export const ADMIN_GROWTH_TREND = [
-  { month: "Feb", learners: 420, enterprises: 6 },
-  { month: "Mar", learners: 610, enterprises: 8 },
-  { month: "Apr", learners: 845, enterprises: 11 },
-  { month: "May", learners: 1120, enterprises: 14 },
-  { month: "Jun", learners: 1465, enterprises: 18 },
-  { month: "Jul", learners: 1880, enterprises: 23 },
+  { month: "Feb", learners: 420, institutions: 6 },
+  { month: "Mar", learners: 610, institutions: 8 },
+  { month: "Apr", learners: 845, institutions: 11 },
+  { month: "May", learners: 1120, institutions: 14 },
+  { month: "Jun", learners: 1465, institutions: 18 },
+  { month: "Jul", learners: 1880, institutions: 23 },
 ]
 
 // replace with: GET /api/admin/analytics/enrollment-mix
@@ -117,10 +117,10 @@ export const ADMIN_PASS_RATE_BY_CERT = [
   { certification: "AP Exam", passRate: 44 },
 ]
 
-/* ------------------------------------------------------------- enterprise */
+/* ------------------------------------------------------------- institution */
 
-// replace with: GET /api/enterprise/me/analytics/seat-usage
-export const ENTERPRISE_SEAT_TREND = [
+// replace with: GET /api/institution/me/analytics/seat-usage
+export const INSTITUTION_SEAT_TREND = [
   { month: "Feb", assigned: 42, active: 31 },
   { month: "Mar", assigned: 58, active: 44 },
   { month: "Apr", assigned: 74, active: 61 },
@@ -129,23 +129,23 @@ export const ENTERPRISE_SEAT_TREND = [
   { month: "Jul", assigned: 120, active: 97 },
 ]
 
-// replace with: GET /api/enterprise/me/analytics/completion-mix
-export const ENTERPRISE_COMPLETION_MIX = [
+// replace with: GET /api/institution/me/analytics/completion-mix
+export const INSTITUTION_COMPLETION_MIX = [
   { name: "Completed", value: 46 },
   { name: "In progress", value: 58 },
   { name: "Not started", value: 16, isOther: true },
 ]
 
-// replace with: GET /api/enterprise/me/analytics/group-progress
-export const ENTERPRISE_GROUP_PROGRESS = [
+// replace with: GET /api/institution/me/analytics/group-progress
+export const INSTITUTION_GROUP_PROGRESS = [
   { group: "BSIT 4A", completion: 78 },
   { group: "BSIT 4B", completion: 64 },
   { group: "BSCS 3A", completion: 52 },
   { group: "Night class", completion: 39 },
 ]
 
-// replace with: GET /api/enterprise/me/analytics/activity
-export const ENTERPRISE_ACTIVITY_TREND = [
+// replace with: GET /api/institution/me/analytics/activity
+export const INSTITUTION_ACTIVITY_TREND = [
   { week: "W1", lessons: 210, practice: 148, assessments: 42 },
   { week: "W2", lessons: 265, practice: 172, assessments: 51 },
   { week: "W3", lessons: 232, practice: 196, assessments: 38 },

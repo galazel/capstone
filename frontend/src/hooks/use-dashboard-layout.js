@@ -11,16 +11,16 @@ import {
  * Drag-to-arrange for a dashboard board, with the arrangement saved per user.
  *
  * Lifted out of the learner analytics page rather than copied into the admin and
- * enterprise dashboards: all three boards want identical behaviour, and the
+ * institution dashboards: all three boards want identical behaviour, and the
  * fiddly parts here -- telling "not loaded yet" apart from "the defaults",
  * cancelling changes that have already been written, keeping the query cache
  * honest after a save -- are exactly the parts that rot when duplicated.
  *
  * The learner board keeps its own learner-scoped endpoint under /study-desk;
  * this one talks to /api/dashboard-layout, which is keyed on the user, because
- * admins and enterprise managers have no learner row.
+ * admins and institution managers have no learner row.
  *
- * @param board  "admin" | "enterprise" — the server rejects anything else
+ * @param board  "admin" | "institution" — the server rejects anything else
  */
 export function useDashboardLayout(board) {
   const queryClient = useQueryClient()

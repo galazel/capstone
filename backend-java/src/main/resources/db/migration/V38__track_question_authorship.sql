@@ -1,4 +1,4 @@
--- Questions gain an author: admin, an enterprise owner, or a group leader can
+-- Questions gain an author: admin, an institution owner, or a group leader can
 -- all now create questions, so the table needs to record who created each one.
 -- Nullable because existing questions predate this and have no known author.
 ALTER TABLE public.questions

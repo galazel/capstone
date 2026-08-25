@@ -27,8 +27,8 @@ public class OrganizationCertificate {
     private Long orgCertId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "enterprise_id", nullable = false)
-    private Enterprise enterprise;
+    @JoinColumn(name = "institution_id", nullable = false)
+    private Institution institution;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "certification_id", nullable = false)

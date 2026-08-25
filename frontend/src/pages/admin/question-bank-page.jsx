@@ -3189,7 +3189,7 @@ PROFESSIONAL EXAM STYLE:
 - Write concise, technical questions for IT professionals and aspiring IT professionals.
 - Match official TOPCIT/PhilNITS-style wording: calculations, binary and logic operations, algorithms, code or SQL interpretation, data structures, databases, operating systems, networks, architecture, standards, and precise "Which of the following" questions.
 - Do not force every item into a workplace scenario.
-- Do not repeatedly start with "A company", "An enterprise", "An organization", "A team", "A developer", or a person's name.
+- Do not repeatedly start with "A company", "An institution", "An organization", "A team", "A developer", or a person's name.
 - Do not add fictional clients, deadlines, incidents, or business stories unless those facts are necessary to solve the technical problem.
 - Scenarios are allowed only when technically useful. Prefer direct, objective exam stems and mature professional language.
 - Questions must test certification-level knowledge or reasoning, not childish trivia or high-school-style filler.

@@ -58,7 +58,7 @@ const DEMO_LEARNERS = [
     lastName: "Santos",
     email: "alyssa.santos@example.com",
     organizationName: "Cebu Institute of Technology",
-    learnerType: "enterprise",
+    learnerType: "institution",
     certificationCount: 3,
     progressPercentage: 78,
     status: "active",
@@ -82,7 +82,7 @@ const DEMO_LEARNERS = [
     lastName: "Cruz",
     email: "patricia.cruz@example.com",
     organizationName: "TechBridge Training Center",
-    learnerType: "enterprise",
+    learnerType: "institution",
     certificationCount: 1,
     progressPercentage: 35,
     status: "active",
@@ -106,7 +106,7 @@ const DEMO_LEARNERS = [
     lastName: "Ramos",
     email: "nicole.ramos@example.com",
     organizationName: "Northstar Review Academy",
-    learnerType: "enterprise",
+    learnerType: "institution",
     certificationCount: 2,
     progressPercentage: 48,
     status: "pending",
@@ -118,7 +118,7 @@ const DEMO_LEARNERS = [
     lastName: "Lim",
     email: "joshua.lim@example.com",
     organizationName: "Digital Career Academy",
-    learnerType: "enterprise",
+    learnerType: "institution",
     certificationCount: 2,
     progressPercentage: 19,
     status: "inactive",
@@ -142,7 +142,7 @@ const DEMO_LEARNERS = [
     lastName: "Villanueva",
     email: "paolo.villanueva@example.com",
     organizationName: "FutureReady Philippines",
-    learnerType: "enterprise",
+    learnerType: "institution",
     certificationCount: 3,
     progressPercentage: 83,
     status: "active",
@@ -174,7 +174,7 @@ const statusStyles = {
 }
 
 const learnerTypeStyles = {
-  enterprise:
+  institution:
       "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300",
   individual:
       "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300",
@@ -257,7 +257,7 @@ function LearnerTypeBadge({ type }) {
               "border-slate-200 bg-slate-50 text-slate-700"
           }
       >
-        {normalizedType === "enterprise" ? "Enterprise" : "Individual"}
+        {normalizedType === "institution" ? "Institution" : "Individual"}
       </Badge>
   )
 }
@@ -317,7 +317,7 @@ export default function Learners({
       const type = String(
           learner.learnerType ??
           learner.type ??
-          (organizationName ? "enterprise" : "individual")
+          (organizationName ? "institution" : "individual")
       ).toLowerCase()
 
       const matchesSearch =
@@ -421,7 +421,7 @@ export default function Learners({
       [list]
   )
 
-  const enterpriseCount = useMemo(
+  const institutionCount = useMemo(
       () =>
           list.filter((learner) => {
             const organizationName =
@@ -432,15 +432,15 @@ export default function Learners({
             const type = String(
                 learner.learnerType ??
                 learner.type ??
-                (organizationName ? "enterprise" : "individual")
+                (organizationName ? "institution" : "individual")
             ).toLowerCase()
 
-            return type === "enterprise"
+            return type === "institution"
           }).length,
       [list]
   )
 
-  const individualCount = list.length - enterpriseCount
+  const individualCount = list.length - institutionCount
 
   const visibleStart =
       sortedLearners.length === 0
@@ -488,12 +488,12 @@ export default function Learners({
 
           <div className="rounded-xl border bg-card px-4 py-3">
             <p className="text-xs font-medium text-muted-foreground">
-              Enterprise learners
+              Institution learners
             </p>
             <div className="mt-2 flex items-center gap-2">
               <GraduationCap className="h-4 w-4 text-primary" />
               <p className="text-xl font-semibold tabular-nums">
-                {enterpriseCount}
+                {institutionCount}
               </p>
             </div>
           </div>
@@ -554,7 +554,7 @@ export default function Learners({
                 <SelectContent>
                   <SelectItem value={ALL_FILTER_VALUE}>All types</SelectItem>
                   <SelectItem value="individual">Individual</SelectItem>
-                  <SelectItem value="enterprise">Enterprise</SelectItem>
+                  <SelectItem value="institution">Institution</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -649,7 +649,7 @@ export default function Learners({
                       const learnerType = String(
                           learner.learnerType ??
                           learner.type ??
-                          (organizationName ? "enterprise" : "individual")
+                          (organizationName ? "institution" : "individual")
                       ).toLowerCase()
 
                       const certificationCount = Number(

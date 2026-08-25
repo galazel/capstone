@@ -15,7 +15,7 @@ import java.util.List;
 /**
  * Short-answer/descriptive answer keys -- had no authentication at all, the
  * same defect class the question bank itself had (see QuestionController).
- * Now admin- or enterprise-scoped like every other question-authoring endpoint.
+ * Now admin- or institution-scoped like every other question-authoring endpoint.
  */
 @RestController
 @RequestMapping("/api/text-question-configs")
@@ -26,49 +26,49 @@ public class TextQuestionConfigController {
 
     @GetMapping
     public List<TextQuestionConfigDto> getAll(@AuthenticationPrincipal Jwt jwt) {
-        requireAdminOrEnterprise(jwt);
+        requireAdminOrInstitution(jwt);
         return textQuestionConfigService.getAll();
     }
 
     @GetMapping("/{id}")
     public TextQuestionConfigDto getById(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
-        requireAdminOrEnterprise(jwt);
+        requireAdminOrInstitution(jwt);
         return textQuestionConfigService.getById(id);
     }
 
     @GetMapping("/by-question/{questionId}")
     public TextQuestionConfigDto getByQuestionId(@PathVariable Long questionId, @AuthenticationPrincipal Jwt jwt) {
-        requireAdminOrEnterprise(jwt);
+        requireAdminOrInstitution(jwt);
         return textQuestionConfigService.getByQuestionId(questionId);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public TextQuestionConfigDto create(@Valid @RequestBody TextQuestionConfigDto dto, @AuthenticationPrincipal Jwt jwt) {
-        requireAdminOrEnterprise(jwt);
+        requireAdminOrInstitution(jwt);
         return textQuestionConfigService.create(dto);
     }
 
     @PutMapping("/{id}")
     public TextQuestionConfigDto update(@PathVariable Long id, @Valid @RequestBody TextQuestionConfigDto dto, @AuthenticationPrincipal Jwt jwt) {
-        requireAdminOrEnterprise(jwt);
+        requireAdminOrInstitution(jwt);
         return textQuestionConfigService.update(id, dto);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
-        requireAdminOrEnterprise(jwt);
+        requireAdminOrInstitution(jwt);
         textQuestionConfigService.delete(id);
     }
 
-    private void requireAdminOrEnterprise(Jwt jwt) {
+    private void requireAdminOrInstitution(Jwt jwt) {
         if (jwt == null) {
             throw new IllegalArgumentException("Authentication is required");
         }
         var user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
-        if (!"ADMIN".equalsIgnoreCase(user.role()) && !CognitoAuthService.isEnterpriseRole(user.role())) {
-            throw new IllegalArgumentException("Admin or enterprise access is required");
+        if (!"ADMIN".equalsIgnoreCase(user.role()) && !CognitoAuthService.isInstitutionRole(user.role())) {
+            throw new IllegalArgumentException("Admin or institution access is required");
         }
     }
 }

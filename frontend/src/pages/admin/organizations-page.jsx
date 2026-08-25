@@ -11,7 +11,7 @@ import {
 } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
-import { EnterpriseStatusBadge } from "@/components/enterprise/enterprise-ui.jsx"
+import { InstitutionStatusBadge } from "@/components/institution/institution-ui.jsx"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,7 +41,7 @@ import {
   TableToolbar,
   useTableSort,
 } from "@/components/commons/data-table.jsx"
-import { getAllEnterprises } from "@/services/adminEnterpriseService"
+import { getAllInstitutions } from "@/services/adminInstitutionService"
 
 const ALL_FILTER_VALUE = "all"
 
@@ -151,7 +151,7 @@ const DEMO_ORGANIZATIONS = [
 
 function getOrganizationId(organization, index) {
   return (
-      organization.enterpriseId ??
+      organization.institutionId ??
       organization.organizationId ??
       organization.id ??
       `organization-${index}`
@@ -160,7 +160,7 @@ function getOrganizationId(organization, index) {
 
 function getOrganizationName(organization) {
   return (
-      organization.enterpriseName ??
+      organization.institutionName ??
       organization.organizationName ??
       organization.name ??
       organization.title ??
@@ -204,8 +204,8 @@ export default function Organizations({ onEdit, onDelete }) {
   const { sort, toggle, sortRows } = useTableSort()
 
   const { data: fetchedOrganizations = [], isLoading } = useQuery({
-    queryKey: ["admin-enterprises"],
-    queryFn: () => getAllEnterprises(),
+    queryKey: ["admin-institutions"],
+    queryFn: () => getAllInstitutions(),
     staleTime: 5 * 60 * 1000,
   })
 
@@ -379,7 +379,7 @@ export default function Organizations({ onEdit, onDelete }) {
 
           <div className="rounded-xl border bg-card px-4 py-3">
             <p className="text-xs font-medium text-muted-foreground">
-              Enterprise learners
+              Institution learners
             </p>
             <div className="mt-2 flex items-center gap-2">
               <Users className="h-4 w-4 text-primary" />
@@ -566,7 +566,7 @@ export default function Organizations({ onEdit, onDelete }) {
                             </TableCell>
 
                             <TableCell>
-                              <EnterpriseStatusBadge
+                              <InstitutionStatusBadge
                                   status={organization.status}
                               />
                             </TableCell>

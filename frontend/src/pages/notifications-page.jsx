@@ -80,7 +80,7 @@ function groupByDay(items) {
 
 /**
  * The full notification history for whoever is signed in -- one page shared by
- * the admin, enterprise, and learner portals, since the feed itself is
+ * the admin, institution, and learner portals, since the feed itself is
  * per-user rather than per-portal. The bell in every layout links here.
  */
 export default function NotificationsPage() {

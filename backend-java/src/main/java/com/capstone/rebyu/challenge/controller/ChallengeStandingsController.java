@@ -54,7 +54,7 @@ public class ChallengeStandingsController {
     /**
      * The caller's learner id, or null.
      *
-     * <p>Null rather than a 400 on the board: an admin or an enterprise manager
+     * <p>Null rather than a 400 on the board: an admin or an institution manager
      * signing in can legitimately look at the leaderboard, they simply are not
      * on it, and nothing there is theirs to highlight.
      */

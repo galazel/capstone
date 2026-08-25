@@ -2,11 +2,11 @@ package com.capstone.rebyu.partnership.service;
 
 import com.capstone.rebyu.auth.service.CognitoAdminService;
 import com.capstone.rebyu.common.BusinessRuleException;
-import com.capstone.rebyu.organization.entity.Enterprise;
-import com.capstone.rebyu.organization.entity.EnterpriseMember;
+import com.capstone.rebyu.organization.entity.Institution;
+import com.capstone.rebyu.organization.entity.InstitutionMember;
 import com.capstone.rebyu.organization.entity.OrganizationCertificate;
-import com.capstone.rebyu.organization.repository.EnterpriseMemberRepository;
-import com.capstone.rebyu.organization.repository.EnterpriseRepository;
+import com.capstone.rebyu.organization.repository.InstitutionMemberRepository;
+import com.capstone.rebyu.organization.repository.InstitutionRepository;
 import com.capstone.rebyu.organization.repository.OrganizationCertificateRepository;
 import com.capstone.rebyu.notification.service.NotificationService;
 import com.capstone.rebyu.user.entity.User;
@@ -34,7 +34,7 @@ import java.util.Locale;
 /**
  * Transaction Two: an admin approves or rejects a partnership request.
  *
- * Approval is atomic: it creates the Organization (Enterprise) record if it
+ * Approval is atomic: it creates the Organization (Institution) record if it
  * does not exist yet, then creates or tops up an OrganizationCertificate slot
  * allocation for every requested certification. Existing allocations are
  * increased, never overwritten. Rejection records the decision only and grants
@@ -46,13 +46,13 @@ import java.util.Locale;
 public class AdminPartnershipService {
 
     private static final int DEFAULT_ACCESS_MONTHS = 12;
-    private static final String ENTERPRISE_USER_TYPE = "ENTERPRISE";
+    private static final String INSTITUTION_USER_TYPE = "INSTITUTION";
 
     private final PartnershipRequestRepository requestRepository;
     private final PartnershipRequestItemRepository itemRepository;
-    private final EnterpriseRepository enterpriseRepository;
+    private final InstitutionRepository institutionRepository;
     private final OrganizationCertificateRepository organizationCertificateRepository;
-    private final EnterpriseMemberRepository enterpriseMemberRepository;
+    private final InstitutionMemberRepository institutionMemberRepository;
     private final UserRepository userRepository;
     private final UserTypeRepository userTypeRepository;
     private final CognitoAdminService cognitoAdminService;
@@ -78,21 +78,21 @@ public class AdminPartnershipService {
         PartnershipRequest request = loadRequest(requestId);
         requireReviewable(request);
 
-        Enterprise enterprise = resolveOrCreateEnterprise(request);
+        Institution institution = resolveOrCreateInstitution(request);
         LocalDate today = LocalDate.now();
 
         for (PartnershipRequestItem item : itemRepository
                 .findByPartnershipRequest_RequestId(requestId)) {
             int requestedSlots = item.getSlots() == null ? 0 : item.getSlots();
             OrganizationCertificate existing = organizationCertificateRepository
-                    .findByEnterprise_EnterpriseIdAndCertification_CertificationId(
-                            enterprise.getEnterpriseId(),
+                    .findByInstitution_InstitutionIdAndCertification_CertificationId(
+                            institution.getInstitutionId(),
                             item.getCertification().getCertificationId())
                     .orElse(null);
 
             if (existing == null) {
                 OrganizationCertificate access = OrganizationCertificate.builder()
-                        .enterprise(enterprise)
+                        .institution(institution)
                         .certification(item.getCertification())
                         .totalSlots(requestedSlots)
                         .usedSlots(0)
@@ -110,103 +110,103 @@ public class AdminPartnershipService {
             }
         }
 
-        request.setEnterprise(enterprise);
+        request.setInstitution(institution);
         request.setStatus(PartnershipRequest.Status.APPROVED);
         request.setReviewedAt(LocalDateTime.now());
         request.setReviewedBy(reviewedBy);
         request.setAdminRemarks(remarks);
         requestRepository.save(request);
 
-        // Provision the enterprise login account and email their credentials.
-        CognitoAdminService.ProvisionResult provision = provisionEnterpriseAccount(enterprise, request);
+        // Provision the institution login account and email their credentials.
+        CognitoAdminService.ProvisionResult provision = provisionInstitutionAccount(institution, request);
 
-        log.info("Partnership request {} APPROVED (enterprise {}); account emailed={}",
-                request.getReferenceNumber(), enterprise.getEnterpriseId(), provision.emailed());
+        log.info("Partnership request {} APPROVED (institution {}); account emailed={}",
+                request.getReferenceNumber(), institution.getInstitutionId(), provision.emailed());
 
-        notifyEnterpriseOwners(enterprise,
+        notifyInstitutionOwners(institution,
                 "Partnership request approved",
                 "Your partnership request (" + request.getReferenceNumber() + ") was approved.",
-                "/enterprise/dashboard");
+                "/institution/dashboard");
 
         return toDetail(request, provision.emailed(), provision.note());
     }
 
     /**
-     * Creates the enterprise's login account (Cognito emails the credentials)
-     * and links a primary-contact EnterpriseMember. Best-effort: if the
+     * Creates the institution's login account (Cognito emails the credentials)
+     * and links a primary-contact InstitutionMember. Best-effort: if the
      * account was already provisioned, or Cognito is unavailable, approval
      * still stands and a note explains what happened.
      */
-    private CognitoAdminService.ProvisionResult provisionEnterpriseAccount(
-            Enterprise enterprise, PartnershipRequest request) {
-        boolean alreadyLinked = !enterpriseMemberRepository
-                .findByEnterprise_EnterpriseId(enterprise.getEnterpriseId()).isEmpty();
+    private CognitoAdminService.ProvisionResult provisionInstitutionAccount(
+            Institution institution, PartnershipRequest request) {
+        boolean alreadyLinked = !institutionMemberRepository
+                .findByInstitution_InstitutionId(institution.getInstitutionId()).isEmpty();
         if (alreadyLinked) {
             return new CognitoAdminService.ProvisionResult(false, null,
-                    "This organization already has an enterprise account.");
+                    "This organization already has an institution account.");
         }
 
         String[] name = splitName(request.getContactPersonName());
         CognitoAdminService.ProvisionResult result = cognitoAdminService
-                .createEnterpriseAccount(request.getOrganizationEmail(), name[0], name[1]);
+                .createInstitutionAccount(request.getOrganizationEmail(), name[0], name[1]);
 
-        // Link a local ENTERPRISE user only when a Cognito identity exists, so
+        // Link a local INSTITUTION user only when a Cognito identity exists, so
         // sign-in and role resolution work. If the sub is unknown (existing
         // account), CognitoAuthService links it on first sign-in by email.
         if (result.cognitoSub() != null || result.emailed()) {
-            UserType enterpriseType = userTypeRepository.findByUserTypeText(ENTERPRISE_USER_TYPE)
+            UserType institutionType = userTypeRepository.findByUserTypeText(INSTITUTION_USER_TYPE)
                     .orElseGet(() -> {
                         UserType type = new UserType();
-                        type.setUserTypeText(ENTERPRISE_USER_TYPE);
+                        type.setUserTypeText(INSTITUTION_USER_TYPE);
                         return userTypeRepository.save(type);
                     });
 
             User user = userRepository.findByEmailIgnoreCase(request.getOrganizationEmail())
                     .orElseGet(() -> User.builder()
-                            .userType(enterpriseType)
+                            .userType(institutionType)
                             .email(request.getOrganizationEmail())
                             .passwordHash("COGNITO")
                             .accountStatus(User.AccountStatus.active)
                             .joinedAt(LocalDateTime.now())
                             .cognitoSub(result.cognitoSub())
                             .build());
-            user.setUserType(enterpriseType);
+            user.setUserType(institutionType);
             if (user.getCognitoSub() == null && result.cognitoSub() != null) {
                 user.setCognitoSub(result.cognitoSub());
             }
             user = userRepository.save(user);
 
-            EnterpriseMember member = EnterpriseMember.builder()
-                    .enterprise(enterprise)
+            InstitutionMember member = InstitutionMember.builder()
+                    .institution(institution)
                     .user(user)
-                    .memberRole(EnterpriseMember.MemberRole.owner)
+                    .memberRole(InstitutionMember.MemberRole.owner)
                     .isPrimaryContact(true)
                     .joinedAt(LocalDateTime.now())
                     .build();
-            enterpriseMemberRepository.save(member);
+            institutionMemberRepository.save(member);
         } else {
             // Cognito reported the account already exists (UsernameExistsException
             // was caught upstream: no new sub was minted and nothing was emailed).
-            // The enterprise and its certificate slots were still created above --
-            // without linking an owner here, the enterprise would be permanently
+            // The institution and its certificate slots were still created above --
+            // without linking an owner here, the institution would be permanently
             // orphaned with nobody able to manage it. Link the existing local User
             // for that email if one exists; CognitoAuthService will already
             // resolve sign-in for that account by its Cognito sub/email.
             User existingUser = userRepository.findByEmailIgnoreCase(request.getOrganizationEmail())
                     .orElse(null);
             if (existingUser != null) {
-                EnterpriseMember member = EnterpriseMember.builder()
-                        .enterprise(enterprise)
+                InstitutionMember member = InstitutionMember.builder()
+                        .institution(institution)
                         .user(existingUser)
-                        .memberRole(EnterpriseMember.MemberRole.owner)
+                        .memberRole(InstitutionMember.MemberRole.owner)
                         .isPrimaryContact(true)
                         .joinedAt(LocalDateTime.now())
                         .build();
-                enterpriseMemberRepository.save(member);
+                institutionMemberRepository.save(member);
             } else {
                 log.warn("Cognito account already exists for {} but no local User is linked to it; "
-                                + "enterprise {} was created with no owner and requires manual linking.",
-                        request.getOrganizationEmail(), enterprise.getEnterpriseId());
+                                + "institution {} was created with no owner and requires manual linking.",
+                        request.getOrganizationEmail(), institution.getInstitutionId());
             }
         }
         return result;
@@ -233,24 +233,24 @@ public class AdminPartnershipService {
 
         log.info("Partnership request {} REJECTED", request.getReferenceNumber());
 
-        // Only an already-signed-in enterprise (re-requesting more slots) has an
+        // Only an already-signed-in institution (re-requesting more slots) has an
         // account to notify at this point -- a first-time public request has no
-        // enterprise/account yet when rejected.
-        if (request.getEnterprise() != null) {
-            notifyEnterpriseOwners(request.getEnterprise(),
+        // institution/account yet when rejected.
+        if (request.getInstitution() != null) {
+            notifyInstitutionOwners(request.getInstitution(),
                     "Partnership request rejected",
                     "Your partnership request (" + request.getReferenceNumber() + ") was not approved.",
-                    "/enterprise/partnership");
+                    "/institution/partnership");
         }
 
         return toDetail(request);
     }
 
-    /** Notifies every owner/primary-contact User linked to this enterprise. */
-    private void notifyEnterpriseOwners(Enterprise enterprise, String title, String body, String href) {
-        enterpriseMemberRepository.findByEnterprise_EnterpriseId(enterprise.getEnterpriseId()).stream()
-                .filter(member -> member.isPrimaryContact() || member.getMemberRole() == EnterpriseMember.MemberRole.owner)
-                .map(EnterpriseMember::getUser)
+    /** Notifies every owner/primary-contact User linked to this institution. */
+    private void notifyInstitutionOwners(Institution institution, String title, String body, String href) {
+        institutionMemberRepository.findByInstitution_InstitutionId(institution.getInstitutionId()).stream()
+                .filter(member -> member.isPrimaryContact() || member.getMemberRole() == InstitutionMember.MemberRole.owner)
+                .map(InstitutionMember::getUser)
                 .distinct()
                 .forEach(user -> notificationService.notify(user, title, body, href));
     }
@@ -271,35 +271,35 @@ public class AdminPartnershipService {
         }
     }
 
-    private Enterprise resolveOrCreateEnterprise(PartnershipRequest request) {
-        if (request.getEnterprise() != null) {
-            return request.getEnterprise();
+    private Institution resolveOrCreateInstitution(PartnershipRequest request) {
+        if (request.getInstitution() != null) {
+            return request.getInstitution();
         }
-        // Reuse the existing Enterprise that shares this contact email, so an
+        // Reuse the existing Institution that shares this contact email, so an
         // approved partnership provisions the login account on the SAME
         // organization the admin already set up — never a duplicate. (Restored
         // 2026-07-19: a prior change ALSO required an exact organization-name
-        // match here, which created duplicate enterprises on approval and left
+        // match here, which created duplicate institutions on approval and left
         // the original one with no account — the "I approved but can't get an
-        // account for that enterprise" bug.)
-        Enterprise byEmail = enterpriseRepository
+        // account for that institution" bug.)
+        Institution byEmail = institutionRepository
                 .findByPrimaryContactEmailIgnoreCase(request.getOrganizationEmail())
                 .orElse(null);
         if (byEmail != null) {
             return byEmail;
         }
 
-        // Ensure the unique enterprise_name does not collide.
+        // Ensure the unique institution_name does not collide.
         String name = request.getOrganizationName();
-        if (enterpriseRepository.findByEnterpriseNameIgnoreCase(name).isPresent()) {
+        if (institutionRepository.findByInstitutionNameIgnoreCase(name).isPresent()) {
             name = name + " (" + request.getReferenceNumber() + ")";
         }
 
-        Enterprise enterprise = Enterprise.builder()
-                .enterpriseName(name)
+        Institution institution = Institution.builder()
+                .institutionName(name)
                 // The public form does not collect these; use safe defaults an
                 // admin can refine later on the organization page.
-                .organizationType(Enterprise.OrganizationType.other)
+                .organizationType(Institution.OrganizationType.other)
                 .industry("General")
                 .primaryContactName(request.getContactPersonName())
                 .primaryContactEmail(request.getOrganizationEmail())
@@ -308,7 +308,7 @@ public class AdminPartnershipService {
                 .isVerified(true)
                 .joinedAt(LocalDateTime.now())
                 .build();
-        return enterpriseRepository.save(enterprise);
+        return institutionRepository.save(institution);
     }
 
     private PartnershipRequestSummaryDto toSummary(PartnershipRequest request) {
@@ -358,7 +358,7 @@ public class AdminPartnershipService {
                 request.getReviewedAt(),
                 request.getReviewedBy(),
                 request.getAdminRemarks(),
-                request.getEnterprise() != null ? request.getEnterprise().getEnterpriseId() : null,
+                request.getInstitution() != null ? request.getInstitution().getInstitutionId() : null,
                 items,
                 accountEmailed,
                 accountNote

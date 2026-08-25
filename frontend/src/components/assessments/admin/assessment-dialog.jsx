@@ -219,7 +219,7 @@ export default function AssessmentDialog({
                                            initialTitle = "",
                                            lockPreset = false,
                                            // When set, a newly created exam is owned by this
-                                           // Enterprise group (member-authored) instead of being
+                                           // Institution group (member-authored) instead of being
                                            // official, platform-wide content. See ExamController.
                                            ownerGroupId = null,
                                          }) {

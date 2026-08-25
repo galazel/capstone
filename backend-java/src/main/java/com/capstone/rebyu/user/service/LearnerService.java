@@ -3,10 +3,10 @@ package com.capstone.rebyu.user.service;
 import com.capstone.rebyu.common.InvitationAcceptanceException;
 import com.capstone.rebyu.enrollment.entity.OrganizationCertificationLearner;
 import com.capstone.rebyu.enrollment.repository.OrganizationCertificationLearnerRepository;
-import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup;
-import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroupAssignee;
-import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupAssigneeRepository;
-import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupRepository;
+import com.capstone.rebyu.institutiongroup.entity.InstitutionGroup;
+import com.capstone.rebyu.institutiongroup.entity.InstitutionGroupAssignee;
+import com.capstone.rebyu.institutiongroup.repository.InstitutionGroupAssigneeRepository;
+import com.capstone.rebyu.institutiongroup.repository.InstitutionGroupRepository;
 import com.capstone.rebyu.notification.entity.LearnerInvitation;
 import com.capstone.rebyu.notification.repository.LearnerInvitationRepository;
 import com.capstone.rebyu.notification.service.InvitationTokenService;
@@ -42,9 +42,9 @@ public class LearnerService {
             organizationCertificationLearnerRepository;
     private final OrganizationCertificateRepository organizationCertificateRepository;
     private final InvitationTokenService invitationTokenService;
-    private final EnterpriseGroupAssigneeRepository enterpriseGroupAssigneeRepository;
+    private final InstitutionGroupAssigneeRepository institutionGroupAssigneeRepository;
     private final LearnerDeletionService learnerDeletionService;
-    private final EnterpriseGroupRepository enterpriseGroupRepository;
+    private final InstitutionGroupRepository institutionGroupRepository;
     private final NotificationService notificationService;
 
     public List<LearnerDto> getAll() {
@@ -81,7 +81,7 @@ public class LearnerService {
     }
 
     /**
-     * Accepts an enterprise invitation for the authenticated learner. The
+     * Accepts an institution invitation for the authenticated learner. The
      * caller (controller) resolves the learner from the validated JWT — a
      * learnerId is NEVER accepted from the client. Runs in one transaction.
      *
@@ -133,7 +133,7 @@ public class LearnerService {
             invitation.setStatus(LearnerInvitation.Status.EXPIRED);
             learnerInvitationRepository.save(invitation);
             restoreSlot(invitation.getOrgCert());
-            restoreGroupSlot(invitation.getEnterpriseGroup());
+            restoreGroupSlot(invitation.getInstitutionGroup());
             throw new InvitationAcceptanceException(
                     InvitationAcceptanceException.Code.INVITATION_EXPIRED,
                     "This invitation has expired.");
@@ -189,19 +189,19 @@ public class LearnerService {
         // The invitation was sent by a group leader for a specific group --
         // place the newly-enrolled learner directly into it, so no separate
         // "add to group" step is needed.
-        EnterpriseGroup group = invitation.getEnterpriseGroup();
+        InstitutionGroup group = invitation.getInstitutionGroup();
         if (group != null && invitation.getInvitedBy() != null) {
-            EnterpriseGroupAssignee assignee = EnterpriseGroupAssignee.builder()
-                    .enterpriseGroup(group)
+            InstitutionGroupAssignee assignee = InstitutionGroupAssignee.builder()
+                    .institutionGroup(group)
                     .orgCertLearner(enrollment)
                     .assignedBy(invitation.getInvitedBy())
                     .assignedAt(LocalDateTime.now())
-                    .status(EnterpriseGroupAssignee.Status.active)
-                    .role(EnterpriseGroupAssignee.Role.member)
+                    .status(InstitutionGroupAssignee.Status.active)
+                    .role(InstitutionGroupAssignee.Role.member)
                     .build();
-            enterpriseGroupAssigneeRepository.save(assignee);
+            institutionGroupAssigneeRepository.save(assignee);
             log.info("Learner {} placed into group {} via invitation {}",
-                    learner.getLearnerId(), group.getEnterpriseGroupId(), invitation.getInvitationId());
+                    learner.getLearnerId(), group.getInstitutionGroupId(), invitation.getInvitationId());
 
             notificationService.notify(
                     invitation.getInvitedBy(),
@@ -210,7 +210,7 @@ public class LearnerService {
                             + " accepted your invitation to " + group.getGroupName() + ".",
                     // Straight to the group's learners tab -- the leader opens
                     // this to look at who just joined.
-                    "/enterprise/groups/" + group.getEnterpriseGroupId() + "?tab=learners");
+                    "/institution/groups/" + group.getInstitutionGroupId() + "?tab=learners");
         }
 
         // Backfill the learner's profile name from the invitation when the
@@ -250,12 +250,12 @@ public class LearnerService {
     }
 
     /** Restores exactly one reserved slot on the group; used_slots never goes negative. */
-    private void restoreGroupSlot(EnterpriseGroup group) {
+    private void restoreGroupSlot(InstitutionGroup group) {
         if (group == null) {
             return;
         }
         group.setUsedSlots(Math.max(0, group.getUsedSlots() - 1));
-        enterpriseGroupRepository.save(group);
+        institutionGroupRepository.save(group);
     }
 
     private boolean isBlank(String value) {

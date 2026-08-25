@@ -16,7 +16,7 @@ public class OrganizationCertificateDto {
     private Long orgCertId;
 
     @NotNull
-    private Long enterpriseId;
+    private Long institutionId;
 
     @NotNull
     private Long certificationId;

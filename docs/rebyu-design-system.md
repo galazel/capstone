@@ -25,7 +25,7 @@ Two layers, applied together:
    `--radius`, the chart ramp, the sidebar set, and the legacy `--brand-*`
    values — now resolve to the Rebyu palette. This happens in three blocks:
    `:root` (landing and auth), `.netacad-portal` (shared by the admin,
-   enterprise, and learner layouts), and `.dark .netacad-portal`. Any page built
+   institution, and learner layouts), and `.dark .netacad-portal`. Any page built
    on `bg-primary` / `text-foreground` / `border-border` or the shared shadcn
    primitives adopts the system without being edited.
 2. **Tactile component layer (global, restrained).** Appended at the foot of

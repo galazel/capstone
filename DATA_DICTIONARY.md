@@ -11,7 +11,7 @@ Derived from the JPA entities in `backend-java/src/main/java/com/capstone/rebyu`
 | Field Name | Constraints | Data Type | Allow Nulls | Description |
 |---|---|---|---|---|
 | user_type_id | PK, identity | BIGINT | No | Unique identifier for a user type. |
-| user_type_text | NOT NULL | VARCHAR(20) | No | Name of the role, such as learner, admin, or enterprise. |
+| user_type_text | NOT NULL | VARCHAR(20) | No | Name of the role, such as learner, admin, or institution. |
 
 The USER_TYPES table stores the account role classifications of the platform. Many users can reference each user type.
 
@@ -20,7 +20,7 @@ The USER_TYPES table stores the account role classifications of the platform. Ma
 | Field Name | Constraints | Data Type | Allow Nulls | Description |
 |---|---|---|---|---|
 | user_id | PK, identity | BIGINT | No | Unique identifier for a user account. |
-| user_type_id | FK → USER_TYPES, NOT NULL | BIGINT | No | Role of the account (learner, admin, enterprise). |
+| user_type_id | FK → USER_TYPES, NOT NULL | BIGINT | No | Role of the account (learner, admin, institution). |
 | email | UNIQUE, NOT NULL | VARCHAR(254) | No | Login e-mail address of the account. |
 | password_hash | NOT NULL | VARCHAR(255) | No | Hashed password of the account. |
 | account_status | NOT NULL | VARCHAR(20) | No | Account state: active, inactive, or suspended. Defaults to active. |
@@ -28,7 +28,7 @@ The USER_TYPES table stores the account role classifications of the platform. Ma
 | phone_number | — | VARCHAR(30) | Yes | Contact number of the user. |
 | cognito_sub | UNIQUE | VARCHAR(64) | Yes | Stable Amazon Cognito subject linked to this account; null for pre-Cognito accounts until their first federated sign-in. |
 
-The USERS table stores every account on the platform. Each user belongs to one user type, and a user can own one learner profile, many activity logs, and many enterprise memberships.
+The USERS table stores every account on the platform. Each user belongs to one user type, and a user can own one learner profile, many activity logs, and many institution memberships.
 
 ### DATA DICTIONARY OF LEARNERS
 
@@ -643,7 +643,7 @@ The LEARNER_SUBSCRIPTIONS table stores a learner's personal (B2C) subscription t
 | Field Name | Constraints | Data Type | Allow Nulls | Description |
 |---|---|---|---|---|
 | institutional_license_id | PK, identity | BIGINT | No | Unique identifier for a license. |
-| enterprise_id | FK → ENTERPRISES, NOT NULL | BIGINT | No | Enterprise holding the license. |
+| institution_id | FK → INSTITUTIONS, NOT NULL | BIGINT | No | Institution holding the license. |
 | subscription_plan_id | FK → SUBSCRIPTION_PLANS, NOT NULL | BIGINT | No | Institution plan licensed. |
 | provider | — | VARCHAR(30) | Yes | Payment provider handling the license. |
 | provider_customer_id | — | VARCHAR(100) | Yes | Customer id on the payment provider. |
@@ -663,18 +663,18 @@ The LEARNER_SUBSCRIPTIONS table stores a learner's personal (B2C) subscription t
 | created_at | NOT NULL | TIMESTAMP | No | Date and time the record was created. |
 | updated_at | NOT NULL | TIMESTAMP | No | Date and time the record was last updated. |
 
-The INSTITUTIONAL_LICENSES table stores an enterprise's (B2B) license to an institution plan, with optional per-contract limit overrides. Many licenses can reference one plan.
+The INSTITUTIONAL_LICENSES table stores an institution's (B2B) license to an institution plan, with optional per-contract limit overrides. Many licenses can reference one plan.
 
 ---
 
 ## 9. ORGANIZATIONS AND PARTNERSHIPS (B2B)
 
-### DATA DICTIONARY OF ENTERPRISES
+### DATA DICTIONARY OF INSTITUTIONS
 
 | Field Name | Constraints | Data Type | Allow Nulls | Description |
 |---|---|---|---|---|
-| enterprise_id | PK, identity | BIGINT | No | Unique identifier for an enterprise. |
-| enterprise_name | UNIQUE, NOT NULL | VARCHAR(150) | No | Registered name of the organization. |
+| institution_id | PK, identity | BIGINT | No | Unique identifier for an institution. |
+| institution_name | UNIQUE, NOT NULL | VARCHAR(150) | No | Registered name of the organization. |
 | organization_type | NOT NULL | VARCHAR(50) | No | Kind of organization: school, university, review_center, company, government, training_center, or other. |
 | industry | NOT NULL | VARCHAR(100) | No | Industry the organization operates in. |
 | primary_contact_name | NOT NULL | VARCHAR(100) | No | Name of the primary contact person. |
@@ -682,41 +682,41 @@ The INSTITUTIONAL_LICENSES table stores an enterprise's (B2B) license to an inst
 | primary_contact_phone | — | VARCHAR(30) | Yes | Phone number of the primary contact person. |
 | is_verified | NOT NULL | BOOLEAN | No | Whether the organization has passed verification. Defaults to false. |
 | address | — | TEXT | Yes | Physical address of the organization. |
-| joined_at | — | TIMESTAMP | Yes | Date and time the enterprise was onboarded. |
+| joined_at | — | TIMESTAMP | Yes | Date and time the institution was onboarded. |
 
-The ENTERPRISES table stores partner organizations. One enterprise owns members, verification documents, certificates (slot allocations), groups, invoices, and licenses.
+The INSTITUTIONS table stores partner organizations. One institution owns members, verification documents, certificates (slot allocations), groups, invoices, and licenses.
 
-### DATA DICTIONARY OF ENTERPRISE_MEMBERS
+### DATA DICTIONARY OF INSTITUTION_MEMBERS
 
 | Field Name | Constraints | Data Type | Allow Nulls | Description |
 |---|---|---|---|---|
-| enterprise_member_id | PK, identity | BIGINT | No | Unique identifier for a membership. |
-| enterprise_id | FK → ENTERPRISES, NOT NULL, UNIQUE(enterprise_id, user_id) | BIGINT | No | Enterprise the member belongs to. |
+| institution_member_id | PK, identity | BIGINT | No | Unique identifier for a membership. |
+| institution_id | FK → INSTITUTIONS, NOT NULL, UNIQUE(institution_id, user_id) | BIGINT | No | Institution the member belongs to. |
 | user_id | FK → USERS, NOT NULL | BIGINT | No | User account of the member. |
 | member_role | NOT NULL | VARCHAR(20) | No | Role in the organization: owner, manager, or staff. Defaults to manager. |
 | is_primary_contact | NOT NULL | BOOLEAN | No | Whether this member is the primary contact. Defaults to false. |
-| joined_at | NOT NULL | TIMESTAMP | No | Date and time the member joined the enterprise. |
+| joined_at | NOT NULL | TIMESTAMP | No | Date and time the member joined the institution. |
 
-The ENTERPRISE_MEMBERS table links user accounts to enterprises with a role. A user can belong to an enterprise only once.
+The INSTITUTION_MEMBERS table links user accounts to institutions with a role. A user can belong to an institution only once.
 
-### DATA DICTIONARY OF ENTERPRISE_VERIFICATION_DOCUMENTS
+### DATA DICTIONARY OF INSTITUTION_VERIFICATION_DOCUMENTS
 
 | Field Name | Constraints | Data Type | Allow Nulls | Description |
 |---|---|---|---|---|
-| enterprise_document_id | PK, identity | BIGINT | No | Unique identifier for a verification document. |
-| enterprise_id | FK → ENTERPRISES, NOT NULL | BIGINT | No | Enterprise the document belongs to. |
+| institution_document_id | PK, identity | BIGINT | No | Unique identifier for a verification document. |
+| institution_id | FK → INSTITUTIONS, NOT NULL | BIGINT | No | Institution the document belongs to. |
 | document_type | NOT NULL | VARCHAR(50) | No | Kind of document (e.g. business permit, SEC registration). |
 | file_key | NOT NULL | VARCHAR(500) | No | S3 key of the uploaded file. |
 | uploaded_at | NOT NULL | TIMESTAMP | No | Date and time the document was uploaded. |
 
-The ENTERPRISE_VERIFICATION_DOCUMENTS table stores the files submitted to verify an organization. Many documents belong to one enterprise.
+The INSTITUTION_VERIFICATION_DOCUMENTS table stores the files submitted to verify an organization. Many documents belong to one institution.
 
 ### DATA DICTIONARY OF ORGANIZATION_CERTIFICATES
 
 | Field Name | Constraints | Data Type | Allow Nulls | Description |
 |---|---|---|---|---|
 | org_cert_id | PK, identity | BIGINT | No | Unique identifier for an organization's certification allocation. |
-| enterprise_id | FK → ENTERPRISES, NOT NULL | BIGINT | No | Enterprise that purchased the allocation. |
+| institution_id | FK → INSTITUTIONS, NOT NULL | BIGINT | No | Institution that purchased the allocation. |
 | certification_id | FK → CERTIFICATIONS, NOT NULL | BIGINT | No | Certification the slots grant access to. |
 | total_slots | NOT NULL | INT | No | Total learner slots purchased. |
 | used_slots | NOT NULL | INT | No | Slots already consumed by learners. Defaults to 0. |
@@ -726,7 +726,7 @@ The ENTERPRISE_VERIFICATION_DOCUMENTS table stores the files submitted to verify
 | status | NOT NULL | VARCHAR(20) | No | Allocation state: pending, active, expired, suspended, or cancelled. Defaults to active. |
 | version | Optimistic lock (@Version) | BIGINT | Yes | Version counter guarding concurrent slot reservation so simultaneous invitation batches cannot oversubscribe. |
 
-The ORGANIZATION_CERTIFICATES table stores the certification slot allocations an enterprise has purchased. One allocation is referenced by learner invitations, sponsored enrollments, groups, and renewal requests.
+The ORGANIZATION_CERTIFICATES table stores the certification slot allocations an institution has purchased. One allocation is referenced by learner invitations, sponsored enrollments, groups, and renewal requests.
 
 ### DATA DICTIONARY OF PARTNERSHIP_REQUESTS
 
@@ -734,7 +734,7 @@ The ORGANIZATION_CERTIFICATES table stores the certification slot allocations an
 |---|---|---|---|---|
 | request_id | PK, identity | BIGINT | No | Unique identifier for a partnership request. |
 | reference_number | UNIQUE, indexed | VARCHAR(32) | Yes | Public reference number returned to the requester for status lookup. |
-| enterprise_id | FK → ENTERPRISES | BIGINT | Yes | Null until the request is approved and an enterprise record is created. |
+| institution_id | FK → INSTITUTIONS | BIGINT | Yes | Null until the request is approved and an institution record is created. |
 | organization_name | — | VARCHAR(150) | Yes | Organization name captured on the public request. |
 | organization_email | Indexed | VARCHAR(254) | Yes | Organization e-mail captured on the public request. |
 | contact_person_name | — | VARCHAR(150) | Yes | Contact person named on the request. |
@@ -748,7 +748,7 @@ The ORGANIZATION_CERTIFICATES table stores the certification slot allocations an
 | admin_remarks | — | TEXT | Yes | Admin notes on approval or rejection. |
 | idempotency_key | UNIQUE | VARCHAR(64) | Yes | Prevents duplicate submissions of the same request. |
 
-The PARTNERSHIP_REQUESTS table stores public partnership applications from organizations. One request owns many request items and meetings, and may result in one enterprise.
+The PARTNERSHIP_REQUESTS table stores public partnership applications from organizations. One request owns many request items and meetings, and may result in one institution.
 
 ### DATA DICTIONARY OF PARTNERSHIP_REQUEST_ITEMS
 
@@ -776,7 +776,7 @@ The PARTNERSHIP_REQUEST_ITEMS table stores the certifications and slot counts re
 
 The PARTNERSHIP_MEETINGS table stores the meetings scheduled to evaluate a partnership request. Many meetings can belong to one request.
 
-### DATA DICTIONARY OF ENTERPRISE_CERTIFICATION_RENEWAL_REQUESTS
+### DATA DICTIONARY OF INSTITUTION_CERTIFICATION_RENEWAL_REQUESTS
 
 | Field Name | Constraints | Data Type | Allow Nulls | Description |
 |---|---|---|---|---|
@@ -787,18 +787,18 @@ The PARTNERSHIP_MEETINGS table stores the meetings scheduled to evaluate a partn
 | status | NOT NULL | VARCHAR(20) | No | Request state: pending, approved, rejected, or cancelled. Defaults to pending. |
 | reviewed_at | — | TIMESTAMP | Yes | Date and time an admin reviewed the request. |
 
-The ENTERPRISE_CERTIFICATION_RENEWAL_REQUESTS table stores requests to extend an organization's certification access. Many renewal requests can belong to one organization certificate.
+The INSTITUTION_CERTIFICATION_RENEWAL_REQUESTS table stores requests to extend an organization's certification access. Many renewal requests can belong to one organization certificate.
 
-### DATA DICTIONARY OF ENTERPRISE_INVOICES
+### DATA DICTIONARY OF INSTITUTION_INVOICES
 
 | Field Name | Constraints | Data Type | Allow Nulls | Description |
 |---|---|---|---|---|
-| enterprise_invoice_id | PK, identity | BIGINT | No | Unique identifier for an invoice. |
-| enterprise_id | FK → ENTERPRISES, NOT NULL | BIGINT | No | Enterprise being billed. |
+| institution_invoice_id | PK, identity | BIGINT | No | Unique identifier for an invoice. |
+| institution_id | FK → INSTITUTIONS, NOT NULL | BIGINT | No | Institution being billed. |
 | invoice_number | UNIQUE, NOT NULL | VARCHAR(50) | No | Human-readable invoice number. |
 | invoice_type | NOT NULL | VARCHAR(30) | No | Reason for the invoice: initial_access or renewal. |
 | partnership_request_id | FK → PARTNERSHIP_REQUESTS | BIGINT | Yes | Approved partnership request that generated the invoice. |
-| renewal_request_id | FK → ENTERPRISE_CERTIFICATION_RENEWAL_REQUESTS | BIGINT | Yes | Approved renewal request that generated the invoice. |
+| renewal_request_id | FK → INSTITUTION_CERTIFICATION_RENEWAL_REQUESTS | BIGINT | Yes | Approved renewal request that generated the invoice. |
 | bill_to_name | NOT NULL | VARCHAR(150) | No | Billing contact name. |
 | bill_to_email | NOT NULL | VARCHAR(254) | No | Billing contact e-mail. |
 | subtotal | NOT NULL | DECIMAL(10,2) | No | Sum of line items before discount and tax. |
@@ -807,25 +807,25 @@ The ENTERPRISE_CERTIFICATION_RENEWAL_REQUESTS table stores requests to extend an
 | tax_amount | NOT NULL | DECIMAL(10,2) | No | Tax amount charged. Defaults to 0. |
 | total_amount | NOT NULL | DECIMAL(10,2) | No | Final amount due. |
 | issued_at | NOT NULL | TIMESTAMP | No | Date and time the invoice was issued. |
-| payment_reference | — | VARCHAR(100) | Yes | Payment reference submitted by the enterprise. |
+| payment_reference | — | VARCHAR(100) | Yes | Payment reference submitted by the institution. |
 | payment_proof_key | — | VARCHAR(500) | Yes | S3 key of the uploaded payment proof. |
 | verified_by_user_id | FK → USERS | BIGINT | Yes | Admin who verified the payment. |
 | paid_at | — | TIMESTAMP | Yes | Date and time payment was confirmed. |
 | status | NOT NULL | VARCHAR(30) | No | Invoice state: draft, issued, payment_submitted, paid, rejected, cancelled, or VOID. Defaults to issued. |
 
-The ENTERPRISE_INVOICES table stores B2B invoices for initial access and renewals. One invoice contains many invoice items and traces back to the request that produced it.
+The INSTITUTION_INVOICES table stores B2B invoices for initial access and renewals. One invoice contains many invoice items and traces back to the request that produced it.
 
-### DATA DICTIONARY OF ENTERPRISE_INVOICE_ITEMS
+### DATA DICTIONARY OF INSTITUTION_INVOICE_ITEMS
 
 | Field Name | Constraints | Data Type | Allow Nulls | Description |
 |---|---|---|---|---|
-| enterprise_invoice_item_id | PK, identity | BIGINT | No | Unique identifier for an invoice line item. |
-| enterprise_invoice_id | FK → ENTERPRISE_INVOICES, NOT NULL | BIGINT | No | Invoice the line item belongs to. |
+| institution_invoice_item_id | PK, identity | BIGINT | No | Unique identifier for an invoice line item. |
+| institution_invoice_id | FK → INSTITUTION_INVOICES, NOT NULL | BIGINT | No | Invoice the line item belongs to. |
 | certification_id | FK → CERTIFICATIONS, NOT NULL | BIGINT | No | Certification being billed. |
 | learner_slots | — | INT | Yes | Number of learner slots billed. |
 | validity_months | NOT NULL | INT | No | Access validity in months being billed. |
 
-The ENTERPRISE_INVOICE_ITEMS table stores the line items of an enterprise invoice. Many items belong to one invoice, each referencing one certification.
+The INSTITUTION_INVOICE_ITEMS table stores the line items of an institution invoice. Many items belong to one invoice, each referencing one certification.
 
 ### DATA DICTIONARY OF LEARNER_INVITATIONS
 
@@ -845,14 +845,14 @@ The LEARNER_INVITATIONS table stores invitations sent by organizations to enroll
 
 ---
 
-## 10. ENTERPRISE GROUPS
+## 10. INSTITUTION GROUPS
 
-### DATA DICTIONARY OF ENTERPRISE_GROUPS
+### DATA DICTIONARY OF INSTITUTION_GROUPS
 
 | Field Name | Constraints | Data Type | Allow Nulls | Description |
 |---|---|---|---|---|
-| enterprise_group_id | PK, identity | BIGINT | No | Unique identifier for a group. |
-| enterprise_id | FK → ENTERPRISES, NOT NULL | BIGINT | No | Enterprise that owns the group. |
+| institution_group_id | PK, identity | BIGINT | No | Unique identifier for a group. |
+| institution_id | FK → INSTITUTIONS, NOT NULL | BIGINT | No | Institution that owns the group. |
 | org_cert_id | FK → ORGANIZATION_CERTIFICATES, NOT NULL | BIGINT | No | Certification allocation the group is scoped to. |
 | group_name | NOT NULL | VARCHAR(150) | No | Name of the group. |
 | group_description | — | VARCHAR(500) | Yes | Description of the group. |
@@ -860,35 +860,35 @@ The LEARNER_INVITATIONS table stores invitations sent by organizations to enroll
 | created_at | NOT NULL | TIMESTAMP | No | Date and time the group was created. |
 | status | NOT NULL | VARCHAR(20) | No | Group state: active or archived. Defaults to active. |
 
-The ENTERPRISE_GROUPS table stores learner groupings inside an enterprise's certification allocation. One group has many authorities and many assignees.
+The INSTITUTION_GROUPS table stores learner groupings inside an institution's certification allocation. One group has many authorities and many assignees.
 
-### DATA DICTIONARY OF ENTERPRISE_GROUP_AUTHORITIES
+### DATA DICTIONARY OF INSTITUTION_GROUP_AUTHORITIES
 
 | Field Name | Constraints | Data Type | Allow Nulls | Description |
 |---|---|---|---|---|
-| enterprise_group_authority_id | PK, identity | BIGINT | No | Unique identifier for an authority assignment. |
-| enterprise_group_id | FK → ENTERPRISE_GROUPS, NOT NULL, UNIQUE(enterprise_group_id, user_id) | BIGINT | No | Group being managed. |
+| institution_group_authority_id | PK, identity | BIGINT | No | Unique identifier for an authority assignment. |
+| institution_group_id | FK → INSTITUTION_GROUPS, NOT NULL, UNIQUE(institution_group_id, user_id) | BIGINT | No | Group being managed. |
 | user_id | FK → USERS, NOT NULL | BIGINT | No | User granted authority over the group. |
 | assigned_by | FK → USERS, NOT NULL | BIGINT | No | User who granted the authority. |
 | assigned_at | NOT NULL | TIMESTAMP | No | Date and time the authority was granted. |
 | status | NOT NULL | VARCHAR(20) | No | Assignment state: active or archived. Defaults to active. |
 | removed_at | — | TIMESTAMP | Yes | Date and time the authority was removed. |
 
-The ENTERPRISE_GROUP_AUTHORITIES table stores the users (e.g. instructors) authorized to manage a group. A user can be an authority of a group only once.
+The INSTITUTION_GROUP_AUTHORITIES table stores the users (e.g. instructors) authorized to manage a group. A user can be an authority of a group only once.
 
-### DATA DICTIONARY OF ENTERPRISE_GROUP_ASSIGNEES
+### DATA DICTIONARY OF INSTITUTION_GROUP_ASSIGNEES
 
 | Field Name | Constraints | Data Type | Allow Nulls | Description |
 |---|---|---|---|---|
-| enterprise_group_assignee_id | PK, identity | BIGINT | No | Unique identifier for a group membership. |
-| enterprise_group_id | FK → ENTERPRISE_GROUPS, NOT NULL, UNIQUE(enterprise_group_id, org_cert_learner_id) | BIGINT | No | Group the learner is assigned to. |
+| institution_group_assignee_id | PK, identity | BIGINT | No | Unique identifier for a group membership. |
+| institution_group_id | FK → INSTITUTION_GROUPS, NOT NULL, UNIQUE(institution_group_id, org_cert_learner_id) | BIGINT | No | Group the learner is assigned to. |
 | org_cert_learner_id | FK → ORGANIZATION_CERTIFICATION_LEARNERS, NOT NULL | BIGINT | No | Sponsored enrollment placed in the group. |
 | assigned_by | FK → USERS, NOT NULL | BIGINT | No | User who assigned the learner. |
 | assigned_at | NOT NULL | TIMESTAMP | No | Date and time the learner was assigned. |
 | status | NOT NULL | VARCHAR(20) | No | Membership state: active or archived. Defaults to active. |
 | removed_at | — | TIMESTAMP | Yes | Date and time the learner was removed from the group. |
 
-The ENTERPRISE_GROUP_ASSIGNEES table places sponsored learners into enterprise groups. A sponsored enrollment can appear in a group only once.
+The INSTITUTION_GROUP_ASSIGNEES table places sponsored learners into institution groups. A sponsored enrollment can appear in a group only once.
 
 ---
 

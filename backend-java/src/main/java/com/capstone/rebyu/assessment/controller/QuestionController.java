@@ -6,9 +6,9 @@ import com.capstone.rebyu.assessment.service.EligibleQuestionService;
 import com.capstone.rebyu.assessment.service.QuestionService;
 import com.capstone.rebyu.auth.dto.CurrentUserDto;
 import com.capstone.rebyu.auth.service.CognitoAuthService;
-import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup;
-import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupRepository;
-import com.capstone.rebyu.enterprisegroup.service.EnterpriseGroupService;
+import com.capstone.rebyu.institutiongroup.entity.InstitutionGroup;
+import com.capstone.rebyu.institutiongroup.repository.InstitutionGroupRepository;
+import com.capstone.rebyu.institutiongroup.service.InstitutionGroupService;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * The question bank: admin manages it platform-wide; an enterprise (owner or
+ * The question bank: admin manages it platform-wide; an institution (owner or
  * group leader) may add/edit/delete questions too, but only within
  * certifications their organization has purchased access to, and only for
  * questions they themselves authored (admin-authored questions are read-only
@@ -32,8 +32,8 @@ import java.util.List;
 public class QuestionController {
     private final QuestionService questionService;
     private final EligibleQuestionService eligibleQuestionService;
-    private final EnterpriseGroupService enterpriseGroupService;
-    private final EnterpriseGroupRepository enterpriseGroupRepository;
+    private final InstitutionGroupService institutionGroupService;
+    private final InstitutionGroupRepository institutionGroupRepository;
     private final CognitoAuthService auth;
 
     @GetMapping
@@ -41,7 +41,7 @@ public class QuestionController {
             @RequestParam(required = false) Long lessonId,
             @RequestParam(required = false) Long includeGroupId,
             @AuthenticationPrincipal Jwt jwt) {
-        CurrentUserDto caller = requireAdminOrEnterprise(jwt);
+        CurrentUserDto caller = requireAdminOrInstitution(jwt);
         requireGroupAccessIfRequested(caller, includeGroupId);
         if (lessonId != null) {
             return questionService.getByLessonId(lessonId, includeGroupId);
@@ -64,7 +64,7 @@ public class QuestionController {
             @RequestParam(required = false) Long examId,
             @RequestParam(required = false) Long includeGroupId,
             @AuthenticationPrincipal Jwt jwt) {
-        CurrentUserDto caller = requireAdminOrEnterprise(jwt);
+        CurrentUserDto caller = requireAdminOrInstitution(jwt);
         requireGroupAccessIfRequested(caller, includeGroupId);
         return eligibleQuestionService.getEligible(
                 certificationId, majorId, middleId, lessonId, examId, includeGroupId);
@@ -75,7 +75,7 @@ public class QuestionController {
             @PathVariable Long id,
             @RequestParam(required = false) Long includeGroupId,
             @AuthenticationPrincipal Jwt jwt) {
-        CurrentUserDto caller = requireAdminOrEnterprise(jwt);
+        CurrentUserDto caller = requireAdminOrInstitution(jwt);
         requireGroupAccessIfRequested(caller, includeGroupId);
         return questionService.getById(id, includeGroupId);
     }
@@ -86,43 +86,43 @@ public class QuestionController {
             @Valid @RequestBody QuestionDto dto,
             @RequestParam(required = false) Long ownerGroupId,
             @AuthenticationPrincipal Jwt jwt) {
-        CurrentUserDto caller = requireAdminOrEnterprise(jwt);
+        CurrentUserDto caller = requireAdminOrInstitution(jwt);
         boolean isAdmin = "ADMIN".equalsIgnoreCase(caller.role());
         // ownerGroupId marks this as the group's own question. The caller must
         // actually be able to act on that group (owner or its active leader).
-        EnterpriseGroup ownerGroup = null;
+        InstitutionGroup ownerGroup = null;
         if (ownerGroupId != null) {
             requireGroupAccessIfRequested(caller, ownerGroupId);
-            ownerGroup = enterpriseGroupRepository.findById(ownerGroupId)
+            ownerGroup = institutionGroupRepository.findById(ownerGroupId)
                     .orElseThrow(() -> new EntityNotFoundException("Group not found: " + ownerGroupId));
         }
         return questionService.create(
-                dto, caller.userId(), isAdmin ? null : caller.enterpriseId(), ownerGroup);
+                dto, caller.userId(), isAdmin ? null : caller.institutionId(), ownerGroup);
     }
 
     @PutMapping("/{id}")
     public QuestionDto update(
             @PathVariable Long id, @Valid @RequestBody QuestionDto dto, @AuthenticationPrincipal Jwt jwt) {
-        CurrentUserDto caller = requireAdminOrEnterprise(jwt);
+        CurrentUserDto caller = requireAdminOrInstitution(jwt);
         boolean isAdmin = "ADMIN".equalsIgnoreCase(caller.role());
-        return questionService.update(id, dto, caller.userId(), isAdmin, isAdmin ? null : caller.enterpriseId());
+        return questionService.update(id, dto, caller.userId(), isAdmin, isAdmin ? null : caller.institutionId());
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
-        CurrentUserDto caller = requireAdminOrEnterprise(jwt);
+        CurrentUserDto caller = requireAdminOrInstitution(jwt);
         boolean isAdmin = "ADMIN".equalsIgnoreCase(caller.role());
         questionService.delete(id, caller.userId(), isAdmin);
     }
 
-    private CurrentUserDto requireAdminOrEnterprise(Jwt jwt) {
+    private CurrentUserDto requireAdminOrInstitution(Jwt jwt) {
         if (jwt == null) {
             throw new IllegalArgumentException("Authentication is required");
         }
         CurrentUserDto user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
-        if (!"ADMIN".equalsIgnoreCase(user.role()) && !CognitoAuthService.isEnterpriseRole(user.role())) {
-            throw new IllegalArgumentException("Admin or enterprise access is required");
+        if (!"ADMIN".equalsIgnoreCase(user.role()) && !CognitoAuthService.isInstitutionRole(user.role())) {
+            throw new IllegalArgumentException("Admin or institution access is required");
         }
         return user;
     }
@@ -137,10 +137,10 @@ public class QuestionController {
         if (groupId == null) {
             return;
         }
-        if (caller.enterpriseId() == null) {
-            throw new IllegalArgumentException("An enterprise account is required");
+        if (caller.institutionId() == null) {
+            throw new IllegalArgumentException("An institution account is required");
         }
-        boolean owner = "owner".equalsIgnoreCase(caller.enterpriseMemberRole());
-        enterpriseGroupService.getAccessibleById(groupId, caller.enterpriseId(), caller.userId(), owner);
+        boolean owner = "owner".equalsIgnoreCase(caller.institutionMemberRole());
+        institutionGroupService.getAccessibleById(groupId, caller.institutionId(), caller.userId(), owner);
     }
 }

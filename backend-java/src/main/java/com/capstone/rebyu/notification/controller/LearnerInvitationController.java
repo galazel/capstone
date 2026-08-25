@@ -9,9 +9,9 @@ import java.util.List;
 
 // Read-only: the write endpoints (create/update/delete) were removed because they let
 // anyone forge a valid, self-computed invitation token for any certification with no
-// auth check. The real invitation-sending flow lives in EnterpriseInvitationService.
-// getAll/getById are kept because the enterprise dashboard's "Recent invitations" widget
-// (use-enterprise-data.js -> enterprise-dashboard-page.jsx) still reads from this path.
+// auth check. The real invitation-sending flow lives in InstitutionInvitationService.
+// getAll/getById are kept because the institution dashboard's "Recent invitations" widget
+// (use-institution-data.js -> institution-dashboard-page.jsx) still reads from this path.
 @RestController
 @RequestMapping("/api/learner-invitations")
 @RequiredArgsConstructor

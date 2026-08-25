@@ -1,7 +1,7 @@
 package com.capstone.rebyu.notification.entity;
 
 
-import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup;
+import com.capstone.rebyu.institutiongroup.entity.InstitutionGroup;
 import com.capstone.rebyu.organization.entity.OrganizationCertificate;
 import com.capstone.rebyu.user.entity.Learner;
 import com.capstone.rebyu.user.entity.User;
@@ -41,11 +41,11 @@ public class LearnerInvitation {
     // only for invitations sent before groups scoped this flow; every new
     // invitation is sent by (and requires) a group leader.
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "enterprise_group_id")
-    private EnterpriseGroup enterpriseGroup;
+    @JoinColumn(name = "institution_group_id")
+    private InstitutionGroup institutionGroup;
 
     // The group leader who sent this invitation -- used to attribute the
-    // resulting EnterpriseGroupAssignee row on acceptance.
+    // resulting InstitutionGroupAssignee row on acceptance.
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "invited_by")
     private User invitedBy;

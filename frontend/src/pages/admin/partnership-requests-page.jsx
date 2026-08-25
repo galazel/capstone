@@ -163,7 +163,7 @@ export default function PartnershipRequests() {
       if (variables.action === "approve") {
         toast.success("Partnership approved.", {
           description:
-            data?.enterpriseAccountNote ??
+            data?.institutionAccountNote ??
             "The organization now has certification access.",
         })
       } else {

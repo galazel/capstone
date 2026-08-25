@@ -23,7 +23,7 @@ public abstract class QuestionMapper {
     @Mapping(source = "parentQuestion.questionId", target = "parentQuestionId")
     @Mapping(source = "createdBy.userId", target = "createdByUserId")
     @Mapping(source = "createdBy.email", target = "createdByEmail")
-    @Mapping(source = "ownerGroup.enterpriseGroupId", target = "ownerGroupId")
+    @Mapping(source = "ownerGroup.institutionGroupId", target = "ownerGroupId")
     public abstract QuestionDto toDto(Question entity);
 
     // createdBy/createdAt are never taken from client input -- the service

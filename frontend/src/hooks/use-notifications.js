@@ -16,7 +16,7 @@ export const NOTIFICATIONS_QUERY_KEY = ["my-notifications"]
 
 /**
  * One source of truth for the in-app notification feed, shared by all three
- * portal layouts (admin, enterprise, learner) and the notifications page, so
+ * portal layouts (admin, institution, learner) and the notifications page, so
  * the bell and the full list can never disagree about what is unread.
  *
  * New notifications arrive over the live SSE stream rather than a poll, so the

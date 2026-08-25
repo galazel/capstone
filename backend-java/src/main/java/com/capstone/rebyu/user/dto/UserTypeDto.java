@@ -1,7 +1,7 @@
 package com.capstone.rebyu.user.dto;
 
 
-import com.capstone.rebyu.organization.entity.Enterprise;
+import com.capstone.rebyu.organization.entity.Institution;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import lombok.AllArgsConstructor;
@@ -15,6 +15,6 @@ public class UserTypeDto {
     private Long userTypeId;
 
     @NotBlank
-    @Pattern(regexp = "learner|enterprise|admin")
+    @Pattern(regexp = "learner|institution|admin")
     private String userTypeText;
 }

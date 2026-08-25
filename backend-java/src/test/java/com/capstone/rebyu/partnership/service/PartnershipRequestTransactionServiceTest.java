@@ -3,8 +3,8 @@ package com.capstone.rebyu.partnership.service;
 import com.capstone.rebyu.certification.entity.Certification;
 import com.capstone.rebyu.certification.repository.CertificationRepository;
 import com.capstone.rebyu.common.BusinessRuleException;
-import com.capstone.rebyu.organization.entity.Enterprise;
-import com.capstone.rebyu.organization.repository.EnterpriseRepository;
+import com.capstone.rebyu.organization.entity.Institution;
+import com.capstone.rebyu.organization.repository.InstitutionRepository;
 import com.capstone.rebyu.partnership.dto.PartnershipTransactionDtos.PartnershipItemRequestDto;
 import com.capstone.rebyu.partnership.dto.PartnershipTransactionDtos.PartnershipRequestTransactionDto;
 import com.capstone.rebyu.partnership.dto.PartnershipTransactionDtos.SubmitPartnershipRequestDto;
@@ -38,7 +38,7 @@ class PartnershipRequestTransactionServiceTest {
 
     @Mock private PartnershipRequestRepository requestRepository;
     @Mock private PartnershipRequestItemRepository itemRepository;
-    @Mock private EnterpriseRepository enterpriseRepository;
+    @Mock private InstitutionRepository institutionRepository;
     @Mock private CertificationRepository certificationRepository;
     @Mock private UserRepository userRepository;
     @Mock private NotificationService notificationService;
@@ -48,14 +48,14 @@ class PartnershipRequestTransactionServiceTest {
     @BeforeEach
     void setUp() {
         service = new PartnershipRequestTransactionService(
-                requestRepository, itemRepository, enterpriseRepository, certificationRepository,
+                requestRepository, itemRepository, institutionRepository, certificationRepository,
                 userRepository, notificationService);
     }
 
-    private Enterprise enterprise() {
-        Enterprise e = new Enterprise();
-        e.setEnterpriseId(1L);
-        e.setEnterpriseName("Cebu Institute of Technology");
+    private Institution institution() {
+        Institution e = new Institution();
+        e.setInstitutionId(1L);
+        e.setInstitutionName("Cebu Institute of Technology");
         return e;
     }
 
@@ -77,7 +77,7 @@ class PartnershipRequestTransactionServiceTest {
     @Test
     void submitsRequestAndItemsAtomically() {
         when(requestRepository.findByIdempotencyKey("k1")).thenReturn(Optional.empty());
-        when(enterpriseRepository.findById(1L)).thenReturn(Optional.of(enterprise()));
+        when(institutionRepository.findById(1L)).thenReturn(Optional.of(institution()));
         when(certificationRepository.findById(1L)).thenReturn(Optional.of(certification(1L)));
         when(requestRepository.save(any(PartnershipRequest.class))).thenAnswer(inv -> {
             PartnershipRequest r = inv.getArgument(0);
@@ -99,7 +99,7 @@ class PartnershipRequestTransactionServiceTest {
     void idempotentSubmitReturnsExistingWithoutCreating() {
         PartnershipRequest existing = PartnershipRequest.builder()
                 .requestId(55L)
-                .enterprise(enterprise())
+                .institution(institution())
                 .submittedAt(LocalDateTime.now())
                 .status(PartnershipRequest.Status.PENDING)
                 .idempotencyKey("dup")
@@ -117,7 +117,7 @@ class PartnershipRequestTransactionServiceTest {
     @Test
     void rejectsDraftCertification() {
         when(requestRepository.findByIdempotencyKey(any())).thenReturn(Optional.empty());
-        when(enterpriseRepository.findById(1L)).thenReturn(Optional.of(enterprise()));
+        when(institutionRepository.findById(1L)).thenReturn(Optional.of(institution()));
         when(requestRepository.save(any(PartnershipRequest.class))).thenAnswer(inv -> {
             PartnershipRequest r = inv.getArgument(0);
             r.setRequestId(102L);
@@ -135,7 +135,7 @@ class PartnershipRequestTransactionServiceTest {
     @Test
     void rejectsInvalidAccessDateRange() {
         when(requestRepository.findByIdempotencyKey(any())).thenReturn(Optional.empty());
-        when(enterpriseRepository.findById(1L)).thenReturn(Optional.of(enterprise()));
+        when(institutionRepository.findById(1L)).thenReturn(Optional.of(institution()));
         when(requestRepository.save(any(PartnershipRequest.class))).thenAnswer(inv -> {
             PartnershipRequest r = inv.getArgument(0);
             r.setRequestId(101L);

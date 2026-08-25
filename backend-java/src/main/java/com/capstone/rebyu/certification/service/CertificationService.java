@@ -126,7 +126,7 @@ public class CertificationService {
         for (Exam exam : exams) {
             if (exam.getOwnerGroup() != null
                     && (includeGroupId == null
-                        || !exam.getOwnerGroup().getEnterpriseGroupId().equals(includeGroupId))) {
+                        || !exam.getOwnerGroup().getInstitutionGroupId().equals(includeGroupId))) {
                 continue; // group-owned exam not visible to this caller
             }
             ExamSummaryDto summary = toExamSummary(exam);
@@ -559,23 +559,23 @@ public class CertificationService {
                 """, certificationId);
 
         executeDelete("""
-                DELETE FROM enterprise_invoice_items
+                DELETE FROM institution_invoice_items
                 WHERE certification_id = :certificationId
                 """, certificationId);
 
         executeUpdate("""
-                UPDATE enterprise_invoices
+                UPDATE institution_invoices
                 SET renewal_request_id = NULL
                 WHERE renewal_request_id IN (
                     SELECT renewal_request_id
-                    FROM enterprise_certification_renewal_requests ecrr
+                    FROM institution_certification_renewal_requests ecrr
                     JOIN organization_certificates oc ON oc.org_cert_id = ecrr.org_cert_id
                     WHERE oc.certification_id = :certificationId
                 )
                 """, certificationId);
 
         executeDelete("""
-                DELETE FROM enterprise_certification_renewal_requests
+                DELETE FROM institution_certification_renewal_requests
                 WHERE org_cert_id IN (
                     SELECT org_cert_id
                     FROM organization_certificates
@@ -738,7 +738,7 @@ public class CertificationService {
         List<MissingRequirementDto> missing = new ArrayList<>();
         List<InvalidRequirementDto> invalid = new ArrayList<>();
 
-        // Publishing is about the OFFICIAL curriculum only. Enterprise groups
+        // Publishing is about the OFFICIAL curriculum only. Institution groups
         // author their own categories, lessons, and assessments alongside it;
         // those are separate content and must never add requirements to (or
         // satisfy requirements of) the admin's publish checklist.

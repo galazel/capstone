@@ -22,7 +22,7 @@ export const COMMUNITY_NOTIFICATIONS_QUERY_KEY = ["learner-community-notificatio
  * Sending a community id to the inbox endpoints is exactly what produced
  * "Notification not found" on delete.
  *
- * `enabled` is false for admin/enterprise users, who have no learner row and
+ * `enabled` is false for admin/institution users, who have no learner row and
  * would only get an error from the endpoint.
  */
 export function useCommunityNotifications({ enabled = true } = {}) {

@@ -8,7 +8,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/** DTOs for Transaction Three: enterprise partnership request submission. */
+/** DTOs for Transaction Three: institution partnership request submission. */
 public final class PartnershipTransactionDtos {
 
     private PartnershipTransactionDtos() {
@@ -22,11 +22,11 @@ public final class PartnershipTransactionDtos {
     ) {
     }
 
-    // enterpriseId is always overwritten server-side from the caller's JWT
+    // institutionId is always overwritten server-side from the caller's JWT
     // (see PartnershipTransactionController.submit) before this reaches the
     // service, so it must stay nullable here -- the client never supplies it.
     public record SubmitPartnershipRequestDto(
-            Long enterpriseId,
+            Long institutionId,
             @NotEmpty List<PartnershipItemRequestDto> items,
             String idempotencyKey
     ) {
@@ -44,8 +44,8 @@ public final class PartnershipTransactionDtos {
 
     public record PartnershipRequestTransactionDto(
             Long requestId,
-            Long enterpriseId,
-            String enterpriseName,
+            Long institutionId,
+            String institutionName,
             String status,
             LocalDateTime submittedAt,
             Integer totalSlots,

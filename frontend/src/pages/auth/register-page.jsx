@@ -16,6 +16,9 @@ import {
 import { registerAccount, toSafeAuthMessage } from "@/services/authService.js"
 import AuthShell from "./auth-shell.jsx"
 
+const PASSWORD_REQUIREMENTS =
+  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9\s]).{8,}$/
+
 export default function RegisterPage() {
   const navigate = useNavigate()
 
@@ -37,6 +40,12 @@ export default function RegisterPage() {
     setError("")
     if (form.password !== form.confirmPassword) {
       setError("Passwords do not match.")
+      return
+    }
+    if (!PASSWORD_REQUIREMENTS.test(form.password)) {
+      setError(
+        "Password must be at least 8 characters and include upper and lower case letters, a number, and a special character."
+      )
       return
     }
     setPending(true)
@@ -127,13 +136,15 @@ export default function RegisterPage() {
             autoComplete="new-password"
             required
             minLength={8}
+            pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9\s]).{8,}"
+            title="Use at least 8 characters with upper and lower case letters, a number, and a special character."
             value={form.password}
             onChange={setField("password")}
             className="h-10"
           />
           <FieldDescription>
-            At least 8 characters, with upper and lower case letters and a
-            number.
+            At least 8 characters, with upper and lower case letters, a number,
+            and a special character (such as !, @, or #).
           </FieldDescription>
         </Field>
         <Field>

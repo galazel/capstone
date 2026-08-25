@@ -14,14 +14,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 
 // Shared, presentational lesson-body renderer -- extracted verbatim from
-// the learner lesson page so the enterprise content viewer renders lessons
+// the learner lesson page so the institution content viewer renders lessons
 // identically. Pure: takes a block (tool) or a structure string, no data
 // fetching, no progress/completion concerns.
 //
 // Blocks here use the shadcn semantic tokens (`border-border`,
 // `text-foreground`, `bg-card`, `text-primary`, ...) rather than hardcoded
 // zinc hex values, on purpose: this renderer runs both inside the learner
-// portal's `.rebyu-ds` scope and outside it in the enterprise content viewer.
+// portal's `.rebyu-ds` scope and outside it in the institution content viewer.
 //
 // The `rb-*` design-system *utilities* are equally safe in both, contrary to
 // what this note used to claim: they are declared in an `@theme` block, so
@@ -36,7 +36,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 const EASE = [0.22, 1, 0.36, 1]
 
 // Chart tokens rather than the `.rebyu-ds` palette: they're plain `:root`
-// variables (see index.css), so they resolve identically in the enterprise
+// variables (see index.css), so they resolve identically in the institution
 // content viewer, which renders this file outside the `.rebyu-ds` scope.
 // Order alternates warm/cool so consecutive blocks never land on adjacent hues.
 // `!`-important: these get merged onto shadcn `Card`/list/heading base classes
@@ -62,7 +62,7 @@ function accentFor(index) {
  *
  * Safe outside `.rebyu-ds` despite the note at the top of this file: the
  * `rb-*` *utilities* come from an `@theme` block, so Tailwind emits their
- * variables on `:root` and they resolve identically in the enterprise viewer
+ * variables on `:root` and they resolve identically in the institution viewer
  * (verified: same 24px radius, same #e5e5e5 border in and out of scope). It is
  * the `.rb-chip` / `.rb-btn` *component classes* that are scoped and go inert
  * outside it -- those are still off limits here.

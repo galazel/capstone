@@ -17,6 +17,7 @@ public class CorsConfig {
 
         configuration.setAllowedOrigins(List.of(
                 "https://rebyu.up.railway.app",
+                "http://localhost:3000",
                 "http://localhost:5173"
         ));
 

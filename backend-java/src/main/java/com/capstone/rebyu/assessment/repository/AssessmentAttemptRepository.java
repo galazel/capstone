@@ -53,7 +53,7 @@ public interface AssessmentAttemptRepository extends JpaRepository<AssessmentAtt
     long countByStatusAndSubmittedAtGreaterThanEqual(
             AssessmentAttempt.Status status, java.time.LocalDateTime since);
 
-    // --- Per-learner rollups (enterprise dashboard) ------------------------
+    // --- Per-learner rollups (institution dashboard) ------------------------
 
     /** One row per learner. Projection interface so the rollup stays in SQL. */
     interface LearnerAttemptStats {
@@ -67,7 +67,7 @@ public interface AssessmentAttemptRepository extends JpaRepository<AssessmentAtt
     /**
      * Graded-attempt statistics for a whole roster in one query.
      *
-     * Batched on purpose: the enterprise dashboard renders a row per member,
+     * Batched on purpose: the institution dashboard renders a row per member,
      * and doing this per learner is the N+1 that makes a 200-seat organization's
      * dashboard take seconds.
      */

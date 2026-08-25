@@ -77,7 +77,7 @@ public final class EntitlementDtos {
 
     public record InstitutionalLicenseDto(
             Long institutionalLicenseId,
-            Long enterpriseId,
+            Long institutionId,
             String planCode,
             String planName,
             String billingInterval,

@@ -14,7 +14,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
- * Generic in-app notifications for any role (ADMIN/ENTERPRISE/LEARNER) --
+ * Generic in-app notifications for any role (ADMIN/INSTITUTION/LEARNER) --
  * the partnership-request and invitation lifecycle events all land here.
  * Deliberately parallel to community.CommunityService's learner-only
  * notification methods rather than merged with them, since those are

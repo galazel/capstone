@@ -3,8 +3,8 @@ package com.capstone.rebyu.partnership.service;
 import com.capstone.rebyu.certification.entity.Certification;
 import com.capstone.rebyu.certification.repository.CertificationRepository;
 import com.capstone.rebyu.common.BusinessRuleException;
-import com.capstone.rebyu.organization.entity.Enterprise;
-import com.capstone.rebyu.organization.repository.EnterpriseRepository;
+import com.capstone.rebyu.organization.entity.Institution;
+import com.capstone.rebyu.organization.repository.InstitutionRepository;
 import com.capstone.rebyu.partnership.dto.PartnershipTransactionDtos.PartnershipItemDto;
 import com.capstone.rebyu.partnership.dto.PartnershipTransactionDtos.PartnershipItemRequestDto;
 import com.capstone.rebyu.partnership.dto.PartnershipTransactionDtos.PartnershipRequestTransactionDto;
@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Transaction Three: enterprise partnership request submission.
+ * Transaction Three: institution partnership request submission.
  *
  * The request and all of its certification line items are created in one
  * atomic transaction, so a failure never leaves an orphan request. An
@@ -42,7 +42,7 @@ public class PartnershipRequestTransactionService {
 
     private final PartnershipRequestRepository requestRepository;
     private final PartnershipRequestItemRepository itemRepository;
-    private final EnterpriseRepository enterpriseRepository;
+    private final InstitutionRepository institutionRepository;
     private final CertificationRepository certificationRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
@@ -63,13 +63,13 @@ public class PartnershipRequestTransactionService {
                     "Add at least one certification to your partnership request.");
         }
 
-        Enterprise enterprise = enterpriseRepository.findById(request.enterpriseId())
+        Institution institution = institutionRepository.findById(request.institutionId())
                 .orElseThrow(() -> new EntityNotFoundException(
-                        "Enterprise not found: " + request.enterpriseId()));
+                        "Institution not found: " + request.institutionId()));
 
         LocalDateTime now = LocalDateTime.now();
         PartnershipRequest partnershipRequest = PartnershipRequest.builder()
-                .enterprise(enterprise)
+                .institution(institution)
                 .submittedAt(now)
                 .status(PartnershipRequest.Status.PENDING)
                 .idempotencyKey(idempotencyKey != null && !idempotencyKey.isBlank()
@@ -103,15 +103,15 @@ public class PartnershipRequestTransactionService {
             itemRepository.save(entity);
         }
 
-        log.info("Partnership request {} submitted by enterprise {} with {} item(s)",
-                partnershipRequest.getRequestId(), enterprise.getEnterpriseId(),
+        log.info("Partnership request {} submitted by institution {} with {} item(s)",
+                partnershipRequest.getRequestId(), institution.getInstitutionId(),
                 request.items().size());
 
         for (var admin : userRepository.findByUserType_UserTypeText(ADMIN_USER_TYPE)) {
             notificationService.notify(
                     admin,
                     "New partnership request",
-                    enterprise.getEnterpriseName() + " submitted a partnership request.",
+                    institution.getInstitutionName() + " submitted a partnership request.",
                     "/admin/partnership-requests");
         }
 
@@ -119,9 +119,9 @@ public class PartnershipRequestTransactionService {
     }
 
     @Transactional(readOnly = true)
-    public List<PartnershipRequestTransactionDto> listForEnterprise(Long enterpriseId) {
+    public List<PartnershipRequestTransactionDto> listForInstitution(Long institutionId) {
         return requestRepository
-                .findByEnterprise_EnterpriseIdOrderBySubmittedAtDesc(enterpriseId)
+                .findByInstitution_InstitutionIdOrderBySubmittedAtDesc(institutionId)
                 .stream()
                 .map(this::toDto)
                 .toList();
@@ -145,8 +145,8 @@ public class PartnershipRequestTransactionService {
         }
         return new PartnershipRequestTransactionDto(
                 request.getRequestId(),
-                request.getEnterprise().getEnterpriseId(),
-                request.getEnterprise().getEnterpriseName(),
+                request.getInstitution().getInstitutionId(),
+                request.getInstitution().getInstitutionName(),
                 request.getStatus().name(),
                 request.getSubmittedAt(),
                 totalSlots,

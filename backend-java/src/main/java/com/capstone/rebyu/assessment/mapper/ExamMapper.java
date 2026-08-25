@@ -16,7 +16,7 @@ public interface ExamMapper {
     @Mapping(source = "middleCategory.middleCategoryId", target = "middleCategoryId")
     @Mapping(source = "majorCategory.majorCategoryId", target = "majorCategoryId")
     @Mapping(source = "entity", target = "status", qualifiedByName = "effectiveStatus")
-    @Mapping(source = "ownerGroup.enterpriseGroupId", target = "ownerGroupId")
+    @Mapping(source = "ownerGroup.institutionGroupId", target = "ownerGroupId")
     ExamDto toDto(Exam entity);
 
     @Mapping(source = "certificationId", target = "certification.certificationId")

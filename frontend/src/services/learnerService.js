@@ -210,7 +210,7 @@ export async function getLearnerPortalData() {
       String(item.status ?? "active").toLowerCase() === "active"
   )
 
-  // Enterprise-assigned access: map this learner's active
+  // Institution-assigned access: map this learner's active
   // organization_certification_learners rows to their certificationId via the
   // organization_certificates allocation, then treat them as enrollments.
   const orgCertIdToCertificationId = new Map(
@@ -219,7 +219,7 @@ export async function getLearnerPortalData() {
       orgCert.certificationId,
     ])
   )
-  const enterpriseEnrollments = asArray(orgCertLearners)
+  const institutionEnrollments = asArray(orgCertLearners)
     .filter(
       (item) =>
         isSameId(item.learnerId, learnerId) && item.status === "active"
@@ -228,12 +228,12 @@ export async function getLearnerPortalData() {
       certificationId: orgCertIdToCertificationId.get(String(item.orgCertId)),
       learnerId,
       status: "active",
-      source: "enterprise",
+      source: "institution",
       assignedAt: item.assignedAt,
     }))
     .filter((item) => item.certificationId != null)
 
-  const enrollments = [...purchaseEnrollments, ...enterpriseEnrollments]
+  const enrollments = [...purchaseEnrollments, ...institutionEnrollments]
 
   const enrolledCertificationIds = new Set(
     enrollments.map((item) => String(item.certificationId))

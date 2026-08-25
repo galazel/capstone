@@ -1,7 +1,7 @@
 package com.capstone.rebyu.partnership.entity;
 
 
-import com.capstone.rebyu.organization.entity.Enterprise;
+import com.capstone.rebyu.organization.entity.Institution;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -34,14 +34,14 @@ public class PartnershipRequest {
     @Column(name = "reference_number", unique = true, length = 32)
     private String referenceNumber;
 
-    // Null until the request is approved and an Enterprise record is created.
+    // Null until the request is approved and an Institution record is created.
     // A public organization representative has no account when they submit.
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "enterprise_id")
-    private Enterprise enterprise;
+    @JoinColumn(name = "institution_id")
+    private Institution institution;
 
     // Organization details captured on the public request (denormalized so no
-    // unverified organization pollutes the enterprises table before approval).
+    // unverified organization pollutes the institutions table before approval).
     @Column(name = "organization_name", length = 150)
     private String organizationName;
 

@@ -138,7 +138,7 @@ public class LearnerEntitlementService {
 
     /**
      * Institution-sponsored features for this learner. Coverage requires an
-     * active org-cert-learner assignment whose enterprise holds an active
+     * active org-cert-learner assignment whose institution holds an active
      * license; when a certification is given, the assignment must match it.
      */
     private Set<String> institutionalCoverage(Long learnerId, Long certificationId) {
@@ -147,7 +147,7 @@ public class LearnerEntitlementService {
                 orgCertLearnerRepository.findByLearner_LearnerIdAndStatus(
                         learnerId, OrganizationCertificationLearner.Status.active)) {
             var orgCert = assignment.getOrgCert();
-            if (orgCert == null || orgCert.getEnterprise() == null) {
+            if (orgCert == null || orgCert.getInstitution() == null) {
                 continue;
             }
             if (certificationId != null
@@ -156,10 +156,10 @@ public class LearnerEntitlementService {
                 continue;
             }
             Optional<InstitutionalLicense> license = institutionalEntitlementService
-                    .getActiveLicense(orgCert.getEnterprise().getEnterpriseId());
+                    .getActiveLicense(orgCert.getInstitution().getInstitutionId());
             if (license.isPresent()) {
                 features.addAll(institutionalEntitlementService
-                        .getInstitutionalEntitlements(orgCert.getEnterprise().getEnterpriseId())
+                        .getInstitutionalEntitlements(orgCert.getInstitution().getInstitutionId())
                         .keySet());
             }
         }

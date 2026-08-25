@@ -20,7 +20,7 @@ import java.util.Objects;
  * Lesson has no owner column of its own -- like MiddleCategory, it inherits
  * ownership by walking up to its MiddleCategory's parent MajorCategory, and
  * every write (including the lesson body/component editing methods, which
- * are how an Enterprise Member actually authors their own lesson content) is
+ * are how an Institution Member actually authors their own lesson content) is
  * authorized through MajorCategoryService.requireCanActOn.
  */
 @Service
@@ -55,10 +55,10 @@ public class LessonService {
     }
 
     public LessonDto create(
-            LessonDto dto, boolean isAdmin, Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner) {
+            LessonDto dto, boolean isAdmin, Long callerInstitutionId, Long callerUserId, boolean callerIsOwner) {
         MiddleCategory middleCategory = findMiddleCategory(dto.getMiddleCategoryId());
         majorCategoryService.requireCanActOn(
-                middleCategory.getMajorCategory().getOwnerGroup(), isAdmin, callerEnterpriseId, callerUserId, callerIsOwner);
+                middleCategory.getMajorCategory().getOwnerGroup(), isAdmin, callerInstitutionId, callerUserId, callerIsOwner);
 
         Lesson entity = lessonMapper.toEntity(dto);
         entity.setLessonId(null);
@@ -71,15 +71,15 @@ public class LessonService {
     }
 
     public LessonDto update(
-            Long id, LessonDto dto, boolean isAdmin, Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner) {
+            Long id, LessonDto dto, boolean isAdmin, Long callerInstitutionId, Long callerUserId, boolean callerIsOwner) {
         Lesson existing = findEntity(id);
         majorCategoryService.requireCanActOn(
                 existing.getMiddleCategory().getMajorCategory().getOwnerGroup(),
-                isAdmin, callerEnterpriseId, callerUserId, callerIsOwner);
+                isAdmin, callerInstitutionId, callerUserId, callerIsOwner);
 
         MiddleCategory targetMiddleCategory = findMiddleCategory(dto.getMiddleCategoryId());
         if (!Objects.equals(ownerGroupId(existing.getMiddleCategory()), ownerGroupId(targetMiddleCategory))) {
-            throw new BusinessRuleException.EnterpriseGroupRuleException(
+            throw new BusinessRuleException.InstitutionGroupRuleException(
                     "This lesson can't be moved to a module owned by someone else.");
         }
 
@@ -95,21 +95,21 @@ public class LessonService {
         return lessonMapper.toDto(lessonRepository.save(entity));
     }
 
-    public void delete(Long id, boolean isAdmin, Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner) {
+    public void delete(Long id, boolean isAdmin, Long callerInstitutionId, Long callerUserId, boolean callerIsOwner) {
         Lesson existing = findEntity(id);
         majorCategoryService.requireCanActOn(
                 existing.getMiddleCategory().getMajorCategory().getOwnerGroup(),
-                isAdmin, callerEnterpriseId, callerUserId, callerIsOwner);
+                isAdmin, callerInstitutionId, callerUserId, callerIsOwner);
         lessonRepository.delete(existing);
     }
 
     public void saveLessonComponent(
             Long id, LessonDto lessonDto,
-            boolean isAdmin, Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner) {
+            boolean isAdmin, Long callerInstitutionId, Long callerUserId, boolean callerIsOwner) {
         Lesson lesson = findEntity(id);
         majorCategoryService.requireCanActOn(
                 lesson.getMiddleCategory().getMajorCategory().getOwnerGroup(),
-                isAdmin, callerEnterpriseId, callerUserId, callerIsOwner);
+                isAdmin, callerInstitutionId, callerUserId, callerIsOwner);
 
         String structure = lessonDto.getLessonComponentStructure();
 
@@ -146,7 +146,7 @@ public class LessonService {
 
     private Long ownerGroupId(MiddleCategory middleCategory) {
         return middleCategory.getMajorCategory().getOwnerGroup() != null
-                ? middleCategory.getMajorCategory().getOwnerGroup().getEnterpriseGroupId() : null;
+                ? middleCategory.getMajorCategory().getOwnerGroup().getInstitutionGroupId() : null;
     }
 
     private MiddleCategory findMiddleCategory(Long middleCategoryId) {

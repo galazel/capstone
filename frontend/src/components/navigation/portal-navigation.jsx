@@ -84,9 +84,9 @@ const adminGroups = [
 
 // Groups now live inside Certifications (you create a group from within the
 // certification it belongs to), so there's no standalone "Groups" nav item.
-// Items flagged ownerOnly are hidden for a group leader / other enterprise
+// Items flagged ownerOnly are hidden for a group leader / other institution
 // member -- only the organization owner sees them.
-const enterpriseGroups = [
+const institutionGroups = [
   {
     label: "Overview",
     icon: LayoutDashboard,
@@ -94,7 +94,7 @@ const enterpriseGroups = [
       // One entry, because there is one page. "Organization overview" and
       // "Analytics" were two nav items onto what is now a single board -- the
       // same shape as the learner portal, which lists Analytics once.
-      { label: "Organization overview", href: "/enterprise/dashboard", icon: LayoutDashboard },
+      { label: "Organization overview", href: "/institution/dashboard", icon: LayoutDashboard },
     ],
   },
   {
@@ -105,8 +105,8 @@ const enterpriseGroups = [
       // invited to, and that is the only place the roster means anything -- so
       // they are reached through it ("View learners" on a certification card),
       // not from a top-level list of everyone in the organization.
-      { label: "Certifications", href: "/enterprise/certifications", icon: Award },
-      { label: "Question Bank", href: "/enterprise/question-bank", icon: FileQuestion },
+      { label: "Certifications", href: "/institution/certifications", icon: Award },
+      { label: "Question Bank", href: "/institution/question-bank", icon: FileQuestion },
     ],
   },
   {
@@ -116,18 +116,18 @@ const enterpriseGroups = [
     items: [
       // One entry, because there is one page. Profile, Partnership, License,
       // Billing and Files were five short routes behind a five-item menu; they
-      // are now tabs on /enterprise/organization, and the old paths still open
+      // are now tabs on /institution/organization, and the old paths still open
       // their own tab. `match` keeps the header underlined on all of them.
       {
         label: "Organization",
-        href: "/enterprise/organization",
+        href: "/institution/organization",
         icon: Building2,
         match: [
-          "/enterprise/organization",
-          "/enterprise/partnership",
-          "/enterprise/license",
-          "/enterprise/billing",
-          "/enterprise/files",
+          "/institution/organization",
+          "/institution/partnership",
+          "/institution/license",
+          "/institution/billing",
+          "/institution/files",
         ],
       },
     ],
@@ -135,12 +135,12 @@ const enterpriseGroups = [
 ]
 
 /**
- * Both enterprise-side roles: ENTERPRISE is the organization's own (owner)
- * account, ENTERPRISE_MEMBER is someone it created an account for. They share
- * the same portal and permissions -- see CognitoAuthService.isEnterpriseRole.
+ * Both institution-side roles: INSTITUTION is the organization's own (owner)
+ * account, INSTITUTION_MEMBER is someone it created an account for. They share
+ * the same portal and permissions -- see CognitoAuthService.isInstitutionRole.
  */
-export function isEnterpriseRole(role) {
-  return role === "ENTERPRISE" || role === "ENTERPRISE_MEMBER"
+export function isInstitutionRole(role) {
+  return role === "INSTITUTION" || role === "INSTITUTION_MEMBER"
 }
 
 function pathMatches(pathname, item) {
@@ -149,19 +149,19 @@ function pathMatches(pathname, item) {
 }
 
 function Brand({ role, organizationName }) {
-  const isEnterprise = isEnterpriseRole(role)
+  const isInstitution = isInstitutionRole(role)
   const home = role === "LEARNER"
     ? "/learner/analytics"
-    : isEnterprise
-      ? "/enterprise/dashboard"
+    : isInstitution
+      ? "/institution/dashboard"
       : "/admin/dashboard"
-  // On the enterprise side this shows the organization's own name rather than
+  // On the institution side this shows the organization's own name rather than
   // the generic word "Institution" -- a member works inside one specific
   // organization, and naming it is what makes the header useful to them. Falls
   // back to the generic label only while the profile is still loading.
   const label = role === "LEARNER"
     ? "Learn"
-    : isEnterprise
+    : isInstitution
       ? organizationName || "Institution"
       : "Admin"
 
@@ -172,7 +172,7 @@ function Brand({ role, organizationName }) {
         <span className="block font-heading text-[15px] font-bold tracking-tight">REBYU</span>
         <span
           className="mt-1 block max-w-40 truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground"
-          title={isEnterprise && organizationName ? organizationName : undefined}
+          title={isInstitution && organizationName ? organizationName : undefined}
         >
           {label}
         </span>
@@ -270,22 +270,22 @@ export function CommandPalette({ open, onOpenChange, items }) {
   )
 }
 
-export function PortalTopNavigation({ role, actions, organizationName, enterpriseMemberRole }) {
+export function PortalTopNavigation({ role, actions, organizationName, institutionMemberRole }) {
   const location = useLocation()
   const [commandOpen, setCommandOpen] = useState(false)
-  const isEnterpriseOwner = enterpriseMemberRole === "owner"
-  // An Enterprise Member (group leader, non-owner) only ever acts within
+  const isInstitutionOwner = institutionMemberRole === "owner"
+  // An Institution Member (group leader, non-owner) only ever acts within
   // their own assigned groups' workspace pages -- that navigation lives on
-  // the page itself now (see enterprise-member-dashboard-page.jsx /
-  // enterprise-group-workspace-page.jsx), not in this header, and the
+  // the page itself now (see institution-member-dashboard-page.jsx /
+  // institution-group-workspace-page.jsx), not in this header, and the
   // command-K search bar is hidden for them too since there's nothing
   // institution-wide left for it to search.
   // The explicit role is authoritative; the owner check still covers accounts
-  // that predate ENTERPRISE_MEMBER and have not been migrated yet.
-  const isEnterpriseMember =
-    role === "ENTERPRISE_MEMBER" || (role === "ENTERPRISE" && !isEnterpriseOwner)
-  const allGroups = role === "ADMIN" ? adminGroups : enterpriseGroups
-  const groups = isEnterpriseMember ? [] : allGroups
+  // that predate INSTITUTION_MEMBER and have not been migrated yet.
+  const isInstitutionMember =
+    role === "INSTITUTION_MEMBER" || (role === "INSTITUTION" && !isInstitutionOwner)
+  const allGroups = role === "ADMIN" ? adminGroups : institutionGroups
+  const groups = isInstitutionMember ? [] : allGroups
   const commandItems = role === "LEARNER" ? learnerNavigation.map((item) => ({ ...item, group: "Learner" })) : groups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.label })))
 
   useEffect(() => {

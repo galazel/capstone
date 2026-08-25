@@ -7,10 +7,18 @@ import { defineConfig } from "vite"
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {
-    // Route-level lazy loading keeps the entry chunk below Vite's default
-    // budget. Two self-contained feature routes are slightly larger while
-    // remaining under 200 kB gzip, so retain a meaningful higher ceiling.
     chunkSizeWarningLimit: 650,
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          if (id.includes('recharts')) return 'chart';
+          if (id.includes('@codemirror')) return 'editor';
+          if (id.includes('@mui') || id.includes('@shadcn') || id.includes('flowbite')) return 'ui';
+          if (id.includes('three')) return 'three';
+          if (id.includes('node_modules/react') || id.includes('node_modules/@tanstack')) return 'vendor';
+        }
+      }
+    },
   },
   resolve: {
     alias: {
@@ -18,14 +26,11 @@ export default defineConfig({
     },
   },
   server: {
-    // Same-origin /api in dev avoids CORS coupling to a specific dev port.
     proxy: {
       "/api": {
         target: "http://localhost:8080",
         changeOrigin: true,
         configure: (proxy) => {
-          // The backend CORS allowlist only contains the default dev origin;
-          // present that origin so proxied requests pass its CORS filter.
           proxy.on("proxyReq", (proxyReq) => {
             proxyReq.setHeader("origin", "http://localhost:5173")
           })

@@ -565,7 +565,7 @@ const SECTION_TONE = {
     /* Reversing the tools out of the panel has to be done from outside them:
        LessonTool renders body copy in `text-foreground`/`text-muted-foreground`
        and knows nothing about sitting on a dark surface, and it is shared with
-       the admin preview and the enterprise viewer, so it cannot be taught about
+       the admin preview and the institution viewer, so it cannot be taught about
        this one place.
        Scoped to the tools wrapper rather than the whole section on purpose --
        `[&_h2]` from the section would also catch the section's own title, and

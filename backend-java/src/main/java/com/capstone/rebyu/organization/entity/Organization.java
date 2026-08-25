@@ -17,7 +17,7 @@ public class Organization {
   private String logoUrl;
   private String subscriptionStatus; // ACTIVE, TRIAL, EXPIRED, CANCELLED
   private Long seatCount = 10L;
-  private String billingPlan; // FREE, STARTER, PROFESSIONAL, ENTERPRISE
+  private String billingPlan; // FREE, STARTER, PROFESSIONAL, INSTITUTION
   private LocalDateTime createdAt;
   private LocalDateTime updatedAt;
   private Boolean isActive = true;

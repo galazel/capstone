@@ -1,6 +1,6 @@
 package com.capstone.rebyu.partnership.service;
 
-import com.capstone.rebyu.organization.entity.Enterprise;
+import com.capstone.rebyu.organization.entity.Institution;
 import com.capstone.rebyu.partnership.dto.PartnershipRequestDto;
 import com.capstone.rebyu.partnership.entity.PartnershipRequest;
 import com.capstone.rebyu.partnership.mapper.PartnershipRequestMapper;
@@ -21,7 +21,7 @@ import static org.mockito.Mockito.when;
 class PartnershipRequestServiceTest {
 
     private static final Long REQUEST_ID = 1L;
-    private static final Long ENTERPRISE_ID = 10L;
+    private static final Long INSTITUTION_ID = 10L;
 
     private PartnershipRequestRepository partnershipRequestRepository;
     private PartnershipRequestMapper partnershipRequestMapper;
@@ -41,21 +41,21 @@ class PartnershipRequestServiceTest {
             dto.setRequestId(entity.getRequestId());
             dto.setSubmittedAt(entity.getSubmittedAt());
             dto.setStatus(entity.getStatus());
-            if (entity.getEnterprise() != null) {
-                dto.setEnterpriseId(entity.getEnterprise().getEnterpriseId());
+            if (entity.getInstitution() != null) {
+                dto.setInstitutionId(entity.getInstitution().getInstitutionId());
             }
             return dto;
         });
         when(partnershipRequestMapper.toEntity(any(PartnershipRequestDto.class))).thenAnswer(inv -> {
             PartnershipRequestDto dto = inv.getArgument(0);
-            Enterprise enterprise = null;
-            if (dto.getEnterpriseId() != null) {
-                enterprise = new Enterprise();
-                enterprise.setEnterpriseId(dto.getEnterpriseId());
+            Institution institution = null;
+            if (dto.getInstitutionId() != null) {
+                institution = new Institution();
+                institution.setInstitutionId(dto.getInstitutionId());
             }
             return PartnershipRequest.builder()
                     .requestId(dto.getRequestId())
-                    .enterprise(enterprise)
+                    .institution(institution)
                     .submittedAt(dto.getSubmittedAt())
                     .status(dto.getStatus())
                     .build();
@@ -63,11 +63,11 @@ class PartnershipRequestServiceTest {
     }
 
     private PartnershipRequest existing(PartnershipRequest.Status status) {
-        Enterprise enterprise = new Enterprise();
-        enterprise.setEnterpriseId(ENTERPRISE_ID);
+        Institution institution = new Institution();
+        institution.setInstitutionId(INSTITUTION_ID);
         return PartnershipRequest.builder()
                 .requestId(REQUEST_ID)
-                .enterprise(enterprise)
+                .institution(institution)
                 .submittedAt(LocalDateTime.of(2026, 1, 1, 0, 0, 0))
                 .status(status)
                 .build();
@@ -76,7 +76,7 @@ class PartnershipRequestServiceTest {
     private PartnershipRequestDto dto(PartnershipRequest.Status status) {
         PartnershipRequestDto dto = new PartnershipRequestDto();
         dto.setRequestId(REQUEST_ID);
-        dto.setEnterpriseId(ENTERPRISE_ID);
+        dto.setInstitutionId(INSTITUTION_ID);
         dto.setSubmittedAt(LocalDateTime.of(2026, 1, 1, 0, 0, 0));
         dto.setStatus(status);
         return dto;

@@ -5,7 +5,7 @@ import com.capstone.rebyu.auth.dto.CurrentUserDto;
 import com.capstone.rebyu.auth.service.CognitoAuthService;
 import com.capstone.rebyu.certification.dto.CertificationDto;
 import com.capstone.rebyu.certification.service.CertificationService;
-import com.capstone.rebyu.enterprisegroup.service.EnterpriseGroupService;
+import com.capstone.rebyu.institutiongroup.service.InstitutionGroupService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,7 +26,7 @@ import java.util.List;
  * create/edit/delete/publish any certification); now admin-only.
  *
  * includeGroupId is the opt-in mechanism that lets a group's own curriculum
- * view mix in that group's Enterprise-Member-authored content: omitted (the
+ * view mix in that group's Institution-Member-authored content: omitted (the
  * default, and the only thing every existing caller does), the response is
  * identical to before this parameter existed -- official content only, since
  * no content has ever had a non-null owner group. Passed, it additionally
@@ -42,7 +42,7 @@ public class CertificationController {
 
     private final CertificationService certificationService;
     private final CurriculumGenerationService curriculumGenerationService;
-    private final EnterpriseGroupService enterpriseGroupService;
+    private final InstitutionGroupService institutionGroupService;
     private final CognitoAuthService auth;
 
     @GetMapping
@@ -129,7 +129,7 @@ public class CertificationController {
      * exactly as before this parameter existed. When supplied, the caller must
      * be authenticated and able to act on that specific group (the institution
      * owner, or that group's active leader) -- reusing the same access check
-     * EnterpriseGroupController already relies on -- so group-owned content
+     * InstitutionGroupController already relies on -- so group-owned content
      * can't be read by guessing a group id.
      */
     private void requireGroupAccessIfRequested(Jwt jwt, Long includeGroupId) {
@@ -140,12 +140,12 @@ public class CertificationController {
             throw new IllegalArgumentException("Authentication is required");
         }
         CurrentUserDto user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
-        if (user.enterpriseId() == null) {
-            throw new IllegalArgumentException("An enterprise account is required");
+        if (user.institutionId() == null) {
+            throw new IllegalArgumentException("An institution account is required");
         }
-        boolean owner = "owner".equalsIgnoreCase(user.enterpriseMemberRole());
+        boolean owner = "owner".equalsIgnoreCase(user.institutionMemberRole());
         // Throws EntityNotFoundException (-> 404/400 via the global handler) if
         // the caller can't actually act on this group.
-        enterpriseGroupService.getAccessibleById(includeGroupId, user.enterpriseId(), user.userId(), owner);
+        institutionGroupService.getAccessibleById(includeGroupId, user.institutionId(), user.userId(), owner);
     }
 }

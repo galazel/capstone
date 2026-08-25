@@ -17,30 +17,30 @@ public interface OrganizationCertificationLearnerRepository extends JpaRepositor
 
     List<OrganizationCertificationLearner> findByLearner_LearnerId(Long learnerId);
 
-    /** All learner allocations under one enterprise — the tenant-scoped portal view. */
-    List<OrganizationCertificationLearner> findByOrgCert_Enterprise_EnterpriseId(Long enterpriseId);
+    /** All learner allocations under one institution — the tenant-scoped portal view. */
+    List<OrganizationCertificationLearner> findByOrgCert_Institution_InstitutionId(Long institutionId);
 
-    /** True when a learner holds any allocation under the given enterprise (tenant membership check). */
-    boolean existsByLearner_LearnerIdAndOrgCert_Enterprise_EnterpriseId(Long learnerId, Long enterpriseId);
+    /** True when a learner holds any allocation under the given institution (tenant membership check). */
+    boolean existsByLearner_LearnerIdAndOrgCert_Institution_InstitutionId(Long learnerId, Long institutionId);
 
     /**
      * True when an organization sponsors this learner into this certification.
      * An org-sponsored learner has no learner_certifications row -- that table
      * is only written by the self-purchase flow -- so any "is this learner
-     * enrolled?" check has to consider this table as well, or every enterprise
+     * enrolled?" check has to consider this table as well, or every institution
      * learner looks unenrolled.
      */
     boolean existsByLearner_LearnerIdAndOrgCert_Certification_CertificationIdAndStatus(
             Long learnerId, Long certificationId, OrganizationCertificationLearner.Status status);
 
-    /** Unique active learners under an enterprise — the institutional seat unit. */
+    /** Unique active learners under an institution — the institutional seat unit. */
     @Query("""
             SELECT COUNT(DISTINCT o.learner.learnerId)
             FROM OrganizationCertificationLearner o
-            WHERE o.orgCert.enterprise.enterpriseId = :enterpriseId
+            WHERE o.orgCert.institution.institutionId = :institutionId
               AND o.status = :status
             """)
     long countDistinctActiveLearners(
-            @Param("enterpriseId") Long enterpriseId,
+            @Param("institutionId") Long institutionId,
             @Param("status") OrganizationCertificationLearner.Status status);
 }

@@ -121,7 +121,7 @@ public class FileController {
     }
 
     // Arbitrary-key deletion is destructive and has no per-owner check at this
-    // generic layer (the key alone doesn't identify which lesson/enterprise/
+    // generic layer (the key alone doesn't identify which lesson/institution/
     // learner it belongs to), so it's restricted to ADMIN rather than left
     // fully public -- previously anyone on the internet could delete any file
     // in the bucket by guessing/observing its key.

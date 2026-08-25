@@ -45,12 +45,12 @@ public final class AdminPartnershipDtos {
             LocalDateTime reviewedAt,
             String reviewedBy,
             String adminRemarks,
-            Long enterpriseId,
+            Long institutionId,
             List<PartnershipItemDetailDto> items,
             // Populated on the approve response so the admin sees whether the
-            // enterprise's login credentials were emailed. Null on list/detail.
-            Boolean enterpriseAccountEmailed,
-            String enterpriseAccountNote
+            // institution's login credentials were emailed. Null on list/detail.
+            Boolean institutionAccountEmailed,
+            String institutionAccountNote
     ) {
     }
 

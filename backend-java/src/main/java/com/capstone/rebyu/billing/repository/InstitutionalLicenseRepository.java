@@ -8,9 +8,9 @@ import java.util.Optional;
 
 public interface InstitutionalLicenseRepository extends JpaRepository<InstitutionalLicense, Long> {
 
-    List<InstitutionalLicense> findByEnterprise_EnterpriseIdOrderByCreatedAtDesc(Long enterpriseId);
+    List<InstitutionalLicense> findByInstitution_InstitutionIdOrderByCreatedAtDesc(Long institutionId);
 
-    Optional<InstitutionalLicense> findFirstByEnterprise_EnterpriseIdOrderByCreatedAtDesc(Long enterpriseId);
+    Optional<InstitutionalLicense> findFirstByInstitution_InstitutionIdOrderByCreatedAtDesc(Long institutionId);
 
     long countByLicenseStatusIn(java.util.Collection<com.capstone.rebyu.billing.entity.BillingStatus> statuses);
 }

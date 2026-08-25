@@ -15,7 +15,7 @@ public class PartnershipRequestDto {
     private Long requestId;
 
     @NotNull
-    private Long enterpriseId;
+    private Long institutionId;
 
     @NotNull
     private LocalDateTime submittedAt;

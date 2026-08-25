@@ -30,7 +30,7 @@ export function getExamById(examId, includeGroupId) {
   return base(`exams/${examId}${query}`)
 }
 
-// ownerGroupId is required for an Enterprise Member creating their own
+// ownerGroupId is required for an Institution Member creating their own
 // exam; omitted, the backend requires ADMIN and creates an official exam.
 export function createExam(exam, ownerGroupId) {
   const query = ownerGroupId != null ? `?ownerGroupId=${ownerGroupId}` : ""
@@ -254,11 +254,11 @@ export const ASSESSMENT_TYPES = [
   { value: "ASSIGNMENT", label: "Assignment" },
 ]
 
-// Offered to Enterprise groups authoring their own assessments. Excludes
+// Offered to Institution groups authoring their own assessments. Excludes
 // DIAGNOSTIC -- that label carries special meaning on the official
 // curriculum (it used to gate lesson access platform-wide), which doesn't
 // apply to a group's own, non-gating assessment and would be misleading.
-export const ENTERPRISE_ASSESSMENT_TYPES = ASSESSMENT_TYPES.filter(
+export const INSTITUTION_ASSESSMENT_TYPES = ASSESSMENT_TYPES.filter(
   (type) => type.value !== "DIAGNOSTIC"
 )
 

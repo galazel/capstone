@@ -243,7 +243,7 @@ public class AdaptiveRetakeQuestionSelectionService {
         }
 
         // --- 4. Candidate pool for the exam's whole curriculum scope -------
-        Long ownerGroupId = exam.getOwnerGroup() != null ? exam.getOwnerGroup().getEnterpriseGroupId() : null;
+        Long ownerGroupId = exam.getOwnerGroup() != null ? exam.getOwnerGroup().getInstitutionGroupId() : null;
         List<QuestionSelectionView> candidatePool = eligibleQuestionService.resolveScopeViews(
                 exam.getCertification() != null ? exam.getCertification().getCertificationId() : null,
                 exam.getMajorCategory() != null ? exam.getMajorCategory().getMajorCategoryId() : null,

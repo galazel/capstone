@@ -236,7 +236,7 @@ public class AchievementAwardService {
 
     /**
      * True once every lesson of any one enrolled certification is complete.
-     * Group-authored lessons are excluded: an Enterprise group's own material is
+     * Group-authored lessons are excluded: an Institution group's own material is
      * not part of the certification review a learner signed up for, and counting
      * it would make "Finisher" unreachable for that learner alone.
      */

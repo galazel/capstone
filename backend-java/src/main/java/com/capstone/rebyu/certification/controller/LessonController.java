@@ -16,7 +16,7 @@ import java.util.List;
 
 /**
  * Reads stay public (browsed platform-wide). WRITES had no auth at all --
- * now either ADMIN (official content) or an Enterprise Member acting on
+ * now either ADMIN (official content) or an Institution Member acting on
  * their own group's content, authorized by walking up to the ancestor
  * MajorCategory's ownerGroup -- see LessonService. This includes the lesson
  * body editing endpoints (saveLessonComponent), since a member authoring
@@ -51,9 +51,9 @@ public class LessonController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public LessonDto create(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody LessonDto dto) {
-        CurrentUserDto user = requireAdminOrEnterprise(jwt);
+        CurrentUserDto user = requireAdminOrInstitution(jwt);
         boolean isAdmin = isAdmin(user);
-        return lessonService.create(dto, isAdmin, user.enterpriseId(), user.userId(), isOwner(user));
+        return lessonService.create(dto, isAdmin, user.institutionId(), user.userId(), isOwner(user));
     }
 
     @PutMapping("/{id}")
@@ -62,17 +62,17 @@ public class LessonController {
             @PathVariable Long id,
             @Valid @RequestBody LessonDto dto
     ) {
-        CurrentUserDto user = requireAdminOrEnterprise(jwt);
+        CurrentUserDto user = requireAdminOrInstitution(jwt);
         boolean isAdmin = isAdmin(user);
-        return lessonService.update(id, dto, isAdmin, user.enterpriseId(), user.userId(), isOwner(user));
+        return lessonService.update(id, dto, isAdmin, user.institutionId(), user.userId(), isOwner(user));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
-        CurrentUserDto user = requireAdminOrEnterprise(jwt);
+        CurrentUserDto user = requireAdminOrInstitution(jwt);
         boolean isAdmin = isAdmin(user);
-        lessonService.delete(id, isAdmin, user.enterpriseId(), user.userId(), isOwner(user));
+        lessonService.delete(id, isAdmin, user.institutionId(), user.userId(), isOwner(user));
     }
 
     @PutMapping("/lesson/{id}")
@@ -82,9 +82,9 @@ public class LessonController {
             @PathVariable Long id,
             @RequestBody LessonDto lessonDto
     ) {
-        CurrentUserDto user = requireAdminOrEnterprise(jwt);
+        CurrentUserDto user = requireAdminOrInstitution(jwt);
         boolean isAdmin = isAdmin(user);
-        lessonService.saveLessonComponent(id, lessonDto, isAdmin, user.enterpriseId(), user.userId(), isOwner(user));
+        lessonService.saveLessonComponent(id, lessonDto, isAdmin, user.institutionId(), user.userId(), isOwner(user));
     }
 
     @GetMapping("/lesson/{id}")
@@ -94,13 +94,13 @@ public class LessonController {
         return lessonService.getLessonComponent(id);
     }
 
-    private CurrentUserDto requireAdminOrEnterprise(Jwt jwt) {
+    private CurrentUserDto requireAdminOrInstitution(Jwt jwt) {
         if (jwt == null) {
             throw new IllegalArgumentException("Authentication is required");
         }
         CurrentUserDto user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
-        if (!isAdmin(user) && !CognitoAuthService.isEnterpriseRole(user.role())) {
-            throw new IllegalArgumentException("Admin or enterprise access is required");
+        if (!isAdmin(user) && !CognitoAuthService.isInstitutionRole(user.role())) {
+            throw new IllegalArgumentException("Admin or institution access is required");
         }
         return user;
     }
@@ -110,6 +110,6 @@ public class LessonController {
     }
 
     private boolean isOwner(CurrentUserDto user) {
-        return "owner".equalsIgnoreCase(user.enterpriseMemberRole());
+        return "owner".equalsIgnoreCase(user.institutionMemberRole());
     }
 }

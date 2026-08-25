@@ -146,12 +146,12 @@ export function roleHomePath(role) {
   switch ((role ?? "").toUpperCase()) {
     case "ADMIN":
       return "/admin/dashboard"
-    case "ENTERPRISE":
+    case "INSTITUTION":
     // An account the organization created for one of its people (a group
     // leader). Same portal as the organization's own account -- the dashboard
     // itself branches on whether they are the owner.
-    case "ENTERPRISE_MEMBER":
-      return "/enterprise/dashboard"
+    case "INSTITUTION_MEMBER":
+      return "/institution/dashboard"
     default:
       return "/learner/analytics"
   }

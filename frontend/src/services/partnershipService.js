@@ -37,27 +37,27 @@ export function rejectPartnershipRequest(requestId, remarks) {
   })
 }
 
-// Transaction Three (enterprise): certification access + learner invitations.
-export function getEnterpriseCertificationAccess(enterpriseId) {
-  return base(`enterprise/certification-access?enterpriseId=${enterpriseId}`)
+// Transaction Three (institution): certification access + learner invitations.
+export function getInstitutionCertificationAccess(institutionId) {
+  return base(`institution/certification-access?institutionId=${institutionId}`)
 }
 
-// Sent by a group's leader only -- enterpriseGroupId is required; the
+// Sent by a group's leader only -- institutionGroupId is required; the
 // certification/slots are derived server-side from the group. `learners` is a
 // list of { firstName, lastName, email } (name optional, email required).
-export function sendEnterpriseInvitations({ enterpriseGroupId, learners }) {
-  return base("enterprise/invitations", {
+export function sendInstitutionInvitations({ institutionGroupId, learners }) {
+  return base("institution/invitations", {
     method: "POST",
-    data: { enterpriseGroupId, learners },
+    data: { institutionGroupId, learners },
   })
 }
 
-export function getEnterpriseInvitations(enterpriseId) {
-  return base(`enterprise/invitations?enterpriseId=${enterpriseId}`)
+export function getInstitutionInvitations(institutionId) {
+  return base(`institution/invitations?institutionId=${institutionId}`)
 }
 
-// Only the invitation's own group leader may cancel it; enterpriseId is
+// Only the invitation's own group leader may cancel it; institutionId is
 // resolved from the caller's JWT server-side, never a client param.
-export function cancelEnterpriseInvitation(invitationId) {
-  return base(`enterprise/invitations/${invitationId}/cancel`, { method: "PUT" })
+export function cancelInstitutionInvitation(invitationId) {
+  return base(`institution/invitations/${invitationId}/cancel`, { method: "PUT" })
 }

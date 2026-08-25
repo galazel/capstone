@@ -21,8 +21,8 @@ public class OrganizationCertificateController {
     private final CognitoAuthService auth;
 
     // Cross-tenant allocation data: the unfiltered list exposes every organization's
-    // certificate allocations, so it's admin-only. Enterprises read their own via
-    // /api/enterprise/me/overview; learners via /api/learners/me/portal.
+    // certificate allocations, so it's admin-only. Institutions read their own via
+    // /api/institution/me/overview; learners via /api/learners/me/portal.
     @GetMapping
     public List<OrganizationCertificateDto> getAll(@AuthenticationPrincipal Jwt jwt) {
         requireAdmin(jwt);

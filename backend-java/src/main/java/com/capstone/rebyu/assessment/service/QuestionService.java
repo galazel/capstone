@@ -16,7 +16,7 @@ import com.capstone.rebyu.certification.entity.MajorCategory;
 import com.capstone.rebyu.certification.entity.MiddleCategory;
 import com.capstone.rebyu.certification.repository.LessonRepository;
 import com.capstone.rebyu.common.BusinessRuleException;
-import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup;
+import com.capstone.rebyu.institutiongroup.entity.InstitutionGroup;
 import com.capstone.rebyu.organization.repository.OrganizationCertificateRepository;
 import com.capstone.rebyu.user.entity.User;
 import jakarta.persistence.EntityNotFoundException;
@@ -78,21 +78,21 @@ public class QuestionService {
     /** Official questions are visible to everyone; group-owned only to that group. */
     private boolean isVisible(Question question, Long includeGroupId) {
         return question.getOwnerGroup() == null
-                || question.getOwnerGroup().getEnterpriseGroupId().equals(includeGroupId);
+                || question.getOwnerGroup().getInstitutionGroupId().equals(includeGroupId);
     }
 
     /**
      * @param creatorUserId        the authenticated caller who authored this question.
-     * @param restrictToEnterpriseId non-null for an ENTERPRISE caller (owner or group
+     * @param restrictToInstitutionId non-null for an INSTITUTION caller (owner or group
      *                             leader): the question's lesson must belong to a
      *                             certification this organization has purchased
      *                             access to. Null for an ADMIN caller (no restriction).
      */
     public QuestionDto create(
-            QuestionDto dto, Long creatorUserId, Long restrictToEnterpriseId, EnterpriseGroup ownerGroup) {
+            QuestionDto dto, Long creatorUserId, Long restrictToInstitutionId, InstitutionGroup ownerGroup) {
         log.info("Creating new question (ownerGroup={})",
-                ownerGroup == null ? null : ownerGroup.getEnterpriseGroupId());
-        validateLesson(dto, restrictToEnterpriseId);
+                ownerGroup == null ? null : ownerGroup.getInstitutionGroupId());
+        validateLesson(dto, restrictToInstitutionId);
         if (dto.getParentQuestionId() == null && dto.getQuestionText() != null) {
             if (questionRepository.findDuplicate(dto.getLessonId(), dto.getQuestionText(), dto.getQuestionType()).isPresent()) {
                 throw new IllegalArgumentException("A question with this text already exists in this lesson");
@@ -110,16 +110,16 @@ public class QuestionService {
     }
 
     /**
-     * @param isAdmin              an admin may edit any question; an ENTERPRISE
+     * @param isAdmin              an admin may edit any question; an INSTITUTION
      *                             caller (owner or group leader) may only edit
      *                             questions they themselves created.
-     * @param restrictToEnterpriseId non-null for an ENTERPRISE caller -- same
+     * @param restrictToInstitutionId non-null for an INSTITUTION caller -- same
      *                             certification-access check as {@link #create}.
      */
     public QuestionDto update(
-            Long id, QuestionDto dto, Long callerUserId, boolean isAdmin, Long restrictToEnterpriseId) {
+            Long id, QuestionDto dto, Long callerUserId, boolean isAdmin, Long restrictToInstitutionId) {
         log.info("Updating question id: {}", id);
-        validateLesson(dto, restrictToEnterpriseId);
+        validateLesson(dto, restrictToInstitutionId);
         Question entity = findEntity(id);
         if (!isAdmin) {
             requireOwnAuthorship(entity, callerUserId);
@@ -141,10 +141,10 @@ public class QuestionService {
      * supplies a certificationId — that the lesson actually belongs to that
      * certification. This backs the rule that every generated or manually
      * created question must carry a lessonId within the selected certification.
-     * When restrictToEnterpriseId is set, also enforces that the organization
+     * When restrictToInstitutionId is set, also enforces that the organization
      * actually has purchased access to that certification.
      */
-    private void validateLesson(QuestionDto dto, Long restrictToEnterpriseId) {
+    private void validateLesson(QuestionDto dto, Long restrictToInstitutionId) {
         if (dto.getLessonId() == null) {
             throw new IllegalArgumentException("A lessonId is required to save a question.");
         }
@@ -165,10 +165,10 @@ public class QuestionService {
                             + dto.getCertificationId() + ".");
         }
 
-        if (restrictToEnterpriseId != null) {
+        if (restrictToInstitutionId != null) {
             boolean hasAccess = resolvedCertificationId != null
-                    && organizationCertificateRepository.findByEnterprise_EnterpriseIdAndCertification_CertificationId(
-                            restrictToEnterpriseId, resolvedCertificationId).isPresent();
+                    && organizationCertificateRepository.findByInstitution_InstitutionIdAndCertification_CertificationId(
+                            restrictToInstitutionId, resolvedCertificationId).isPresent();
             if (!hasAccess) {
                 throw new BusinessRuleException.QuestionAccessException(
                         "Your organization does not have access to this certification.");

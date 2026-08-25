@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import {
   ArrowRight,
   BookOpenCheck,
@@ -226,9 +228,11 @@ function GeminiTutorMessage({ message, learnerName, isFirstInGroup, isLastInGrou
                       : `!rounded-2xl ${tailCorner} ${message.action ? "!w-full" : ""} !border-0 !bg-rb-beetle-wash !px-3.5 !py-2.5 !text-rb-eel !shadow-none`
                   }
               >
-                <span className="whitespace-pre-wrap text-sm font-medium leading-6">
-                  {message.text}
-                </span>
+                <div className="text-sm font-medium leading-6 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_strong]:font-extrabold [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {message.text}
+                  </ReactMarkdown>
+                </div>
 
                 {message.action ? <StudyAidActionCard action={message.action} /> : null}
               </BubbleContent>

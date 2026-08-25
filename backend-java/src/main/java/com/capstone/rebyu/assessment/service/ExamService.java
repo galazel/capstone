@@ -21,7 +21,7 @@ import com.capstone.rebyu.certification.repository.MajorCategoryRepository;
 import com.capstone.rebyu.certification.repository.MiddleCategoryRepository;
 import com.capstone.rebyu.certification.service.MajorCategoryService;
 import com.capstone.rebyu.common.BusinessRuleException;
-import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup;
+import com.capstone.rebyu.institutiongroup.entity.InstitutionGroup;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -66,7 +66,7 @@ public class ExamService {
         log.debug("Fetching all exams (includeGroupId={})", includeGroupId);
         return examRepository.findAll().stream()
                 .filter(exam -> exam.getOwnerGroup() == null
-                        || exam.getOwnerGroup().getEnterpriseGroupId().equals(includeGroupId))
+                        || exam.getOwnerGroup().getInstitutionGroupId().equals(includeGroupId))
                 .map(this::toDtoWithQuestions).toList();
     }
 
@@ -75,7 +75,7 @@ public class ExamService {
         log.debug("Fetching exam id: {}", id);
         Exam exam = findEntity(id);
         if (exam.getOwnerGroup() != null
-                && !exam.getOwnerGroup().getEnterpriseGroupId().equals(includeGroupId)) {
+                && !exam.getOwnerGroup().getInstitutionGroupId().equals(includeGroupId)) {
             throw new EntityNotFoundException("Exam not found: " + id);
         }
         return toDtoWithQuestions(exam);
@@ -83,13 +83,13 @@ public class ExamService {
 
     public ExamDto create(
             ExamDto dto, boolean isAdmin,
-            Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner, Long ownerGroupId) {
+            Long callerInstitutionId, Long callerUserId, boolean callerIsOwner, Long ownerGroupId) {
         log.info("Creating new exam (ownerGroupId={})", ownerGroupId);
         enforceUniqueness(dto, ownerGroupId);
         Exam entity = examMapper.toEntity(dto);
         entity.setExamId(null);
         entity.setOwnerGroup(majorCategoryService.resolveAndAuthorizeOwnerGroup(
-                isAdmin, callerEnterpriseId, callerUserId, callerIsOwner, ownerGroupId, dto.getCertificationId()));
+                isAdmin, callerInstitutionId, callerUserId, callerIsOwner, ownerGroupId, dto.getCertificationId()));
         normalizeForSave(entity, dto);
         if (entity.getStatus() == null) {
             entity.setStatus(Exam.Status.DRAFT);
@@ -107,11 +107,11 @@ public class ExamService {
     }
 
     public ExamDto update(
-            Long id, ExamDto dto, boolean isAdmin, Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner) {
+            Long id, ExamDto dto, boolean isAdmin, Long callerInstitutionId, Long callerUserId, boolean callerIsOwner) {
         log.info("Updating exam id: {}", id);
         Exam existing = findEntity(id);
         majorCategoryService.requireCanActOn(
-                existing.getOwnerGroup(), isAdmin, callerEnterpriseId, callerUserId, callerIsOwner);
+                existing.getOwnerGroup(), isAdmin, callerInstitutionId, callerUserId, callerIsOwner);
         Exam entity = examMapper.toEntity(dto);
         entity.setExamId(id);
         entity.setOwnerGroup(existing.getOwnerGroup());
@@ -134,10 +134,10 @@ public class ExamService {
     }
 
     public ExamDto publish(
-            Long id, boolean isAdmin, Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner) {
+            Long id, boolean isAdmin, Long callerInstitutionId, Long callerUserId, boolean callerIsOwner) {
         Exam exam = findEntity(id);
         majorCategoryService.requireCanActOn(
-                exam.getOwnerGroup(), isAdmin, callerEnterpriseId, callerUserId, callerIsOwner);
+                exam.getOwnerGroup(), isAdmin, callerInstitutionId, callerUserId, callerIsOwner);
 
         if (exam.getTitle() == null || exam.getTitle().isBlank()) {
             throw new BusinessRuleException.InvalidAssessmentSubmissionException(
@@ -174,11 +174,11 @@ public class ExamService {
         return toDtoWithQuestions(examRepository.save(exam));
     }
 
-    public void delete(Long id, boolean isAdmin, Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner) {
+    public void delete(Long id, boolean isAdmin, Long callerInstitutionId, Long callerUserId, boolean callerIsOwner) {
         log.info("Deleting exam id: {}", id);
         Exam exam = findEntity(id);
         majorCategoryService.requireCanActOn(
-                exam.getOwnerGroup(), isAdmin, callerEnterpriseId, callerUserId, callerIsOwner);
+                exam.getOwnerGroup(), isAdmin, callerInstitutionId, callerUserId, callerIsOwner);
         // The exam_questions join rows aren't cascade-deleted by the FK, so they
         // must be cleared first or the exam delete fails with a constraint violation.
         examQuestionRepository.deleteByExam_ExamId(id);
@@ -188,10 +188,10 @@ public class ExamService {
     }
 
     public ExamDto archive(
-            Long id, boolean isAdmin, Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner) {
+            Long id, boolean isAdmin, Long callerInstitutionId, Long callerUserId, boolean callerIsOwner) {
         Exam exam = findEntity(id);
         majorCategoryService.requireCanActOn(
-                exam.getOwnerGroup(), isAdmin, callerEnterpriseId, callerUserId, callerIsOwner);
+                exam.getOwnerGroup(), isAdmin, callerInstitutionId, callerUserId, callerIsOwner);
         exam.setStatus(Exam.Status.ARCHIVED);
         exam.setUpdatedAt(LocalDateTime.now());
         log.info("Exam id: {} archived", id);
@@ -205,10 +205,10 @@ public class ExamService {
      */
     public ExamDto addQuestions(
             Long examId, AddExamQuestionsRequest request,
-            boolean isAdmin, Long callerEnterpriseId, Long callerUserId, boolean callerIsOwner) {
+            boolean isAdmin, Long callerInstitutionId, Long callerUserId, boolean callerIsOwner) {
         Exam exam = findEntity(examId);
         majorCategoryService.requireCanActOn(
-                exam.getOwnerGroup(), isAdmin, callerEnterpriseId, callerUserId, callerIsOwner);
+                exam.getOwnerGroup(), isAdmin, callerInstitutionId, callerUserId, callerIsOwner);
 
         Set<Long> requestedIds = new LinkedHashSet<>();
         for (AddExamQuestionsRequest.Item item : request.questions()) {

@@ -2,7 +2,7 @@ import { base } from "./base"
 
 export const DEFAULT_GENERATION_TARGET = 100
 
-// Pass ownerGroupId to author a question that belongs to one Enterprise group
+// Pass ownerGroupId to author a question that belongs to one Institution group
 // (only that group sees/uses it). Omit it for official, platform-wide questions.
 export async function saveQuestion(question, ownerGroupId) {
     const query = ownerGroupId != null ? `?ownerGroupId=${ownerGroupId}` : ""

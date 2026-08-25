@@ -17,7 +17,7 @@ import java.util.List;
 
 /**
  * Reads stay public (browsed platform-wide). WRITES had no auth at all --
- * now either ADMIN (official content) or an Enterprise Member acting on
+ * now either ADMIN (official content) or an Institution Member acting on
  * their own group's content, authorized by walking up to the parent
  * MajorCategory's ownerGroup -- see MiddleCategoryService.
  */
@@ -41,34 +41,34 @@ public class MiddleCategoryController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public MiddleCategoryDto create(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody MiddleCategoryDto dto) {
-        CurrentUserDto user = requireAdminOrEnterprise(jwt);
+        CurrentUserDto user = requireAdminOrInstitution(jwt);
         boolean isAdmin = isAdmin(user);
-        return middleCategoryService.create(dto, isAdmin, user.enterpriseId(), user.userId(), isOwner(user));
+        return middleCategoryService.create(dto, isAdmin, user.institutionId(), user.userId(), isOwner(user));
     }
 
     @PutMapping("/{id}")
     public MiddleCategoryDto update(
             @AuthenticationPrincipal Jwt jwt, @PathVariable Long id, @Valid @RequestBody MiddleCategoryDto dto) {
-        CurrentUserDto user = requireAdminOrEnterprise(jwt);
+        CurrentUserDto user = requireAdminOrInstitution(jwt);
         boolean isAdmin = isAdmin(user);
-        return middleCategoryService.update(id, dto, isAdmin, user.enterpriseId(), user.userId(), isOwner(user));
+        return middleCategoryService.update(id, dto, isAdmin, user.institutionId(), user.userId(), isOwner(user));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
-        CurrentUserDto user = requireAdminOrEnterprise(jwt);
+        CurrentUserDto user = requireAdminOrInstitution(jwt);
         boolean isAdmin = isAdmin(user);
-        middleCategoryService.delete(id, isAdmin, user.enterpriseId(), user.userId(), isOwner(user));
+        middleCategoryService.delete(id, isAdmin, user.institutionId(), user.userId(), isOwner(user));
     }
 
-    private CurrentUserDto requireAdminOrEnterprise(Jwt jwt) {
+    private CurrentUserDto requireAdminOrInstitution(Jwt jwt) {
         if (jwt == null) {
             throw new IllegalArgumentException("Authentication is required");
         }
         CurrentUserDto user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
-        if (!isAdmin(user) && !CognitoAuthService.isEnterpriseRole(user.role())) {
-            throw new IllegalArgumentException("Admin or enterprise access is required");
+        if (!isAdmin(user) && !CognitoAuthService.isInstitutionRole(user.role())) {
+            throw new IllegalArgumentException("Admin or institution access is required");
         }
         return user;
     }
@@ -78,6 +78,6 @@ public class MiddleCategoryController {
     }
 
     private boolean isOwner(CurrentUserDto user) {
-        return "owner".equalsIgnoreCase(user.enterpriseMemberRole());
+        return "owner".equalsIgnoreCase(user.institutionMemberRole());
     }
 }

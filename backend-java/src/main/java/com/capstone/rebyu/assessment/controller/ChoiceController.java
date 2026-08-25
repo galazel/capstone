@@ -15,7 +15,7 @@ import java.util.List;
 /**
  * A question's answer choices (including which one is correct) -- had no
  * authentication at all, the same defect class the question bank itself had
- * (see QuestionController). Now admin- or enterprise-scoped like every other
+ * (see QuestionController). Now admin- or institution-scoped like every other
  * question-authoring endpoint.
  */
 @RestController
@@ -27,43 +27,43 @@ public class ChoiceController {
 
     @GetMapping
     public List<ChoiceDto> getAll(@AuthenticationPrincipal Jwt jwt) {
-        requireAdminOrEnterprise(jwt);
+        requireAdminOrInstitution(jwt);
         return choiceService.getAll();
     }
 
     @GetMapping("/{id}")
     public ChoiceDto getById(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
-        requireAdminOrEnterprise(jwt);
+        requireAdminOrInstitution(jwt);
         return choiceService.getById(id);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ChoiceDto create(@Valid @RequestBody ChoiceDto dto, @AuthenticationPrincipal Jwt jwt) {
-        requireAdminOrEnterprise(jwt);
+        requireAdminOrInstitution(jwt);
         return choiceService.create(dto);
     }
 
     @PutMapping("/{id}")
     public ChoiceDto update(@PathVariable Long id, @Valid @RequestBody ChoiceDto dto, @AuthenticationPrincipal Jwt jwt) {
-        requireAdminOrEnterprise(jwt);
+        requireAdminOrInstitution(jwt);
         return choiceService.update(id, dto);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
-        requireAdminOrEnterprise(jwt);
+        requireAdminOrInstitution(jwt);
         choiceService.delete(id);
     }
 
-    private void requireAdminOrEnterprise(Jwt jwt) {
+    private void requireAdminOrInstitution(Jwt jwt) {
         if (jwt == null) {
             throw new IllegalArgumentException("Authentication is required");
         }
         var user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
-        if (!"ADMIN".equalsIgnoreCase(user.role()) && !CognitoAuthService.isEnterpriseRole(user.role())) {
-            throw new IllegalArgumentException("Admin or enterprise access is required");
+        if (!"ADMIN".equalsIgnoreCase(user.role()) && !CognitoAuthService.isInstitutionRole(user.role())) {
+            throw new IllegalArgumentException("Admin or institution access is required");
         }
     }
 }

@@ -1,9 +1,9 @@
 package com.capstone.rebyu.auth.service;
 
 import com.capstone.rebyu.auth.dto.CurrentUserDto;
-import com.capstone.rebyu.organization.entity.Enterprise;
-import com.capstone.rebyu.organization.entity.EnterpriseMember;
-import com.capstone.rebyu.organization.repository.EnterpriseRepository;
+import com.capstone.rebyu.organization.entity.Institution;
+import com.capstone.rebyu.organization.entity.InstitutionMember;
+import com.capstone.rebyu.organization.repository.InstitutionRepository;
 import com.capstone.rebyu.user.entity.Learner;
 import com.capstone.rebyu.user.entity.User;
 import com.capstone.rebyu.user.entity.UserType;
@@ -42,29 +42,29 @@ public class CognitoAuthService {
 
     public static final String LEARNER_USER_TYPE = "LEARNER";
     /** The organization's own account -- the owner / primary contact. */
-    public static final String ENTERPRISE_USER_TYPE = "ENTERPRISE";
+    public static final String INSTITUTION_USER_TYPE = "INSTITUTION";
     /**
      * Someone the organization created an account for (a group leader, a
      * co-admin) rather than the organization account itself. Carries the same
-     * permissions as ENTERPRISE; it exists so the two can be told apart.
+     * permissions as INSTITUTION; it exists so the two can be told apart.
      */
-    public static final String ENTERPRISE_MEMBER_USER_TYPE = "ENTERPRISE_MEMBER";
+    public static final String INSTITUTION_MEMBER_USER_TYPE = "INSTITUTION_MEMBER";
 
     /**
-     * True for either enterprise-side role. Every permission check that used to
-     * compare against "ENTERPRISE" must go through this, or group leaders lose
+     * True for either institution-side role. Every permission check that used to
+     * compare against "INSTITUTION" must go through this, or group leaders lose
      * the authoring rights they had before the member role existed.
      */
-    public static boolean isEnterpriseRole(String role) {
-        return ENTERPRISE_USER_TYPE.equalsIgnoreCase(role)
-                || ENTERPRISE_MEMBER_USER_TYPE.equalsIgnoreCase(role);
+    public static boolean isInstitutionRole(String role) {
+        return INSTITUTION_USER_TYPE.equalsIgnoreCase(role)
+                || INSTITUTION_MEMBER_USER_TYPE.equalsIgnoreCase(role);
     }
 
     private final UserRepository userRepository;
     private final UserTypeRepository userTypeRepository;
     private final LearnerRepository learnerRepository;
-    private final com.capstone.rebyu.organization.repository.EnterpriseMemberRepository enterpriseMemberRepository;
-    private final EnterpriseRepository enterpriseRepository;
+    private final com.capstone.rebyu.organization.repository.InstitutionMemberRepository institutionMemberRepository;
+    private final InstitutionRepository institutionRepository;
     private final CognitoIdentityProviderClient cognitoClient;
 
     @Transactional
@@ -73,7 +73,7 @@ public class CognitoAuthService {
 
         User existing = userRepository.findByCognitoSub(cognitoSub).orElse(null);
         if (existing != null) {
-            ensureEnterpriseLinkage(existing);
+            ensureInstitutionLinkage(existing);
             return toDto(existing);
         }
 
@@ -88,7 +88,7 @@ public class CognitoAuthService {
 
         try {
             User user = linkOrProvision(cognitoSub, email, attributes);
-            ensureEnterpriseLinkage(user);
+            ensureInstitutionLinkage(user);
             return toDto(user);
         } catch (DataIntegrityViolationException raceLost) {
             // A parallel first-login request linked this subject already.
@@ -166,63 +166,63 @@ public class CognitoAuthService {
     }
 
     /**
-     * Self-heals enterprise account linkage on sign-in. When a validated user's
-     * email matches an Enterprise's primary contact (i.e. an admin-approved
+     * Self-heals institution account linkage on sign-in. When a validated user's
+     * email matches an Institution's primary contact (i.e. an admin-approved
      * partnership created that organization for this email), make sure the
-     * account is typed ENTERPRISE and linked to that organization as its owner.
+     * account is typed INSTITUTION and linked to that organization as its owner.
      *
-     * Without this, the first sign-in of an approved enterprise contact falls
+     * Without this, the first sign-in of an approved institution contact falls
      * through {@link #linkOrProvision} and is provisioned as a plain LEARNER with
-     * no EnterpriseMember row — so enterpriseId never resolves and the enterprise
+     * no InstitutionMember row — so institutionId never resolves and the institution
      * portal shows "Unable to load your organization". This runs on every sync,
      * so it also repairs accounts that were already mis-provisioned.
      */
-    private void ensureEnterpriseLinkage(User user) {
+    private void ensureInstitutionLinkage(User user) {
         if (user == null || user.getEmail() == null || user.getEmail().isBlank()) {
             return;
         }
-        Enterprise enterprise = enterpriseRepository
+        Institution institution = institutionRepository
                 .findByPrimaryContactEmailIgnoreCase(user.getEmail())
                 .orElse(null);
-        if (enterprise == null) {
-            return; // Not an enterprise contact — leave as a learner.
+        if (institution == null) {
+            return; // Not an institution contact — leave as a learner.
         }
 
-        // 1) Ensure the account is typed ENTERPRISE so role resolution returns
-        //    ENTERPRISE instead of the default LEARNER. ENTERPRISE_MEMBER counts
+        // 1) Ensure the account is typed INSTITUTION so role resolution returns
+        //    INSTITUTION instead of the default LEARNER. INSTITUTION_MEMBER counts
         //    as already-typed: this repair runs on every sync, and rewriting it
-        //    to ENTERPRISE would undo a group leader's role on their next
+        //    to INSTITUTION would undo a group leader's role on their next
         //    sign-in for anyone who is both a primary contact and a member.
-        boolean isEnterpriseType = user.getUserType() != null
-                && isEnterpriseRole(user.getUserType().getUserTypeText());
-        if (!isEnterpriseType) {
-            UserType enterpriseType = userTypeRepository.findByUserTypeText(ENTERPRISE_USER_TYPE)
+        boolean isInstitutionType = user.getUserType() != null
+                && isInstitutionRole(user.getUserType().getUserTypeText());
+        if (!isInstitutionType) {
+            UserType institutionType = userTypeRepository.findByUserTypeText(INSTITUTION_USER_TYPE)
                     .orElseGet(() -> {
                         UserType type = new UserType();
-                        type.setUserTypeText(ENTERPRISE_USER_TYPE);
+                        type.setUserTypeText(INSTITUTION_USER_TYPE);
                         return userTypeRepository.save(type);
                     });
-            user.setUserType(enterpriseType);
+            user.setUserType(institutionType);
             userRepository.save(user);
         }
 
-        // 2) Ensure an owner EnterpriseMember link exists so the portal can scope
+        // 2) Ensure an owner InstitutionMember link exists so the portal can scope
         //    to this organization.
-        boolean alreadyLinked = !enterpriseMemberRepository
-                .findByEnterprise_EnterpriseIdAndUser_UserId(
-                        enterprise.getEnterpriseId(), user.getUserId())
+        boolean alreadyLinked = !institutionMemberRepository
+                .findByInstitution_InstitutionIdAndUser_UserId(
+                        institution.getInstitutionId(), user.getUserId())
                 .isEmpty();
         if (!alreadyLinked) {
-            EnterpriseMember member = EnterpriseMember.builder()
-                    .enterprise(enterprise)
+            InstitutionMember member = InstitutionMember.builder()
+                    .institution(institution)
                     .user(user)
-                    .memberRole(EnterpriseMember.MemberRole.owner)
+                    .memberRole(InstitutionMember.MemberRole.owner)
                     .isPrimaryContact(true)
                     .joinedAt(LocalDateTime.now())
                     .build();
-            enterpriseMemberRepository.save(member);
-            log.info("Linked enterprise account {} to enterprise {} (id={}) on sign-in",
-                    user.getEmail(), enterprise.getEnterpriseName(), enterprise.getEnterpriseId());
+            institutionMemberRepository.save(member);
+            log.info("Linked institution account {} to institution {} (id={}) on sign-in",
+                    user.getEmail(), institution.getInstitutionName(), institution.getInstitutionId());
         }
     }
 
@@ -254,22 +254,22 @@ public class CognitoAuthService {
             displayName = learner != null ? learner.getUsername() : user.getEmail();
         }
 
-        // Enterprise members carry their organization so the portal can scope
-        // to it; their role comes from the ENTERPRISE user type.
-        EnterpriseMember membership = enterpriseMemberRepository.findByUser_UserId(user.getUserId())
+        // Institution members carry their organization so the portal can scope
+        // to it; their role comes from the INSTITUTION user type.
+        InstitutionMember membership = institutionMemberRepository.findByUser_UserId(user.getUserId())
                 .stream()
                 .findFirst()
                 .orElse(null);
-        Long enterpriseId = membership != null ? membership.getEnterprise().getEnterpriseId() : null;
-        String enterpriseMemberRole = membership != null ? membership.getMemberRole().name() : null;
+        Long institutionId = membership != null ? membership.getInstitution().getInstitutionId() : null;
+        String institutionMemberRole = membership != null ? membership.getMemberRole().name() : null;
 
         return new CurrentUserDto(
                 user.getUserId(),
                 user.getEmail(),
                 user.getUserType() != null ? user.getUserType().getUserTypeText() : LEARNER_USER_TYPE,
                 learner != null ? learner.getLearnerId() : null,
-                enterpriseId,
-                enterpriseMemberRole,
+                institutionId,
+                institutionMemberRole,
                 firstName,
                 lastName,
                 displayName

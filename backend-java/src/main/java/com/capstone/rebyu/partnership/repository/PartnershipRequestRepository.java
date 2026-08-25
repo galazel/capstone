@@ -10,7 +10,7 @@ public interface PartnershipRequestRepository extends JpaRepository<PartnershipR
 
     Optional<PartnershipRequest> findByIdempotencyKey(String idempotencyKey);
 
-    List<PartnershipRequest> findByEnterprise_EnterpriseIdOrderBySubmittedAtDesc(Long enterpriseId);
+    List<PartnershipRequest> findByInstitution_InstitutionIdOrderBySubmittedAtDesc(Long institutionId);
 
     Optional<PartnershipRequest> findByReferenceNumber(String referenceNumber);
 

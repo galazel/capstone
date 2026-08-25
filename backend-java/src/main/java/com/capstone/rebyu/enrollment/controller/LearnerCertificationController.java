@@ -22,7 +22,7 @@ public class LearnerCertificationController {
 
     // Cross-learner enrollment data: the unfiltered list/lookup exposes every learner's
     // purchased enrollments, so reads are admin-only. Learners get their own via
-    // /api/learners/me/portal; enterprise managers via the scoped enterprise endpoints.
+    // /api/learners/me/portal; institution managers via the scoped institution endpoints.
     @GetMapping
     public List<LearnerCertificationDto> getAll(@AuthenticationPrincipal Jwt jwt) {
         requireAdmin(jwt);

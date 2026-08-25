@@ -52,7 +52,7 @@ public class EligibleQuestionService {
         return scoped.stream()
                 .filter(question -> !assigned.contains(question.getQuestionId()))
                 .filter(question -> question.getOwnerGroup() == null
-                        || question.getOwnerGroup().getEnterpriseGroupId().equals(includeGroupId))
+                        || question.getOwnerGroup().getInstitutionGroupId().equals(includeGroupId))
                 .map(this::toDto)
                 .toList();
     }

@@ -196,7 +196,7 @@ class ProgressAnalyticsAssessmentCountTest {
 
     @Test
     void excludesAnExamTargetingContentOutsideTheCurriculum() {
-        String reason = reasonFor(onLesson(exam(7L, "Enterprise-only quiz", "LESSON_QUIZ"), 99L));
+        String reason = reasonFor(onLesson(exam(7L, "Institution-only quiz", "LESSON_QUIZ"), 99L));
         assertNotNull(reason);
         assertTrue(reason.contains("targets lesson 99"), reason);
     }

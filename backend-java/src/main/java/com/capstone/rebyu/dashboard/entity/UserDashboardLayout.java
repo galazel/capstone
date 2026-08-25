@@ -14,7 +14,7 @@ import java.time.OffsetDateTime;
  * How one person has arranged one dashboard.
  *
  * Keyed on the user rather than the learner, which is what makes it usable by the
- * admin and enterprise boards -- neither of those audiences has a learner row, so
+ * admin and institution boards -- neither of those audiences has a learner row, so
  * {@code LearnerDashboardLayout} is structurally unavailable to them.
  *
  * The UNIQUE(user_id, board) is declared here as well as in V60. It has to be:

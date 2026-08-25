@@ -20,7 +20,7 @@ public class LearnerExamDetailController {
     private final LearnerExamDetailService learnerExamDetailService;
     private final CognitoAuthService auth;
 
-    // Per-question exam detail rows across every learner/enterprise -- admin-only.
+    // Per-question exam detail rows across every learner/institution -- admin-only.
     @GetMapping
     public List<LearnerExamDetailDto> getAll(@AuthenticationPrincipal Jwt jwt) {
         requireAdmin(jwt);

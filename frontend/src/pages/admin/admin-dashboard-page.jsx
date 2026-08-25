@@ -7,12 +7,12 @@ import {
 } from "@/components/icons"
 
 import {
-  EnterpriseErrorState,
-  EnterpriseLoadingSkeleton,
-  EnterprisePageHeader,
-  EnterpriseStatusBadge,
+  InstitutionErrorState,
+  InstitutionLoadingSkeleton,
+  InstitutionPageHeader,
+  InstitutionStatusBadge,
   formatDateTime,
-} from "@/components/enterprise/enterprise-ui.jsx"
+} from "@/components/institution/institution-ui.jsx"
 import { BentoHeading, BentoStat, BentoTile } from "@/components/commons/bento.jsx"
 import {
   BarBreakdownChart,
@@ -316,7 +316,7 @@ export default function AdminDashboard() {
                           {formatDateTime(request.submittedAt)}
                         </p>
                       </div>
-                      <EnterpriseStatusBadge status={request.status} />
+                      <InstitutionStatusBadge status={request.status} />
                     </li>
                   ))}
                 </ul>
@@ -383,16 +383,16 @@ export default function AdminDashboard() {
     partnershipsQuery.isError,
   ])
 
-  if (metricsQuery.isLoading) return <EnterpriseLoadingSkeleton />
+  if (metricsQuery.isLoading) return <InstitutionLoadingSkeleton />
 
   if (metricsQuery.isError && partnershipsQuery.isError) {
     return (
       <div className="space-y-6">
-        <EnterprisePageHeader
+        <InstitutionPageHeader
           title="Dashboard"
           subtitle="Platform overview across learners, organizations, and certifications."
         />
-        <EnterpriseErrorState
+        <InstitutionErrorState
           title="Unable to load platform data"
           description="The dashboard could not reach the REBYU backend. Check that the API is running."
           onRetry={() => {
@@ -406,7 +406,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      <EnterprisePageHeader
+      <InstitutionPageHeader
         title="Dashboard"
         subtitle="Platform overview across learners, organizations, and certifications."
       />

@@ -17,11 +17,11 @@ import software.amazon.awssdk.services.cognitoidentityprovider.model.UsernameExi
 import java.util.List;
 
 /**
- * Provisions approved enterprise login accounts in the Cognito user pool.
+ * Provisions approved institution login accounts in the Cognito user pool.
  *
  * AdminCreateUser generates a temporary password and Cognito emails the new
- * enterprise its username and temporary password (a forced reset on first
- * login). This is the "admin approves, enterprise receives credentials by
+ * institution its username and temporary password (a forced reset on first
+ * login). This is the "admin approves, institution receives credentials by
  * email" step. It requires the cognito-idp:AdminCreateUser IAM permission.
  */
 @Slf4j
@@ -38,7 +38,7 @@ public class CognitoAdminService {
         this.userPoolId = userPoolId;
     }
 
-    /** Outcome of an enterprise account provisioning attempt. */
+    /** Outcome of an institution account provisioning attempt. */
     public record ProvisionResult(boolean emailed, String cognitoSub, String note) {
     }
 
@@ -85,7 +85,7 @@ public class CognitoAdminService {
                 .orElse(null);
     }
 
-    public ProvisionResult createEnterpriseAccount(
+    public ProvisionResult createInstitutionAccount(
             String email, String givenName, String familyName) {
         try {
             AdminCreateUserResponse response = adminClient.adminCreateUser(
@@ -104,18 +104,18 @@ public class CognitoAdminService {
                             .build());
 
             String sub = extractSub(response.user() == null ? List.of() : response.user().attributes());
-            log.info("Enterprise Cognito account created and credentials emailed to {}", email);
+            log.info("Institution Cognito account created and credentials emailed to {}", email);
             return new ProvisionResult(true, sub,
                     "Login credentials were emailed to " + email + ".");
         } catch (UsernameExistsException alreadyExists) {
-            log.info("Enterprise Cognito account already exists for {}", email);
+            log.info("Institution Cognito account already exists for {}", email);
             return new ProvisionResult(false, null,
                     "An account already exists for " + email + "; no new email was sent.");
         } catch (Exception e) {
             // Most commonly an IAM AccessDeniedException. Approval must still
             // succeed; the admin can send credentials manually or add the
             // cognito-idp:AdminCreateUser permission and re-run provisioning.
-            log.warn("Could not create enterprise Cognito account for {}: {}", email, e.getMessage());
+            log.warn("Could not create institution Cognito account for {}: {}", email, e.getMessage());
             return new ProvisionResult(false, null,
                     "The organization was approved, but the login account could not be "
                             + "created automatically. Send credentials manually.");

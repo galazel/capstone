@@ -226,8 +226,8 @@ body.netacad-overlay-theme {
     text-transform: none;
 }
 
-:is(.admin-portal, .enterprise-portal) :is(.rounded-xl, .rounded-2xl, .rounded-3xl).border:is(.bg-card, .bg-background, .bg-white),
-:is(.admin-portal, .enterprise-portal) :is(section, article).rounded-xl.border {
+:is(.admin-portal, .institution-portal) :is(.rounded-xl, .rounded-2xl, .rounded-3xl).border:is(.bg-card, .bg-background, .bg-white),
+:is(.admin-portal, .institution-portal) :is(section, article).rounded-xl.border {
     border-color: color-mix(in srgb, var(--border) 78%, transparent);
     border-radius: 0.625rem;
     box-shadow: none;
@@ -306,7 +306,7 @@ body.netacad-overlay-theme {
 }
 
 /* Portal system: Snow surfaces with an Azure interaction language.
-   Shared by the admin, enterprise, and learner layouts. */
+   Shared by the admin, institution, and learner layouts. */
 .netacad-portal,
 body.netacad-overlay-theme {
     /* Polar. No longer the page canvas — see `--rb-page-surface` — this is now
@@ -401,8 +401,8 @@ body.netacad-overlay-theme {
 
 .dark .netacad-portal [data-slot="card"],
 .dark .netacad-portal [data-slot="table-container"],
-.dark :is(.admin-portal, .enterprise-portal) :is(.rounded-xl, .rounded-2xl, .rounded-3xl).border:is(.bg-card, .bg-background, .bg-white),
-.dark :is(.admin-portal, .enterprise-portal) :is(section, article).rounded-xl.border {
+.dark :is(.admin-portal, .institution-portal) :is(.rounded-xl, .rounded-2xl, .rounded-3xl).border:is(.bg-card, .bg-background, .bg-white),
+.dark :is(.admin-portal, .institution-portal) :is(section, article).rounded-xl.border {
     background-color: var(--card);
 }
 
@@ -471,8 +471,8 @@ body.netacad-overlay-theme {
 
 /* Normalize older page-local panels to the same card treatment used by the
    shared Card primitive. */
-:is(.admin-portal, .enterprise-portal) :is(.rounded-xl, .rounded-2xl, .rounded-3xl).border:is(.bg-card, .bg-background, .bg-white),
-:is(.admin-portal, .enterprise-portal) :is(section, article).rounded-xl.border {
+:is(.admin-portal, .institution-portal) :is(.rounded-xl, .rounded-2xl, .rounded-3xl).border:is(.bg-card, .bg-background, .bg-white),
+:is(.admin-portal, .institution-portal) :is(section, article).rounded-xl.border {
     border-color: var(--border);
     border-radius: 0.625rem;
     background-color: #ffffff;
@@ -1185,9 +1185,9 @@ body.netacad-overlay-theme {
 /* --- Surfaces -------------------------------------------------------------- */
 /* Overrides the portal's flattened card treatment further up this file. */
 .netacad-portal [data-slot="card"],
-:is(.admin-portal, .enterprise-portal)
+:is(.admin-portal, .institution-portal)
     :is(.rounded-xl, .rounded-2xl, .rounded-3xl).border:is(.bg-card, .bg-background, .bg-white),
-:is(.admin-portal, .enterprise-portal) :is(section, article).rounded-xl.border {
+:is(.admin-portal, .institution-portal) :is(section, article).rounded-xl.border {
     border-color: var(--border);
     border-width: 2px;
     border-radius: 1rem;

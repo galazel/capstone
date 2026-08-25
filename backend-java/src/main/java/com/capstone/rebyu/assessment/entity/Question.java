@@ -2,7 +2,7 @@ package com.capstone.rebyu.assessment.entity;
 
 
 import com.capstone.rebyu.certification.entity.Lesson;
-import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup;
+import com.capstone.rebyu.institutiongroup.entity.InstitutionGroup;
 import com.capstone.rebyu.user.entity.User;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -79,7 +79,7 @@ public class Question {
     private TextQuestionConfig textQuestionConfig;
 
     // Nullable: questions created before authorship tracking have no known
-    // author. Admin, an enterprise owner, or a group leader can all author
+    // author. Admin, an institution owner, or a group leader can all author
     // questions now, so the question bank needs to record who added what.
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
@@ -91,11 +91,11 @@ public class Question {
     private LocalDateTime createdAt;
 
     // NULL = official, platform-wide question (admin-authored, unchanged).
-    // Set = authored by one Enterprise group; only that group sees and can
+    // Set = authored by one Institution group; only that group sees and can
     // use it. Mirrors MajorCategory.ownerGroup / Exam.ownerGroup.
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "owner_group_id")
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
-    private EnterpriseGroup ownerGroup;
+    private InstitutionGroup ownerGroup;
 }

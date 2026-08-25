@@ -221,7 +221,7 @@ public class ProgressAnalyticsService {
         // the certification themselves gets a learner_certifications row; one an
         // organization sponsors gets only an organization_certification_learners
         // row (see LearnerService.acceptInvitation, which never writes the
-        // former). Checking just the first made every enterprise learner look
+        // former). Checking just the first made every institution learner look
         // unenrolled -- including on their own analytics page.
         boolean selfEnrolled = learnerCertificationRepository
                 .existsByLearner_LearnerIdAndCertification_CertificationIdAndStatus(
@@ -373,7 +373,7 @@ public class ProgressAnalyticsService {
         boolean hasChallengeActivity = !sessions.isEmpty();
 
         // Official lessons only. The unfiltered query counts every lesson on the
-        // certification including ones private to an Enterprise group, so a
+        // certification including ones private to an Institution group, so a
         // learner's total -- and therefore their completion percentage -- used to
         // move whenever an unrelated group authored content the learner cannot
         // see, let alone complete.
@@ -442,7 +442,7 @@ public class ProgressAnalyticsService {
 
            `findByCertification_CertificationId` returns every exam carrying the
            certification's foreign key, which includes those targeting lessons
-           and categories private to an Enterprise group -- content this learner
+           and categories private to an Institution group -- content this learner
            cannot see, let alone attempt. Counting them made a certification
            with one official lesson report nine outstanding assessments, and
            made it impossible to ever finish.
@@ -664,7 +664,7 @@ public class ProgressAnalyticsService {
      *       them, and the curriculum page pulls it out separately.</li>
      *   <li><b>Targets content outside the official curriculum.</b> The
      *       certification's exam list includes exams aimed at lessons and
-     *       categories private to an Enterprise group — content this learner
+     *       categories private to an Institution group — content this learner
      *       cannot see, let alone attempt. An exam that targets nothing is
      *       certification-level (a mock) and always qualifies.</li>
      * </ul>

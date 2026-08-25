@@ -23,7 +23,7 @@ public class ExamResultController {
 
     // Cross-learner results data: the unfiltered list/lookup exposes every learner's
     // exam results, so reads are admin-only. Learners read their own via
-    // /api/learners/me/portal; enterprise managers via /api/enterprise/me/learners/{id}/exam-results.
+    // /api/learners/me/portal; institution managers via /api/institution/me/learners/{id}/exam-results.
     @GetMapping
     public List<ExamResultDto> getAll(@AuthenticationPrincipal Jwt jwt) {
         requireAdmin(jwt);

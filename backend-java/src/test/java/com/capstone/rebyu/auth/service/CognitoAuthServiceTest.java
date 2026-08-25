@@ -33,8 +33,8 @@ class CognitoAuthServiceTest {
     private UserRepository userRepository;
     private UserTypeRepository userTypeRepository;
     private LearnerRepository learnerRepository;
-    private com.capstone.rebyu.organization.repository.EnterpriseMemberRepository enterpriseMemberRepository;
-    private com.capstone.rebyu.organization.repository.EnterpriseRepository enterpriseRepository;
+    private com.capstone.rebyu.organization.repository.InstitutionMemberRepository institutionMemberRepository;
+    private com.capstone.rebyu.organization.repository.InstitutionRepository institutionRepository;
     private CognitoIdentityProviderClient cognitoClient;
     private CognitoAuthService service;
 
@@ -45,19 +45,19 @@ class CognitoAuthServiceTest {
         userRepository = mock(UserRepository.class);
         userTypeRepository = mock(UserTypeRepository.class);
         learnerRepository = mock(LearnerRepository.class);
-        enterpriseMemberRepository =
-                mock(com.capstone.rebyu.organization.repository.EnterpriseMemberRepository.class);
-        enterpriseRepository = mock(com.capstone.rebyu.organization.repository.EnterpriseRepository.class);
+        institutionMemberRepository =
+                mock(com.capstone.rebyu.organization.repository.InstitutionMemberRepository.class);
+        institutionRepository = mock(com.capstone.rebyu.organization.repository.InstitutionRepository.class);
         cognitoClient = mock(CognitoIdentityProviderClient.class);
-        when(enterpriseMemberRepository.findByUser_UserId(org.mockito.ArgumentMatchers.anyLong()))
+        when(institutionMemberRepository.findByUser_UserId(org.mockito.ArgumentMatchers.anyLong()))
                 .thenReturn(java.util.List.of());
-        // None of these test accounts are enterprise contacts -- ensureEnterpriseLinkage
+        // None of these test accounts are institution contacts -- ensureInstitutionLinkage
         // must be a no-op for them.
-        when(enterpriseRepository.findByPrimaryContactEmailIgnoreCase(org.mockito.ArgumentMatchers.anyString()))
+        when(institutionRepository.findByPrimaryContactEmailIgnoreCase(org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn(Optional.empty());
         service = new CognitoAuthService(
                 userRepository, userTypeRepository, learnerRepository,
-                enterpriseMemberRepository, enterpriseRepository, cognitoClient);
+                institutionMemberRepository, institutionRepository, cognitoClient);
     }
 
     private Jwt jwt() {

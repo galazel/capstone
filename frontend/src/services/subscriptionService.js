@@ -34,13 +34,13 @@ export function getInstitutionalPlans() {
   return base("subscription-plans/institutional")
 }
 
-// Enterprise (B2B) license reads
-export function getEnterpriseLicense(enterpriseId) {
-  return base(`enterprise/license?enterpriseId=${enterpriseId}`)
+// Institution (B2B) license reads
+export function getInstitutionLicense(institutionId) {
+  return base(`institution/license?institutionId=${institutionId}`)
 }
 
-export function getEnterpriseLicenseUsage(enterpriseId) {
-  return base(`enterprise/license/usage?enterpriseId=${enterpriseId}`)
+export function getInstitutionLicenseUsage(institutionId) {
+  return base(`institution/license/usage?institutionId=${institutionId}`)
 }
 
 // Well-known premium feature codes (must match backend Entitlements)

@@ -34,7 +34,7 @@ import {
 } from "@/services/learnerAnalyticsService.js"
 import { useAuth } from "@/context/auth-context.jsx"
 import { NotificationBell } from "@/components/notification-bell.jsx"
-import { getLearnerInvitations } from "@/services/enterpriseService.js"
+import { getLearnerInvitations } from "@/services/institutionService.js"
 import { usePortalTheme } from "@/hooks/use-portal-theme.js"
 import { useNotifications } from "@/hooks/use-notifications.js"
 import { PortalThemeMenuItem } from "@/components/portal-theme-toggle"
@@ -154,11 +154,11 @@ export default function LearnerLayout() {
     }))
 
   const assignmentNotifications = (query.data?.enrollments ?? [])
-    .filter((enrollment) => enrollment.source === "enterprise")
+    .filter((enrollment) => enrollment.source === "institution")
     .map((enrollment) => {
       const certification = certificationById.get(String(enrollment.certificationId))
       return {
-        id: `enterprise-certification-${enrollment.certificationId}`,
+        id: `institution-certification-${enrollment.certificationId}`,
         type: "certification",
         title: "New certification assigned",
         description: certification?.title ?? certification?.name ?? "Your organization assigned you a certification.",
@@ -166,7 +166,7 @@ export default function LearnerLayout() {
         href: `/learner/certifications/${enrollment.certificationId}`,
       }
     })
-  // The persisted feed (the same one admins and enterprises see) was never read
+  // The persisted feed (the same one admins and institutions see) was never read
   // here before, so backend-issued notifications never reached learners at all.
   const inbox = useNotifications()
   const notifications = [

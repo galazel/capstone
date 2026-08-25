@@ -24,7 +24,7 @@ public class LearnerController {
     private final CognitoAuthService cognitoAuthService;
 
     // Reading the full learner list / arbitrary learner records exposes every
-    // learner across every enterprise, so reads are admin-only. Learners read
+    // learner across every institution, so reads are admin-only. Learners read
     // their own record via /api/learners/me/portal.
     @GetMapping
     public List<LearnerDto> getAll(@AuthenticationPrincipal Jwt jwt) {
@@ -51,7 +51,7 @@ public class LearnerController {
         return learnerService.create(dto);
     }
     /**
-     * Accepts an enterprise invitation for the signed-in learner. The learner
+     * Accepts an institution invitation for the signed-in learner. The learner
      * is resolved from the validated Cognito JWT — never from the request body.
      */
     @PostMapping("accept-invitation")

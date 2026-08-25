@@ -1,9 +1,9 @@
 -- Dashboard arrangements for boards that are not the learner analytics page.
 --
 -- learner_dashboard_layouts is keyed on learner_id, so it can only ever store the
--- learner board: an admin or an enterprise manager has no learner row, and the
+-- learner board: an admin or an institution manager has no learner row, and the
 -- study-desk endpoint that reads it rejects them outright. The admin and
--- enterprise dashboards need the same drag-to-arrange behaviour, so the layout is
+-- institution dashboards need the same drag-to-arrange behaviour, so the layout is
 -- keyed on the user instead, with a board name alongside it -- one person can hold
 -- an arrangement per board, and a board added later needs no schema change.
 --

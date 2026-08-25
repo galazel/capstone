@@ -11,10 +11,10 @@ import com.capstone.rebyu.billing.repository.InstitutionalLicenseRepository;
 import com.capstone.rebyu.billing.repository.PlanEntitlementRepository;
 import com.capstone.rebyu.enrollment.entity.OrganizationCertificationLearner;
 import com.capstone.rebyu.enrollment.repository.OrganizationCertificationLearnerRepository;
-import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroup;
-import com.capstone.rebyu.enterprisegroup.entity.EnterpriseGroupAuthority;
-import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupAuthorityRepository;
-import com.capstone.rebyu.enterprisegroup.repository.EnterpriseGroupRepository;
+import com.capstone.rebyu.institutiongroup.entity.InstitutionGroup;
+import com.capstone.rebyu.institutiongroup.entity.InstitutionGroupAuthority;
+import com.capstone.rebyu.institutiongroup.repository.InstitutionGroupAuthorityRepository;
+import com.capstone.rebyu.institutiongroup.repository.InstitutionGroupRepository;
 import com.capstone.rebyu.organization.entity.OrganizationCertificate;
 import com.capstone.rebyu.organization.repository.OrganizationCertificateRepository;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
 
 /**
  * Centralized institutional (B2B) entitlement + capacity authority. Everything
- * derives from the enterprise's active license and validated usage counts —
+ * derives from the institution's active license and validated usage counts —
  * never from stored counters the caller supplies.
  */
 @Slf4j
@@ -42,61 +42,61 @@ public class InstitutionalEntitlementService {
     private final PlanEntitlementRepository planEntitlementRepository;
     private final OrganizationCertificationLearnerRepository orgCertLearnerRepository;
     private final OrganizationCertificateRepository orgCertificateRepository;
-    private final EnterpriseGroupRepository groupRepository;
-    private final EnterpriseGroupAuthorityRepository authorityRepository;
+    private final InstitutionGroupRepository groupRepository;
+    private final InstitutionGroupAuthorityRepository authorityRepository;
 
     @Transactional(readOnly = true)
-    public Optional<InstitutionalLicense> getCurrentInstitutionalLicense(Long enterpriseId) {
-        return licenseRepository.findFirstByEnterprise_EnterpriseIdOrderByCreatedAtDesc(enterpriseId);
+    public Optional<InstitutionalLicense> getCurrentInstitutionalLicense(Long institutionId) {
+        return licenseRepository.findFirstByInstitution_InstitutionIdOrderByCreatedAtDesc(institutionId);
     }
 
     /** The most recent license that currently grants access, if any. */
     @Transactional(readOnly = true)
-    public Optional<InstitutionalLicense> getActiveLicense(Long enterpriseId) {
-        return licenseRepository.findByEnterprise_EnterpriseIdOrderByCreatedAtDesc(enterpriseId).stream()
+    public Optional<InstitutionalLicense> getActiveLicense(Long institutionId) {
+        return licenseRepository.findByInstitution_InstitutionIdOrderByCreatedAtDesc(institutionId).stream()
                 .filter(InstitutionalLicense::isCurrentlyActive)
                 .findFirst();
     }
 
     /** Enabled entitlements of the active license's plan, keyed by code. */
     @Transactional(readOnly = true)
-    public Map<String, PlanEntitlement> getInstitutionalEntitlements(Long enterpriseId) {
-        return getActiveLicense(enterpriseId)
+    public Map<String, PlanEntitlement> getInstitutionalEntitlements(Long institutionId) {
+        return getActiveLicense(institutionId)
                 .map(this::planEntitlements)
                 .orElse(Map.of());
     }
 
     @Transactional(readOnly = true)
-    public boolean hasInstitutionalEntitlement(Long enterpriseId, String entitlementCode) {
-        return getInstitutionalEntitlements(enterpriseId).containsKey(entitlementCode);
+    public boolean hasInstitutionalEntitlement(Long institutionId, String entitlementCode) {
+        return getInstitutionalEntitlements(institutionId).containsKey(entitlementCode);
     }
 
     @Transactional(readOnly = true)
-    public void requireInstitutionalEntitlement(Long enterpriseId, String entitlementCode) {
-        if (!hasInstitutionalEntitlement(enterpriseId, entitlementCode)) {
+    public void requireInstitutionalEntitlement(Long institutionId, String entitlementCode) {
+        if (!hasInstitutionalEntitlement(institutionId, entitlementCode)) {
             throw new InstitutionalEntitlementRequiredException(entitlementCode);
         }
     }
 
     @Transactional(readOnly = true)
-    public InstitutionalLicenseDto getLicenseUsageSummary(Long enterpriseId) {
-        InstitutionalLicense license = getActiveLicense(enterpriseId).orElse(null);
+    public InstitutionalLicenseDto getLicenseUsageSummary(Long institutionId) {
+        InstitutionalLicense license = getActiveLicense(institutionId).orElse(null);
         if (license == null) {
             return new InstitutionalLicenseDto(
-                    null, enterpriseId, null, null, null, null, "NONE",
+                    null, institutionId, null, null, null, null, "NONE",
                     null, null, false, Set.of(), List.of());
         }
         Map<String, PlanEntitlement> entitlements = planEntitlements(license);
         List<UsageMetricDto> usage = List.of(
-                metric(Entitlements.SEAT_LIMIT, seatsUsed(enterpriseId), seatLimit(license, entitlements)),
-                metric(Entitlements.GROUP_LIMIT, groupsUsed(enterpriseId), limit(license.getCustomGroupLimit(), entitlements, Entitlements.GROUP_LIMIT)),
-                metric(Entitlements.AUTHORITY_LIMIT, authoritiesUsed(enterpriseId), limit(license.getCustomAuthorityLimit(), entitlements, Entitlements.AUTHORITY_LIMIT)),
-                metric(Entitlements.CERTIFICATION_ALLOCATION_LIMIT, certificationsUsed(enterpriseId),
+                metric(Entitlements.SEAT_LIMIT, seatsUsed(institutionId), seatLimit(license, entitlements)),
+                metric(Entitlements.GROUP_LIMIT, groupsUsed(institutionId), limit(license.getCustomGroupLimit(), entitlements, Entitlements.GROUP_LIMIT)),
+                metric(Entitlements.AUTHORITY_LIMIT, authoritiesUsed(institutionId), limit(license.getCustomAuthorityLimit(), entitlements, Entitlements.AUTHORITY_LIMIT)),
+                metric(Entitlements.CERTIFICATION_ALLOCATION_LIMIT, certificationsUsed(institutionId),
                         limit(license.getCustomCertificationLimit(), entitlements, Entitlements.CERTIFICATION_ALLOCATION_LIMIT))
         );
         return new InstitutionalLicenseDto(
                 license.getInstitutionalLicenseId(),
-                enterpriseId,
+                institutionId,
                 license.getSubscriptionPlan().getPlanCode(),
                 license.getSubscriptionPlan().getPlanName(),
                 license.getSubscriptionPlan().getBillingInterval().name(),
@@ -112,42 +112,42 @@ public class InstitutionalEntitlementService {
     // ----- capacity checks (throw on limit reached) -----
 
     @Transactional(readOnly = true)
-    public void requireAvailableLearnerSeat(Long enterpriseId) {
-        InstitutionalLicense license = requireActiveLicense(enterpriseId);
+    public void requireAvailableLearnerSeat(Long institutionId) {
+        InstitutionalLicense license = requireActiveLicense(institutionId);
         int limit = seatLimit(license, planEntitlements(license));
-        checkCapacity("LEARNER_SEAT_LIMIT_REACHED", seatsUsed(enterpriseId), limit,
+        checkCapacity("LEARNER_SEAT_LIMIT_REACHED", seatsUsed(institutionId), limit,
                 "The institutional learner-seat limit has been reached.");
     }
 
     @Transactional(readOnly = true)
-    public void requireAvailableGroupCapacity(Long enterpriseId) {
-        InstitutionalLicense license = requireActiveLicense(enterpriseId);
+    public void requireAvailableGroupCapacity(Long institutionId) {
+        InstitutionalLicense license = requireActiveLicense(institutionId);
         int limit = limit(license.getCustomGroupLimit(), planEntitlements(license), Entitlements.GROUP_LIMIT);
-        checkCapacity("GROUP_LIMIT_REACHED", groupsUsed(enterpriseId), limit,
+        checkCapacity("GROUP_LIMIT_REACHED", groupsUsed(institutionId), limit,
                 "The institutional group limit has been reached.");
     }
 
     @Transactional(readOnly = true)
-    public void requireAvailableAuthorityCapacity(Long enterpriseId) {
-        InstitutionalLicense license = requireActiveLicense(enterpriseId);
+    public void requireAvailableAuthorityCapacity(Long institutionId) {
+        InstitutionalLicense license = requireActiveLicense(institutionId);
         int limit = limit(license.getCustomAuthorityLimit(), planEntitlements(license), Entitlements.AUTHORITY_LIMIT);
-        checkCapacity("AUTHORITY_LIMIT_REACHED", authoritiesUsed(enterpriseId), limit,
+        checkCapacity("AUTHORITY_LIMIT_REACHED", authoritiesUsed(institutionId), limit,
                 "The institutional authority limit has been reached.");
     }
 
     @Transactional(readOnly = true)
-    public void requireAvailableCertificationCapacity(Long enterpriseId) {
-        InstitutionalLicense license = requireActiveLicense(enterpriseId);
+    public void requireAvailableCertificationCapacity(Long institutionId) {
+        InstitutionalLicense license = requireActiveLicense(institutionId);
         int limit = limit(license.getCustomCertificationLimit(), planEntitlements(license),
                 Entitlements.CERTIFICATION_ALLOCATION_LIMIT);
-        checkCapacity("CERTIFICATION_ALLOCATION_LIMIT_REACHED", certificationsUsed(enterpriseId), limit,
+        checkCapacity("CERTIFICATION_ALLOCATION_LIMIT_REACHED", certificationsUsed(institutionId), limit,
                 "The institutional certification-allocation limit has been reached.");
     }
 
     // ----- internals -----
 
-    private InstitutionalLicense requireActiveLicense(Long enterpriseId) {
-        return getActiveLicense(enterpriseId).orElseThrow(() ->
+    private InstitutionalLicense requireActiveLicense(Long institutionId) {
+        return getActiveLicense(institutionId).orElseThrow(() ->
                 new InstitutionalEntitlementRequiredException(
                         "INSTITUTIONAL_LICENSE",
                         "This organization does not have an active institutional license."));
@@ -162,24 +162,24 @@ public class InstitutionalEntitlementService {
                         (existing, ignored) -> existing));
     }
 
-    private int seatsUsed(Long enterpriseId) {
+    private int seatsUsed(Long institutionId) {
         return (int) orgCertLearnerRepository.countDistinctActiveLearners(
-                enterpriseId, OrganizationCertificationLearner.Status.active);
+                institutionId, OrganizationCertificationLearner.Status.active);
     }
 
-    private int groupsUsed(Long enterpriseId) {
-        return (int) groupRepository.countByEnterprise_EnterpriseIdAndStatus(
-                enterpriseId, EnterpriseGroup.Status.active);
+    private int groupsUsed(Long institutionId) {
+        return (int) groupRepository.countByInstitution_InstitutionIdAndStatus(
+                institutionId, InstitutionGroup.Status.active);
     }
 
-    private int authoritiesUsed(Long enterpriseId) {
+    private int authoritiesUsed(Long institutionId) {
         return (int) authorityRepository.countDistinctActiveAuthorities(
-                enterpriseId, EnterpriseGroupAuthority.Status.active);
+                institutionId, InstitutionGroupAuthority.Status.active);
     }
 
-    private int certificationsUsed(Long enterpriseId) {
-        return (int) orgCertificateRepository.countByEnterprise_EnterpriseIdAndStatus(
-                enterpriseId, OrganizationCertificate.Status.active);
+    private int certificationsUsed(Long institutionId) {
+        return (int) orgCertificateRepository.countByInstitution_InstitutionIdAndStatus(
+                institutionId, OrganizationCertificate.Status.active);
     }
 
     private int seatLimit(InstitutionalLicense license, Map<String, PlanEntitlement> entitlements) {

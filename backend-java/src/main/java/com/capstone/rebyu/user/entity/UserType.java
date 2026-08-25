@@ -1,7 +1,7 @@
 package com.capstone.rebyu.user.entity;
 
 
-import com.capstone.rebyu.organization.entity.Enterprise;
+import com.capstone.rebyu.organization.entity.Institution;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;

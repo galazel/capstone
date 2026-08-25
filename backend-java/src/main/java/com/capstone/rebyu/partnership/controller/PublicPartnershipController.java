@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Transaction One (public, no authentication): submit a partnership request
- * and check its status. No enterprise account is created or granted here.
+ * and check its status. No institution account is created or granted here.
  */
 @RestController
 @RequestMapping("/api/public/partnership-requests")

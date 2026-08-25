@@ -19,7 +19,7 @@ import java.util.List;
 
 /** Transaction Three: partnership request submission and lookup. */
 @RestController
-@RequestMapping("/api/enterprise/partnership-requests")
+@RequestMapping("/api/institution/partnership-requests")
 @RequiredArgsConstructor
 public class PartnershipTransactionController {
 
@@ -30,25 +30,25 @@ public class PartnershipTransactionController {
     public PartnershipRequestTransactionDto submit(
             @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody SubmitPartnershipRequestDto request) {
-        Long enterpriseId = myEnterpriseId(jwt);
+        Long institutionId = myInstitutionId(jwt);
         SubmitPartnershipRequestDto trusted = new SubmitPartnershipRequestDto(
-                enterpriseId, request.items(), request.idempotencyKey());
+                institutionId, request.items(), request.idempotencyKey());
         return transactionService.submit(trusted);
     }
 
     @GetMapping
     public List<PartnershipRequestTransactionDto> list(@AuthenticationPrincipal Jwt jwt) {
-        return transactionService.listForEnterprise(myEnterpriseId(jwt));
+        return transactionService.listForInstitution(myInstitutionId(jwt));
     }
 
-    private Long myEnterpriseId(Jwt jwt) {
+    private Long myInstitutionId(Jwt jwt) {
         if (jwt == null) {
             throw new IllegalArgumentException("Authentication is required");
         }
         CurrentUserDto user = auth.syncCurrentUser(jwt, jwt.getTokenValue());
-        if (user.enterpriseId() == null) {
-            throw new IllegalArgumentException("An enterprise account is required");
+        if (user.institutionId() == null) {
+            throw new IllegalArgumentException("An institution account is required");
         }
-        return user.enterpriseId();
+        return user.institutionId();
     }
 }

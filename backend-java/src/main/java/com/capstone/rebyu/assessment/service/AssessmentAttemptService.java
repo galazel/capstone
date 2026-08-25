@@ -47,6 +47,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -1887,8 +1888,10 @@ public class AssessmentAttemptService {
                 exam.getTitle(),
                 exam.getExamType().getExamTypeText(),
                 attempt.getAttemptNumber(),
-                attempt.getStartedAt(),
-                attempt.getExpiresAt(),
+                attempt.getStartedAt() == null
+                        ? null : attempt.getStartedAt().atOffset(ZoneOffset.UTC),
+                attempt.getExpiresAt() == null
+                        ? null : attempt.getExpiresAt().atOffset(ZoneOffset.UTC),
                 resumed,
                 questionDtos,
                 savedAnswers,

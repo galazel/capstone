@@ -3,7 +3,7 @@ import { MegaphoneIcon, PinIcon } from "@/components/icons"
 
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
-import { getMyAnnouncements } from "@/services/enterpriseService.js"
+import { getMyAnnouncements } from "@/services/institutionService.js"
 
 function formatWhen(value) {
   if (!value) return ""
