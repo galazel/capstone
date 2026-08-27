@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom"
+import { Link, Navigate, useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import {
   ArrowRight,
@@ -40,8 +40,7 @@ import {
   useAnimationControls,
 } from "@/components/motion/rebyu-motion.jsx"
 import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
-import { useStudyPlanGate } from "@/components/learner/use-study-plan-gate.jsx"
-import { PRIORITY_CONFIG } from "@/components/learner/priority-tag.jsx"
+import { useCertificationStudyPlan } from "@/components/learner/use-certification-study-plan.js"
 import { ASSESSMENT_MAX_XP } from "@/lib/xp.js"
 import {
   certificationProgressPercent,
@@ -49,7 +48,6 @@ import {
 } from "@/lib/certification-progress.js"
 import { getExams, getExamTypes } from "@/services/assessmentService.js"
 import { getProgressAnalytics } from "@/services/learnerAnalyticsService.js"
-import { STUDY_PLAN_QUERY_KEY, getActiveStudyPlan } from "@/services/studyPlanService.js"
 import { buildCurriculum, hasSatDiagnostic } from "./curriculum-model.js"
 
 /**
@@ -131,21 +129,6 @@ const TONE = {
     btn: "fox",
     bar: "fox",
   },
-}
-
-// Worst-first: the summary reads like a triage list, not an alphabetical one.
-const PRIORITY_SUMMARY_ORDER = [
-  "CRITICAL_PRIORITY",
-  "HIGH_PRIORITY",
-  "MEDIUM_PRIORITY",
-  "LOW_PRIORITY",
-]
-
-const PRIORITY_SUMMARY_LABEL = {
-  CRITICAL_PRIORITY: "critical",
-  HIGH_PRIORITY: "high priority",
-  MEDIUM_PRIORITY: "medium priority",
-  LOW_PRIORITY: "low priority",
 }
 
 /* ------------------------------------------------------------------- pieces */
@@ -525,8 +508,8 @@ function PathNode({ node, index, onSelect, onLocked }) {
  *
  * Sticky while its section is open, the way a section header is on Duolingo:
  * once the road is longer than the viewport the learner loses which unit the
- * nodes belong to about four stops in. The offset clears the two sticky things
- * above it -- the portal nav (`top-0`, 4rem) and this page's header bar.
+ * nodes belong to about four stops in. The offset clears the one sticky thing
+ * above it -- the portal nav (`top-0`, 4rem).
  *
  * The unit's colour lives here rather than on a card behind every node: one
  * saturated band per section, with the road on the page's own ground. That is
@@ -547,9 +530,8 @@ function UnitBanner({ major, locked, exam, open, onToggle, onLocked, takenExamId
   }
 
   return (
-    /* 7.5rem = the portal nav (4rem) plus this page's header bar (a 40px
-       control in 12px padding, so 4rem), less the padding below -- so the card
-       itself lands half a rem under the header with air above it.
+    /* 4.25rem = the portal nav (4rem) plus a little air, now that this page
+       has no header bar of its own for the banner to clear.
 
        That air is painted in the page's own colour rather than left
        transparent. A bare offset showed the road sliding through the gap above
@@ -560,7 +542,7 @@ function UnitBanner({ major, locked, exam, open, onToggle, onLocked, takenExamId
        pile up against the top of the window, each one pinning the next. */
     <motion.div
       animate={shake}
-      className={open ? "sticky top-[7.5rem] z-20 bg-rb-polar pb-1 pt-3" : ""}
+      className={open ? "sticky top-[4.25rem] z-20 bg-rb-polar pb-1 pt-3" : ""}
     >
       <button
         type="button"
@@ -822,23 +804,6 @@ export default function LearnerCertificationCurriculumPage() {
     })
   }, [certification, lessonById, certificationExams, examTypesById, lessonPriorityById])
 
-  // How many not-yet-done lessons carry each priority tag, so the learner
-  // sees at a glance where the study plan wants them to focus before opening
-  // a single unit. Ordered worst-first: critical is the tag that means
-  // "behind on this", so it leads and gets the loudest colour.
-  const priorityCounts = useMemo(() => {
-    const counts = {}
-    for (const major of curriculum?.majors ?? []) {
-      for (const middle of major.middles) {
-        for (const lesson of middle.lessons) {
-          if (lesson.completed || !lesson.priorityTag) continue
-          counts[lesson.priorityTag] = (counts[lesson.priorityTag] ?? 0) + 1
-        }
-      }
-    }
-    return counts
-  }, [curriculum])
-
   const diagnosticDone = useMemo(() => {
     if (!curriculum) return false
     return hasSatDiagnostic({
@@ -983,17 +948,23 @@ export default function LearnerCertificationCurriculumPage() {
   // Read-only here. The plan is built on My Learning, at the click that starts
   // the studying; this page only needs to know whether one exists so it can
   // offer the way through to the calendar.
-  const planQuery = useQuery({
-    queryKey: [STUDY_PLAN_QUERY_KEY, certificationId],
-    queryFn: () => getActiveStudyPlan(certificationId),
-    enabled: Boolean(certificationId) && diagnosticDone,
-    staleTime: 30_000,
-  })
-  const hasPlan = Boolean(planQuery.data?.planId)
-  /* The same generator the My Learning and Certifications pages open, so a
-     plan built from the gate below is built exactly like one built from a
-     card -- one dialog, one save path, no second implementation to drift. */
-  const { openStudyPlanFor, studyPlanDialog } = useStudyPlanGate()
+  /* Through the shared hook, so an overall plan counts.
+   *
+   * This asked only for *this certification's* plan. A learner whose one plan
+   * spans several certifications has none by that reading, so the gate below
+   * would send them off to build a second plan they already had. The hook
+   * falls back to the overall plan and checks it actually covers this
+   * certification.
+   *
+   * This page reads plans; it does not build them.
+   */
+  const {
+    plan: activePlan,
+    isLoading: planLoading,
+    isError: planLookupFailed,
+    hasAnyPlan,
+  } = useCertificationStudyPlan(certificationId)
+  const hasPlan = Boolean(activePlan?.planId)
 
   if (!certification) {
     return (
@@ -1069,43 +1040,33 @@ export default function LearnerCertificationCurriculumPage() {
    * *fails*, the learner is let through -- the hook takes the same view, and a
    * plan the app cannot read must not lock somebody out of what they paid for.
    */
-  if (diagnosticDone && masteryReady && planQuery.isSuccess && !hasPlan) {
+  /* Studying starts from a plan, here as well as on the analytics board.
+   *
+   * Sent to the generator rather than shown a wall. This page used to answer
+   * the click with its own full-page "Build your study plan" screen -- a
+   * second generator, a second set of words, and a page that refused to show
+   * what was asked for. Redirecting keeps one generator and one flow, and
+   * `returnTo` brings the learner back here the moment it is saved.
+   *
+   * Only once the diagnostic is done: the plan is built from its priorities,
+   * so before it there is nothing to generate and the road below is where the
+   * diagnostic itself is offered.
+   *
+   * A failed lookup lets them through. Not knowing whether a plan exists is
+   * not the same as knowing there is none, and a curriculum locked by a
+   * timed-out request is worse than an unplanned lesson.
+   */
+  /* `hasAnyPlan`, not `hasPlan`: a certification outside an existing overall
+     plan is unplanned, but its owner is not unplanned, and sending them to
+     build a second plan is asking for something they cannot give. */
+  if (diagnosticDone && !planLoading && !planLookupFailed && !hasAnyPlan) {
+    const returnTo = `/learner/learning/${certificationId}`
     return (
-      <div className="rebyu-ds flex min-h-[calc(100dvh-4rem)] items-center justify-center bg-rb-polar px-5">
-        <div className="w-full max-w-md rounded-rb-card border-2 border-rb-swan bg-rb-snow p-8 text-center shadow-[0_5px_0_var(--color-rb-swan)]">
-          <span className="mx-auto grid size-16 place-items-center rounded-2xl bg-rb-macaw-wash text-rb-macaw-lip">
-            <CalendarDays className="size-7" aria-hidden="true" />
-          </span>
-
-          <h1 className="mt-5 font-rb-display text-xl font-extrabold text-rb-eel">
-            Build your study plan
-          </h1>
-
-          <p className="mt-2 text-sm leading-6 text-rb-wolf">
-            Your diagnostic is in, so we can schedule {certification.title} around what
-            you already know. Build the plan and the curriculum opens.
-          </p>
-
-          <TactileButton
-            variant="macaw"
-            className="mt-6 w-full"
-            onClick={() => openStudyPlanFor(certification)}
-          >
-            Build a study plan
-            <ArrowRight className="size-4" aria-hidden="true" />
-          </TactileButton>
-
-          <button
-            type="button"
-            onClick={() => navigate("/learner/learning")}
-            className="mt-4 text-xs font-bold text-rb-hare underline decoration-dotted underline-offset-4 hover:text-rb-wolf"
-          >
-            Back to my learning
-          </button>
-        </div>
-
-        {studyPlanDialog}
-      </div>
+      <Navigate
+        to={`/learner/analytics?certification=${certificationId}`
+          + `&plan=1&returnTo=${encodeURIComponent(returnTo)}`}
+        replace
+      />
     )
   }
 
@@ -1147,29 +1108,28 @@ export default function LearnerCertificationCurriculumPage() {
           just clicked, before any of the road was visible. The road is the
           page; the header only has to say which certification it belongs to
           and how far along it is. */}
-      <header className="sticky top-16 z-30 border-b-2 border-rb-swan bg-rb-snow/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 lg:px-8">
-          <BackButton asChild label="Back to my learning">
-            <Link to="/learner/learning" />
-          </BackButton>
+      {/* Controls, not a header bar.
+          A full-width bar with a title, a subtitle, a chip and a link was more
+          chrome than the page it introduced -- and it repeated what the unit
+          card underneath already says. What is left is the two things that are
+          actually actions, as icons, with the progress they qualify. */}
+      <div className="mx-auto flex max-w-[1600px] items-center gap-3 px-5 pb-1 pt-4 lg:px-8">
+        <BackButton asChild label="Back to my learning">
+          <Link to="/learner/learning" />
+        </BackButton>
 
-          {/* `capitalize` rather than a JS transform: it only touches the first
-              letter of each word, so titles already stored in caps (TOPCIT,
-              AWS) pass through untouched. */}
-          <h1 className="min-w-0 truncate font-rb-display text-xl font-extrabold capitalize text-rb-eel">
-            {certification.title ?? "Certification"}
-          </h1>
+        {/* The page still needs a name -- for the document outline and for
+            anyone arriving by screen reader -- but not a banner across the top.
+            The unit card below states where you are. */}
+        <h1 className="sr-only">{certification.title ?? "Certification"}</h1>
 
-          <span className="hidden text-xs font-bold text-rb-wolf sm:inline">
-            {curriculum.majors.length} unit{curriculum.majors.length === 1 ? "" : "s"} ·{" "}
-            {curriculum.lessonTotal} lessons
-            {curriculum.mockExam ? " · 1 mock exam" : ""}
-          </span>
-
-          {/* Progress as a bar in the flow of the row rather than a ring in a
-              corner of a band: it is one number, and it was taking a column. */}
-          <div className="ml-auto flex shrink-0 items-center gap-2.5">
-            <div className="h-2.5 w-24 overflow-hidden rounded-full bg-rb-swan sm:w-40">
+        <div className="ml-auto flex shrink-0 items-center gap-3">
+          {/* One number, so it is drawn as one: a bar and a figure, not a card. */}
+          <div
+            className="flex items-center gap-2"
+            title={`${Math.round(headerProgress)}% of this certification complete`}
+          >
+            <div className="h-2.5 w-24 overflow-hidden rounded-full bg-rb-swan sm:w-32">
               <motion.div
                 className="h-full rounded-full bg-rb-feather"
                 initial={{ width: 0 }}
@@ -1184,51 +1144,22 @@ export default function LearnerCertificationCurriculumPage() {
             />
           </div>
 
-          {/* Triage, one chip. The full worst-first breakdown was four pills
-              wide on a page whose whole job is now to point at one node. */}
-          {diagnosticDone ? (
-            <>
-              {PRIORITY_SUMMARY_ORDER.some((tag) => priorityCounts[tag]) ? (
-                (() => {
-                  const tag = PRIORITY_SUMMARY_ORDER.find((item) => priorityCounts[item])
-                  const config = PRIORITY_CONFIG[tag]
-                  const Icon = config.icon
-                  const urgent = tag === "CRITICAL_PRIORITY" || tag === "HIGH_PRIORITY"
-
-                  return (
-                    <span
-                      className={`hidden shrink-0 items-center gap-1.5 rounded-rb-pill px-3 py-1.5 text-xs font-extrabold md:inline-flex ${
-                        urgent
-                          ? "bg-rb-cardinal-wash text-rb-cardinal-lip"
-                          : `${config.bgColor} ${config.textColor}`
-                      }`}
-                    >
-                      <Icon className="size-3.5" aria-hidden="true" />
-                      <CountUp value={priorityCounts[tag]} className="rb-numeric" />
-                      {PRIORITY_SUMMARY_LABEL[tag]}
-                    </span>
-                  )
-                })()
-              ) : (
-                <span className="hidden shrink-0 items-center gap-1.5 rounded-rb-pill bg-rb-feather-wash px-3 py-1.5 text-xs font-extrabold text-rb-feather-ink md:inline-flex">
-                  <CheckCircle2 className="size-3.5" aria-hidden="true" />
-                  all caught up
-                </span>
-              )}
-            </>
-          ) : null}
-
           {diagnosticDone && hasPlan ? (
-            <Link
-              to="/learner/plan"
-              className="hidden shrink-0 items-center gap-1.5 text-xs font-bold text-rb-macaw-lip underline decoration-dotted underline-offset-4 hover:text-rb-macaw lg:inline-flex"
+            <TactileButton
+              variant="ghost"
+              size="md"
+              asChild
+              aria-label="Study calendar"
+              title="Study calendar"
+              className="rb-btn-icon"
             >
-              <CalendarDays className="size-4" aria-hidden="true" />
-              study calendar
-            </Link>
+              <Link to="/learner/plan">
+                <CalendarDays className="size-5" aria-hidden="true" />
+              </Link>
+            </TactileButton>
           ) : null}
         </div>
-      </header>
+      </div>
 
       {/* The gate. Out of the header and into the page, directly above the
           road it locks -- in the header bar it would have to compete with the

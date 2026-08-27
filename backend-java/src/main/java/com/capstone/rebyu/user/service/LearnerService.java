@@ -2,6 +2,7 @@ package com.capstone.rebyu.user.service;
 
 import com.capstone.rebyu.common.InvitationAcceptanceException;
 import com.capstone.rebyu.enrollment.entity.OrganizationCertificationLearner;
+import com.capstone.rebyu.enrollment.repository.LearnerCertificationRepository;
 import com.capstone.rebyu.enrollment.repository.OrganizationCertificationLearnerRepository;
 import com.capstone.rebyu.institutiongroup.entity.InstitutionGroup;
 import com.capstone.rebyu.institutiongroup.entity.InstitutionGroupAssignee;
@@ -28,6 +29,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -41,6 +44,7 @@ public class LearnerService {
     private final OrganizationCertificationLearnerRepository
             organizationCertificationLearnerRepository;
     private final OrganizationCertificateRepository organizationCertificateRepository;
+    private final LearnerCertificationRepository learnerCertificationRepository;
     private final InvitationTokenService invitationTokenService;
     private final InstitutionGroupAssigneeRepository institutionGroupAssigneeRepository;
     private final LearnerDeletionService learnerDeletionService;
@@ -48,14 +52,100 @@ public class LearnerService {
     private final NotificationService notificationService;
 
     public List<LearnerDto> getAll() {
-        return learnerRepository.findAll()
-                .stream()
-                .map(learnerMapper::toDto)
+        List<Learner> learners = learnerRepository.findAll();
+
+        /*
+         * Enrolments are read in two queries for the whole list, not one pair
+         * per learner. The admin table shows every learner on the platform, so
+         * a per-learner lookup here is the list length in round trips to a
+         * remote database -- and it is the page an admin opens first.
+         */
+        Map<Long, List<OrganizationCertificationLearner>> orgEnrolmentsByLearner =
+                organizationCertificationLearnerRepository.findAll().stream()
+                        .filter(row -> row.getLearner() != null)
+                        .collect(Collectors.groupingBy(
+                                row -> row.getLearner().getLearnerId()));
+
+        Map<Long, Long> individualEnrolmentsByLearner =
+                learnerCertificationRepository.findAll().stream()
+                        .filter(row -> row.getLearner() != null)
+                        .collect(Collectors.groupingBy(
+                                row -> row.getLearner().getLearnerId(),
+                                Collectors.counting()));
+
+        return learners.stream()
+                .map(learner -> enrich(
+                        learnerMapper.toDto(learner),
+                        learner,
+                        orgEnrolmentsByLearner.getOrDefault(
+                                learner.getLearnerId(), List.of()),
+                        individualEnrolmentsByLearner.getOrDefault(
+                                learner.getLearnerId(), 0L)))
                 .toList();
     }
 
     public LearnerDto getById(Long id) {
-        return learnerMapper.toDto(findEntity(id));
+        Learner learner = findEntity(id);
+
+        return enrich(
+                learnerMapper.toDto(learner),
+                learner,
+                organizationCertificationLearnerRepository
+                        .findByLearner_LearnerId(id),
+                (long) learnerCertificationRepository
+                        .findByLearner_LearnerId(id).size());
+    }
+
+    /**
+     * Fills the descriptive half of a learner: who they are on the user record,
+     * and what they are enrolled in.
+     *
+     * <p>Organisation membership comes from the enrolments rather than from a
+     * field on the learner, because that is where it actually lives -- a
+     * learner is "institutional" by having been assigned a seat on one of an
+     * institution's certificates, and stops being so when the last one ends.
+     * Reading it off a stored flag would let the two disagree.
+     */
+    private LearnerDto enrich(
+            LearnerDto dto,
+            Learner learner,
+            List<OrganizationCertificationLearner> orgEnrolments,
+            long individualEnrolments) {
+
+        if (learner.getUser() != null) {
+            dto.setEmail(learner.getUser().getEmail());
+            dto.setJoinedAt(learner.getUser().getJoinedAt());
+            dto.setStatus(learner.getUser().getAccountStatus() == null
+                    ? null
+                    : learner.getUser().getAccountStatus().name());
+        }
+
+        String organizationName = orgEnrolments.stream()
+                .map(OrganizationCertificationLearner::getOrgCert)
+                .filter(orgCert -> orgCert != null && orgCert.getInstitution() != null)
+                .map(orgCert -> orgCert.getInstitution().getInstitutionName())
+                .filter(name -> name != null && !name.isBlank())
+                .findFirst()
+                .orElse(null);
+
+        dto.setOrganizationName(organizationName);
+        dto.setLearnerType(organizationName == null ? "individual" : "institution");
+        dto.setCertificationCount((int) (orgEnrolments.size() + individualEnrolments));
+
+        /*
+         * Progress is the mean of the seats an institution tracks. Individual
+         * enrolments carry no stored percentage -- their progress is derived
+         * from mastery elsewhere -- so a learner with none reports 0 rather
+         * than a number this query cannot honestly produce.
+         */
+        dto.setProgressPercentage(orgEnrolments.stream()
+                .map(OrganizationCertificationLearner::getProgressPercentage)
+                .filter(java.util.Objects::nonNull)
+                .mapToDouble(BigDecimal::doubleValue)
+                .average()
+                .orElse(0.0));
+
+        return dto;
     }
 
     public LearnerDto create(LearnerDto dto) {

@@ -1,7 +1,17 @@
 import { useMemo, useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowLeft, CalendarDays, Check, Plus, Trophy } from "@/components/icons"
 import { toast } from "sonner"
+
+import {
+  saveChoices,
+  saveDiagramQuestion,
+  saveProgrammingQuestion,
+  saveQuestion,
+  saveTextQuestion,
+} from "@/services/questionService.js"
+import { saveAuthoredQuestion } from "@/components/questions/question-editors.jsx"
+import { CHALLENGE_ARENAS_KEY, saveArenaProblems } from "@/services/challengeService.js"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -88,6 +98,7 @@ function emptyStages(arena) {
 }
 
 export default function WorldCupEditions({ arena }) {
+  const queryClient = useQueryClient()
   const [editions, setEditions] = useState([])
   const [openEditionId, setOpenEditionId] = useState(null)
   const [createOpen, setCreateOpen] = useState(false)
@@ -96,6 +107,11 @@ export default function WorldCupEditions({ arena }) {
   const thisWeek = weekStartOf(new Date())
   const [draftWeek, setDraftWeek] = useState(thisWeek)
   const [draftCertification, setDraftCertification] = useState("")
+  /* Every question is filed under a lesson -- `questions.lesson_id` is NOT
+     NULL -- so an edition needs one even though a bracket spans the whole
+     certification. Asked for once, when the week is created. */
+  const [draftLesson, setDraftLesson] = useState("")
+  const [publishing, setPublishing] = useState(false)
   const [draftError, setDraftError] = useState("")
 
   const { data: certifications = [] } = useQuery({
@@ -114,11 +130,26 @@ export default function WorldCupEditions({ arena }) {
     return (id) => byId.get(String(id)) ?? "Certification"
   }, [certifications])
 
+  /* The chosen certification's lessons, out of the tree already fetched. */
+  const draftLessons = useMemo(() => {
+    const certification = certifications.find(
+      (item) => String(item.certificationId ?? item.id) === String(draftCertification),
+    )
+    return (certification?.majorCategory ?? []).flatMap((major) =>
+      (major.middleCategory ?? []).flatMap((middle) => middle.lessons ?? []),
+    )
+  }, [certifications, draftCertification])
+
   const openEdition = editions.find((edition) => edition.id === openEditionId) ?? null
 
   function createEdition() {
     if (!draftCertification) {
       setDraftError("Choose the certification this week's bracket runs on.")
+      return
+    }
+
+    if (!draftLesson) {
+      setDraftError("Choose the lesson these questions are filed under.")
       return
     }
 
@@ -131,6 +162,7 @@ export default function WorldCupEditions({ arena }) {
       id: createLocalId(),
       weekStart: draftWeek,
       certificationId: draftCertification,
+      lessonId: draftLesson,
       published: false,
       stages: emptyStages(arena),
     }
@@ -181,15 +213,80 @@ export default function WorldCupEditions({ arena }) {
       return
     }
 
-    setEditions((current) =>
-      current.map((item) =>
-        item.id === edition.id ? { ...item, published: true } : item,
-      ),
-    )
+    /* Two steps, in this order: every question is written to the bank exactly
+       as the bank writes it -- same endpoints, same per-type follow-ups -- and
+       only then is the arena told which questions this week's bracket runs.
 
-    toast.success(`${formatWeek(edition.weekStart)} exam validated`, {
-      description: `${allQuestions.length} questions across ${arena.stages.length} stages. Publishing needs the weekly-exam endpoint.`,
-    })
+       Publishing replaces the arena's whole set rather than adding to it,
+       which is what a weekly bracket wants: everyone sits the same questions
+       at once, and by the time next week is published last week's are spent. */
+    setPublishing(true)
+    void (async () => {
+      try {
+        const saved = []
+
+        for (const [stageIndex, stage] of arena.stages.entries()) {
+          for (const problem of edition.stages[stage.id]) {
+            const question = await saveAuthoredQuestion(
+              problem,
+              {
+                lessonId: Number(edition.lessonId),
+                certificationId: Number(edition.certificationId),
+                totalPoints: Number(problem.points) || 1,
+              },
+              {
+                saveQuestion,
+                saveChoices,
+                saveTextQuestion,
+                saveProgrammingQuestion,
+                saveDiagramQuestion,
+              },
+            )
+
+            saved.push({
+              questionId: question.questionId,
+              // Which round this question belongs to, kept in the order the
+              // stages are played.
+              nodeIndex: stageIndex + 1,
+              points: Number(problem.points) || 1,
+            })
+          }
+        }
+
+        const status = await saveArenaProblems(arena.id, {
+          certificationId: Number(edition.certificationId),
+          timeLimitMinutes: Number(
+            arena.fields?.find((field) => field.key === "timeLimit")?.value ?? 0,
+          ),
+          problems: saved,
+        })
+
+        await queryClient.invalidateQueries({ queryKey: [CHALLENGE_ARENAS_KEY] })
+
+        setEditions((current) =>
+          current.map((item) =>
+            item.id === edition.id ? { ...item, published: true } : item,
+          ),
+        )
+
+        toast.success(`${formatWeek(edition.weekStart)} is live`, {
+          description: `${status.problemCount} questions across ${arena.stages.length} stages. The World Cup is open to learners.`,
+        })
+      } catch (error) {
+        /* The questions are written one at a time and the arena is only told
+           at the end, so a failure part-way leaves some in the bank. Saying so
+           beats a bare error, because republishing writes a fresh set rather
+           than resuming this one. */
+        toast.error("Could not publish this week", {
+          description:
+            error?.response?.data?.message ??
+            error?.message ??
+            "Some questions may have been saved. Check the question bank before retrying.",
+        })
+      } finally {
+        setPublishing(false)
+      }
+    })()
   }
 
   /* ------------------------------------------------------------- one edition */
@@ -218,9 +315,15 @@ export default function WorldCupEditions({ arena }) {
             </p>
           </div>
 
-          <Button size="sm" onClick={() => publishEdition(openEdition)}>
+          {/* Disabled while publishing: questions are written one at a time,
+              so a second press mid-run would author the whole week twice. */}
+          <Button
+            size="sm"
+            onClick={() => publishEdition(openEdition)}
+            disabled={publishing}
+          >
             <Check className="mr-2 size-4" />
-            Publish week
+            {publishing ? "Publishing..." : "Publish week"}
           </Button>
         </div>
 
@@ -386,7 +489,15 @@ export default function WorldCupEditions({ arena }) {
               <Label htmlFor="world-cup-certification" className="text-sm font-bold">
                 Certification
               </Label>
-              <Select value={draftCertification} onValueChange={setDraftCertification}>
+              <Select
+                value={draftCertification}
+                onValueChange={(value) => {
+                  setDraftCertification(value)
+                  // The lesson list belongs to the certification, so it cannot
+                  // survive a change of one.
+                  setDraftLesson("")
+                }}
+              >
                 <SelectTrigger
                   id="world-cup-certification"
                   className="mt-1.5"
@@ -407,6 +518,40 @@ export default function WorldCupEditions({ arena }) {
               </Select>
               <p className="mt-1 text-xs text-muted-foreground">
                 Every player in the bracket answers from this syllabus.
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="world-cup-lesson" className="text-sm font-bold">
+                Lesson
+              </Label>
+              <Select
+                value={draftLesson}
+                onValueChange={setDraftLesson}
+                disabled={!draftCertification || draftLessons.length === 0}
+              >
+                <SelectTrigger id="world-cup-lesson" className="mt-1.5">
+                  <SelectValue
+                    placeholder={
+                      !draftCertification
+                        ? "Choose a certification first"
+                        : draftLessons.length === 0
+                          ? "This certification has no lessons"
+                          : "Select a lesson"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {draftLessons.map((lesson) => (
+                    <SelectItem key={lesson.lessonId} value={String(lesson.lessonId)}>
+                      {lesson.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Where the questions are stored. A bracket spans the whole
+                certification; the bank still files each question under a lesson.
               </p>
             </div>
 

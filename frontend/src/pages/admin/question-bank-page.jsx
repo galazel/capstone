@@ -31,6 +31,7 @@ import {
     XIcon,
 } from "@/components/icons";
 
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { formatBytes, useFileUpload } from "@/hooks/use-file-upload";
 import { Badge } from "@/components/ui/badge";
@@ -1703,7 +1704,7 @@ function Diagram({
                             </Button>
                         }
                         content={
-                            <div className="h-full w-full overflow-hidden rounded-lg border border-border bg-white shadow-sm">
+                            <div className="h-full w-full overflow-hidden rounded-lg border border-border bg-card shadow-sm">
                                 <DiagramArea
                                     diagramType={data.diagramType}
                                     initialXml={data.referenceDiagramXml || undefined}
@@ -2486,15 +2487,21 @@ const QuestionCardWrapper = React.memo(function QuestionCardWrapper({
 // `certificationId` locks the bank to a single certification: the certification
 // pickers disappear and every tab works against that one. Passed in when the
 // bank is embedded as a tab on the view-certification page.
-function QuestionBank({ certificationId = null, embedded = false }) {
+function QuestionBank({
+    certificationId = null,
+    embedded = false,
+    initialTab = "all-questions",
+    initialBuilderMode = "",
+}) {
+    const navigate = useNavigate();
     const lockedCertificationId = certificationId ? String(certificationId) : "";
     const isLockedToCertification = Boolean(lockedCertificationId);
 
-    const [activeTab, setActiveTab] = useState("all-questions");
+    const [activeTab, setActiveTab] = useState(initialTab);
     // Sub-mode inside the single Question Builder tab. "" shows the centered
     // Create Manually / Generate with AI chooser; selecting one swaps the same
     // builder area in place (manual form vs AI generation interface).
-    const [builderMode, setBuilderMode] = useState("");
+    const [builderMode, setBuilderMode] = useState(initialBuilderMode);
 
     const [filterCertificationId, setFilterCertificationId] =
         useState(lockedCertificationId);
@@ -3328,7 +3335,11 @@ OUTPUT RULES:
             className={
                 embedded
                     ? "flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/80 bg-muted/20 py-0 md:h-[calc(100dvh-12rem)]"
-                    : "flex min-h-0 flex-col bg-muted/20 py-0 md:h-[calc(100dvh-8rem)] md:overflow-hidden"
+                    /* Fills whatever it is handed. It used to subtract a fixed
+                       8rem for a portal header that is not there on its own
+                       page, which left a strip of dead space under the table
+                       and made the list shorter than the window. */
+                    : "flex min-h-0 flex-1 flex-col bg-muted/20 py-0 md:overflow-hidden"
             }
         >
             <Tabs
@@ -3346,14 +3357,53 @@ OUTPUT RULES:
                             All Questions
                         </TabsTrigger>
 
-                        <TabsTrigger
-                            value="question-builder"
-                            className="h-8 rounded-md px-3 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+                    </TabsList>
+
+                    {/* The bank and the builder are one page: the questions
+                        you are writing and the ones already written are the
+                        same subject, and sending authoring to a route of its
+                        own meant leaving the library to add to it, then
+                        navigating back to see that you had. Both buttons swap
+                        the area below in place. */}
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant={
+                                activeTab === "question-builder" &&
+                                builderMode === "manual"
+                                    ? "default"
+                                    : "outline"
+                            }
+                            onClick={() => {
+                                setActiveTab("question-builder");
+                                setBuilderMode("manual");
+                            }}
                         >
                             <BookOpen className="mr-2 h-4 w-4" />
                             Question Builder
-                        </TabsTrigger>
-                    </TabsList>
+                        </Button>
+
+                        {/* Only inside the builder. Over the library it was an
+                            action about a screen you were not on -- and the
+                            library's own job is reviewing what already exists,
+                            not adding to it. */}
+                        {activeTab === "question-builder" ? (
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant={
+                                    builderMode === "generate" ? "default" : "outline"
+                                }
+                                onClick={() => {
+                                    setActiveTab("question-builder");
+                                    setBuilderMode("generate");
+                                }}
+                            >
+                                Generate with AI
+                            </Button>
+                        ) : null}
+                    </div>
 
                     {activeTab === "question-builder" && builderMode !== "" && (
                         <div className="flex shrink-0 items-center gap-2 py-1.5">
@@ -3389,26 +3439,29 @@ OUTPUT RULES:
 
                 <TabsContent
                     value="all-questions"
-                    className="m-0 min-h-0 flex-1 overflow-y-auto py-5"
+                    className="m-0 flex min-h-0 flex-1 flex-col overflow-hidden py-3 data-[state=inactive]:hidden"
                 >
-                    {/* Matches `.rebyu-page`'s cap in index.css — this tab
-                        renders its own container rather than inheriting one,
-                        so it has to be widened alongside it or the question
-                        table stays inset while the rest of the portal is not. */}
-                    <div className="mx-auto w-full max-w-[1800px] px-3 sm:px-5">
-                        <Card className="rounded-2xl border-border/80 bg-background shadow-sm">
-                            <CardContent className="p-4 sm:p-5">
-                                <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                                    <div>
-                                        <h3 className="text-base font-semibold text-foreground">
-                                            Refine your library
-                                        </h3>
-
-                                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                            {isLockedToCertification
-                                                ? "Narrow this certification's questions by lesson, question type, or difficulty."
-                                                : "Choose a certification, then narrow the results by lesson, question type, or difficulty."}
-                                        </p>
+                    {/* Capped only when embedded in a portal page. On its own
+                        page the window is the container, and a 1800px cap just
+                        reintroduced the inset the full-page move removed. */}
+                    <div
+                        className={
+                            embedded
+                                ? "mx-auto flex min-h-0 w-full max-w-[1800px] flex-1 flex-col gap-3 px-3 sm:px-5"
+                                : "flex min-h-0 w-full flex-1 flex-col gap-3 px-4 sm:px-6"
+                        }
+                    >
+                        {/* The filters were a card with a heading and a
+                            paragraph explaining that a filter filters, wrapped
+                            around a panel holding three dropdowns -- four
+                            nested surfaces and roughly 180px of height spent
+                            before the first question. They are a toolbar now:
+                            the controls say what they do, and the height they
+                            gave back goes to the list. */}
+                        <div className="flex shrink-0 flex-col gap-2">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                                    <div className="sr-only">
+                                        <h3>Refine your library</h3>
                                     </div>
 
                                     {!isLockedToCertification && selectedFilterCertification && (
@@ -3422,7 +3475,7 @@ OUTPUT RULES:
                                 </div>
 
                                 <div
-                                    className={`grid gap-3 rounded-xl border border-border/70 bg-muted/30 p-3 md:grid-cols-2 ${
+                                    className={`grid gap-2 md:grid-cols-2 ${
                                         isLockedToCertification
                                             ? "xl:grid-cols-[minmax(230px,1.2fr)_minmax(185px,0.9fr)_minmax(165px,0.8fr)]"
                                             : "xl:grid-cols-[minmax(250px,1.35fr)_minmax(230px,1.2fr)_minmax(185px,0.9fr)_minmax(165px,0.8fr)]"
@@ -3658,18 +3711,18 @@ OUTPUT RULES:
 
                                     }
                                 </div>
-                            </CardContent>
-                        </Card>
+                        </div>
 
-                        <Card className="mt-5 overflow-hidden rounded-2xl border-border/80 bg-background shadow-sm">
-                            <div className="flex flex-col gap-2 border-b border-border/70 bg-muted/20 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                                <div>
-                                    <h3 className="text-sm font-semibold text-foreground">Question library</h3>
-                                    <p className="mt-0.5 text-xs text-muted-foreground">
-                                        Review saved questions or open one to make changes.
-                                    </p>
-                                </div>
-                                <Badge variant="secondary" className="w-fit rounded-md px-2.5 py-1">
+                        {/* One bordered surface for the list, and the only
+                            thing on the page that scrolls. The page itself no
+                            longer does: the filters stay put at the top and
+                            the rows move under a header that stays with
+                            them. */}
+                        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/80 bg-background">
+                            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/70 px-4 py-2">
+                                <h3 className="text-sm font-semibold text-foreground">Question library</h3>
+
+                                <Badge variant="secondary" className="w-fit rounded-md px-2 py-0.5 text-xs">
                                     {selectedFilterCertification
                                         ? `${filteredQuestions.length} total`
                                         : isLockedToCertification
@@ -3677,7 +3730,7 @@ OUTPUT RULES:
                                             : "Choose a certification"}
                                 </Badge>
                             </div>
-                            <div className="overflow-x-auto">
+                            <div className="min-h-0 flex-1 overflow-auto">
                                 <Table className="min-w-[880px] [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-muted/35">
                                     <TableHeader>
                                         <TableRow>
@@ -3830,7 +3883,7 @@ OUTPUT RULES:
 
                             <Separator />
 
-                            <div className="flex flex-col gap-3 bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex shrink-0 flex-col gap-2 bg-muted/20 px-4 py-2 sm:flex-row sm:items-center sm:justify-between">
                                 <p className="min-w-0 truncate text-sm text-muted-foreground">
                                     {selectedFilterCertification
                                         ? `${filteredQuestions.length} question${
@@ -3899,7 +3952,7 @@ OUTPUT RULES:
                                     </Button>
                                 </div>
                             </div>
-                        </Card>
+                        </div>
                     </div>
                 </TabsContent>
 
@@ -3956,33 +4009,10 @@ OUTPUT RULES:
                         </div>
                     ) : (
                         <div className="flex min-h-0 flex-1 flex-col gap-3">
-                            <div className="flex shrink-0 justify-center">
-                                <div className="inline-flex rounded-xl border border-border/80 bg-background p-1 shadow-sm">
-                                    <button
-                                        type="button"
-                                        onClick={() => setBuilderMode("manual")}
-                                        className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${
-                                            builderMode === "manual"
-                                                ? "bg-background text-foreground shadow-sm"
-                                                : "text-muted-foreground hover:text-foreground"
-                                        }`}
-                                    >
-                                        Create Manually
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setBuilderMode("generate")}
-                                        className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${
-                                            builderMode === "generate"
-                                                ? "bg-background text-foreground shadow-sm"
-                                                : "text-muted-foreground hover:text-foreground"
-                                        }`}
-                                    >
-                                        Generate with AI
-                                    </button>
-                                </div>
-                            </div>
-
+                            {/* The manual/AI switch lives in the toolbar above,
+                                once. Repeating it here as a second pill row put
+                                the same two choices on screen twice, one under
+                                the other. */}
                             {builderMode === "generate" ? (
                                 <div className="flex min-h-0 flex-1 flex-col gap-3">
                                     <div className="shrink-0 space-y-2">

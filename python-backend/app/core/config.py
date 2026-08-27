@@ -295,15 +295,38 @@ class Settings(BaseSettings):
     bkt_min_interactions_per_skill: int = 20
     bkt_min_learners_per_skill: int = 3
 
+    # Used for every lesson until the model is trained -- and with no training
+    # run yet, that is every lesson. They are not a formality.
     fallback_prior: float = 0.30
-    fallback_learn: float = 0.20
+    # Was 0.20, which made a single answer move mastery enormously: the learn
+    # transition is applied after *every* observation, correct or not, so at
+    # 0.20 three correct answers took a real learner from 0.34 to 0.98 while
+    # their record on that lesson was 19 right and 70 wrong. 0.08 is within the
+    # range fitted BKT models typically report and leaves the estimate moving
+    # on evidence rather than lurching on the last answer.
+    fallback_learn: float = 0.08
     fallback_guess: float = 0.25
     fallback_slip: float = 0.10
-    fallback_forget: float = 0.00
+    # A little forgetting, so mastery cannot pin itself at ~1.0 and stay there
+    # on the strength of an old streak. With forget at exactly zero the
+    # transition can only ever add, which is why the ceiling was so sticky.
+    fallback_forget: float = 0.03
 
     developing_threshold: float = 0.40
     good_threshold: float = 0.70
     mastered_threshold: float = 0.85
+
+    # --- Accuracy guard -----------------------------------------------------
+    # BKT is a recency-weighted estimate: it answers "what is the chance they
+    # know this now", not "how have they done overall". Those come apart badly
+    # when a learner has a long poor record and a short good run, and the
+    # honest answer in that case is not 98%.
+    #
+    # So once there is enough evidence to trust it, observed accuracy sets a
+    # ceiling on the reported estimate. The estimate may sit above accuracy --
+    # improvement is real and should show -- but only by so much.
+    mastery_accuracy_guard_min_evidence: int = 10
+    mastery_accuracy_guard_headroom: float = 0.35
 
     # Readiness component weights. They must sum to 1.00: the service divides
     # by the full total, so a component a learner has not earned yet counts as

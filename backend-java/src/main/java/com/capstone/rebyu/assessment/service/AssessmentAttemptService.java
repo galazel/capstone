@@ -72,6 +72,8 @@ public class AssessmentAttemptService {
     private static final String TYPE_DIAGNOSTIC = "DIAGNOSTIC";
     private static final String TYPE_QUIZ = "QUIZ";
     private static final String TYPE_MOCK = "MOCK_EXAM";
+    /** An IT Olympics arena run; see ChallengeArenaService. */
+    private static final String TYPE_CHALLENGE = "CHALLENGE";
 
     private final ExamRepository examRepository;
     private final ExamQuestionRepository examQuestionRepository;
@@ -252,7 +254,28 @@ public class AssessmentAttemptService {
             }
         }
         String retakeBasisJson = null;
-        if (nextAttemptNumber > 1) {
+
+        /*
+         * Adaptive retake is for exams that assess a curriculum. It rebuilds
+         * the paper from the learner's weakest (lesson, difficulty) cells,
+         * drawing from the whole certification's question bank -- which is
+         * right for a unit exam and wrong for a challenge arena.
+         *
+         * An arena IS its problem set. CodeStrike is one programming problem
+         * and Blueprint Arena is one diagram problem, chosen by an admin; on
+         * the second attempt the selector was replacing them with whatever
+         * multiple-choice questions the certification happened to have, so
+         * CodeStrike stopped being CodeStrike and asked about requirements
+         * elicitation instead. Nothing failed loudly -- the paper was valid,
+         * just not the arena's.
+         *
+         * So a CHALLENGE exam always runs its configured problems, on every
+         * attempt.
+         */
+        boolean adaptiveRetake = nextAttemptNumber > 1
+                && !TYPE_CHALLENGE.equals(exam.getExamType().getExamTypeText());
+
+        if (adaptiveRetake) {
             AdaptiveRetakeQuestionSelectionService.Selection selection =
                     adaptiveRetakeQuestionSelectionService.select(exam, learnerId, examQuestions);
             questionsToUse = selection.questions();
@@ -751,6 +774,25 @@ public class AssessmentAttemptService {
 
     private String resolveLockReason(Exam exam, Long learnerId) {
         Long certificationId = exam.getCertification().getCertificationId();
+
+        /* An arena is not a certification's assessment.
+         *
+         * A CHALLENGE exam belongs to a certification only because an exam has
+         * to -- that is where its questions were authored. The arena itself is
+         * a platform-wide surface: the IT Olympics are open to whoever the
+         * admin opens them to, by industry, not to whoever happens to have
+         * bought the certification the problems were written against.
+         *
+         * Without this, configuring CodeStrike from any one certification's
+         * bank locked it for every learner not enrolled in that certification
+         * -- which is most of them, and none of whom did anything wrong. The
+         * arena would look unlocked on the challenges page and then refuse
+         * entry, which is the exact failure the lock was meant to prevent.
+         */
+        if (TYPE_CHALLENGE.equals(exam.getExamType().getExamTypeText())) {
+            return null;
+        }
+
         Optional<LearnerCertification> enrollment = learnerCertificationRepository
                 .findFirstByLearner_LearnerIdAndCertification_CertificationIdAndStatus(
                         learnerId, certificationId, LearnerCertification.Status.active);
@@ -1067,7 +1109,7 @@ public class AssessmentAttemptService {
         // AI grading: critical-thinking questions whose parent has neither a
         // programming nor a diagram config are plain analytical sub-question
         // sets — grade every sub-question in one holistic call.
-        if ("CRITICAL_THINKING".equals(type) && source != null) {
+        if (isWorkspaceType(type) && source != null) {
             String criticalThinkingType = resolveCriticalThinkingType(source.getQuestionId());
 
             if (criticalThinkingType == null
@@ -1196,7 +1238,7 @@ public class AssessmentAttemptService {
                 continue;
             }
 
-            if ("CRITICAL_THINKING".equals(type)) {
+            if (isWorkspaceType(type)) {
                 String criticalThinkingType = resolveCriticalThinkingType(source.getQuestionId());
 
                 if (criticalThinkingType == null) {
@@ -1447,6 +1489,29 @@ public class AssessmentAttemptService {
     }
 
     /** PROGRAMMING or DIAGRAM when the parent carries that sub-config, else null (analytical). */
+
+    /**
+     * Whether an item is a workspace item -- one sat in the code editor or on
+     * the diagram canvas rather than in a plain answer box.
+     *
+     * <p>A question can say so two ways, and both are in the database. Older
+     * ones are typed {@code CRITICAL_THINKING} and carry the specialism in a
+     * programming or diagram config; the question bank's editors type them
+     * {@code PROGRAMMING} or {@code DIAGRAM} outright. Every check here used to
+     * test only for the first, so a directly typed coding problem was served as
+     * a textarea, could not be run or checked, and -- worst of the three -- was
+     * never routed to Judge0 or the structural grader when submitted. It was
+     * marked as prose.
+     */
+    private static boolean isWorkspaceType(String questionType) {
+        return "CRITICAL_THINKING".equals(questionType)
+                || TYPE_PROGRAMMING_ITEM.equals(questionType)
+                || TYPE_DIAGRAM_ITEM.equals(questionType);
+    }
+
+    private static final String TYPE_PROGRAMMING_ITEM = "PROGRAMMING";
+    private static final String TYPE_DIAGRAM_ITEM = "DIAGRAM";
+
     private String resolveCriticalThinkingType(Long parentQuestionId) {
         if (programmingQuestionConfigRepository.findByQuestion_QuestionId(parentQuestionId).isPresent()) {
             return "PROGRAMMING";
@@ -1758,7 +1823,10 @@ public class AssessmentAttemptService {
      */
     private List<SubQuestionAnswerReviewDto> buildSubQuestionAnswerReviews(
             Question source, AssessmentAttemptAnswer answer) {
-        if (source == null || !"CRITICAL_THINKING".equals(source.getQuestionType())) {
+        // Directly typed programming items carry sub-questions too -- the
+        // bank writes them with a parent id exactly as it does for a
+        // critical-thinking parent -- so their reviews must be built as well.
+        if (source == null || !isWorkspaceType(source.getQuestionType())) {
             return List.of();
         }
         List<Question> subQuestions = questionRepository
@@ -1922,7 +1990,7 @@ public class AssessmentAttemptService {
             data.put("choices", choices);
         }
 
-        if ("CRITICAL_THINKING".equals(question.getQuestionType())) {
+        if (isWorkspaceType(question.getQuestionType())) {
             programmingQuestionConfigRepository
                     .findByQuestion_QuestionId(question.getQuestionId())
                     .ifPresent(config -> {
@@ -2073,7 +2141,7 @@ public class AssessmentAttemptService {
         AssessmentAttempt attempt = requireOwnedAttempt(attemptId, request.learnerId());
         requireEditable(attempt);
         AssessmentAttemptQuestion question = requireAttemptQuestion(attempt, attemptQuestionId);
-        if (!"CRITICAL_THINKING".equals(question.getQuestionType())) {
+        if (!isWorkspaceType(question.getQuestionType())) {
             throw new BusinessRuleException.InvalidAssessmentSubmissionException(
                     "This item is not a diagram question.");
         }
@@ -2151,7 +2219,7 @@ public class AssessmentAttemptService {
         AssessmentAttempt attempt = requireOwnedAttempt(attemptId, request.learnerId());
         requireEditable(attempt);
         AssessmentAttemptQuestion attemptQuestion = requireAttemptQuestion(attempt, attemptQuestionId);
-        if (!"CRITICAL_THINKING".equals(attemptQuestion.getQuestionType())) {
+        if (!isWorkspaceType(attemptQuestion.getQuestionType())) {
             throw new BusinessRuleException.InvalidAssessmentSubmissionException(
                     "This item is not a programming question.");
         }

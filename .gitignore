@@ -5,3 +5,7 @@
 .env.*
 !.env.example
 db-backup-*/
+
+# Local database backups (BKT purge snapshots, etc). Large and
+# environment-specific: useful on the machine that made them, noise in git.
+backups/

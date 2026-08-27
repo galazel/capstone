@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { TABLE_SURFACE } from "@/components/commons/data-table"
 import { Progress } from "@/components/ui/progress"
 import {
   Table,
@@ -186,7 +187,7 @@ export default function AdminOrganizationDetail() {
         <InstitutionStatCard label="Joined" value={formatDate(institution.joinedAt)} />
       </div>
 
-      <Card>
+      <Card className={TABLE_SURFACE}>
         <CardHeader>
           <CardTitle>Certifications</CardTitle>
           <CardDescription>
@@ -244,7 +245,7 @@ export default function AdminOrganizationDetail() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className={TABLE_SURFACE}>
         <CardHeader>
           <CardTitle>Learners ({orgCertLearners.length})</CardTitle>
           <CardDescription>

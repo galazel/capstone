@@ -185,8 +185,11 @@ export default function PartnershipRequests() {
     detail && (detail.status === "PENDING" || detail.status === "UNDER_REVIEW")
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-3">
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+      {/* Three counts on one line rather than three cards on a grid: each held
+          a single number, and a card's job is to separate things that would
+          otherwise run together -- which spacing already does here. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-x-10 gap-y-3 border-b border-border px-4 py-3 sm:px-6">
         <SummaryCard icon={Clock} label="Pending" value={counts.PENDING} />
         <SummaryCard icon={CheckCircle2} label="Approved" value={counts.APPROVED} />
         <SummaryCard icon={XCircle} label="Rejected" value={counts.REJECTED} />
@@ -196,7 +199,8 @@ export default function PartnershipRequests() {
           list this page used to render below md is gone: it was a second copy
           of every row to keep in step, and a request is read by comparing
           slots and dates down a column, which cards cannot do. */}
-      <TableCard>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <TableCard className="flex min-h-0 flex-1 flex-col rounded-none border-0 bg-transparent">
         <TableToolbar
           pageSize={pageSize}
           onPageSizeChange={setPageSize}
@@ -330,6 +334,7 @@ export default function PartnershipRequests() {
           unit="requests"
         />
       </TableCard>
+      </div>
 
       {/* Detail dialog */}
       <Dialog
@@ -475,15 +480,11 @@ export default function PartnershipRequests() {
 
 function SummaryCard({ icon: Icon, label, value }) {
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardDescription className="flex items-center gap-2">
-          <Icon className="size-4" aria-hidden="true" />
-          {label}
-        </CardDescription>
-        <CardTitle className="text-3xl tabular-nums">{value}</CardTitle>
-      </CardHeader>
-    </Card>
+    <div className="flex items-baseline gap-2">
+      <Icon className="size-4 self-center text-muted-foreground" aria-hidden="true" />
+      <p className="text-xl font-semibold tabular-nums">{value}</p>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+    </div>
   )
 }
 

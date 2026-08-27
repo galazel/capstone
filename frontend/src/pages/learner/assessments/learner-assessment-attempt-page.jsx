@@ -398,6 +398,7 @@ function WorkspaceQuestionPanel({ question, index, answer, onAnswer }) {
       ) : format === "DIAGRAM" ? (
           <div className="h-full min-h-[420px] overflow-hidden rounded-2xl border-2 border-rb-swan">
             <DiagramArea
+                documentId={question.attemptQuestionId ?? question.questionId ?? null}
                 initialXml={answer?.diagramSubmissionData}
                 onChange={(diagramXml) =>
                     onAnswer({ diagramSubmissionData: diagramXml })
@@ -799,11 +800,32 @@ export default function LearnerAssessmentAttemptPage() {
   }
 
   const currentQuestion = questions[currentIndex]
+
+  /* Which workspace this item needs, from either way a question can say so.
+   *
+   * Older questions are typed CRITICAL_THINKING and carry the specialism in
+   * `criticalThinkingType`; the question bank's editors type them PROGRAMMING
+   * or DIAGRAM outright. Both are real and both are in the database.
+   *
+   * This used to require CRITICAL_THINKING *and* the subtype, so a directly
+   * typed question fell through to the plain answer box: a coding problem was
+   * sat by typing prose into a textarea, with no editor, no test cases and no
+   * canvas -- while its badge still read "Programming". The backend was already
+   * right, deriving the specialism from whether a programming or diagram config
+   * exists, which is the fact that actually decides what the item needs. */
+  const workspaceKind =
+      currentQuestion?.criticalThinkingType
+      ?? (currentQuestion?.questionType === "PROGRAMMING"
+          || currentQuestion?.questionType === "DIAGRAM"
+              ? currentQuestion.questionType
+              : null)
+
+  const isProgramming = workspaceKind === "PROGRAMMING"
+  const isDiagram = workspaceKind === "DIAGRAM"
+
+  /* A critical-thinking item that is neither -- no programming or diagram
+     config behind it -- still gets its own panel rather than the plain one. */
   const isWorkspace = currentQuestion?.questionType === "CRITICAL_THINKING"
-  const isProgramming =
-      isWorkspace && currentQuestion?.criticalThinkingType === "PROGRAMMING"
-  const isDiagram =
-      isWorkspace && currentQuestion?.criticalThinkingType === "DIAGRAM"
   const currentAnswer = currentQuestion
       ? answers[currentQuestion.attemptQuestionId]
       : null
@@ -934,8 +956,12 @@ export default function LearnerAssessmentAttemptPage() {
                 {/* Same as programming: the meta belongs at the head of the
                     problem column, not in a header above the canvas. */}
                 <div className="min-h-0 flex-1 overflow-hidden">
+                  {/* No `key` here on purpose: remounting this layout would
+                      also remount the draw.io iframe, re-downloading the whole
+                      editor on every question step. The layout resets its own
+                      question-scoped state, and DiagramArea swaps documents
+                      in place via `documentId`. */}
                   <DiagramQuestionLayout
-                      key={currentQuestion.attemptQuestionId}
                       question={currentQuestion}
                       index={currentIndex}
                       answer={currentAnswer}

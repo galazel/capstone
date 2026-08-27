@@ -40,6 +40,7 @@ import { useNotifications } from "@/hooks/use-notifications.js"
 import { PortalThemeMenuItem } from "@/components/portal-theme-toggle"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useLearnerEntitlements } from "@/hooks/use-learner-entitlements.js"
+import { StudyActivityHost } from "@/components/learner/study-activity-host.jsx"
 
 function getInitials(name = "", email = "") {
   const source = name || email || "Learner"
@@ -309,6 +310,18 @@ export default function LearnerLayout() {
           )}
         </main>
       {!isTopicPage ? <LearnerMobileNavigation /> : null}
+
+      {/* Outside <main>, so a scheduled session fires on whatever page the
+          learner is on and survives navigation between them.
+
+          Here rather than in main.jsx beside <XpAwardModal>: this only ever
+          concerns a signed-in learner, and the layout is what already
+          guarantees that. Hosted at the root it would need its own auth and
+          role checks to avoid polling study plans for logged-out visitors and
+          for admins. The cost is that it stops while the learner is outside
+          /learner/*, which is the right trade -- there is no study session to
+          run on the login page. */}
+      <StudyActivityHost />
     </div>
   )
 }

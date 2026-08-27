@@ -12,6 +12,7 @@ import com.capstone.rebyu.certification.entity.Lesson;
 import com.capstone.rebyu.certification.repository.LessonRepository;
 import com.capstone.rebyu.enrollment.entity.LearnerCertification;
 import com.capstone.rebyu.enrollment.repository.LearnerCertificationRepository;
+import com.capstone.rebyu.enrollment.repository.OrganizationCertificationLearnerRepository;
 import com.capstone.rebyu.diagram.service.DiagramGradingService;
 import com.capstone.rebyu.gamification.RewardService;
 import com.capstone.rebyu.gamification.service.StreakService;
@@ -50,6 +51,11 @@ class AssessmentAttemptServiceTest {
     @Mock private AssessmentAttemptQuestionRepository attemptQuestionRepository;
     @Mock private AssessmentAttemptAnswerRepository attemptAnswerRepository;
     @Mock private LearnerCertificationRepository learnerCertificationRepository;
+    /* The institution-sponsored route into an assessment. Left unstubbed on
+       purpose: Mockito's default `false` is "not sponsored", so these tests keep
+       reaching the gate through their own direct enrollment, which is what they
+       are about. */
+    @Mock private OrganizationCertificationLearnerRepository organizationCertificationLearnerRepository;
     @Mock private ExamResultRepository examResultRepository;
     @Mock private AssessmentAttemptExecutionRepository attemptExecutionRepository;
     @Mock private QuestionRubricCriterionRepository questionRubricCriterionRepository;
@@ -76,7 +82,8 @@ class AssessmentAttemptServiceTest {
                 textQuestionConfigRepository, programmingQuestionConfigRepository,
                 diagramQuestionConfigRepository, attemptRepository,
                 attemptQuestionRepository, attemptAnswerRepository,
-                learnerCertificationRepository, examResultRepository,
+                learnerCertificationRepository, organizationCertificationLearnerRepository,
+                examResultRepository,
                 attemptExecutionRepository, questionRubricCriterionRepository,
                 lessonRepository, learnerEntitlementService, bktOutboxService,
                 new ObjectMapper(), aiAnswerGradingService, codeExecutionService,

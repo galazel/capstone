@@ -54,8 +54,9 @@ const ERROR_MESSAGES = {
       "Your password does not meet the required requirements.",
   InvalidParameterException:
       "Unable to process your details. Please check them and try again.",
-  CodeMismatchException: "Your verification code is invalid or expired.",
-  ExpiredCodeException: "Your verification code is invalid or expired.",
+  CodeMismatchException: "That code is not right. Check the newest email -- each resend replaces the last code.",
+  CodeDeliveryFailureException: "We could not send the code to that address.",
+  ExpiredCodeException: "That code has expired. Request a new one below.",
   UserNotConfirmedException:
       "Your account must be verified before signing in.",
   NotAuthorizedException: "Incorrect email or password.",
@@ -74,24 +75,72 @@ const ERROR_MESSAGES = {
 
 export function toSafeAuthMessage(error, fallback = "Something went wrong. Please try again.") {
   const name = error?.name ?? error?.code
+
+  /* Unmapped errors are logged before being flattened into the fallback.
+     Raw provider names must never reach the UI, but they also must not vanish:
+     with a fallback like "your code is invalid or expired", a network failure,
+     a misconfigured pool and a throttle all present as the same sentence, and
+     the learner is told to fix the one thing that is not wrong. The console
+     keeps the truth for whoever has to work out why. */
+  if (name && !ERROR_MESSAGES[name]) {
+    console.warn(`Unmapped auth error: ${name}`, error?.message ?? error)
+  }
+
   return ERROR_MESSAGES[name] ?? fallback
 }
 
+/**
+ * Registers a learner, or picks up a registration that was abandoned.
+ *
+ * <p>Cognito creates the account the moment sign-up succeeds, in an UNCONFIRMED
+ * state, and it stays there until a code is entered. Someone who closed the tab
+ * on the verification screen therefore has an account they cannot use and
+ * cannot re-create: signing up again is rejected with "already registered", and
+ * signing in is rejected because they are unconfirmed. A dead end reached by
+ * doing nothing more unusual than closing a tab.
+ *
+ * <p>So an existing username is not automatically a refusal. Cognito will only
+ * resend a sign-up code to an account that is still unconfirmed -- a confirmed
+ * one raises instead -- which makes the resend itself the test. If it goes
+ * through, this was an abandoned registration and the caller is told to send
+ * the learner to verification. If it does not, the email really is taken.
+ *
+ * @returns {{ status: "SIGNED_UP" | "RESENT_CODE" }}
+ *   `RESENT_CODE` means no new account was created: a fresh code was sent to
+ *   the one that was already waiting.
+ */
 export async function registerAccount({ email, password, firstName, lastName }) {
   // A lingering session from an earlier/incomplete flow makes Cognito reject a
   // fresh sign-up; clear it first so registering always works.
   await signOut().catch(() => {})
-  return signUp({
-    username: email,
-    password,
-    options: {
-      userAttributes: {
-        email,
-        ...(firstName ? { given_name: firstName } : {}),
-        ...(lastName ? { family_name: lastName } : {}),
+
+  try {
+    await signUp({
+      username: email,
+      password,
+      options: {
+        userAttributes: {
+          email,
+          ...(firstName ? { given_name: firstName } : {}),
+          ...(lastName ? { family_name: lastName } : {}),
+        },
       },
-    },
-  })
+    })
+    return { status: "SIGNED_UP" }
+  } catch (error) {
+    if ((error?.name ?? error?.code) !== "UsernameExistsException") {
+      throw error
+    }
+
+    /* The password typed just now is deliberately not applied to the waiting
+       account. Cognito offers no way to set it without proving ownership of
+       the address, and anything that did would let a stranger overwrite the
+       credentials of an unconfirmed account by knowing only its email. They
+       verify with the code, then sign in with the password from their first
+       attempt. */
+    await resendSignUpCode({ username: email })
+    return { status: "RESENT_CODE" }
+  }
 }
 
 export function confirmRegistration(email, code) {

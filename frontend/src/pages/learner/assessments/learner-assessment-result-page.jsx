@@ -30,6 +30,7 @@ import {
   getAttemptResult,
 } from "@/services/assessmentService.js"
 import LearnerPremiumGuard from "@/components/learner/learner-premium-guard.jsx"
+import { StudyPlanPrompt } from "@/components/learner/study-plan-prompt.jsx"
 import { FEATURES } from "@/services/subscriptionService.js"
 
 /**
@@ -274,6 +275,14 @@ export default function LearnerAssessmentResultPage() {
             ) : null}
           </CardContent>
         </Card>
+
+        {/* Offered here, and nowhere along the way to the curriculum: the
+            diagnostic is what a plan is built from, so this is the first moment
+            there is anything to schedule. */}
+        <StudyPlanPrompt
+          certificationId={result.certificationId}
+          enabled={result.assessmentType === "DIAGNOSTIC"}
+        />
 
         {result.assessmentType === "DIAGNOSTIC" ? (
           <div className="flex items-start gap-2 rounded-xl border border-primary/40 bg-primary/5 p-3 text-sm">

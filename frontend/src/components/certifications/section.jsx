@@ -86,8 +86,36 @@ function Section({
                 </button>
             </div>
 
-            <article className="min-h-[720px] w-full overflow-hidden rounded-xl bg-card ring-1 ring-border/60">
-                <div className="flex min-h-[720px] w-full flex-col gap-3 p-8">
+            {/* 720px is a page's worth of height, which is right for a section
+                being filled and absurd for one that is empty -- it made a
+                blank section a full screen of nothing to scroll past. */}
+            <article
+                className={`w-full overflow-hidden rounded-xl bg-card ring-1 ring-border/60 ${
+                    tools.length === 0 ? "" : "min-h-[720px]"
+                }`}
+            >
+                <div
+                    className={`flex w-full flex-col gap-3 p-8 ${
+                        tools.length === 0 ? "" : "min-h-[720px]"
+                    }`}
+                >
+                    {/* An empty section is a real state, not a glitch: the
+                        generator opens a lesson with a title-only section, and
+                        a new section starts with nothing in it. Rendered as
+                        bare whitespace it read as content that had failed to
+                        load, so it says what it is. */}
+                    {tools.length === 0 ? (
+                        <div className="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-border/70 text-center">
+                            <p className="text-sm font-medium text-muted-foreground">
+                                This section is empty
+                            </p>
+                            <p className="mt-1 max-w-xs text-xs leading-5 text-muted-foreground/80">
+                                Add a tool from the panel on the left to put
+                                something in it.
+                            </p>
+                        </div>
+                    ) : null}
+
                     {tools.map((item, toolIndex) => {
                         const ToolComponent = TOOL_COMPONENTS[item.type]
 

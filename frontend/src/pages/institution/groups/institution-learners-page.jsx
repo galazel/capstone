@@ -4,6 +4,7 @@ import { ArrowLeftIcon, Search, UsersIcon } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { TABLE_SURFACE } from "@/components/commons/data-table"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -234,7 +235,7 @@ export default function InstitutionLearnersPage() {
               }
             />
           ) : (
-            <Card>
+            <Card className={TABLE_SURFACE}>
               <CardContent className="p-0">
                 <Table>
                   <TableHeader>

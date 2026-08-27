@@ -141,6 +141,30 @@ public class BktClient {
     }
 
     @SuppressWarnings("unchecked")
+    /**
+     * Erases every BKT record held against a learner id.
+     *
+     * <p>Called when a learner is provisioned, because learner ids are not
+     * unique over time: the application database has been reset while the BKT
+     * store was not, so ids restarted from 1 on top of surviving mastery rows.
+     * A new account then opened on a stranger's record -- 98% mastery of a
+     * lesson it had never seen, with 89 answers behind it.
+     *
+     * <p>Idempotent, and a no-op for a genuinely fresh id. Anything it does
+     * find belonged to an account that no longer exists.
+     */
+    public Map<String, Object> purgeLearnerState(Long learnerId) {
+        try {
+            return webClient.delete()
+                    .uri("/mastery/learners/{learnerId}", learnerId)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
+        } catch (Exception e) {
+            throw new BktServiceException("Could not purge BKT state for learner " + learnerId, e);
+        }
+    }
+
     private Map<String, Object> getMap(String path, String action) {
         try {
             return webClient.get().uri(path).retrieve().bodyToMono(Map.class).block();

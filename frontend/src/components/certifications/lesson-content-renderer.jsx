@@ -198,8 +198,25 @@ function ImageAttribution({ sourceUrl, sourceName }) {
 //: a different variant group, so tailwind-merge does not treat it as a conflict
 //: and would otherwise leave it applied above 640px.
 const LIGHTBOX_PANEL =
-    "!max-w-none w-[min(92vw,1000px)] h-[min(78vh,660px)] grid place-items-center p-6"
-const LIGHTBOX_MEDIA = "h-full w-full object-contain"
+    "!max-w-none w-[min(92vw,1000px)] h-[min(78vh,660px)] grid place-items-center overflow-hidden p-6"
+
+//: The media is capped in the SAME units as the panel, minus its `p-6` on both
+//: sides (1.5rem x 2 = 3rem) -- not in percentages of it.
+//:
+//: `h-full w-full` was the obvious spelling and it silently failed. The panel's
+//: single grid row is auto-sized, so the browser sizes the row from its content
+//: while the content asks for 100% of the row: a cycle. The percentage resolves
+//: to `auto`, the row grows to the image's intrinsic height -- 1200px for a
+//: lesson diagram -- and the picture spills straight out of a panel fixed at
+//: 660px, uncropped, over the page behind it. It only looked correct for images
+//: that happened to be smaller than the panel already.
+//:
+//: Absolute caps have no such cycle: the image is never asked how big it is in
+//: terms of a box whose size depends on the answer. `overflow-hidden` on the
+//: panel above is the backstop -- if any future image escapes its cap, it is
+//: clipped to the frame instead of covering the lesson.
+const LIGHTBOX_MEDIA =
+    "max-h-[calc(min(78vh,660px)-3rem)] max-w-[calc(min(92vw,1000px)-3rem)] object-contain"
 
 /**
  * A lesson image, openable full-screen.

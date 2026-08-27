@@ -9,25 +9,31 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { StudyPlanGenerator } from "@/pages/learner/learning/learner-study-plan.jsx"
-import { STUDY_PLAN_QUERY_KEY, getActiveStudyPlan, saveStudyPlan } from "@/services/studyPlanService.js"
+import {
+  OVERALL_CERTIFICATION_LABEL,
+  StudyPlanGenerator,
+} from "@/pages/learner/learning/learner-study-plan.jsx"
+import {
+  STUDY_PLAN_QUERY_KEY,
+  getActiveStudyPlan,
+  getOverallStudyPlan,
+  saveStudyPlan,
+} from "@/services/studyPlanService.js"
 
 /**
- * Offering the study plan before a learner starts studying a certification.
+ * The study-plan generator, and the one way into it.
  *
- * Extracted from the My Learning page, which owned the whole gate — the
- * diagnostic check, the plan lookup, the dialog and the save — as local
- * functions. The Certifications page navigates into a curriculum too, and
- * because none of this was reachable from there, clicking an enrolled
- * certification on that page went straight to the curriculum and the plan was
- * never offered. Two entry points, one of them silently missing the gate.
+ * There used to be six: a gate before opening a certification, a full-page
+ * block on the curriculum, a button on the certification page, two tiles, and
+ * the calendar. They asked the same question in different words at different
+ * moments, and two of them refused to let the learner past until they answered.
  *
- * Everything lives here now so both pages ask the same question and cannot
- * drift apart again.
+ * Now a plan is built in exactly one place -- the analytics board -- and
+ * offered in exactly one moment: after the diagnostic, which is what the plan
+ * is built from. Everywhere else links there rather than growing its own copy.
  *
- * The lookup happens on the click, never on render: a query per card would be
- * one request per enrolled certification on every visit, to answer a question
- * that only matters once a card is clicked.
+ * `openCertification` stays only because several pages call it to open a
+ * course; it no longer has anything to do with plans.
  */
 
 /** The id, whatever shape the caller's certification object happens to be. */
@@ -51,7 +57,14 @@ export function useStudyPlanGate() {
   const savePlanMutation = useMutation({
     mutationFn: (plan) =>
       saveStudyPlan({
-        certificationId: Number(planFor?.certificationId),
+        /* Null, not `Number(null)`, for an overall plan. The backend reads a
+           null certificationId as "spans every certification"; `Number(null)`
+           is 0, which would be stored as a plan for certification zero -- a
+           certification that does not exist, so the plan would be invisible
+           everywhere afterwards. */
+        certificationId: planFor?.certificationId
+          ? Number(planFor.certificationId)
+          : null,
         goal: plan?.courseGoal ?? "Complete a full reviewer",
         // The generated plan, whole: preferences and every dated event. The
         // study calendar and the analytics board both read this back, so
@@ -63,11 +76,43 @@ export function useStudyPlanGate() {
       // before the dialog state is cleared.
       const next = planFor?.next
 
+      /* Closed first, before anything that can wait.
+       *
+       * This used to await `invalidateQueries` and close afterwards, which
+       * meant the dialog stayed open for as long as the refetches took --
+       * and `invalidateQueries` awaits *every* active query under this key.
+       * That is now several, including the scheduler's, which is mounted on
+       * every learner page. One slow refetch and the learner saw the success
+       * toast sitting on top of a modal that would not go away, with no way
+       * to tell whether the save had worked.
+       *
+       * The save is already done by this point. Nothing about closing depends
+       * on the refetch, so nothing about closing should wait for it.
+       */
+      setPlanFor(null)
+
       toast.success("Study plan saved", {
         description: "Your schedule is on the study calendar.",
       })
-      await queryClient.invalidateQueries({ queryKey: [STUDY_PLAN_QUERY_KEY] })
-      setPlanFor(null)
+
+      /* Dropped from the cache rather than refetched-and-awaited.
+       *
+       * The destination may gate on having a plan, so it must not read a stale
+       * "no plan yet" and bounce the learner back to the generator they just
+       * finished. Invalidating fixes that but makes saving feel slow: it
+       * refetches every active plan query and waits for all of them, and
+       * against a remote database that is seconds -- including `my-plans`,
+       * which returns every plan's full schedule and is mounted on every
+       * learner page.
+       *
+       * Removing the entries achieves the same guarantee for free. There is no
+       * stale answer left to act on, so the gate on the next page starts with
+       * no data, reports `isLoading`, and waits for a fresh one -- while
+       * anything still mounted refetches in the background. Nothing here has
+       * to be awaited, so the save is over the moment the server says so.
+       */
+      queryClient.removeQueries({ queryKey: [STUDY_PLAN_QUERY_KEY] })
+
       if (next) navigate(next)
     },
     onError: (error) => {
@@ -78,14 +123,55 @@ export function useStudyPlanGate() {
   })
 
   /**
-   * Open a certification, offering the plan first when there isn't one.
+   * Does this learner have a study plan at all?
    *
-   * @param certification  the certification being opened
+   * Coverage is deliberately not part of this test. It used to be: an overall
+   * plan only counted if it named this certification, so enrolling in a new one
+   * put the learner back in front of the generator -- asked to build a plan
+   * they had already built, on a screen that only builds overall plans, whose
+   * result replaces the plan they had. The next enrolment would ask again.
+   *
+   * A learner is asked for a plan once, when they have none. Adding a new
+   * certification to an existing plan is an edit, and edits belong on the
+   * analytics board where the plan lives -- not in a dialog thrown in front of
+   * somebody who clicked Continue.
+   *
+   * Read against the same cache keys the curriculum page and the analytics
+   * board use, and now the same question, so all three agree. When they did
+   * not, one page thought a learner was unplanned and sent them to another that
+   * thought they were planned and sent them back.
+   */
+  async function existingPlan(certificationId) {
+    const scoped = await queryClient.fetchQuery({
+      queryKey: [STUDY_PLAN_QUERY_KEY, String(certificationId ?? "")],
+      queryFn: () => getActiveStudyPlan(certificationId),
+      staleTime: 60_000,
+    })
+    if (scoped?.planId) return scoped
+
+    const overall = await queryClient.fetchQuery({
+      queryKey: [STUDY_PLAN_QUERY_KEY, "overall"],
+      queryFn: getOverallStudyPlan,
+      staleTime: 60_000,
+    })
+    return overall?.planId ? overall : null
+  }
+
+  /**
+   * Opens a certification, asking for a plan first when there is not one.
+   *
+   * <p>The generator opens *here*, over the page the learner is already on,
+   * rather than sending them to the analytics board to build one. It is the
+   * same generator either way -- one dialog, one save path -- but a click on
+   * "Continue" should be answered where it was made, not by a redirect to
+   * somewhere else with the real answer another click away.
+   *
+   * <p>Saving carries them on to the course they were opening.
+   *
    * @param options.diagnosticCompleted
-   *   whether the learner has sat this certification's diagnostic. The plan is
-   *   built around diagnostic priorities, so there is nothing to generate from
-   *   before it is done — those learners go straight through and the curriculum
-   *   offers the diagnostic itself.
+   *   whether this certification's diagnostic is done. A plan is built from its
+   *   priorities, so before it there is nothing to generate: those learners go
+   *   straight through, and the curriculum offers the diagnostic itself.
    * @param options.to  where the click was headed; defaults to the curriculum.
    */
   async function openCertification(certification, options = {}) {
@@ -98,43 +184,34 @@ export function useStudyPlanGate() {
     }
 
     try {
-      const plan = await queryClient.fetchQuery({
-        queryKey: [STUDY_PLAN_QUERY_KEY, certificationId],
-        queryFn: () => getActiveStudyPlan(certificationId),
-        staleTime: 30_000,
-      })
-      if (plan?.planId) {
+      if (await existingPlan(certificationId)) {
         navigate(path)
         return
       }
     } catch (error) {
-      // Logged, never swallowed: a lookup that fails invisibly looks exactly
-      // like a learner who already has a plan. A plan is an offer, and it must
-      // never stand between the learner and the page they asked for.
+      /* Never swallowed, and never a blocker: a lookup that fails invisibly
+         looks exactly like a learner who has no plan, and would hold them at a
+         generator they may not need. */
       console.warn("Study plan lookup failed; opening the certification directly.", error)
       navigate(path)
       return
     }
 
-    setPlanFor({
-      certificationId,
-      title: certification?.title ?? "Untitled Certification",
-      next: path,
-    })
+    openOverallStudyPlan(path)
   }
 
   /**
-   * Open the generator directly, with no navigation afterwards.
-   *
-   * The "Study plan" link on a card, as opposed to opening the certification:
-   * the learner asked for the plan itself, so saving it should leave them where
-   * they are rather than carrying them into a curriculum they did not click.
+   * @param next  where the learner was heading when the plan was asked for.
+   *   Saving carries them on there, so a plan required before studying reads as
+   *   a step on the way rather than a door slammed in front of them. Omitted
+   *   when the generator was opened for its own sake.
    */
-  function openStudyPlanFor(certification) {
+  function openOverallStudyPlan(next = null) {
     setPlanFor({
-      certificationId: certificationIdOf(certification),
-      title: certification?.title ?? "Untitled Certification",
-      next: null,
+      certificationId: null,
+      overall: true,
+      title: OVERALL_CERTIFICATION_LABEL,
+      next: typeof next === "string" ? next : null,
     })
   }
 
@@ -157,13 +234,17 @@ export function useStudyPlanGate() {
         className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[min(1180px,calc(100vw-4rem))]"
       >
         <DialogHeader>
-          <DialogTitle>Study plan</DialogTitle>
+          <DialogTitle>{planFor?.overall ? "Overall study plan" : "Study plan"}</DialogTitle>
         </DialogHeader>
 
         {planFor ? (
           <StudyPlanGenerator
-            lockedCertification={planFor.title}
-            certificationId={planFor.certificationId}
+            /* An overall plan has neither: no certification to lock the form
+               to, and no id to read one certification's priorities against --
+               it pools them from every enrolled certification instead. */
+            lockedCertification={planFor.overall ? undefined : planFor.title}
+            certificationId={planFor.overall ? null : planFor.certificationId}
+            overall={Boolean(planFor.overall)}
             generating={savePlanMutation.isPending}
             onPlanGenerated={(plan) => savePlanMutation.mutate(plan)}
           />
@@ -172,5 +253,11 @@ export function useStudyPlanGate() {
     </Dialog>
   )
 
-  return { openCertification, openStudyPlanFor, closeStudyPlan, planFor, studyPlanDialog: dialog }
+  return {
+    openCertification,
+    openOverallStudyPlan,
+    closeStudyPlan,
+    planFor,
+    studyPlanDialog: dialog,
+  }
 }

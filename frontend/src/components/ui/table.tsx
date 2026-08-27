@@ -6,7 +6,13 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto border-y border-border/70"
+      /* No border here on purpose. Every table in the product already sits
+         inside a bordered surface (a Card, a TableCard, a rounded panel), and
+         a self-drawn edge landed a second hairline directly against that
+         surface's own border -- the doubled rules are what made these read as
+         boxes stacked inside boxes. The surface owns the frame; the table owns
+         the rows. */
+      className="relative w-full overflow-x-auto"
     >
       <table
         data-slot="table"
@@ -21,7 +27,12 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("[&_tr]:border-b", className)}
+      /* A faint band separates the header from the rows, so the single
+         hairline beneath it is all the structure the head needs. */
+      className={cn(
+        "bg-muted/40 [&_tr]:border-b [&_tr]:border-border/60 [&_tr]:hover:bg-transparent",
+        className
+      )}
       {...props}
     />
   )
@@ -42,7 +53,7 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
     <tfoot
       data-slot="table-footer"
       className={cn(
-        "border-t bg-muted/50 font-medium [&>tr]:last:border-b-0",
+        "border-t border-border/60 bg-muted/40 font-medium [&>tr]:last:border-b-0",
         className
       )}
       {...props}
@@ -55,7 +66,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "border-b border-border/60 transition-colors duration-150 hover:bg-muted/35 has-aria-expanded:bg-muted/40 data-[state=selected]:bg-primary/5",
+        "border-b border-border/40 transition-colors duration-150 hover:bg-muted/35 has-aria-expanded:bg-muted/40 data-[state=selected]:bg-primary/5",
         className
       )}
       {...props}

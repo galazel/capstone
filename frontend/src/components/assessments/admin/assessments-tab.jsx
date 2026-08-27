@@ -73,20 +73,65 @@ function normalizeAssessmentType(value) {
   return type
 }
 
-export function useAssessmentData(certificationId) {
-  const examsQuery = useQuery({ queryKey: ["exams"], queryFn: () => getExams() })
-  const examTypesQuery = useQuery({
-    queryKey: ["exam-types"],
-    queryFn: getExamTypes,
-  })
-  const examQuestionsQuery = useQuery({
+/**
+ * The four reads this tab is assembled from, declared once.
+ *
+ * <p>They live out here because the certification page warms them the moment
+ * it opens, and a prefetch only lands in the cache the tab reads if the key and
+ * the fetcher match it exactly. Written twice they would eventually differ by a
+ * character, the prefetch would silently fill a cache nothing reads, and the
+ * tab would go back to loading -- with nothing to show that it had.
+ */
+/* Kept, not re-fetched on sight.
+   
+   These four are whole-table reads -- every exam, every exam question, every
+   question on the platform -- and they were on the client's defaults: stale
+   immediately, dropped from the cache five minutes after the last component
+   using them unmounted. So leaving the certification and coming back re-ran
+   all four, and any detour longer than five minutes came back to skeleton
+   rows, on data that changes when an admin edits an assessment and not
+   otherwise.
+
+   Fifteen minutes fresh, an hour before collection. Everything that writes
+   here already invalidates these keys by hand (see the mutations below), so a
+   change an admin makes still shows immediately -- what this stops is the
+   re-fetching that no change prompted. */
+const ASSESSMENT_CACHE = {
+  staleTime: 15 * 60 * 1000,
+  gcTime: 60 * 60 * 1000,
+}
+
+export const ASSESSMENT_QUERIES = {
+  exams: { queryKey: ["exams"], queryFn: () => getExams(), ...ASSESSMENT_CACHE },
+  examTypes: { queryKey: ["exam-types"], queryFn: getExamTypes, ...ASSESSMENT_CACHE },
+  examQuestions: {
     queryKey: ["exam-questions"],
     queryFn: getExamQuestions,
+    ...ASSESSMENT_CACHE,
+  },
+  questions: { queryKey: ["questions"], queryFn: () => getQuestions(), ...ASSESSMENT_CACHE },
+}
+
+/**
+ * Warms the tab's cache ahead of the click that opens it.
+ *
+ * <p>Not awaited: this is work done on the chance the tab is opened, so it must
+ * never hold up the page that starts it. If a fetch fails the tab simply loads
+ * the way it used to -- {@code prefetchQuery} swallows the error rather than
+ * caching one, so a warm-up failure cannot turn into an error state on a tab
+ * the user has not even opened.
+ */
+export function prefetchAssessmentData(queryClient) {
+  Object.values(ASSESSMENT_QUERIES).forEach((query) => {
+    void queryClient.prefetchQuery(query)
   })
-  const questionsQuery = useQuery({
-    queryKey: ["questions"],
-    queryFn: () => getQuestions(),
-  })
+}
+
+export function useAssessmentData(certificationId) {
+  const examsQuery = useQuery(ASSESSMENT_QUERIES.exams)
+  const examTypesQuery = useQuery(ASSESSMENT_QUERIES.examTypes)
+  const examQuestionsQuery = useQuery(ASSESSMENT_QUERIES.examQuestions)
+  const questionsQuery = useQuery(ASSESSMENT_QUERIES.questions)
 
   return useMemo(() => {
     const exams = (Array.isArray(examsQuery.data) ? examsQuery.data : []).filter(

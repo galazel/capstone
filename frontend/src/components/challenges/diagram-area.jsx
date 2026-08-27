@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { LoaderCircle } from "@/components/icons"
+import { ChevronLeft, ChevronRight } from "@/components/icons"
 import { DrawIoEmbed } from "react-drawio"
 
 const EMPTY_GRID_DIAGRAM = `
@@ -91,28 +91,92 @@ function getDiagramToolPreset(diagramType) {
     return DIAGRAM_TOOL_PRESETS[resolved] ?? DIAGRAM_TOOL_PRESETS.ERD
 }
 
+function normalizeXml(xml) {
+    return typeof xml === "string" && xml.trim() ? xml : EMPTY_GRID_DIAGRAM
+}
+
+// The editor is a remote iframe (embed.diagrams.net), so its first paint costs
+// a full app download. Warming DNS/TLS for that origin as soon as any diagram
+// screen imports this module takes a chunk off that first load; the browser
+// HTTP cache covers every load after it.
+const DRAWIO_ORIGIN = "https://embed.diagrams.net"
+
+if (
+    typeof document !== "undefined" &&
+    !document.querySelector("link[data-drawio-preconnect]")
+) {
+    for (const rel of ["preconnect", "dns-prefetch"]) {
+        const link = document.createElement("link")
+        link.rel = rel
+        link.href = DRAWIO_ORIGIN
+        link.crossOrigin = "anonymous"
+        link.dataset.drawioPreconnect = "true"
+        document.head.appendChild(link)
+    }
+}
+
+// draw.io renders inside an iframe Tailwind can't reach, but it does accept a
+// CSS blob over its configuration message. This restates the REBYU surface
+// tokens (Google Sans, swan borders, polar chrome, feather accent) as literals
+// so the embedded editor stops reading as a third-party tool bolted onto the
+// page.
+const DRAWIO_THEME_CSS = `
+  .geEditor, .geSidebarContainer, .geFormatContainer, .geToolbarContainer,
+  .geMenubarContainer, .geDialog, .mxWindow {
+    font-family: "Google Sans", "Google Sans Flex", Arial, sans-serif !important;
+  }
+  .geTabContainer { display: none !important; }
+  .geSidebarContainer, .geFormatContainer { background: #f7f7f7 !important; }
+  .geSidebarContainer { border-right: 1px solid #e5e5e5 !important; }
+  .geFormatContainer { border-left: 1px solid #e5e5e5 !important; }
+  .geToolbarContainer, .geMenubarContainer {
+    background: #ffffff !important;
+    border-bottom: 1px solid #e5e5e5 !important;
+    box-shadow: none !important;
+  }
+  .geTitle, .geFormatSection { color: #4b4b4b !important; }
+  .geSidebar .geItem:hover { background: #e8f1fe !important; }
+  .geBtn, button.geBtn {
+    border-radius: 10px !important;
+    font-weight: 700 !important;
+  }
+  .gePrimaryBtn, button.gePrimaryBtn {
+    background: #1b6ef3 !important;
+    border-color: #1553c4 !important;
+    border-radius: 10px !important;
+    font-weight: 700 !important;
+  }
+`
+
+/**
+ * `documentId` identifies the diagram being edited (e.g. an attempt question
+ * id). Changing it swaps the canvas contents *in place* through the embed's
+ * load action instead of tearing the iframe down — moving between diagram
+ * questions used to re-download the whole draw.io app every time.
+ */
 export default function DiagramArea({
                                         diagramType = "ERD",
                                         initialXml,
+                                        documentId = null,
                                         onChange,
                                         className = "",
                                     }) {
     const [isLoading, setIsLoading] = useState(true)
+    // Collapsed to start: the palette is a menu, and a menu should not be the
+    // first thing between the learner and a blank canvas.
+    const [shapesOpen, setShapesOpen] = useState(false)
     const onChangeRef = useRef(onChange)
     const autosaveTimerRef = useRef(null)
+    const embedRef = useRef(null)
 
     const toolPreset = useMemo(
         () => getDiagramToolPreset(diagramType),
         [diagramType]
     )
 
-    const startingXmlRef = useRef(
-        typeof initialXml === "string" && initialXml.trim()
-            ? initialXml
-            : EMPTY_GRID_DIAGRAM
-    )
-
+    const startingXmlRef = useRef(normalizeXml(initialXml))
     const lastSavedXmlRef = useRef(startingXmlRef.current)
+    const documentIdRef = useRef(documentId)
 
     useEffect(() => {
         onChangeRef.current = onChange
@@ -126,9 +190,29 @@ export default function DiagramArea({
         }
     }, [])
 
+    // Only a change of shape libraries needs a new iframe URL, and several
+    // diagram types share one preset — switching UML class -> use case is free.
     useEffect(() => {
         setIsLoading(true)
-    }, [diagramType])
+    }, [toolPreset.libs])
+
+    // Same iframe, different document.
+    useEffect(() => {
+        if (documentId === documentIdRef.current) {
+            return
+        }
+        documentIdRef.current = documentId
+
+        if (autosaveTimerRef.current) {
+            clearTimeout(autosaveTimerRef.current)
+            autosaveTimerRef.current = null
+        }
+
+        const nextXml = normalizeXml(initialXml)
+        startingXmlRef.current = nextXml
+        lastSavedXmlRef.current = nextXml
+        embedRef.current?.load({ xml: nextXml, autosave: true })
+    }, [documentId, initialXml])
 
     const handleAutoSave = useCallback((data) => {
         const nextXml = typeof data?.xml === "string" ? data.xml : ""
@@ -150,77 +234,116 @@ export default function DiagramArea({
 
     return (
         <div
-            className={`h-full min-h-[620px] w-full overflow-hidden rounded-2xl border border-sky-200 bg-[#eef9fd] p-2 shadow-sm ${className}`}
+            className={`rb-diagram-shell h-full min-h-[420px] w-full bg-card ${className}`}
+            data-shapes={shapesOpen ? "open" : "closed"}
         >
-            <div className="relative h-full w-full overflow-hidden rounded-xl border border-sky-100 bg-white">
-                {isLoading && (
-                    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-white">
-                        <LoaderCircle className="h-7 w-7 animate-spin text-sky-500" />
+            {isLoading && (
+                <div
+                    className="absolute inset-0 z-10 flex bg-card"
+                    aria-live="polite"
+                >
+                    {/* A skeleton of the editor's own furniture — sidebar,
+                        toolbar, format panel — so the wait reads as "this is
+                        arriving" instead of "nothing is here". */}
+                    <div className="hidden w-40 shrink-0 flex-col gap-2 border-r border-rb-swan bg-rb-polar p-3 sm:flex">
+                        {Array.from({ length: 7 }).map((_, item) => (
+                            <div
+                                key={item}
+                                className="h-8 rounded-lg bg-rb-swan motion-safe:animate-pulse"
+                            />
+                        ))}
+                    </div>
 
-                        <div className="text-center">
-                            <p className="text-sm font-semibold text-slate-800">
+                    <div className="flex min-w-0 flex-1 flex-col">
+                        <div className="h-10 shrink-0 border-b border-rb-swan bg-rb-polar" />
+
+                        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+                            <div className="h-10 w-10 rounded-full border-4 border-rb-swan border-t-rb-feather motion-safe:animate-spin" />
+
+                            <p className="text-sm font-bold text-rb-eel">
                                 Loading {toolPreset.label} editor
                             </p>
 
-                            <p className="mt-1 text-xs text-slate-400">
-                                Preparing diagram workspace...
+                            <p className="text-xs font-medium text-rb-wolf">
+                                Preparing your diagram workspace...
                             </p>
                         </div>
                     </div>
-                )}
 
-                <DrawIoEmbed
-                    key={diagramType}
-                    xml={startingXmlRef.current}
-                    autosave
-                    onLoad={() => setIsLoading(false)}
-                    onAutoSave={handleAutoSave}
-                    style={{
-                        width: "100%",
-                        height: "100%",
-                        display: "block",
-                        border: "none",
-                    }}
-                    urlParameters={{
-                        ui: "simple",
-                        sidebar: 1,
-                        libraries: 1,
-                        libs: toolPreset.libs,
-                        format: 0,
-                        noSaveBtn: 1,
-                        noExitBtn: 1,
-                        saveAndExit: 0,
-                        splash: 0,
-                    }}
-                    configuration={{
-                        compressXml: false,
-                        compact: true,
-                        hideMenus: ["file", "edit", "view", "arrange", "extras", "help"],
-                        hideMenuItems: [
-                            "importFrom",
-                            "exportAs",
-                            "embed",
-                            "newLibrary",
-                            "openLibrary",
-                            "pageSetup",
-                            "print",
-                            "settings",
-                            "help",
-                            "exit",
-                        ],
-                        css: `
-              .geTabContainer {
-                display: none !important;
-              }
-            `,
-                        defaultGridEnabled: true,
-                        defaultGridSize: 10,
-                        defaultPageVisible: false,
-                        override: true,
-                        version: `rebyu-diagram-editor-${diagramType}`,
-                    }}
-                />
-            </div>
+                    <div className="hidden w-48 shrink-0 border-l border-rb-swan bg-rb-polar p-3 lg:block">
+                        <div className="h-6 w-24 rounded bg-rb-swan motion-safe:animate-pulse" />
+                    </div>
+                </div>
+            )}
+
+            <DrawIoEmbed
+                ref={embedRef}
+                key={toolPreset.libs}
+                xml={startingXmlRef.current}
+                autosave
+                onLoad={() => setIsLoading(false)}
+                onAutoSave={handleAutoSave}
+                urlParameters={{
+                    ui: "simple",
+                    sidebar: 1,
+                    libraries: 1,
+                    libs: toolPreset.libs,
+                    format: 0,
+                    noSaveBtn: 1,
+                    noExitBtn: 1,
+                    saveAndExit: 0,
+                    splash: 0,
+                }}
+                configuration={{
+                    compressXml: false,
+                    compact: true,
+                    hideMenus: ["file", "edit", "view", "arrange", "extras", "help"],
+                    hideMenuItems: [
+                        "importFrom",
+                        "exportAs",
+                        "embed",
+                        "newLibrary",
+                        "openLibrary",
+                        "pageSetup",
+                        "print",
+                        "settings",
+                        "help",
+                        "exit",
+                    ],
+                    css: DRAWIO_THEME_CSS,
+                    defaultGridEnabled: true,
+                    defaultGridSize: 10,
+                    defaultPageVisible: false,
+                    override: true,
+                    version: `rebyu-diagram-editor-${toolPreset.libs}`,
+                }}
+            />
+
+            {/* The handle that pulls the shape library out. It rides the
+                sidebar's right edge, so it reads as the edge of the drawer
+                rather than a button parked on the canvas. Hidden while the
+                editor is still loading -- there is nothing to pull out yet. */}
+            {!isLoading && (
+                <button
+                    type="button"
+                    onClick={() => setShapesOpen((open) => !open)}
+                    aria-expanded={shapesOpen}
+                    aria-label={shapesOpen ? "Hide shapes" : "Show shapes"}
+                    title={shapesOpen ? "Hide shapes" : "Show shapes"}
+                    style={{ left: shapesOpen ? "var(--rb-shapes-w)" : 0 }}
+                    className="absolute top-1/2 z-20 flex h-28 w-7 -translate-y-1/2 flex-col items-center justify-center gap-1 rounded-r-lg border border-l-0 border-rb-swan bg-card text-rb-wolf transition-colors hover:bg-rb-polar hover:text-rb-eel focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rb-feather"
+                >
+                    {shapesOpen ? (
+                        <ChevronLeft className="size-3.5 shrink-0" aria-hidden="true" />
+                    ) : (
+                        <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
+                    )}
+
+                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] [writing-mode:vertical-rl]">
+                        Shapes
+                    </span>
+                </button>
+            )}
         </div>
     )
 }

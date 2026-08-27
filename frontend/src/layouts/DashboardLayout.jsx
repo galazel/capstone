@@ -1,4 +1,4 @@
-import { Outlet, useNavigate } from "react-router-dom"
+import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import { LogOutIcon, SettingsIcon, UserIcon } from "@/components/icons"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -19,6 +19,23 @@ import { useNotifications } from "@/hooks/use-notifications.js"
 export default function DashboardLayout() {
   usePortalTheme()
   const navigate = useNavigate()
+  const location = useLocation()
+
+  /* Pages that run edge to edge and pad themselves. The portal's gutter would
+     only frame them in white -- a full-width banner stopping short of the
+     window, or a table inset inside a page that is itself inset.
+
+     Matched on the path rather than announced by the page, because the gutter
+     belongs to the layout: a child cannot unset padding applied above it
+     without negative margins, which break the moment the cap changes. */
+  const BLEED_PATHS = [
+    /^\/admin\/certification\/[^/]+$/,
+    /^\/admin\/organizations$/,
+    /^\/admin\/partnership-requests$/,
+    /^\/admin\/learners$/,
+  ]
+
+  const isBleedPage = BLEED_PATHS.some((pattern) => pattern.test(location.pathname))
   const { user, logout } = useAuth()
   const notifications = useNotifications()
 
@@ -58,7 +75,7 @@ export default function DashboardLayout() {
           </>
         }
       />
-      <main className="rebyu-page">
+      <main className={`rebyu-page ${isBleedPage ? "rebyu-page-bleed" : ""}`}>
         <Outlet />
       </main>
     </div>

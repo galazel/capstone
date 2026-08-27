@@ -34,10 +34,29 @@ import { TableHead } from "@/components/ui/table"
 
 export const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
 
-/** The card the toolbar, table, and pager sit in. */
+/**
+ * Surface classes for a plain <Card> that holds a table, so those pages match
+ * TableCard instead of out-weighing it.
+ *
+ * Card's default is a 2px border plus the design system's 2px solid "lip"
+ * shadow. That reads well on a small tile, but a table is the widest surface
+ * on its page: at that size the lip is a bar under the whole panel, and the
+ * heavy border is a crate. A data panel sits flat -- the rows are the content,
+ * not the box.
+ */
+export const TABLE_SURFACE = "border border-border/70 shadow-none"
+
+/**
+ * The card the toolbar, table, and pager sit in.
+ *
+ * One hairline, not the 2px cage this used to draw. At full page width a heavy
+ * border reads as a crate around the data rather than an edge to it, and it
+ * was competing with the rules the toolbar, header band and pager already put
+ * across the same surface.
+ */
 export function TableCard({ className = "", children }) {
   return (
-    <div className={`overflow-hidden rounded-rb-card border-2 border-border bg-card ${className}`}>
+    <div className={`overflow-hidden rounded-rb-card border border-border/70 bg-card ${className}`}>
       {children}
     </div>
   )
@@ -56,7 +75,7 @@ export function TableToolbar({
   children,
 }) {
   return (
-    <div className="flex flex-col gap-3 border-b-2 border-border px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
+    <div className="flex flex-col gap-3 border-b border-border/60 px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex flex-wrap items-center gap-3">
         {onPageSizeChange ? (
           <label className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -225,7 +244,7 @@ export function TablePagination({
   const pages = useMemo(() => pageWindow(page, totalPages), [page, totalPages])
 
   return (
-    <div className="flex flex-col items-center gap-3 border-t-2 border-border px-4 py-4 sm:px-5 md:flex-row md:justify-between">
+    <div className="flex flex-col items-center gap-3 border-t border-border/60 px-4 py-4 sm:px-5 md:flex-row md:justify-between">
       <p className="text-sm text-muted-foreground">
         Showing <span className="font-bold text-foreground tabular-nums">{rangeStart}</span>–
         <span className="font-bold text-foreground tabular-nums">{rangeEnd}</span> of{" "}

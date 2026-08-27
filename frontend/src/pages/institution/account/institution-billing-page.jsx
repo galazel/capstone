@@ -3,6 +3,7 @@ import { useOutletContext } from "react-router-dom"
 import { ReceiptTextIcon } from "@/components/icons"
 
 import { Card, CardContent } from "@/components/ui/card"
+import { TABLE_SURFACE } from "@/components/commons/data-table"
 import {
   Table,
   TableBody,
@@ -83,7 +84,7 @@ export default function InstitutionBillingPage() {
               description="Invoices are issued after a partnership request is approved."
             />
           ) : (
-            <Card>
+            <Card className={TABLE_SURFACE}>
               <CardContent className="p-0">
                 <Table>
                   <TableHeader>

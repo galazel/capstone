@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { Award, Clock, Crown, Gauge, Trophy, Users, Zap } from "@/components/icons"
+import { Award, Clock, Crown, Gauge, Lock, Trophy, Users, Zap } from "@/components/icons"
 
 import { BackButton, ProgressBar, TactileButton } from "@/components/rebyu/rebyu-ui.jsx"
 import { getWorldCupTracks } from "@/lib/arenas.js"
 import { getLearnerPortalData } from "@/services/learnerService.js"
+import { CHALLENGE_ARENAS_KEY, getChallengeArenas } from "@/services/challengeService.js"
 
 /**
  * World Cup — 8-player synchronised tournament.
@@ -243,6 +244,7 @@ function Bracket() {
 /* ---------------------------------------------------------------------- page */
 
 export default function WorldCupPage() {
+  const navigate = useNavigate()
   const [phase, setPhase] = useState("track")
   const [track, setTrack] = useState(null)
   const [filled, setFilled] = useState(1)
@@ -257,6 +259,20 @@ export default function WorldCupPage() {
     queryFn: getLearnerPortalData,
     staleTime: 5 * 60 * 1000,
   })
+
+  /* Whether an admin has published a week. The card on the challenges page
+     already locks an unpublished arena, but this page is reachable by URL, so
+     the same answer is given here rather than running a tournament over
+     questions that do not exist. */
+  const arenasQuery = useQuery({
+    queryKey: [CHALLENGE_ARENAS_KEY],
+    queryFn: getChallengeArenas,
+    staleTime: 60_000,
+  })
+
+  const worldCup = (arenasQuery.data ?? []).find((row) => row.arenaId === "worldcup") ?? null
+  // Unknown is not unpublished: a slow lookup must not read as a locked arena.
+  const locked = arenasQuery.isSuccess && !worldCup?.configured
 
   const tracks = useMemo(
     () => getWorldCupTracks(portalQuery.data?.enrolledCertifications ?? []),
@@ -306,6 +322,26 @@ export default function WorldCupPage() {
     stats: "Tournament results",
   }
 
+  if (locked) {
+    return (
+      <div className="rebyu-ds grid min-h-dvh place-items-center bg-rb-polar px-5 py-12">
+        <div className="w-full max-w-lg text-center">
+          <div className="mx-auto grid size-24 place-items-center rounded-full bg-rb-swan">
+            <Lock className="size-12 text-rb-wolf" aria-hidden="true" />
+          </div>
+          <h1 className="rb-display rb-display-lg mt-6 !text-center">not open yet</h1>
+          <p className="rb-body-lg mt-3">
+            No World Cup week has been published yet. The bracket opens as soon as an
+            admin publishes one.
+          </p>
+          <TactileButton asChild className="mt-8 w-full">
+            <Link to="/learner/challenges">back to arenas</Link>
+          </TactileButton>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="rebyu-ds rb-arena flex h-dvh flex-col overflow-hidden">
       {/* No header bar, same as the CodeStrike run: a ruled white strip framed
@@ -339,6 +375,20 @@ export default function WorldCupPage() {
               {track.name}
             </span>
           ) : null}
+          {/* The published week, for real.
+              The bracket around it is still a presentation -- the seats, the
+              countdown and the opponents are local state. This button is the
+              part that is not: it opens the questions an admin published, in
+              the standard exam workspace, graded like any other attempt. */}
+          {worldCup?.examId ? (
+            <TactileButton
+              size="sm"
+              onClick={() => navigate(`/learner/assessments/${worldCup.examId}`)}
+            >
+              play this week
+            </TactileButton>
+          ) : null}
+
           {phase === "bracket" ? (
             <TactileButton size="sm" variant="ghost" onClick={() => setPhase("stats")}>
               view results

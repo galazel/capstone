@@ -50,12 +50,14 @@ import {
 import { FEATURES } from "@/services/subscriptionService.js"
 import {
   PRIORITY_META,
+  NEW_STUDY_PLAN_PARAM as NEW_PLAN_PARAM,
   PROGRESS_ANALYTICS_PARAM as CERTIFICATION_PARAM,
   PROGRESS_ANALYTICS_STALE_TIME,
   getProgressAnalytics,
   progressAnalyticsQueryKey,
 } from "@/services/learnerAnalyticsService.js"
 import { useStudyPlanGate } from "@/components/learner/use-study-plan-gate.jsx"
+import { useCertificationStudyPlan } from "@/components/learner/use-certification-study-plan.js"
 import { isDiagnosticCompleted } from "@/pages/learner/learning/learner-learning-page.jsx"
 import {
   DASHBOARD_LAYOUT_KEY,
@@ -544,7 +546,83 @@ export default function LearnerProgressPage() {
     )
   }, [publishedCertifications, selectedCertificationId])
 
-  const { openCertification, studyPlanDialog } = useStudyPlanGate()
+  const { openCertification, openOverallStudyPlan, studyPlanDialog } = useStudyPlanGate()
+
+  /* Whether the learner already has a plan, which decides what the control
+     beside the picker offers. Building a second plan over the same
+     certifications is almost never what someone means when they already have
+     one -- the useful action then is seeing the schedule they built, so the
+     button becomes a way into the calendar rather than a way to quietly
+     replace it. Any active plan counts, of either scope. */
+  /* Deliberately the same question the curriculum gate asks, through the same
+     hook: "is there a plan covering the certification on screen".
+
+     They must not diverge. This used to ask for the learner's most recent
+     active plan of any scope, and the curriculum asked whether one covered
+     *that* certification -- so a learner whose overall plan left this
+     certification out was, to the curriculum, unplanned and redirected here,
+     and to this page, planned and sent straight back. A redirect loop with no
+     way out of it. */
+  const {
+    plan: existingPlan,
+    isLoading: planLoading,
+  } = useCertificationStudyPlan(selectedCertificationId)
+
+  const hasStudyPlan = Boolean(existingPlan?.planId)
+
+  /* `?plan=new` opens the generator on arrival.
+   *
+   * Building a plan happens in exactly one place -- here. Everywhere else that
+   * used to offer it (the curriculum page, the tiles, the calendar, the gate
+   * that interrupted opening a certification) now links to this instead, so
+   * there is one flow to understand and one to maintain rather than six that
+   * drifted apart.
+   *
+   * The parameter is cleared as soon as it is used: left in place, a reload or
+   * a back-navigation would reopen the generator over a plan the learner had
+   * just finished building. */
+  const wantsNewPlan = searchParams.get(NEW_PLAN_PARAM) === "1"
+
+  /* Where to go once the plan is saved, when the learner was sent here from
+     somewhere that needs one (the curriculum gate).
+
+     Validated rather than trusted: this is a destination read out of the URL
+     and handed to `navigate`, so a crafted link could otherwise bounce someone
+     to anywhere. Only in-app learner paths are accepted, and a leading `//` is
+     rejected because the browser reads it as a protocol-relative URL to
+     another host. */
+  const returnTo = searchParams.get("returnTo")
+  const safeReturnTo =
+    returnTo && returnTo.startsWith("/learner/") && !returnTo.startsWith("//")
+      ? returnTo
+      : null
+
+  useEffect(() => {
+    if (!wantsNewPlan || planLoading) {
+      return
+    }
+
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        next.delete(NEW_PLAN_PARAM)
+        next.delete("returnTo")
+        return next
+      },
+      { replace: true }
+    )
+
+    if (hasStudyPlan) {
+      /* Already has one. If a gate sent them here, that gate was wrong -- the
+         plan arrived between the redirect and this render -- so put them back
+         where they were going rather than opening a generator that would
+         quietly replace it. */
+      navigate(safeReturnTo ?? "/learner/plan")
+    } else {
+      openOverallStudyPlan(safeReturnTo)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantsNewPlan, planLoading, hasStudyPlan, safeReturnTo])
 
   const analyticsQuery = useQuery({
     queryKey: progressAnalyticsQueryKey(selectedCertificationId),
@@ -626,26 +704,22 @@ export default function LearnerProgressPage() {
       return
     }
 
-    /* Through the shared gate, not straight to the lesson.
-     *
-     * This board was a third way into a curriculum, and the only one that
-     * skipped `useStudyPlanGate` -- the same failure its own comment records
-     * about the certifications page ("two entry points, one of them silently
-     * missing the gate"). A learner who had sat no diagnostic and built no
-     * study plan pressed "study now" here and landed inside a lesson, past
-     * both.
-     *
-     * The deep link is only offered once the diagnostic is behind them. Before
-     * that, `to` is left undefined so the gate falls back to the curriculum,
-     * which is the screen that keeps every stop locked and offers the
-     * diagnostic itself -- deep-linking into a topic jumps exactly that.
+    /* The deep link is only offered once the diagnostic is behind them. Before
+     * that, `to` is left undefined so the click falls back to the curriculum,
+     * which keeps every stop locked and offers the diagnostic itself --
+     * deep-linking into a topic jumps exactly that.
      */
     const diagnosticDone = isDiagnosticCompleted(selectedCertification, data)
 
+    /* The plan check lives in the gate, so this page asks it the same way
+       every other entry point does -- and the generator opens over this board
+       rather than navigating anywhere. */
     openCertification(
       selectedCertification ?? { certificationId: selectedCertificationId },
       {
         diagnosticCompleted: diagnosticDone,
+        // Straight to the lesson once the diagnostic is done; to the curriculum
+        // before that, which is where the diagnostic itself is offered.
         to: diagnosticDone ? (lessonPath ?? undefined) : undefined,
       },
     )
@@ -1102,8 +1176,14 @@ export default function LearnerProgressPage() {
       y: 0,
       col: 1,
       row: 2,
+      // Handed the generator itself rather than a link back to this page: the
+      // tile is already on it, and a round trip through the URL would drop the
+      // certification the board is showing.
       element: (
-        <TodaysPlanTile certificationId={selectedCertificationId} />
+        <TodaysPlanTile
+          certificationId={selectedCertificationId}
+          onCreatePlan={openOverallStudyPlan}
+        />
       ),
     },
     {
@@ -1583,6 +1663,20 @@ export default function LearnerProgressPage() {
               ))}
             </SelectContent>
           </Select>
+
+          {/* Beside the picker, but deliberately not scoped by it: this builds
+              one plan across every certification the learner is enrolled in,
+              where the picker only chooses which certification the board below
+              is reporting on. Offered, never required -- a learner can read
+              this page forever without one, so it is an outline button in the
+              controls row rather than anything that interrupts the page.
+
+              Hidden with nothing enrolled: there would be nothing to plan, and
+              the empty state below is already saying so. */}
+          {/* The study plan lives in the "today's plan" tile, not up here.
+              The controls row is for what the board is showing -- which
+              certification, and how the tiles are arranged -- and a plan is
+              neither. It belongs beside the thing it fills in. */}
 
           {/* Read left to right, the two ways out of this mode sit before the
               one way to keep it: put everything back, abandon this session's

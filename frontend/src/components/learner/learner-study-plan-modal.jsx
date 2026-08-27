@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { CalendarDays, ChevronLeft, ChevronRight, Sparkles } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
-import { STUDY_PLAN_QUERY_KEY, getActiveStudyPlan } from "@/services/studyPlanService.js"
+import { STUDY_PLAN_QUERY_KEY, getMyStudyPlans } from "@/services/studyPlanService.js"
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
@@ -27,85 +27,178 @@ function buildMonth(viewDate) {
 }
 
 /**
- * The study calendar: the plan the learner is following, laid out by month.
+ * Which certification a session belongs to.
+ *
+ * The event's own certification where it has one, and only then the plan's
+ * name. An overall plan is called "All certifications", so labelling its events
+ * by the plan put that same phrase under every session on the calendar -- true,
+ * and useless, since the one thing the label is there to answer is which
+ * certification this particular session is for.
+ */
+function labelFor(event) {
+  return event?.certification ?? event?.planLabel ?? "Study plan"
+}
+
+function formatDayLabel(value) {
+  const date = new Date(`${String(value).slice(0, 10)}T00:00:00`)
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
+}
+
+/**
+ * The study calendar: every plan the learner is following, laid out by month.
  *
  * Read-only. Generating a plan moved to the certification's curriculum page --
  * the moment the learner opens the course they are about to study, with the
  * diagnostic's priority order behind them -- because reaching it here meant
  * knowing the feature existed and navigating to a calendar to find it.
+ *
+ * <p>Every active plan, not one. This used to ask for "the active plan" without
+ * naming a certification, which the backend answers with whichever plan was
+ * created most recently -- so a learner following a plan per certification saw
+ * one of them and no sign the others existed, and an overall plan disappeared
+ * the moment any certification's plan was built after it. A calendar that hides
+ * most of your schedule is worse than no calendar, because it reads as a
+ * complete one.
  */
 export default function LearnerStudyPlanCalendarPage() {
   const [viewDate, setViewDate] = useState(new Date())
   const [movedToPlan, setMovedToPlan] = useState(false)
 
   const planQuery = useQuery({
-    queryKey: [STUDY_PLAN_QUERY_KEY, "active"],
-    queryFn: () => getActiveStudyPlan(),
+    queryKey: [STUDY_PLAN_QUERY_KEY, "mine"],
+    queryFn: getMyStudyPlans,
     staleTime: 30_000,
   })
 
-  // The saved plan's schedule is the generated object as it was built, so its
-  // events come back exactly as the generator produced them.
-  const plan = planQuery.data?.schedule ?? null
+  /* Only the plans being followed. Regenerating retires the old one as
+     ABANDONED rather than deleting it, so the full list carries every plan the
+     learner has ever built -- drawing those onto the calendar would replay
+     schedules they deliberately replaced. */
+  const activePlans = useMemo(
+    () => (planQuery.data ?? []).filter((row) => row?.status === "ACTIVE" && row?.schedule),
+    [planQuery.data]
+  )
 
-  /* The plan's own span, read off the saved schedule rather than off the
-     events, so it states what was asked for even if generation produced
-     nothing for it. */
+  /* Events from every plan on one grid, each tagged with the plan it came from.
+     The tag is what keeps a merged calendar readable: without it, two plans
+     scheduling a session on the same day are indistinguishable. */
+  const events = useMemo(
+    () =>
+      activePlans.flatMap((row) =>
+        (row.schedule?.events ?? []).map((event) => ({
+          ...event,
+          planId: row.planId,
+          planLabel: row.schedule?.certification ?? row.goal ?? "Study plan",
+        }))
+      ),
+    [activePlans]
+  )
+
+  /* The span every plan covers between them, read off the saved schedules
+     rather than off the events, so it states what was asked for even where
+     generation produced nothing. */
   const planRange = useMemo(() => {
-    const from = plan?.calendarStart
-    const to = plan?.targetExamDate
-    if (!from || !to) return null
+    const starts = activePlans.map((row) => row.schedule?.calendarStart).filter(Boolean)
+    const ends = activePlans.map((row) => row.schedule?.targetExamDate).filter(Boolean)
+    if (starts.length === 0 || ends.length === 0) return null
 
-    const label = (value) => {
-      const date = new Date(`${String(value).slice(0, 10)}T00:00:00`)
-      return Number.isNaN(date.getTime())
-        ? value
-        : date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
-    }
+    // Zero-padded YYYY-MM-DD, so plain string ordering is chronological.
+    const from = starts.reduce((earliest, value) => (value < earliest ? value : earliest))
+    const to = ends.reduce((latest, value) => (value > latest ? value : latest))
 
-    return `${label(from)} → ${label(to)}`
-  }, [plan])
+    return `${formatDayLabel(from)} → ${formatDayLabel(to)}`
+  }, [activePlans])
+
+  /* What this calendar is showing. Named individually while that stays
+     readable, and counted once it does not -- a header is not the place for a
+     list of six certification titles. */
+  const planSummary = useMemo(() => {
+    if (activePlans.length === 0) return "Personal study calendar"
+    if (activePlans.length > 3) return `${activePlans.length} study plans`
+    return activePlans
+      .map((row) => row.schedule?.certification ?? row.goal ?? "Study plan")
+      .join(" · ")
+  }, [activePlans])
 
   const days = useMemo(() => buildMonth(viewDate), [viewDate])
   const today = dateKey(new Date())
-  const eventsByDate = useMemo(() => (plan?.events ?? []).reduce((result, event) => {
+  const eventsByDate = useMemo(() => events.reduce((result, event) => {
     const key = event.dateKey ?? event.key
     if (key) (result[key] ??= []).push(event)
     return result
-  }, {}), [plan])
+  }, {}), [events])
 
-  // Opens on the month the plan starts, once, rather than on today -- a plan
-  // that begins next month would otherwise load onto an empty grid. Only the
-  // first time, so paging away from it sticks.
+  // Opens on the month the earliest plan starts, once, rather than on today --
+  // a plan that begins next month would otherwise load onto an empty grid. Only
+  // the first time, so paging away from it sticks.
+  const earliestStart = useMemo(() => {
+    const starts = activePlans.map((row) => row.schedule?.calendarStart).filter(Boolean)
+    return starts.length ? starts.reduce((a, b) => (b < a ? b : a)) : null
+  }, [activePlans])
+
   useEffect(() => {
-    if (movedToPlan || !plan?.calendarStart) return
-    setViewDate(new Date(`${plan.calendarStart}T00:00:00`))
+    if (movedToPlan || !earliestStart) return
+    setViewDate(new Date(`${earliestStart}T00:00:00`))
     setMovedToPlan(true)
-  }, [plan?.calendarStart, movedToPlan])
+  }, [earliestStart, movedToPlan])
 
   function changeMonth(amount) {
     setViewDate((current) => new Date(current.getFullYear(), current.getMonth() + amount, 1))
   }
 
+  /* The height left between the top of the calendar and the bottom of the
+     window, measured rather than assumed.
+   *
+   * A `calc(100dvh - 8.5rem)` would mean hardcoding the height of the portal
+   * header and the page padding above this point -- a number that is wrong the
+   * moment either changes, and wrong differently at every breakpoint, in the
+   * direction that puts the last week back under the fold. Measuring the
+   * element's own offset costs one layout pass and is right by construction.
+   *
+   * `useLayoutEffect` so the height is applied before paint: with a plain
+   * effect the grid renders full-height for a frame and visibly collapses. */
+  const frameRef = useRef(null)
+  const [frameHeight, setFrameHeight] = useState(null)
+
+  useLayoutEffect(() => {
+    function measure() {
+      const top = frameRef.current?.getBoundingClientRect().top
+      if (top == null) return
+      // A floor, so a short window scrolls rather than crushing the grid into
+      // an unreadable band of slivers.
+      setFrameHeight(Math.max(420, Math.round(window.innerHeight - top - 16)))
+    }
+
+    measure()
+    window.addEventListener("resize", measure)
+    return () => window.removeEventListener("resize", measure)
+  }, [])
+
   return (
-    <div className="min-w-0 space-y-5">
-      <section className="min-w-0">
-        <div className="mb-5 flex flex-col gap-4 border-b border-border/70 pb-5 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-2xl font-semibold tracking-[-0.025em] text-foreground sm:text-3xl">
-                {viewDate.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
-              </h2>
-            </div>
-            {/* Which plan this is, and the span it covers.
-                The page asks for the active plan without naming a
-                certification, so the backend answers with the most recently
-                created active plan across all of them -- which is not
-                necessarily the one the learner just built. Without the range
-                printed, a plan running to a later exam date looks like the
-                calendar inventing sessions past the date you chose. */}
-            <p className="mt-1.5 text-sm text-muted-foreground">
-              {plan?.certification ?? "Personal study calendar"}
+    /* Sized to the viewport rather than to its content, so the whole month is
+       on screen at once. A calendar you have to scroll defeats the one thing a
+       month grid is for -- seeing the shape of the month -- and the six-row
+       grid divides whatever height is left rather than setting its own. */
+    <div
+      ref={frameRef}
+      className="flex min-w-0 flex-col"
+      style={{ height: frameHeight ?? undefined }}
+    >
+      <section className="flex min-h-0 flex-1 flex-col">
+        <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border/70 pb-3">
+          <div className="min-w-0">
+            <h2 className="text-xl font-semibold tracking-[-0.025em] text-foreground sm:text-2xl">
+              {viewDate.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+            </h2>
+
+            {/* Which plans this is showing, and the span they cover between
+                them. Without the range printed, a plan running to a later exam
+                date looks like the calendar inventing sessions past the date
+                you chose. */}
+            <p className="truncate text-xs text-muted-foreground">
+              {planSummary}
               {planRange ? (
                 <>
                   <span aria-hidden="true"> · </span>
@@ -115,44 +208,75 @@ export default function LearnerStudyPlanCalendarPage() {
             </p>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex shrink-0 items-center gap-2">
             <div className="flex w-fit items-center border border-border bg-card p-0.5">
               <Button variant="ghost" size="icon-sm" onClick={() => changeMonth(-1)} aria-label="Previous month"><ChevronLeft /></Button>
-              <Button variant="ghost" size="sm" className="min-w-16" onClick={() => setViewDate(new Date())}>Today</Button>
+              <Button variant="ghost" size="sm" className="min-w-14" onClick={() => setViewDate(new Date())}>Today</Button>
               <Button variant="ghost" size="icon-sm" onClick={() => changeMonth(1)} aria-label="Next month"><ChevronRight /></Button>
             </div>
-            <Button asChild variant="outline" className="gap-2">
-              <Link to="/learner/learning">
+            <Button asChild variant="outline" size="sm" className="gap-2">
+              {/* Both go to the analytics board: it is the one place a plan is
+                  built, so "update" is the same journey as "create". */}
+              <Link to="/learner/analytics?plan=1">
                 <Sparkles className="size-4" />
-                {plan ? "Update plan" : "Create a plan"}
+                {activePlans.length ? "Update plan" : "Create a plan"}
               </Link>
             </Button>
           </div>
         </div>
 
-        <div className="overflow-x-auto border-y border-border bg-card [scrollbar-width:thin]">
-          <div className="min-w-[900px]">
-            <div className="grid grid-cols-7 border-b border-border bg-muted">
+        {/* `min-w` low enough that a desktop never scrolls sideways. The old
+            900px floor forced a horizontal scrollbar on top of the vertical
+            one. */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-x-auto border-y border-border bg-card [scrollbar-width:thin]">
+          <div className="flex min-h-0 min-w-[44rem] flex-1 flex-col">
+            <div className="grid shrink-0 grid-cols-7 border-b border-border bg-muted">
               {DAY_NAMES.map((day, index) => (
-                <div key={day} className={`px-4 py-3 text-xs font-semibold ${index === 0 || index === 6 ? "text-primary" : "text-muted-foreground"}`}>{day}</div>
+                <div key={day} className={`px-3 py-1.5 text-[11px] font-semibold ${index === 0 || index === 6 ? "text-primary" : "text-muted-foreground"}`}>{day}</div>
               ))}
             </div>
-            <div className="grid grid-cols-7">
+
+            {/* Six fixed rows sharing the leftover height: `minmax(0,1fr)` is
+                what lets a row shrink below its content instead of pushing the
+                grid past the fold. */}
+            <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-[repeat(6,minmax(0,1fr))]">
               {days.map((day, dayIndex) => {
-                const events = eventsByDate[day.key] ?? []
+                // Named apart from the merged `events` above rather than
+                // shadowing it -- one is this day's, the other is every day's.
+                const dayEvents = eventsByDate[day.key] ?? []
                 const isToday = day.key === today
                 const isWeekend = day.date.getDay() === 0 || day.date.getDay() === 6
                 return (
-                  <div key={day.key} className={`min-h-36 border-b border-r border-border/70 p-3.5 [&:nth-child(7n)]:border-r-0 ${dayIndex >= 35 ? "border-b-0" : ""} ${day.currentMonth ? (isWeekend ? "bg-muted/40" : "bg-card") : "bg-muted/20 text-muted-foreground"} ${isToday ? "shadow-[inset_0_3px_0_var(--primary)]" : ""}`}>
-                    <div className="flex items-center justify-between">
-                      <span className={`inline-flex size-7 items-center justify-center text-xs font-medium ${isToday ? "rounded-full bg-primary font-semibold text-primary-foreground" : ""}`}>{day.date.getDate()}</span>
-                      {events.length ? <span className="text-[10px] font-medium text-muted-foreground">{events.length} {events.length === 1 ? "task" : "tasks"}</span> : null}
+                  <div key={day.key} className={`flex min-h-0 flex-col overflow-hidden border-b border-r border-border/70 px-1.5 py-1 [&:nth-child(7n)]:border-r-0 ${dayIndex >= 35 ? "border-b-0" : ""} ${day.currentMonth ? (isWeekend ? "bg-muted/40" : "bg-card") : "bg-muted/20 text-muted-foreground"} ${isToday ? "shadow-[inset_0_3px_0_var(--primary)]" : ""}`}>
+                    <div className="flex shrink-0 items-center justify-between">
+                      <span className={`inline-flex size-5 items-center justify-center text-[11px] font-medium ${isToday ? "rounded-full bg-primary font-semibold text-primary-foreground" : ""}`}>{day.date.getDate()}</span>
+                      {dayEvents.length ? <span className="text-[10px] font-medium text-muted-foreground">{dayEvents.length}</span> : null}
                     </div>
-                    <div className="mt-2 space-y-1.5">
-                      {events.slice(0, 3).map((event, index) => (
-                        <div key={`${event.id ?? event.title}-${index}`} className="truncate border-l-2 border-primary bg-primary/[0.06] px-2 py-1.5 text-[11px] font-medium text-foreground" title={event.title}>{event.title}</div>
+
+                    {/* Scrolls within its own day rather than stretching the
+                        row: a single busy day would otherwise set the height of
+                        every week on the grid. */}
+                    <div className="mt-0.5 min-h-0 flex-1 space-y-0.5 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      {dayEvents.map((event, index) => (
+                        <div
+                          key={`${event.planId ?? ""}-${event.id ?? event.title}-${index}`}
+                          className="border-l-2 border-primary bg-primary/[0.06] px-1.5 py-0.5 text-[10px] font-medium leading-tight text-foreground"
+                          title={`${event.title} · ${labelFor(event)}`}
+                        >
+                          <p className="truncate">{event.title}</p>
+
+                          {/* Which certification this session belongs to,
+                              written out rather than left to a colour -- but
+                              only when the calendar carries more than one plan,
+                              since otherwise it repeats the header on every
+                              single event. */}
+                          {activePlans.length > 1 ? (
+                            <p className="truncate text-[9px] font-normal text-muted-foreground">
+                              {labelFor(event)}
+                            </p>
+                          ) : null}
+                        </div>
                       ))}
-                      {events.length > 3 ? <p className="px-2 text-[10px] font-medium text-primary">+{events.length - 3} more</p> : null}
                     </div>
                   </div>
                 )
@@ -161,14 +285,14 @@ export default function LearnerStudyPlanCalendarPage() {
           </div>
         </div>
 
-        {!plan && !planQuery.isLoading ? (
-          <div className="flex items-center gap-3 border-b border-border px-1 py-5">
+        {activePlans.length === 0 && !planQuery.isLoading ? (
+          <div className="flex shrink-0 items-center gap-3 px-1 py-3">
             <span className="flex size-9 items-center justify-center bg-accent text-primary"><CalendarDays className="size-4" /></span>
             <div>
               <p className="text-sm font-medium">No scheduled study tasks</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Open a certification in My Learning and build a study plan there — it
-                needs your diagnostic result to decide what to schedule first.
+                Create a study plan from Analytics — it needs your diagnostic result
+                to decide what to schedule first.
               </p>
             </div>
           </div>

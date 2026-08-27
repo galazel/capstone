@@ -12,7 +12,6 @@ import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtDecoders;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -113,6 +112,14 @@ public class SecurityConfig {
                         // A learner's own study plans -- learnerId is JWT-derived at the
                         // controller, so anonymous access has nothing to resolve.
                         .requestMatchers("/api/study-plans/**").authenticated()
+                        // Recall sessions mint a real, learner-owned exam out of the
+                        // questions that learner has been getting wrong. Anonymous
+                        // access has no learner to build one for, and the paper itself
+                        // reveals someone's weak spots -- never reachable without a token.
+                        .requestMatchers("/api/recall-sessions/**").authenticated()
+                        // A learner's own spaced-repetition memory state: what they
+                        // are due to review and how well they recalled it. Same rule.
+                        .requestMatchers("/api/review-sessions/**").authenticated()
                         // A learner's own exam countdown and study notes -- same rule.
                         .requestMatchers("/api/study-desk/**").authenticated()
                         // learnerId is now JWT-derived at the controller instead of a
@@ -177,6 +184,9 @@ public class SecurityConfig {
                         // record is the caller's own: both require a real token
                         // rather than falling through to the permitAll default.
                         .requestMatchers("/api/challenges/**").authenticated()
+                        // Arena configuration and its status. Reading says only which
+                        // arenas are ready; writing is admin-gated at the controller.
+                        .requestMatchers("/api/challenge-arenas/**").authenticated()
                         // Existing application routes keep their current
                         // public behavior; tokens are validated when present.
                         .anyRequest().permitAll()
@@ -185,13 +195,38 @@ public class SecurityConfig {
                 .build();
     }
 
-    // Decoder bound to the Cognito User Pool: validates signature against the
-    // pool JWKS, the issuer, expiry, and that the token is an access token.
+    /**
+     * Decoder bound to the Cognito User Pool: validates the signature against
+     * the pool JWKS, the issuer, expiry, and that the token is an access token.
+     *
+     * <p>Built from the JWKS URI rather than by OIDC discovery. {@code
+     * JwtDecoders.fromIssuerLocation} fetches {@code
+     * /.well-known/openid-configuration} <em>while this bean is being
+     * created</em>, which made a reachable Cognito a hard precondition for the
+     * application starting at all: a single slow response there and the context
+     * failed, the container exited, and every service in the stack went down
+     * with it. That happened repeatedly in practice while nothing was wrong
+     * with the pool, the network, or this application -- a momentary read
+     * timeout was enough.
+     *
+     * <p>Discovery only ever told us two things: where the JWKS lives, and that
+     * the issuer matches. The first is a fixed, documented path under the
+     * issuer for every Cognito pool. The second is still enforced below, by
+     * {@code JwtValidators.createDefaultWithIssuer} on every token. So nothing
+     * is trusted that was not trusted before -- the key set is simply fetched
+     * when a token first needs verifying, and cached by the decoder thereafter.
+     *
+     * <p>The failure mode moves from "the application will not start" to "the
+     * first request or two fail while Cognito is unreachable, and recover on
+     * their own". That is the same outage, survived instead of amplified.
+     */
     @Bean
     public JwtDecoder jwtDecoder(
             @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuerUri
     ) {
-        NimbusJwtDecoder decoder = (NimbusJwtDecoder) JwtDecoders.fromIssuerLocation(issuerUri);
+        NimbusJwtDecoder decoder = NimbusJwtDecoder
+                .withJwkSetUri(jwkSetUri(issuerUri))
+                .build();
 
         OAuth2TokenValidator<Jwt> tokenUseIsAccess = jwt -> {
             Object tokenUse = jwt.getClaims().get("token_use");
@@ -207,5 +242,25 @@ public class SecurityConfig {
                 tokenUseIsAccess
         ));
         return decoder;
+    }
+
+    /**
+     * Where a Cognito User Pool publishes its signing keys.
+     *
+     * <p>{@code {issuer}/.well-known/jwks.json} is fixed for every pool -- it
+     * is what discovery would have reported. Derived rather than configured so
+     * there is no second setting that can disagree with the issuer and point
+     * token verification at the wrong pool's keys.
+     */
+    private static String jwkSetUri(String issuerUri) {
+        if (issuerUri == null || issuerUri.isBlank()) {
+            throw new IllegalStateException(
+                    "spring.security.oauth2.resourceserver.jwt.issuer-uri is not set");
+        }
+        String trimmed = issuerUri.trim();
+        String withoutTrailingSlash = trimmed.endsWith("/")
+                ? trimmed.substring(0, trimmed.length() - 1)
+                : trimmed;
+        return withoutTrailingSlash + "/.well-known/jwks.json";
     }
 }

@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react"
-import { useLocation, useNavigate } from "react-router-dom"
+import { useEffect, useRef, useState } from "react"
+import { useLocation, useNavigate, useParams } from "react-router-dom"
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -7,20 +7,19 @@ import {
   ChevronDown,
   ChevronRight,
   Layers3,
+  ListChecks,
   Pencil,
 } from "@/components/icons"
 
 import { Badge } from "@/components/ui/badge"
+import { getAllCertifications } from "@/services/certificationService.js"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import CertificationFormDrawer from "@/components/certifications/certification-form-drawer"
-import AssessmentsTab from "@/components/assessments/admin/assessments-tab.jsx"
+import AssessmentsTab, {
+  prefetchAssessmentData,
+} from "@/components/assessments/admin/assessments-tab.jsx"
 import CertificationPublishingChecklist from "@/components/assessments/admin/certification-publishing-checklist.jsx"
-import { useQueryClient } from "@tanstack/react-query"
-
-// The question bank is a big tree; keep it out of the certification page bundle
-// and only load it when the Question Bank tab is opened.
-const QuestionBank = lazy(() => import("./question-bank-page.jsx"))
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 function getCertification(location) {
   return (
@@ -37,15 +36,55 @@ function getLessonTitle(lesson) {
 export default function ViewCertificationAdmin() {
   const location = useLocation()
   const navigate = useNavigate()
+  const { id: routeCertificationId } = useParams()
   const pageRef = useRef(null)
   const queryClient = useQueryClient()
-  const [certification, setCertification] = useState(() =>
+  const [certificationOverride, setCertification] = useState(() =>
       getCertification(location)
   )
 
+  /* The certification is handed over in router state when you arrive from the
+     list, which is instant and saves a round trip. But state does not survive a
+     refresh, a bookmark, or the back button off one of this page's own
+     workspaces -- and the page answered all three with "Certification not
+     found", which is a lie: the certification is there, the state that carried
+     it is not. So the id in the URL is the fallback, and the URL always
+     survives. */
+  const { data: certifications = [], isLoading: isLoadingCertifications } = useQuery({
+    queryKey: ["admin-certifications", "certification-page"],
+    queryFn: () => getAllCertifications(),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  /* Resolved during render, not in an effect. An effect would leave the first
+     frame with nothing to show -- and with the list already cached there is no
+     loading flag to hide behind, so that frame rendered "Certification not
+     found" before correcting itself.
+
+     The override is whatever this page has been handed or has changed locally:
+     router state on arrival, and the edits made here. It wins when present;
+     the fetched copy is what the URL alone can reach. */
+  const fetchedCertification = certifications.find(
+      (item) =>
+          String(item.certificationId ?? item.id) === String(routeCertificationId)
+  )
+
+  const certification = certificationOverride ?? fetchedCertification ?? null
+
   const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState("curriculum")
   const [createAssessmentRequest, setCreateAssessmentRequest] = useState(null)
+
+  /* The assessments tab's reads, started as soon as the certification opens
+     rather than when the tab is clicked.
+
+     The tab's content is unmounted while another tab is showing, so its queries
+     could not begin until the click -- which is why opening it always meant
+     watching four requests resolve behind skeleton rows. Nothing here depends
+     on them, so warming them costs the page nothing and gives the tab its data
+     already in hand. */
+  useEffect(() => {
+    prefetchAssessmentData(queryClient)
+  }, [queryClient])
 
   useEffect(() => {
     pageRef.current?.scrollIntoView({
@@ -60,9 +99,32 @@ export default function ViewCertificationAdmin() {
     })
   }, [location.key])
 
+  /* Router state wins when it is there -- arriving from the list carries the
+     certification with it, which saves a round trip. What this must NOT do is
+     blank the certification when state is absent: it ran after the fallback
+     below and undid it in the same commit, and because neither effect's
+     dependencies had changed by the end of it, nothing re-ran and the page sat
+     on "Certification not found" while holding the id that would have found it.
+     Coming back from the question bank or the lesson editor is exactly that
+     case -- a fresh location.key with no state attached. */
   useEffect(() => {
-    setCertification(getCertification(location))
-  }, [location.key])
+    const fromRouterState = getCertification(location)
+
+    if (fromRouterState) {
+      setCertification(fromRouterState)
+      return
+    }
+
+    // Only clear an override that belongs to a different certification;
+    // clearing it simply falls back to the fetched copy.
+    setCertification((current) =>
+        current &&
+        String(current.certificationId ?? current.id) ===
+        String(routeCertificationId)
+            ? current
+            : null
+    )
+  }, [location.key, routeCertificationId])
 
   async function handleCertificationSaved(updatedCertification) {
     setCertification((currentCertification) => ({
@@ -84,7 +146,14 @@ export default function ViewCertificationAdmin() {
       ...request,
       requestId: `${Date.now()}-${Math.random()}`,
     })
-    setActiveTab("assessments")
+  }
+
+  if (!certification && isLoadingCertifications) {
+    return (
+        <section className="flex min-h-full items-center justify-center bg-muted/40 p-6">
+          <p className="text-sm text-muted-foreground">Loading certification...</p>
+        </section>
+    )
   }
 
   if (!certification) {
@@ -199,6 +268,21 @@ export default function ViewCertificationAdmin() {
               </div>
 
               <div className="flex flex-wrap gap-3">
+                {/* One button, not two: the bank opens with the builder in
+                    it. */}
+                <Button
+                    type="button"
+                    className="h-11 rounded-xl px-5 font-medium shadow-sm"
+                    onClick={() =>
+                        navigate(
+                            `/admin/certification/${certification.certificationId}/question-bank`
+                        )
+                    }
+                >
+                  <ListChecks className="mr-2 h-4 w-4" />
+                  Question Bank
+                </Button>
+
                 <CertificationFormDrawer
                     mode="edit"
                     certification={certification}
@@ -219,81 +303,63 @@ export default function ViewCertificationAdmin() {
               </div>
             </div>
 
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="mb-6">
-                <TabsTrigger value="curriculum">Curriculum</TabsTrigger>
-                <TabsTrigger value="question-bank">Question Bank</TabsTrigger>
-                <TabsTrigger value="assessments">Assessments</TabsTrigger>
-              </TabsList>
+            {/* The curriculum, in place. It is what this page is about -- a
+                link to it from a page whose whole subject is it was a step
+                that led nowhere new. */}
+            <section className="mb-10">
+              <h3 className="mb-5 font-heading text-xl font-bold tracking-tight text-foreground">
+                Curriculum
+              </h3>
 
-              <TabsContent value="curriculum">
-                {majorCategories.length === 0 ? (
-                    <div className="rounded-3xl border border-dashed border-border bg-card p-12 text-center shadow-sm">
-                      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                        <Layers3 className="h-7 w-7" />
-                      </div>
-
-                      <h3 className="mt-5 font-heading text-lg font-bold text-foreground">
-                        No major categories yet
-                      </h3>
-
-                      <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
-                        Add a major category to start building this certification
-                        curriculum.
-                      </p>
+              {majorCategories.length === 0 ? (
+                  <div className="rounded-3xl border border-dashed border-border bg-card p-12 text-center shadow-sm">
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                      <Layers3 className="h-7 w-7" />
                     </div>
-                ) : (
-                    <div className="space-y-10">
-                      {majorCategories.map((majorCategory, majorIndex) => (
-                          <MajorCategorySection
-                              key={majorCategory.majorCategoryId ?? majorIndex}
-                              certification={certification}
-                              majorCategory={majorCategory}
-                              majorIndex={majorIndex}
-                          />
-                      ))}
-                    </div>
-                )}
-              </TabsContent>
 
-              <TabsContent value="question-bank">
-                <Suspense
-                    fallback={
-                      <div className="rounded-2xl border border-border bg-card p-12 text-center text-sm text-muted-foreground shadow-sm">
-                        Loading question bank…
-                      </div>
-                    }
-                >
-                  <QuestionBank
-                      certificationId={certification.certificationId}
-                      embedded
-                  />
-                </Suspense>
-              </TabsContent>
+                    <h4 className="mt-5 font-heading text-lg font-bold text-foreground">
+                      No major categories yet
+                    </h4>
 
-              <TabsContent value="assessments">
-                <div className="space-y-8">
-                  <CertificationPublishingChecklist
-                      certificationId={certification?.certificationId}
-                      isPublished={certification?.status === "PUBLISHED"}
-                      onCreateAssessment={handleCreateAssessment}
-                      onPublished={() =>
-                          setCertification((current) => ({
-                            ...current,
-                            status: "PUBLISHED",
-                          }))
-                      }
-                  />
-                  <AssessmentsTab
-                      certification={certification}
-                      createRequest={createAssessmentRequest}
-                      onCreateRequestHandled={() =>
-                          setCreateAssessmentRequest(null)
-                      }
-                  />
-                </div>
-              </TabsContent>
-            </Tabs>
+                    <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
+                      Add a major category to start building this certification
+                      curriculum.
+                    </p>
+                  </div>
+              ) : (
+                  <div className="space-y-10">
+                    {majorCategories.map((majorCategory, majorIndex) => (
+                        <MajorCategorySection
+                            key={majorCategory.majorCategoryId ?? majorIndex}
+                            certification={certification}
+                            majorCategory={majorCategory}
+                            majorIndex={majorIndex}
+                        />
+                    ))}
+                  </div>
+              )}
+            </section>
+
+
+            <div className="space-y-8">
+              <CertificationPublishingChecklist
+                  certificationId={certification?.certificationId}
+                  isPublished={certification?.status === "PUBLISHED"}
+                  onCreateAssessment={handleCreateAssessment}
+                  onPublished={() =>
+                      setCertification((current) => ({
+                        ...current,
+                        status: "PUBLISHED",
+                      }))
+                  }
+              />
+
+              <AssessmentsTab
+                  certification={certification}
+                  createRequest={createAssessmentRequest}
+                  onCreateRequestHandled={() => setCreateAssessmentRequest(null)}
+              />
+            </div>
           </div>
         </main>
       </section>

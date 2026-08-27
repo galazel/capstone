@@ -453,68 +453,60 @@ export default function Learners({
   )
 
   return (
-      <section className="flex h-full min-h-0 flex-col overflow-hidden">
-        <div className="flex shrink-0 justify-end pb-4">
-            <Button type="button" onClick={onCreate}>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Add Learner
-            </Button>
-        </div>
-
-        <div className="grid shrink-0 gap-3 border-b border-border bg-background py-4 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-xl border bg-card px-4 py-3">
+      <section className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+        {/* Counts and the one action on a single line: the button had a row of
+            its own above a row of bordered panels, so the page opened with two
+            bands of chrome before any learner. */}
+        <div className="flex shrink-0 flex-wrap items-center gap-x-10 gap-y-3 border-b border-border px-4 py-3 sm:px-6">
+          <div className="flex items-baseline gap-2">
+            <Users className="self-center h-4 w-4 text-primary" />
+            <p className="text-xl font-semibold tabular-nums">
+              {list.length}
+            </p>
             <p className="text-xs font-medium text-muted-foreground">
               Total learners
             </p>
-            <div className="mt-2 flex items-center gap-2">
-              <Users className="h-4 w-4 text-primary" />
-              <p className="text-xl font-semibold tabular-nums">
-                {list.length}
-              </p>
-            </div>
           </div>
 
-          <div className="rounded-xl border bg-card px-4 py-3">
+          <div className="flex items-baseline gap-2">
+            <span className="self-center h-2.5 w-2.5 rounded-full bg-emerald-500" />
+            <p className="text-xl font-semibold tabular-nums">
+              {activeCount}
+            </p>
             <p className="text-xs font-medium text-muted-foreground">
               Active learners
             </p>
-            <div className="mt-2 flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-              <p className="text-xl font-semibold tabular-nums">
-                {activeCount}
-              </p>
-            </div>
           </div>
 
-          <div className="rounded-xl border bg-card px-4 py-3">
+          <div className="flex items-baseline gap-2">
+            <GraduationCap className="self-center h-4 w-4 text-primary" />
+            <p className="text-xl font-semibold tabular-nums">
+              {institutionCount}
+            </p>
             <p className="text-xs font-medium text-muted-foreground">
               Institution learners
             </p>
-            <div className="mt-2 flex items-center gap-2">
-              <GraduationCap className="h-4 w-4 text-primary" />
-              <p className="text-xl font-semibold tabular-nums">
-                {institutionCount}
-              </p>
-            </div>
           </div>
 
-          <div className="rounded-xl border bg-card px-4 py-3">
+          <div className="flex items-baseline gap-2">
+            <Award className="self-center h-4 w-4 text-primary" />
+            <p className="text-xl font-semibold tabular-nums">
+              {individualCount}
+            </p>
             <p className="text-xs font-medium text-muted-foreground">
               Individual learners
             </p>
-            <div className="mt-2 flex items-center gap-2">
-              <Award className="h-4 w-4 text-primary" />
-              <p className="text-xl font-semibold tabular-nums">
-                {individualCount}
-              </p>
-            </div>
           </div>
+          <Button type="button" className="ml-auto" onClick={onCreate}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Add Learner
+          </Button>
         </div>
 
-        {/* One card holds the toolbar, the rows, and the pager, so the table
-            reads as a single object rather than three stacked panels. */}
-        <div className="min-h-0 flex-1 overflow-auto py-4">
-          <TableCard>
+        {/* The table is the page from here down: no card around it, no gutter
+            beside it, and the rows -- not the window -- are what scrolls. */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <TableCard className="flex min-h-0 flex-1 flex-col rounded-none border-0 bg-transparent">
             <TableToolbar
                 pageSize={pageSize}
                 onPageSizeChange={setPageSize}

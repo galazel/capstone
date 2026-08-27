@@ -355,45 +355,42 @@ export default function Organizations({ onEdit, onDelete }) {
   )
 
   return (
-      <section className="flex h-full min-h-0 flex-col overflow-hidden">
-        <div className="grid shrink-0 gap-3 border-b border-border bg-background py-4 sm:grid-cols-3">
-          <div className="rounded-xl border bg-card px-4 py-3">
+      <section className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+        {/* Three counts, not three cards. They were bordered panels sitting in
+            a bordered strip inside a padded page -- three frames deep for three
+            numbers. A figure with its label under it is already legible; the
+            border was only telling you where one number stopped and the next
+            began, which the spacing does. */}
+        <div className="flex shrink-0 flex-wrap items-baseline gap-x-10 gap-y-3 border-b border-border px-4 py-3 sm:px-6">
+          <div className="flex items-baseline gap-2">
+            <Building2 className="h-4 w-4 self-center text-primary" />
+            <p className="text-xl font-semibold tabular-nums">{list.length}</p>
             <p className="text-xs font-medium text-muted-foreground">
               Total organizations
             </p>
-            <div className="mt-2 flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-primary" />
-              <p className="text-xl font-semibold tabular-nums">{list.length}</p>
-            </div>
           </div>
 
-          <div className="rounded-xl border bg-card px-4 py-3">
-            <p className="text-xs font-medium text-muted-foreground">
-              Active organizations
+          <div className="flex items-baseline gap-2">
+            <span className="h-2.5 w-2.5 self-center rounded-full bg-rb-bee" />
+            <p className="text-xl font-semibold tabular-nums">{activeCount}</p>
+            <p className="text-xs font-medium text-muted-foreground">Active</p>
+          </div>
+
+          <div className="flex items-baseline gap-2">
+            <Users className="h-4 w-4 self-center text-primary" />
+            <p className="text-xl font-semibold tabular-nums">
+              {totalLearners.toLocaleString()}
             </p>
-            <div className="mt-2 flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-rb-bee" />
-              <p className="text-xl font-semibold tabular-nums">{activeCount}</p>
-            </div>
-          </div>
-
-          <div className="rounded-xl border bg-card px-4 py-3">
             <p className="text-xs font-medium text-muted-foreground">
               Institution learners
             </p>
-            <div className="mt-2 flex items-center gap-2">
-              <Users className="h-4 w-4 text-primary" />
-              <p className="text-xl font-semibold tabular-nums">
-                {totalLearners.toLocaleString()}
-              </p>
-            </div>
           </div>
         </div>
 
-        {/* One card holds the toolbar, the rows, and the pager, so the table
-            reads as a single object rather than three stacked panels. */}
-        <div className="min-h-0 flex-1 overflow-auto py-4">
-          <TableCard>
+        {/* The table is the page from here down: no card around it, no gutter
+            beside it, and the rows -- not the window -- are what scrolls. */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <TableCard className="flex min-h-0 flex-1 flex-col rounded-none border-0 bg-transparent">
             <TableToolbar
                 pageSize={pageSize}
                 onPageSizeChange={setPageSize}

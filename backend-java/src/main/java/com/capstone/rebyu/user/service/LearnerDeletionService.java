@@ -38,6 +38,7 @@ public class LearnerDeletionService {
     private final JdbcTemplate jdbc;
     private final S3StorageService s3StorageService;
     private final CognitoAdminService cognitoAdminService;
+    private final com.capstone.rebyu.bkt.client.BktClient bktClient;
 
     /**
      * Deletes the learner's rows, their uploaded files, their user account, and
@@ -64,6 +65,28 @@ public class LearnerDeletionService {
             // The user row is the learner's account, not shared with anyone else.
             deleteDescendants("users", "SELECT user_id FROM users WHERE user_id = " + userId, 0);
             jdbc.update("DELETE FROM users WHERE user_id = ?", userId);
+        }
+
+        /* The BKT store, which the catalog walk above cannot reach.
+         *
+         * Mastery, priorities and event history live in their own schema,
+         * written by the Python service, keyed on a plain learner_id with no
+         * foreign key back to `learners` -- so childForeignKeys("learners")
+         * does not and cannot find them. Deleting a learner left all of it
+         * behind, and because learner ids are reissued from 1 after a reset,
+         * the next account to be handed that id inherited the lot: a brand-new
+         * learner opened on 98% mastery of a lesson they had never seen, with
+         * 89 answers behind it. Six such abandoned learner ids had accumulated
+         * before this was found.
+         */
+        try {
+            bktClient.purgeLearnerState(learnerId);
+        } catch (Exception ex) {
+            // Logged at error, not warn: whatever is left behind is a real
+            // person's answer history that will surface under whoever is issued
+            // this id next.
+            log.error("Learner {} deleted, but their BKT mastery could not be purged. "
+                    + "It will be inherited by the next learner issued this id.", learnerId, ex);
         }
 
         // Outside the database, so failures are logged rather than rolled back:

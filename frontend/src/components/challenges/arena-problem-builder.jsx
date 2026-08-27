@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, Plus, Trash2, Trophy } from "@/components/icons"
 import { toast } from "sonner"
 
@@ -22,6 +22,15 @@ import {
   validateQuestionData,
 } from "@/components/questions/question-editors.jsx"
 import { getAllCertifications } from "@/services/certificationService.js"
+import {
+  saveChoices,
+  saveDiagramQuestion,
+  saveProgrammingQuestion,
+  saveQuestion,
+  saveTextQuestion,
+} from "@/services/questionService.js"
+import { saveAuthoredQuestion } from "@/components/questions/question-editors.jsx"
+import { CHALLENGE_ARENAS_KEY, saveArenaProblems } from "@/services/challengeService.js"
 
 /**
  * Authoring surface for one arena's problem set.
@@ -67,6 +76,7 @@ function createNode() {
 }
 
 export default function ArenaProblemBuilder({ arena }) {
+  const queryClient = useQueryClient()
   // One shape in state for both arenas: a mock-exam arena is a single unnamed
   // node, so grouping never needs a second code path here or in the endpoint.
   const [nodes, setNodes] = useState(() => [createNode()])
@@ -74,6 +84,12 @@ export default function ArenaProblemBuilder({ arena }) {
   const [nodeErrors, setNodeErrors] = useState({})
   const [certificationId, setCertificationId] = useState("")
   const [certificationError, setCertificationError] = useState("")
+  /* Arena problems are ordinary questions, and a question must belong to a
+     lesson -- `questions.lesson_id` is NOT NULL. So authoring one needs a
+     lesson to file it under, even though a run never shows which. */
+  const [lessonId, setLessonId] = useState("")
+  const [lessonError, setLessonError] = useState("")
+  const [saving, setSaving] = useState(false)
 
   const questionsPerNode = Number(arena.questionsPerNode) || 0
   const isRoadmap = questionsPerNode > 0
@@ -89,13 +105,27 @@ export default function ArenaProblemBuilder({ arena }) {
     [arena.questionTypes],
   )
 
-  // Only a tracked arena needs this, so only a tracked arena pays for the call.
+  /* Every arena needs one now, tracked or not: the problem set is saved as a
+     CHALLENGE exam and an exam belongs to a certification. `tracked` still
+     decides matchmaking; it no longer decides whether authoring needs a home. */
   const { data: certifications = [] } = useQuery({
     queryKey: ["admin-certifications", "arena-problems"],
     queryFn: () => getAllCertifications(),
-    enabled: Boolean(arena.tracked),
     staleTime: 5 * 60 * 1000,
   })
+
+  /* The chosen certification's lessons, flattened out of its curriculum tree.
+     Taken from the certification already fetched rather than listing every
+     lesson on the platform: a lesson from another certification would be
+     rejected by the server anyway, so it should not be offered. */
+  const lessons = useMemo(() => {
+    const certification = certifications.find(
+      (item) => String(item.certificationId) === String(certificationId),
+    )
+    return (certification?.majorCategory ?? []).flatMap((major) =>
+      (major.middleCategory ?? []).flatMap((middle) => middle.lessons ?? []),
+    )
+  }, [certifications, certificationId])
 
   const allProblems = nodes.flatMap((node) => node.problems)
 
@@ -194,35 +224,46 @@ export default function ArenaProblemBuilder({ arena }) {
 
     setErrors(nextErrors)
 
-    const missingCertification = arena.tracked && !certificationId
+    const missingCertification = !certificationId
     setCertificationError(
       missingCertification ? "Choose the certification these problems come from." : "",
     )
 
-    // A node short of its quota is a circle the learner can open and not
-    // finish, so it blocks the save the same way a broken question does.
+    /* An *empty* node is a circle the learner can open onto nothing, so it
+       blocks the save. A node merely short of the target does not.
+
+       This used to demand exactly `questionsPerNode` in every node, which for
+       a ten-node path meant authoring a hundred questions before anything
+       could be saved at all -- an arena could not be built up over several
+       sittings, or opened with a smaller set while the rest was written. The
+       count is still shown per node and in the summary, as a target to work
+       towards rather than a gate. */
     const nextNodeErrors = {}
     if (isRoadmap) {
       nodes.forEach((node, index) => {
-        if (node.problems.length !== questionsPerNode) {
-          nextNodeErrors[node.id] =
-            `Node ${index + 1} has ${node.problems.length} of ${questionsPerNode} questions.`
+        if (node.problems.length === 0) {
+          nextNodeErrors[node.id] = `Node ${index + 1} has no questions yet.`
         }
       })
     }
     setNodeErrors(nextNodeErrors)
 
-    if (missingCertification) {
-      toast.error("Choose a certification", {
-        description: `${arena.name} problems are drawn from one certification track.`,
+    const missingLesson = !lessonId
+    setLessonError(missingLesson ? "Choose the lesson these problems belong to." : "")
+
+    if (missingCertification || missingLesson) {
+      toast.error(missingCertification ? "Choose a certification" : "Choose a lesson", {
+        description: missingCertification
+          ? `${arena.name} problems are saved against one certification.`
+          : "Every question is filed under a lesson, even in an arena.",
       })
       return
     }
 
-    const shortNodeCount = Object.keys(nextNodeErrors).length
-    if (shortNodeCount > 0) {
-      toast.error("Fill every node", {
-        description: `${shortNodeCount} node${shortNodeCount === 1 ? "" : "s"} do not hold ${questionsPerNode} questions.`,
+    const emptyNodeCount = Object.keys(nextNodeErrors).length
+    if (emptyNodeCount > 0) {
+      toast.error("Every node needs at least one question", {
+        description: `${emptyNodeCount} node${emptyNodeCount === 1 ? " is" : "s are"} empty. Remove ${emptyNodeCount === 1 ? "it" : "them"} or add a question.`,
       })
       return
     }
@@ -235,11 +276,73 @@ export default function ArenaProblemBuilder({ arena }) {
       return
     }
 
-    toast.success(`${arena.name} problems validated`, {
-      description: isRoadmap
-        ? `${nodes.length} node${nodes.length === 1 ? "" : "s"} × ${questionsPerNode} questions ready. Saving needs the arena-problems endpoint.`
-        : `${allProblems.length} question${allProblems.length === 1 ? "" : "s"} ready. Saving needs the arena-problems endpoint.`,
-    })
+    /* Two steps, in this order, because the second needs the ids the first
+       creates: every problem is saved to the question bank exactly as the bank
+       itself saves it -- same endpoints, same per-type follow-ups -- and only
+       then is the arena told which questions it runs. */
+    setSaving(true)
+    void (async () => {
+      try {
+        const saved = []
+
+        for (const node of nodes) {
+          const nodeIndex = isRoadmap ? nodes.indexOf(node) + 1 : null
+
+          for (const problem of node.problems) {
+            const question = await saveAuthoredQuestion(
+              problem,
+              {
+                lessonId: Number(lessonId),
+                certificationId: Number(certificationId),
+                totalPoints: Number(problem.points) || 1,
+              },
+              {
+                saveQuestion,
+                saveChoices,
+                saveTextQuestion,
+                saveProgrammingQuestion,
+                saveDiagramQuestion,
+              },
+            )
+
+            saved.push({
+              questionId: question.questionId,
+              nodeIndex,
+              points: Number(problem.points) || 1,
+            })
+          }
+        }
+
+        const status = await saveArenaProblems(arena.id, {
+          certificationId: Number(certificationId),
+          timeLimitMinutes: Number(
+            arena.fields.find((field) => field.key === "timeLimit")?.value ?? 0,
+          ),
+          problems: saved,
+        })
+
+        await queryClient.invalidateQueries({ queryKey: [CHALLENGE_ARENAS_KEY] })
+
+        toast.success(`${arena.name} is live`, {
+          description: `${status.problemCount} problem${
+            status.problemCount === 1 ? "" : "s"
+          } saved. Learners can enter this arena now.`,
+        })
+      } catch (error) {
+        /* Partial saves are possible here: the questions are written one at a
+           time and the arena is only told about them at the end. Saying so
+           beats a bare failure, because re-saving writes a fresh set rather
+           than resuming this one. */
+        toast.error("Could not save the arena", {
+          description:
+            error?.response?.data?.message ??
+            error?.message ??
+            "Some questions may have been saved. Check the question bank before retrying.",
+        })
+      } finally {
+        setSaving(false)
+      }
+    })()
   }
 
   const totalPoints = allProblems.reduce(
@@ -345,39 +448,93 @@ export default function ArenaProblemBuilder({ arena }) {
     <div className="space-y-5">
       {/* One certification for the whole set — a bracket is a track, and every
           player in it is answering from the same syllabus. */}
-      {arena.tracked ? (
-        <div className="rounded-xl border-2 border-border bg-card p-4">
-          <Label htmlFor={`${arena.id}-certification`} className="text-sm font-bold">
-            Certification
-          </Label>
-          <p className="mt-1 text-xs text-muted-foreground">
-            A {arena.name} round is a mock exam on one certification. Choose it before
-            authoring the set.
-          </p>
-          <Select value={certificationId} onValueChange={setCertificationId}>
-            <SelectTrigger
-              id={`${arena.id}-certification`}
-              className="mt-2 max-w-sm"
-              aria-invalid={Boolean(certificationError)}
+      {/* Where the problems live. Shown for every arena, not just the tracked
+          one: the set is saved as a CHALLENGE exam, an exam belongs to a
+          certification, and every question belongs to a lesson. */}
+      <div className="rounded-xl border-2 border-border bg-card p-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <Label htmlFor={`${arena.id}-certification`} className="text-sm font-bold">
+              Certification
+            </Label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {arena.tracked
+                ? `A ${arena.name} round is a mock exam on one certification.`
+                : `Where ${arena.name} problems are filed.`}
+            </p>
+            <Select
+              value={certificationId}
+              onValueChange={(value) => {
+                setCertificationId(value)
+                // The lesson list is the certification's, so it cannot survive
+                // a change of certification.
+                setLessonId("")
+              }}
             >
-              <SelectValue placeholder="Select a certification" />
-            </SelectTrigger>
-            <SelectContent>
-              {certifications.map((certification) => {
-                const id = String(certification.certificationId ?? certification.id)
-                return (
-                  <SelectItem key={id} value={id}>
-                    {certification.title}
+              <SelectTrigger
+                id={`${arena.id}-certification`}
+                className="mt-2"
+                aria-invalid={Boolean(certificationError)}
+              >
+                <SelectValue placeholder="Select a certification" />
+              </SelectTrigger>
+              <SelectContent>
+                {certifications.map((certification) => {
+                  const id = String(certification.certificationId ?? certification.id)
+                  return (
+                    <SelectItem key={id} value={id}>
+                      {certification.title}
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
+            {certificationError ? (
+              <p className="mt-1.5 text-xs text-destructive">{certificationError}</p>
+            ) : null}
+          </div>
+
+          <div>
+            <Label htmlFor={`${arena.id}-lesson`} className="text-sm font-bold">
+              Lesson
+            </Label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Every question is filed under a lesson, even in an arena.
+            </p>
+            <Select
+              value={lessonId}
+              onValueChange={setLessonId}
+              disabled={!certificationId || lessons.length === 0}
+            >
+              <SelectTrigger
+                id={`${arena.id}-lesson`}
+                className="mt-2"
+                aria-invalid={Boolean(lessonError)}
+              >
+                <SelectValue
+                  placeholder={
+                    !certificationId
+                      ? "Choose a certification first"
+                      : lessons.length === 0
+                        ? "This certification has no lessons"
+                        : "Select a lesson"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {lessons.map((lesson) => (
+                  <SelectItem key={lesson.lessonId} value={String(lesson.lessonId)}>
+                    {lesson.name}
                   </SelectItem>
-                )
-              })}
-            </SelectContent>
-          </Select>
-          {certificationError ? (
-            <p className="mt-1.5 text-xs text-destructive">{certificationError}</p>
-          ) : null}
+                ))}
+              </SelectContent>
+            </Select>
+            {lessonError ? (
+              <p className="mt-1.5 text-xs text-destructive">{lessonError}</p>
+            ) : null}
+          </div>
         </div>
-      ) : null}
+      </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -411,9 +568,15 @@ export default function ArenaProblemBuilder({ arena }) {
           ) : null}
         </div>
 
-        <Button size="sm" onClick={saveProblems} disabled={allProblems.length === 0}>
+        {/* Disabled while saving: the questions are written one at a time, so
+            a second press mid-run would author the whole set twice. */}
+        <Button
+          size="sm"
+          onClick={saveProblems}
+          disabled={allProblems.length === 0 || saving}
+        >
           <Check className="mr-2 size-4" />
-          Save problems
+          {saving ? "Saving..." : "Save problems"}
         </Button>
       </div>
 

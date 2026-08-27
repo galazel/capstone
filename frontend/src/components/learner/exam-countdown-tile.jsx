@@ -1,13 +1,33 @@
-import { useQuery } from "@tanstack/react-query"
-
 import { CalendarDays } from "@/components/icons"
 import { BentoHeading, BentoSkeleton, BentoTile } from "@/components/commons/bento.jsx"
-import { STUDY_PLAN_QUERY_KEY, getActiveStudyPlan } from "@/services/studyPlanService.js"
+import { useCertificationStudyPlan } from "@/components/learner/use-certification-study-plan.js"
 
 function parseDay(value) {
   if (!value) return null
   const date = new Date(`${String(value).slice(0, 10)}T00:00:00`)
   return Number.isNaN(date.getTime()) ? null : date
+}
+
+/**
+ * The target exam date a plan holds for one certification, or null.
+ *
+ * Overall plans carry a `certificationPlans` entry per certification, each with
+ * its own start and exam date. Plans built before that existed, and plans for a
+ * single certification, have no such list -- those fall back to the plan's own
+ * top-level date, which for them is the right answer anyway.
+ */
+function examDateFor(plan, certificationId) {
+  const entries = plan?.schedule?.certificationPlans
+
+  if (!Array.isArray(entries)) {
+    return null
+  }
+
+  const match = entries.find(
+    (entry) => String(entry?.certificationId) === String(certificationId)
+  )
+
+  return match?.targetExamDate ?? null
 }
 
 function daysUntil(date) {
@@ -40,14 +60,15 @@ function formatExamDate(date) {
  * thing to show and points at the plan that needs updating.
  */
 export function ExamCountdownTile({ certificationId }) {
-  const planQuery = useQuery({
-    queryKey: [STUDY_PLAN_QUERY_KEY, String(certificationId ?? "")],
-    queryFn: () => getActiveStudyPlan(certificationId),
-    enabled: Boolean(certificationId),
-    staleTime: 60_000,
-  })
+  const { plan, isLoading } = useCertificationStudyPlan(certificationId)
 
-  const examDate = parseDay(planQuery.data?.schedule?.targetExamDate)
+  /* This certification's own exam date where the plan carries one. An overall
+     plan schedules each certification between its own two dates and records the
+     latest of them at the top level, so reading that top-level date would count
+     down to whichever exam is last rather than to this one. */
+  const examDate = parseDay(
+    examDateFor(plan, certificationId) ?? plan?.schedule?.targetExamDate
+  )
   const days = examDate ? daysUntil(examDate) : null
   const past = days !== null && days < 0
   const today = days === 0
@@ -57,15 +78,14 @@ export function ExamCountdownTile({ certificationId }) {
     <BentoTile col={3} row={2}>
       <BentoHeading title="exam countdown" />
 
-      {planQuery.isLoading ? (
+      {isLoading ? (
         <BentoSkeleton rows={1} />
       ) : !examDate ? (
         <div className="flex flex-1 flex-col justify-center">
           <p className="text-sm font-medium text-foreground">No exam date yet</p>
 
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Build a study plan for this certification in My Learning and the countdown
-            starts from its target exam date.
+            Create a study plan and the countdown starts from its target exam date.
           </p>
         </div>
       ) : (

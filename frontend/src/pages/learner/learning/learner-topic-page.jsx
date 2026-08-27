@@ -456,15 +456,16 @@ function Outline({
  * also a button, because progress that can only be earned by scrolling cannot
  * be corrected by a learner who skimmed ahead and came back.
  */
-function ReadCheck({ done, label, onToggle, pending, size = "size-8" }) {
+function ReadCheck({ done, label, onToggle, pending, disabled = false, size = "size-8" }) {
   return (
     <motion.button
       type="button"
       onClick={onToggle}
+      disabled={disabled}
       aria-pressed={done}
       aria-label={label}
       title={label}
-      whileTap={{ scale: 0.88 }}
+      whileTap={disabled ? undefined : { scale: 0.88 }}
       // The pop only fires on the transition into done, so ticking is
       // rewarding and unticking is quiet.
       animate={done ? { scale: [1, 1.3, 1] } : { scale: 1 }}
@@ -474,7 +475,9 @@ function ReadCheck({ done, label, onToggle, pending, size = "size-8" }) {
       className={`grid ${size} shrink-0 place-items-center rounded-full border-2 transition-colors ${
         done
           ? "border-rb-feather bg-rb-feather text-white"
-          : "border-rb-swan bg-rb-snow text-rb-hare hover:border-rb-hare"
+          : disabled
+            ? "cursor-not-allowed border-rb-swan bg-rb-polar text-rb-hare/60"
+            : "border-rb-swan bg-rb-snow text-rb-hare hover:border-rb-hare"
       }`}
     >
       {pending ? (
@@ -622,9 +625,16 @@ function LessonView({
   onNext,
   backTo,
   takenExamIds,
+  quizPending,
 }) {
   const articleRef = useRef(null)
   const headerRef = useRef(null)
+
+  /* The scroll handler below is bound once per lesson, but it has to test the
+     current tick state. Through a ref rather than the prop, or the effect would
+     rebind on every one of the fifteen sections as it ticks. */
+  const readSectionsRef = useRef(readSections)
+  readSectionsRef.current = readSections
 
   /* The sticky header's height, published as a custom property the sections
      below size themselves against.
@@ -672,10 +682,18 @@ function LessonView({
         }
       })
 
+      /* Reaching the end is necessary but not sufficient.
+         This used to read "reaching the end means every section above it was
+         passed" and back-fill all of them, which is only true of someone who
+         scrolled there. A table-of-contents link, the End key, or one fast
+         flick jumps the sentinel into view having passed nothing, and the
+         lesson ticked all fifteen sections and completed itself unread.
+         Each section now has to have crossed the line on its own. */
       const end = root.querySelector("[data-read-lesson]")
-      if (end && end.getBoundingClientRect().top < line) {
-        // Reaching the end means every section above it was passed.
-        sections.forEach((section) => onReadSection(section.key))
+      if (!end || end.getBoundingClientRect().top >= line) return
+
+      const read = readSectionsRef.current
+      if (sections.every((section) => read.has(section.key))) {
         onReadLesson()
       }
     }
@@ -780,9 +798,15 @@ function LessonView({
           cannot do that. */}
       <div className="w-full">
         {loading ? (
-        <div className="mx-auto mt-10 flex w-full max-w-6xl items-center gap-3 text-sm font-bold text-rb-wolf">
-          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-          Loading lesson content…
+        /* Switching lessons used to drop the column to a single spinner line,
+           so the page collapsed to nothing and sprang back. Same blocks as the
+           topic skeleton, in the measure the sections themselves take. */
+        <div
+          className="mx-auto mt-10 w-full max-w-6xl px-5 sm:px-8"
+          role="status"
+          aria-label="Loading lesson content"
+        >
+          <SectionStackSkeleton />
         </div>
       ) : sections.length === 0 ? (
         <div className="mx-auto mt-10 w-full max-w-6xl">
@@ -967,23 +991,38 @@ function LessonView({
         <ReadCheck
           done={lessonDone}
           pending={completing}
+          disabled={!lessonDone && quizPending}
           size="size-11"
-          label={lessonDone ? "Lesson complete" : "Mark lesson complete"}
+          label={
+            lessonDone
+              ? "Lesson complete"
+              : quizPending
+                ? "Sit the quick check to complete this lesson"
+                : "Mark lesson complete"
+          }
           onToggle={onToggleLesson}
         />
 
+        {/* The card names what is actually outstanding. It used to announce
+            "You reached the end of this lesson" over a quick check that had
+            never been opened, which is how a lesson came to read as complete
+            with its quiz untouched. */}
         <div className="min-w-0">
           <p className="font-rb-display text-base font-extrabold text-rb-eel">
             {lessonDone
               ? "Lesson complete"
               : completing
                 ? "Saving your progress…"
-                : "You reached the end of this lesson"}
+                : quizPending
+                  ? "One thing left: the quick check"
+                  : "You reached the end of this lesson"}
           </p>
           <p className="mt-0.5 text-sm font-medium text-rb-wolf">
             {lessonDone
               ? "This lesson is ticked off in your outline."
-              : "Completion is saved automatically once you reach the end."}
+              : quizPending
+                ? `Sit the quick check above to finish this lesson and earn its ${LESSON_COMPLETION_XP} XP.`
+                : "Completion is saved automatically once you reach the end."}
           </p>
         </div>
       </motion.div>
@@ -1192,6 +1231,96 @@ function AssessmentView({ exam, position, total, backTo, taken }) {
 }
 
 /* --------------------------------------------------------------------- page */
+
+/* One grey block, one pulse, everywhere on this page. Two loading states drawn
+   at two different rhythms read as two different things happening. */
+const SKELETON_BLOCK = "animate-pulse rounded-rb-tile bg-rb-swan"
+
+/** A run of placeholder sections: a heading over three lines of copy. */
+function SectionStackSkeleton({ count = 3 }) {
+  return (
+    <div className="space-y-10">
+      {Array.from({ length: count }, (_, section) => (
+        <div key={section} className="space-y-3">
+          <div className={`${SKELETON_BLOCK} h-6 w-1/2 max-w-sm`} />
+          <div className={`${SKELETON_BLOCK} h-4 w-full`} />
+          <div className={`${SKELETON_BLOCK} h-4 w-full`} />
+          <div className={`${SKELETON_BLOCK} h-4 w-4/5`} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * The topic page's own geometry, greyed out.
+ *
+ * It replaces a centred "Loading topic" card, which threw the layout away and
+ * left the rest of the screen empty -- a small box floating in white reads as
+ * something having gone wrong, and when the content did arrive it arrived as a
+ * jump. Holding the real frame -- outline rail, lesson header, section stack --
+ * means the load is the page filling in rather than the page replacing itself.
+ *
+ * Deliberately the two-column shape, never the three-column one: the tutor
+ * panel is only offered on a lesson and only when the learner has opened it, so
+ * a third column here would collapse the moment the real page rendered.
+ */
+function TopicSkeleton() {
+  const block = SKELETON_BLOCK
+
+  return (
+    <div
+      className="rebyu-ds min-h-dvh w-full bg-rb-polar"
+      role="status"
+      aria-label="Loading topic"
+    >
+      <div className="grid min-h-dvh xl:grid-cols-[340px_minmax(0,1fr)]">
+        {/* The outline rail. Rows fade down the list -- the eye is told where
+            the content starts, not that eight identical things are pending. */}
+        <aside className="hidden min-h-0 border-r-2 border-rb-swan bg-rb-snow xl:block">
+          <div className="sticky top-0 h-dvh space-y-6 p-5">
+            <div className="space-y-2">
+              <div className={`${block} h-3 w-24`} />
+              <div className={`${block} h-5 w-40`} />
+              <div className={`${block} h-2 w-full`} />
+            </div>
+
+            <div className="space-y-2">
+              {Array.from({ length: 8 }, (_, row) => (
+                <div
+                  key={row}
+                  className={`${block} h-9 w-full`}
+                  style={{ opacity: 1 - row * 0.1 }}
+                />
+              ))}
+            </div>
+          </div>
+        </aside>
+
+        <main className="min-w-0 bg-rb-snow">
+          {/* The lesson header: eyebrow, title, chip row -- the same three
+              lines, at the same sizes, that are about to land here. */}
+          <div className="border-b-2 border-rb-swan px-5 py-6 sm:px-8">
+            <div className="mx-auto w-full max-w-6xl space-y-3">
+              <div className={`${block} h-3 w-28`} />
+              <div className={`${block} h-7 w-2/3 max-w-md`} />
+
+              <div className="flex flex-wrap gap-2">
+                {[88, 132, 116, 96].map((width) => (
+                  <div key={width} className={`${block} h-7`} style={{ width }} />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-8">
+            <SectionStackSkeleton />
+          </div>
+        </main>
+      </div>
+    </div>
+  )
+}
 
 export default function LearnerTopicPage() {
   const navigate = useNavigate()
@@ -1462,13 +1591,27 @@ export default function LearnerTopicPage() {
   const alreadyDone = activeLessonId ? isDone(activeLessonId) : false
   const completing = completeMutation.isPending
 
+  /* A lesson that carries a quick check is not finished until that check has
+     been sat.
+     The sentinel that completes a lesson sits *below* the quiz band, so
+     scrolling to the bottom of the page proved only that the learner had
+     scrolled past the quiz -- and the lesson completed, paid out its XP, and
+     ticked itself in the outline with the five questions never opened.
+     "Taken", not "passed", deliberately: a failed attempt is still an attempt,
+     and the retake lives on the same launcher. Matching `takenExamIds`, which
+     the curriculum page reads the same way, so the two screens cannot disagree
+     about whether something has been sat. */
+  const activeQuiz = active?.kind === "lesson" ? active.quiz : null
+  const quizPending = Boolean(activeQuiz) && !takenExamIds.has(String(activeQuiz.examId))
+
   // Two entry points, deliberately different: the scroll check only ever
   // *sets* (reaching the end twice must not re-post), the button is what a
   // learner presses and is a no-op once the lesson is already recorded.
+  // Both are gated on the quick check, so neither route can complete around it.
   const readLesson = useCallback(() => {
-    if (!activeLessonId || alreadyDone || completing || !data?.learnerId) return
+    if (!activeLessonId || alreadyDone || completing || quizPending || !data?.learnerId) return
     completeMutation.mutate(activeLessonId)
-  }, [activeLessonId, alreadyDone, completing, data?.learnerId, completeMutation])
+  }, [activeLessonId, alreadyDone, completing, quizPending, data?.learnerId, completeMutation])
 
   // Seed per-lesson reading state from the server once it loads, so refreshing
   // the page (or coming back to a lesson) restores the ticks instead of
@@ -1497,13 +1640,7 @@ export default function LearnerTopicPage() {
   }
 
   if (examsQuery.isLoading || examTypesQuery.isLoading || !curriculum) {
-    return (
-      <LearnerEmptyState
-        icon={BookOpen}
-        title="Loading topic"
-        description="Preparing your lessons and assessments."
-      />
-    )
+    return <TopicSkeleton />
   }
 
   if (!middle || !major) {
@@ -1633,6 +1770,7 @@ export default function LearnerTopicPage() {
               onReadLesson={readLesson}
               onToggleLesson={readLesson}
               takenExamIds={takenExamIds}
+              quizPending={quizPending}
               onPrev={
                 prev
                   ? () => {

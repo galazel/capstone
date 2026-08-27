@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import {
   Building2,
@@ -9,7 +9,16 @@ import {
   Trophy,
   Users,
 } from "@/components/icons"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
+
+import { industries } from "@/constants/industries.js"
+
+import {
+  CHALLENGE_ARENAS_KEY,
+  getChallengeArenas,
+  saveArenaIndustries,
+} from "@/services/challengeService.js"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -26,16 +35,14 @@ import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { BubbleCard } from "@/components/commons/bubble-card.jsx"
 
-const INDUSTRIES = [
-  "Information Technology",
-  "Education",
-  "Training Center",
-  "Review Center",
-  "Government",
-  "Banking and Finance",
-  "Business Process Outsourcing",
-  "Healthcare",
-]
+/* The industries a certification can carry, not a list of our own.
+   This page used to define eight labels of its own ("Information Technology",
+   "Training Center", ...) while every certification is tagged from
+   `constants/industries`. Nothing matched anything: an arena assigned to
+   "Information Technology" could never line up with a certification in
+   "Information and Communications Technology (ICT)", so gating a learner on it
+   would have hidden every arena from everybody. One vocabulary, shared. */
+const INDUSTRIES = industries
 
 /* The IT Olympics, and only the IT Olympics — the same three arenas the
    landing page sells and the learner can actually enter. QueryRealm, Sprint
@@ -110,6 +117,36 @@ export default function Challenges({
                                      industries = INDUSTRIES,
                                    }) {
   const [challenges, setChallenges] = useState(initialChallenges)
+  const [saving, setSaving] = useState(false)
+  const queryClient = useQueryClient()
+
+  /* The stored assignments, which are the truth.
+     The list above supplies each arena's name, blurb and artwork -- those are
+     properties of a built surface, not data. What an admin can change is
+     stored, so it is read back rather than assumed. */
+  const arenasQuery = useQuery({
+    queryKey: [CHALLENGE_ARENAS_KEY],
+    queryFn: getChallengeArenas,
+    staleTime: 60_000,
+  })
+
+  useEffect(() => {
+    if (!arenasQuery.data) return
+    const byArena = new Map(arenasQuery.data.map((arena) => [arena.arenaId, arena]))
+    setChallenges((current) =>
+      current.map((challenge) => {
+        const arena = byArena.get(challenge.arenaId)
+        return arena
+          ? {
+              ...challenge,
+              assignedIndustries: arena.industries ?? [],
+              problemCount: arena.problemCount,
+              configured: arena.configured,
+            }
+          : challenge
+      }),
+    )
+  }, [arenasQuery.data])
 
   const [assignDialogOpen, setAssignDialogOpen] = useState(false)
   const [selectedChallenge, setSelectedChallenge] = useState(null)
@@ -142,30 +179,49 @@ export default function Challenges({
   }
 
   function saveIndustryAssignments() {
-    if (!selectedChallenge) return
+    if (!selectedChallenge || saving) return
 
-    setChallenges((current) =>
-        current.map((challenge) =>
-            challenge.challengeId === selectedChallenge.challengeId
-                ? {
-                  ...challenge,
-                  assignedIndustries: [...selectedIndustries],
-                }
-                : challenge
+    /* Persisted, not just held on screen.
+       This used to update local state and toast "assignments updated", so the
+       change survived exactly until the next reload -- an admin could assign
+       an arena, be told it worked, and find it unassigned on returning. */
+    setSaving(true)
+    const arenaId = selectedChallenge.arenaId
+    const industriesToSave = [...selectedIndustries]
+
+    void (async () => {
+      try {
+        const arena = await saveArenaIndustries(arenaId, industriesToSave)
+
+        setChallenges((current) =>
+          current.map((challenge) =>
+            challenge.arenaId === arenaId
+              ? { ...challenge, assignedIndustries: arena.industries ?? [] }
+              : challenge,
+          ),
         )
-    )
+        await queryClient.invalidateQueries({ queryKey: [CHALLENGE_ARENAS_KEY] })
 
-    toast.success("Challenge assignments updated", {
-      description:
-          selectedIndustries.length > 0
-              ? `${selectedChallenge.title} is assigned to ${selectedIndustries.length} industr${
-                  selectedIndustries.length === 1 ? "y" : "ies"
-              }.`
+        toast.success("Challenge assignments updated", {
+          description:
+            industriesToSave.length > 0
+              ? `${selectedChallenge.title} is assigned to ${industriesToSave.length} industr${
+                  industriesToSave.length === 1 ? "y" : "ies"
+                }.`
               : `${selectedChallenge.title} is no longer assigned to any industry.`,
-    })
+        })
 
-    setAssignDialogOpen(false)
-    setSelectedChallenge(null)
+        setAssignDialogOpen(false)
+        setSelectedChallenge(null)
+      } catch (error) {
+        toast.error("Could not save the assignment", {
+          description:
+            error?.response?.data?.message ?? error?.message ?? "Please try again.",
+        })
+      } finally {
+        setSaving(false)
+      }
+    })()
   }
 
   return (
@@ -372,8 +428,9 @@ export default function Challenges({
               <Button
                   type="button"
                   onClick={saveIndustryAssignments}
+                  disabled={saving}
               >
-                Save assignments
+                {saving ? "Saving..." : "Save assignments"}
               </Button>
             </DialogFooter>
           </DialogContent>

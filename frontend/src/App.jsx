@@ -20,8 +20,6 @@ const AdminOrganizationDetail = lazy(() => import("./pages/admin/admin-organizat
 const ViewCertificationAdmin = lazy(() => import("./pages/admin/view-certification-admin-page.jsx"))
 const AdminDashboard = lazy(() => import("./pages/admin/admin-dashboard-page.jsx"))
 const PartnershipRequests = lazy(() => import("./pages/admin/partnership-requests-page.jsx"))
-const BktDeliveryStatus = lazy(() => import("./pages/admin/bkt-delivery-status-page.jsx"))
-const GamificationSettings = lazy(() => import("./pages/admin/gamification-settings-page.jsx"))
 const AcceptInstitutionInvitationPage = lazy(() => import("./pages/admin/accept-institution-invitation-page.jsx"))
 const LandingPage = lazy(() => import("./pages/public/landing-page.jsx"))
 const CreateLessons = lazy(() => import("./pages/admin/create-lessons-page.jsx"))
@@ -74,6 +72,7 @@ const LearnerCertificationCurriculumPage = lazy(() =>
 const LearnerTopicPage = lazy(() => import("./pages/learner/learning/learner-topic-page.jsx"))
 const ArenaConfig = lazy(() => import("./pages/admin/arena-config-page.jsx"))
 const ArenaDetail = lazy(() => import("./pages/admin/arena-detail-page.jsx"))
+const CertificationQuestionBank = lazy(() => import("./pages/admin/certification-question-bank-page.jsx"))
 const NotificationsPage = lazy(() => import("./pages/notifications-page.jsx"))
 const NotFoundPage = lazy(() => import("./pages/public/not-found-page.jsx"))
 const ForbiddenPage = lazy(() => import("./pages/public/forbidden-page.jsx"))
@@ -205,6 +204,22 @@ export function App() {
             ) : null}
 
             <Route element={<ProtectedRoute allowedRoles={["ADMIN"]} />}>
+                {/* The certification's question bank, on its own page for the
+                    same reason: a library you filter, scan and open one row of
+                    is a workspace, and it was sharing a tab strip with the
+                    curriculum it has nothing to do with. */}
+                <Route
+                    path="/admin/certification/:id/question-bank"
+                    element={<CertificationQuestionBank />}
+                />
+
+                {/* The lesson editor. It was already a full-viewport tool --
+                    100dvh, its own header, its own way back -- but mounted
+                    inside the dashboard shell, so the portal chrome sat above
+                    it and `.rebyu-page` padded it in. It belongs out here with
+                    the other builders. */}
+                <Route path="/admin/lessons/:name/create" element={<CreateLessons />} />
+
                 <Route path="/admin" element={<DashboardLayout />}>
                     <Route index element={<Certifications />} />
                     <Route path="dashboard" element={<AdminDashboard />} />
@@ -227,18 +242,21 @@ export function App() {
                     {/* Community moderation is withdrawn from the admin portal.
                         The page and its service still exist -- re-register this
                         route to bring it back. */}
-                    <Route path="bkt-delivery" element={<BktDeliveryStatus />} />
+                    {/* BKT delivery status is withdrawn from the admin portal.
+                        The page and its service still exist -- re-register this
+                        route to bring it back. */}
                     {/* No standalone generation workspace. A run is watched in
                         the modal that started it -- the InlineGenerationMonitor
                         renders the same transcript, review checkpoints and
                         recovery panel without leaving the certification. */}
-                    <Route path="gamification-settings" element={<GamificationSettings />} />
+                    {/* Gamification settings are withdrawn from the admin
+                        portal. The page and its service still exist --
+                        re-register this route to bring it back. */}
                     <Route path="learners" element={<Learners />} />
                     <Route
                         path="certification/:id"
                         element={<ViewCertificationAdmin />}
                     />
-                    <Route path="lessons/:name/create" element={<CreateLessons />} />
                 </Route>
             </Route>
 

@@ -20,6 +20,15 @@ export async function getProgressAnalytics(certificationId) {
 export const PROGRESS_ANALYTICS_PARAM = "certification"
 
 /**
+ * Set to "1" to open the study-plan generator on arrival.
+ *
+ * The analytics board is the one place a plan is built, so everywhere that
+ * offers to build one links here with this parameter rather than owning its
+ * own copy of the flow.
+ */
+export const NEW_STUDY_PLAN_PARAM = "plan"
+
+/**
  * The one definition of the analytics query key.
  *
  * <p>Shared because the shell prefetches under this key and the board reads

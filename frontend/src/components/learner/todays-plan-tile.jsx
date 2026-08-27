@@ -1,28 +1,11 @@
 import { useMemo } from "react"
 import { useNavigate } from "react-router-dom"
-import { useQuery } from "@tanstack/react-query"
 
 import { ArrowRight, BookOpen, CalendarDays, Check, Target, Zap } from "@/components/icons"
 import { Button } from "@/components/ui/button"
 import { BentoHeading, BentoSkeleton, BentoTile } from "@/components/commons/bento.jsx"
-import { STUDY_PLAN_QUERY_KEY, getActiveStudyPlan } from "@/services/studyPlanService.js"
-
-/**
- * `dateKey` as the plan generator writes it: a local YYYY-MM-DD, built from the
- * browser's own calendar fields rather than from an ISO timestamp.
- *
- * `toISOString().slice(0,10)` would be the obvious thing here and is wrong —
- * it converts to UTC first, so anywhere east of Greenwich the early hours of a
- * day report yesterday's date, and the tile would show the wrong session for
- * the first several hours of every morning. This mirrors the generator's own
- * `toDateKey` exactly, which is what the keys were written with.
- */
-function toDateKey(date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, "0")
-  const day = String(date.getDate()).padStart(2, "0")
-  return `${year}-${month}-${day}`
-}
+import { useCertificationStudyPlan } from "@/components/learner/use-certification-study-plan.js"
+import { formatWhen, toDateKey } from "@/lib/study-schedule.js"
 
 /* The event types the generator emits, and how each should read. Every entry
    carries its own words — a session that is a mock exam and one that is a
@@ -58,18 +41,18 @@ function formatDay(dateKey) {
  * someone who has opened their analytics on an off day. A plan whose remaining
  * sessions are all in the past says so instead of showing nothing.
  */
-export function TodaysPlanTile({ certificationId }) {
+/**
+ * @param onCreatePlan  opens the generator in place. Passed by the analytics
+ *   board, which owns it; without it the tile falls back to linking there, so
+ *   it still works anywhere else it might be mounted.
+ */
+export function TodaysPlanTile({ certificationId, onCreatePlan }) {
   const navigate = useNavigate()
 
-  const planQuery = useQuery({
-    queryKey: [STUDY_PLAN_QUERY_KEY, String(certificationId ?? "")],
-    queryFn: () => getActiveStudyPlan(certificationId),
-    enabled: Boolean(certificationId),
-    staleTime: 60_000,
-  })
+  const { plan, isLoading, isOverall } = useCertificationStudyPlan(certificationId)
 
   const { todaysEvents, nextEvent, hasEvents } = useMemo(() => {
-    const events = planQuery.data?.schedule?.events
+    const events = plan?.schedule?.events
     if (!Array.isArray(events) || events.length === 0) {
       return { todaysEvents: [], nextEvent: null, hasEvents: false }
     }
@@ -85,34 +68,56 @@ export function TodaysPlanTile({ certificationId }) {
       .sort((a, b) => a.dateKey.localeCompare(b.dateKey))
 
     return { todaysEvents: todays, nextEvent: upcoming[0] ?? null, hasEvents: true }
-  }, [planQuery.data])
+  }, [plan])
 
   return (
     <BentoTile col={3} row={2} className="!p-0">
       <div className="flex min-h-0 flex-1 flex-col p-5 sm:p-6">
-        <BentoHeading
-          title="today's plan"
-          hint="What your study plan has scheduled for today."
-        />
+        <div className="flex items-start justify-between gap-3">
+          <BentoHeading
+            title="today's plan"
+            hint={
+              isOverall
+                ? "From your overall study plan, which covers this certification."
+                : "What your study plan has scheduled for today."
+            }
+          />
 
-        {planQuery.isLoading ? (
+          {/* The way to the whole schedule, kept in the same box as the way to
+              create one -- this tile shows a single day, and "what about the
+              rest of it" is the obvious next question. Only once there is a
+              plan to look at. */}
+          {plan ? (
+            <button
+              type="button"
+              onClick={() => navigate("/learner/plan")}
+              className="mt-0.5 shrink-0 text-xs font-semibold text-primary underline decoration-dotted underline-offset-4 hover:text-primary/80"
+            >
+              view calendar
+            </button>
+          ) : null}
+        </div>
+
+        {isLoading ? (
           <BentoSkeleton rows={2} />
         ) : !hasEvents ? (
           <div className="mt-4 flex flex-1 flex-col justify-center">
             <p className="text-sm font-medium text-foreground">No study plan yet</p>
 
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Build one in My Learning and this shows the topics it schedules for
-              each day.
+              Create one and this shows the topics it schedules for each day.
             </p>
 
+            {/* The one place a plan is created. */}
             <Button
               variant="outline"
               size="sm"
               className="mt-4 w-fit"
-              onClick={() => navigate("/learner/learning")}
+              onClick={
+                onCreatePlan ?? (() => navigate("/learner/analytics?plan=1"))
+              }
             >
-              Build a study plan
+              Create study plan
               <ArrowRight className="size-4" aria-hidden="true" />
             </Button>
           </div>
@@ -138,12 +143,15 @@ export function TodaysPlanTile({ certificationId }) {
                     </p>
 
                     {/* The type is written, never left to the icon's colour. */}
+                    {/* The exact time, from the same value the scheduler fires
+                        on -- so "Today · 7:00 PM" is a promise the app keeps
+                        rather than a label that drifts from the trigger. */}
                     <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                       <span className="font-medium">{meta.label}</span>
-                      {event.time ? (
+                      {formatWhen(event) ? (
                         <>
                           <span aria-hidden="true">·</span>
-                          <span>{event.time}</span>
+                          <span>{formatWhen(event)}</span>
                         </>
                       ) : null}
                     </p>

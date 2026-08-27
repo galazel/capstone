@@ -1135,7 +1135,7 @@ export function Diagram({ questionKey, questionNumber, onRemove, data, onDataCha
               </Button>
             }
             content={
-              <div className="h-full w-full overflow-hidden rounded-lg border border-border bg-white shadow-sm">
+              <div className="h-full w-full overflow-hidden rounded-lg border border-border bg-card shadow-sm">
                 <DiagramArea
                   diagramType={data.diagramType}
                   initialXml={data.referenceDiagramXml || undefined}

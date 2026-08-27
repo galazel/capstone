@@ -50,13 +50,26 @@ export default function RegisterPage() {
     }
     setPending(true)
     try {
-      await registerAccount({
+      const { status } = await registerAccount({
         email: form.email.trim(),
         password: form.password,
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
       })
-      toast.success("Account created. Check your email for a verification code.")
+
+      /* Either way the next screen is verification -- but the learner is told
+         which of the two happened. "Account created" over an account that
+         already existed would be a lie, and the difference matters: a picked-up
+         registration keeps the password from the first attempt, not the one
+         just typed. */
+      toast.success(
+        status === "RESENT_CODE"
+          ? "You already started signing up. We sent a new code to your email."
+          : "Account created. Check your email for a verification code.",
+        status === "RESENT_CODE"
+          ? { description: "Verify it, then sign in with the password you first chose." }
+          : undefined
+      )
       navigate("/verify-email", { state: { email: form.email.trim() } })
     } catch (err) {
       setError(

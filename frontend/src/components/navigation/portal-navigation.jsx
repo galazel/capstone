@@ -13,7 +13,6 @@ import {
   LayoutDashboard,
   Menu,
   ServerCog,
-  Sparkles,
   Search,
   Swords,
   Users,
@@ -75,8 +74,9 @@ const adminGroups = [
     items: [
       { label: "Institutions", href: "/admin/organizations", icon: Building2 },
       { label: "Partnership requests", href: "/admin/partnership-requests", icon: Handshake },
-      { label: "BKT delivery", href: "/admin/bkt-delivery", icon: ServerCog },
-      { label: "Gamification", href: "/admin/gamification-settings", icon: Sparkles },
+      // No BKT delivery or Gamification entries: both are withdrawn from the
+      // admin portal. Their pages and services still exist -- re-register the
+      // routes in App.jsx and add the entries back here to bring them back.
       { label: "Learners", href: "/admin/learners", icon: Users },
     ],
   },

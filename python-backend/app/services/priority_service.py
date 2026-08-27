@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
+from app.services.bkt_math import mastery_level
 from app.db.models import (
     LearnerCategoryPriority,
     LearnerCategoryPriorityHistory,
@@ -103,9 +104,50 @@ def classify_tag(
     return tag
 
 
+def reportable_mastery(row: LearnerLessonMastery, settings: Settings) -> float:
+    """The knowledge estimate, held within reach of the learner's actual record.
+
+    BKT's P(L) answers "what is the chance they know this *now*", and it is
+    recency-weighted by design: Bulut et al. (2023), Eq. 3 -- each observation
+    updates the posterior and then applies the learn transition, so a run of
+    correct answers is *supposed* to move it sharply. That is the right
+    behaviour for a learner who has turned a corner, and the wrong one to put
+    on a dashboard unqualified: with the untrained fallback parameters, three
+    correct answers took a real learner to 0.98 on a lesson they had answered
+    19 right and 70 wrong. No reading of that record supports 98%.
+
+    So once there is enough evidence to be worth trusting, observed accuracy
+    sets a ceiling on what is *reported*. The headroom above accuracy is
+    deliberate rather than slack -- a learner who has genuinely improved should
+    read higher than their lifetime average, because that average still carries
+    everything they have since learned. What they cannot do is read as mastered
+    on the strength of the last three answers alone.
+
+    Applied here, at the point of reporting, and never written back to
+    `LearnerLessonMastery`: the stored value is the input to the next update
+    (`mastery_before`), so capping it would feed a doctored prior into the
+    chain and compound at every step. The model stays the model; this is a
+    statement about what we are willing to *claim*.
+
+    Once per-lesson parameters are actually fitted this guard should bind far
+    less often, and its headroom is worth revisiting then -- it is a safeguard
+    against untrained parameters, not a permanent part of the model.
+    """
+    mastery = row.mastery_probability
+    evidence = (row.correct_count or 0) + (row.incorrect_count or 0)
+
+    # Too little to draw a ceiling from: an estimate is meant to move freely
+    # early on, and a bound taken from two answers is noise.
+    if evidence < settings.mastery_accuracy_guard_min_evidence:
+        return mastery
+
+    accuracy = (row.correct_count or 0) / evidence
+    return min(mastery, accuracy + settings.mastery_accuracy_guard_headroom)
+
+
 def compute_lesson_priority(row: LearnerLessonMastery, settings: Settings) -> dict:
     """Weighted, missing-data-normalized lesson priority."""
-    mastery = row.mastery_probability
+    mastery = reportable_mastery(row, settings)
     evidence = (row.correct_count or 0) + (row.incorrect_count or 0)
     mastery_weakness = _clamp((1.0 - mastery) * 100.0)
 
@@ -164,7 +206,16 @@ def compute_lesson_priority(row: LearnerLessonMastery, settings: Settings) -> di
         "recommended_action": ACTION[tag],
         "recommended_activity": ACTIVITY[tag],
         "mastery_probability": mastery,
-        "mastery_level": row.mastery_level,
+        # Derived from the reported figure, not the stored one. Read off the
+        # row it could say "mastered" beside a percentage the guard had just
+        # pulled down, and a badge contradicting the number under it is worse
+        # than either being wrong alone.
+        "mastery_level": mastery_level(
+            mastery,
+            developing_threshold=settings.developing_threshold,
+            good_threshold=settings.good_threshold,
+            mastered_threshold=settings.mastered_threshold,
+        ),
         "evidence_count": evidence,
     }
 

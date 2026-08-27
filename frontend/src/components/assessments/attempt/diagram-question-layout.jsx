@@ -39,9 +39,13 @@ export default function DiagramQuestionLayout({
   const diagramType = question.diagramType ?? "ERD"
   const subQuestions = question.subQuestions ?? []
 
+  // This layout is deliberately NOT remounted per question: remounting would
+  // tear down the draw.io iframe and re-download the editor on every step
+  // through a diagram exam. Everything question-scoped resets here instead.
   useEffect(() => {
     setRubric(question.rubric ?? [])
     setNotice(null)
+    setChecking(false)
   }, [question.attemptQuestionId, question.rubric])
 
   const handleCheck = async () => {
@@ -125,6 +129,7 @@ export default function DiagramQuestionLayout({
           {subQuestions.length > 0 ? (
             <div className="rounded-xl border bg-background p-3">
               <SubQuestionTabs
+                key={question.attemptQuestionId ?? question.questionId ?? index}
                 subQuestions={subQuestions.map((sub) => ({
                   questionId: sub.subQuestionId,
                   questionText: sub.questionText,
@@ -174,6 +179,9 @@ export default function DiagramQuestionLayout({
         >
           <DiagramArea
             diagramType={diagramType}
+            documentId={
+              question.attemptQuestionId ?? question.questionId ?? index
+            }
             initialXml={answer?.diagramSubmissionData}
             onChange={(diagramXml) =>
               onAnswer({ diagramSubmissionData: diagramXml })

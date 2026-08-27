@@ -41,19 +41,45 @@ public class StudyPlanController {
 
   /**
    * The plan currently being followed, or {@code null} when there is none.
-   * Omit {@code certificationId} for the learner's most recent plan overall.
+   *
+   * <p>With {@code certificationId}, that certification's plan. With
+   * {@code scope=overall}, the plan that spans several certifications. With
+   * neither, the learner's most recent plan whatever its scope -- which is what
+   * the study calendar shows, since it is not scoped to a certification.
    */
   @GetMapping("/me/active")
   public StudyPlanService.StudyPlanDto active(
       @AuthenticationPrincipal Jwt jwt,
-      @RequestParam(required = false) Long certificationId) {
-    return studyPlanService.activePlan(me(jwt), certificationId);
+      @RequestParam(required = false) Long certificationId,
+      @RequestParam(required = false) String scope) {
+    Long learnerId = me(jwt);
+    return "overall".equalsIgnoreCase(scope)
+        ? studyPlanService.overallPlan(learnerId)
+        : studyPlanService.activePlan(learnerId, certificationId);
   }
 
   @GetMapping("/my-plans")
   public List<StudyPlanService.StudyPlanDto> myPlans(@AuthenticationPrincipal Jwt jwt) {
     return studyPlanService.getUserPlans(me(jwt));
   }
+
+  /** Every task status the learner has recorded, across all their plans. */
+  @GetMapping("/me/tasks")
+  public List<StudyPlanService.TaskStatusDto> taskStatuses(@AuthenticationPrincipal Jwt jwt) {
+    return studyPlanService.taskStatuses(me(jwt));
+  }
+
+  /** Records that a scheduled task was started, finished, or passed over. */
+  @PutMapping("/{planId}/tasks/{eventId}/status")
+  public StudyPlanService.TaskStatusDto setTaskStatus(
+      @AuthenticationPrincipal Jwt jwt,
+      @PathVariable Long planId,
+      @PathVariable String eventId,
+      @RequestBody TaskStatusRequest request) {
+    return studyPlanService.setTaskStatus(me(jwt), planId, eventId, request.status());
+  }
+
+  public record TaskStatusRequest(String status) {}
 
   @PostMapping("/{planId}/complete")
   public ResponseEntity<Void> complete(@AuthenticationPrincipal Jwt jwt, @PathVariable Long planId) {

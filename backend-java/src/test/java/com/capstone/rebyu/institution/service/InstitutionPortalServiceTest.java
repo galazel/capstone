@@ -4,6 +4,7 @@ import com.capstone.rebyu.enrollment.entity.OrganizationCertificationLearner;
 import com.capstone.rebyu.enrollment.mapper.OrganizationCertificationLearnerMapper;
 import com.capstone.rebyu.enrollment.repository.OrganizationCertificationLearnerRepository;
 import com.capstone.rebyu.institution.dto.InstitutionPortalDtos.OverviewDto;
+import com.capstone.rebyu.institutiongroup.repository.InstitutionGroupAssigneeRepository;
 import com.capstone.rebyu.organization.mapper.OrganizationCertificateMapper;
 import com.capstone.rebyu.organization.repository.OrganizationCertificateRepository;
 import com.capstone.rebyu.partnership.mapper.InstitutionInvoiceMapper;
@@ -37,6 +38,7 @@ class InstitutionPortalServiceTest {
     private InstitutionInvoiceRepository invoiceRepository;
     private LearnerRepository learnerRepository;
     private InstitutionInvitationService invitationService;
+    private InstitutionGroupAssigneeRepository groupAssigneeRepository;
     private com.capstone.rebyu.assessment.repository.ExamResultRepository examResultRepository;
     private InstitutionPortalService service;
 
@@ -48,15 +50,22 @@ class InstitutionPortalServiceTest {
         invoiceRepository = mock(InstitutionInvoiceRepository.class);
         learnerRepository = mock(LearnerRepository.class);
         invitationService = mock(InstitutionInvitationService.class);
+        groupAssigneeRepository = mock(InstitutionGroupAssigneeRepository.class);
         examResultRepository = mock(com.capstone.rebyu.assessment.repository.ExamResultRepository.class);
         service = new InstitutionPortalService(orgCertRepository, mock(OrganizationCertificateMapper.class),
                 orgCertLearnerRepository, orgCertLearnerMapper, invoiceRepository,
                 mock(InstitutionInvoiceMapper.class), learnerRepository, invitationService,
-                examResultRepository, mock(com.capstone.rebyu.assessment.mapper.ExamResultMapper.class));
+                groupAssigneeRepository, examResultRepository,
+                mock(com.capstone.rebyu.assessment.mapper.ExamResultMapper.class));
 
         when(orgCertRepository.findByInstitution_InstitutionId(INSTITUTION_ID)).thenReturn(List.of());
         when(invoiceRepository.findByInstitution_InstitutionId(INSTITUTION_ID)).thenReturn(List.of());
         when(invitationService.listInvitations(INSTITUTION_ID)).thenReturn(List.of());
+        /* Stubbed, not left as a bare mock: `overview` streams this result
+           straight away, so the default null would NPE before any assertion in
+           these tests is reached. Empty is also the honest default here -- these
+           tests are about which learners are fetched, not about grouping. */
+        when(groupAssigneeRepository.assignmentGroupsByInstitution(INSTITUTION_ID)).thenReturn(List.of());
     }
 
     private OrganizationCertificationLearner assignment(Long learnerId) {

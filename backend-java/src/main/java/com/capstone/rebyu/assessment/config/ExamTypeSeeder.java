@@ -59,7 +59,15 @@ public class ExamTypeSeeder implements ApplicationRunner {
             // (LearnerToolsController#generate) writes real exams/questions
             // under these types instead of the bespoke practice-set tables.
             "GENERATED_QUIZ",
-            "GENERATED_FLASHCARD");
+            "GENERATED_FLASHCARD",
+            // The study plan's Active Recall session: a learner-owned exam
+            // assembled from questions they have already got wrong or barely
+            // mastered, rather than authored for a certification.
+            "RECALL",
+            // An IT Olympics arena's problem set. One exam per arena, which is
+            // what lets a challenge run be graded by the ordinary attempt
+            // engine instead of a second scoring path.
+            "CHALLENGE");
 
     private final ExamTypeRepository examTypeRepository;
 

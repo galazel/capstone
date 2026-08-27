@@ -18,6 +18,8 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import {
+  CHALLENGE_ARENAS_KEY,
+  getChallengeArenas,
   getChallengeLeaderboard,
   getMyChallengeRecord,
 } from "@/services/challengeService.js"
@@ -91,11 +93,14 @@ const CHALLENGES = [
    endpoints scoped to the caller, and empty means empty: a board nobody is on
    says so, and says that finishing a challenge puts you top of it. */
 
-function relativePosition(index, activeIndex) {
+/* Wrapped against the number of cards actually shown, not the full catalogue.
+   Filtering by industry can leave two arenas on screen while this still
+   assumed three, which put a card at a position no slot rendered. */
+function relativePosition(index, activeIndex, total) {
   let difference = index - activeIndex
-  const midpoint = Math.floor(CHALLENGES.length / 2)
-  if (difference > midpoint) difference -= CHALLENGES.length
-  if (difference < -midpoint) difference += CHALLENGES.length
+  const midpoint = Math.floor(total / 2)
+  if (difference > midpoint) difference -= total
+  if (difference < -midpoint) difference += total
   return difference
 }
 
@@ -123,17 +128,89 @@ export default function LearnerChallengesPage() {
     [outletContext?.data?.enrolledCertifications],
   )
 
+  /* Which arenas an admin has actually put problems into.
+     An arena with no problems is not a hard challenge -- it is a run that opens
+     onto nothing, and finding that out after clicking in is worse than being
+     told on the card. */
+  const arenaQuery = useQuery({
+    queryKey: [CHALLENGE_ARENAS_KEY],
+    queryFn: getChallengeArenas,
+    staleTime: 60_000,
+  })
+
+  const configuredArenas = useMemo(() => {
+    const map = new Map()
+    for (const arena of arenaQuery.data ?? []) {
+      map.set(arena.arenaId, arena)
+    }
+    return map
+  }, [arenaQuery.data])
+
+  /* The industries this learner is actually in, taken from what they are
+     enrolled in. A certification carries one; an arena is assigned a set. */
+  const learnerIndustries = useMemo(() => {
+    const set = new Set()
+    for (const certification of outletContext?.data?.enrolledCertifications ?? []) {
+      if (certification?.industry) set.add(certification.industry)
+    }
+    return set
+  }, [outletContext?.data?.enrolledCertifications])
+
   const challenges = useMemo(
     () =>
-      CHALLENGES.map((challenge) =>
-        challenge.needsEnrollment
-          ? { ...challenge, tracks: worldCupTracks, available: worldCupTracks.length > 0 }
-          : { ...challenge, available: true },
-      ),
-    [worldCupTracks],
+      CHALLENGES.map((challenge) => {
+        const arena = configuredArenas.get(challenge.id)
+        const configured = Boolean(arena?.configured)
+
+        /* Unknown is not unconfigured. While the lookup is in flight -- or if it
+           failed -- every arena would otherwise read as locked, which is a page
+           full of padlocks caused by a slow request. */
+        const known = arenaQuery.isSuccess
+        const ready = !known || configured
+
+        const enrolled = !challenge.needsEnrollment || worldCupTracks.length > 0
+
+        /* Whether this arena is meant for this learner at all.
+           An arena with no industries assigned is open to everyone -- that is
+           the state every arena starts in, and reading it as "nobody" would
+           empty the page the moment the feature shipped. Once an admin assigns
+           industries, only learners enrolled in a certification from one of
+           them belong there. */
+        const restricted = (arena?.industries ?? []).length > 0
+        const inIndustry =
+          !known ||
+          !restricted ||
+          (arena.industries ?? []).some((industry) => learnerIndustries.has(industry))
+
+        return {
+          ...challenge,
+          ...(challenge.needsEnrollment ? { tracks: worldCupTracks } : null),
+          problemCount: arena?.problemCount ?? 0,
+          // Told apart so the message can say which of the two it is: nothing
+          // to run, or nothing of yours to run it on.
+          unconfigured: known && !configured,
+          inIndustry,
+          available: ready && enrolled,
+        }
+      }),
+    [worldCupTracks, configuredArenas, arenaQuery.isSuccess, learnerIndustries],
   )
 
-  const activeChallenge = challenges[activeIndex]
+  /* Arenas for someone else's industry are not shown at all, rather than shown
+     locked. A padlock invites the learner to work out how to open it; this one
+     never opens for them, and saying so on a card they cannot use is noise. */
+  const visibleChallenges = useMemo(
+    () => challenges.filter((challenge) => challenge.inIndustry),
+    [challenges],
+  )
+
+  // Clamped: filtering can shorten the list under a carousel that was already
+  // scrolled, leaving `activeIndex` past the end and `activeChallenge`
+  // undefined.
+  const safeIndex = visibleChallenges.length
+    ? Math.min(activeIndex, visibleChallenges.length - 1)
+    : 0
+  const activeChallenge = visibleChallenges[safeIndex] ?? null
 
   /* Two scoped reads. The server ranks and names the board (and marks which row
      is yours), and returns your own totals, streak and recent sessions -- work
@@ -156,8 +233,11 @@ export default function LearnerChallengesPage() {
   const recentSessions = Array.isArray(record?.recent) ? record.recent : []
 
   const move = (direction) => {
+    // Modulo zero is NaN, which would wedge the carousel permanently.
+    if (visibleChallenges.length === 0) return
     setActiveIndex(
-      (current) => (current + direction + challenges.length) % challenges.length
+      (current) =>
+        (current + direction + visibleChallenges.length) % visibleChallenges.length
     )
   }
 
@@ -166,8 +246,16 @@ export default function LearnerChallengesPage() {
       navigate(challenge.route)
       return
     }
-    // The only way to be unavailable now is World Cup with nothing enrolled,
-    // so the message says what to do rather than "coming soon".
+    /* Two reasons an arena can be shut, and they need different answers: one
+       is on the learner to fix, the other is not theirs at all. */
+    if (challenge.unconfigured) {
+      toast.info(`${challenge.title} is not ready yet`, {
+        description:
+          "This arena has no problems set up yet. It unlocks as soon as an admin adds them.",
+      })
+      return
+    }
+
     toast.info("Enrol in a certification first", {
       description:
         "The World Cup bracket runs on one certification's question bank. Enrol in a certification to unlock it.",
@@ -214,8 +302,8 @@ export default function LearnerChallengesPage() {
           </div>
 
           <div className="relative mt-7 h-[390px] sm:h-[420px]">
-            {challenges.map((challenge, index) => {
-              const position = relativePosition(index, activeIndex)
+            {visibleChallenges.map((challenge, index) => {
+              const position = relativePosition(index, safeIndex, visibleChallenges.length)
               const isActive = position === 0
               const Icon = challenge.icon
               return (
@@ -297,8 +385,8 @@ export default function LearnerChallengesPage() {
               <ChevronLeft className="h-5 w-5" />
             </Button>
             <div className="flex gap-1.5" aria-hidden="true">
-              {challenges.map((challenge, index) => (
-                <span key={challenge.title} className={`h-1.5 rounded-full transition-all ${index === activeIndex ? "w-7 bg-primary" : "w-1.5 bg-muted"}`} />
+              {visibleChallenges.map((challenge, index) => (
+                <span key={challenge.title} className={`h-1.5 rounded-full transition-all ${index === safeIndex ? "w-7 bg-primary" : "w-1.5 bg-muted"}`} />
               ))}
             </div>
             <Button type="button" variant="ghost" size="icon" className="size-11 rounded-full border-2 border-border bg-card" onClick={() => move(1)} aria-label="Next challenge">
@@ -307,20 +395,35 @@ export default function LearnerChallengesPage() {
           </div>
         </section>
 
-        <div className="mx-auto flex max-w-4xl flex-col items-center justify-between gap-3 px-2 pt-5 text-center sm:flex-row sm:text-left">
-          <div>
-            <p className="font-semibold text-foreground">{activeChallenge.title}</p>
+        {/* Nothing on screen when no arena belongs to this learner's industry.
+            The strip below reads off the active card, so without this it would
+            dereference a card that is not there. */}
+        {activeChallenge ? (
+          <div className="mx-auto flex max-w-4xl flex-col items-center justify-between gap-3 px-2 pt-5 text-center sm:flex-row sm:text-left">
+            <div>
+              <p className="font-semibold text-foreground">{activeChallenge.title}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {activeChallenge.available
+                  ? "This game mode is ready to play."
+                  : activeChallenge.unconfigured
+                    ? "This arena is not set up yet."
+                    : "Enrol in a certification to queue for the World Cup bracket."}
+              </p>
+            </div>
+            <Button type="button" onClick={() => selectChallenge(activeChallenge)} variant={activeChallenge.available ? "default" : "secondary"}>
+              {activeChallenge.available ? "Start challenge" : "Enrol to unlock"}
+              <ChevronRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
+        ) : (
+          <div className="mx-auto max-w-xl px-2 pt-5 text-center">
+            <p className="font-semibold text-foreground">No arenas for you yet</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              {activeChallenge.available
-                ? "This game mode is ready to play."
-                : "Enrol in a certification to queue for the World Cup bracket."}
+              Arenas are opened to particular industries. None currently covers a
+              certification you are enrolled in.
             </p>
           </div>
-          <Button type="button" onClick={() => selectChallenge(activeChallenge)} variant={activeChallenge.available ? "default" : "secondary"}>
-            {activeChallenge.available ? "Start challenge" : "Enrol to unlock"}
-            <ChevronRight className="ml-2 h-4 w-4" />
-          </Button>
-        </div>
+        )}
 
         <section className="mx-auto max-w-6xl border-t border-blue-200/70 pt-10 dark:border-blue-900/70">
           <div className="grid gap-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.7fr)]">

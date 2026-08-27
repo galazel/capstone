@@ -38,6 +38,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import { formatBytes, useFileUpload } from "@/hooks/use-file-upload"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -359,6 +361,114 @@ const actionGroups = [
 ]
 
 const actions = actionGroups.flatMap((group) => group.items)
+
+
+/**
+ * The third pane: what is selected, and its properties.
+ *
+ * <p>The editor had tools on the left and the lesson in the middle, so every
+ * property of a section -- its name, what it holds, the order of it -- had to
+ * be edited on the canvas itself, between the blocks it describes. Pulling
+ * them out here leaves the middle as the lesson and nothing else, which is the
+ * point of the layout: the thing being made stays legible while it is made.
+ */
+function LessonInspectorPanel({
+  section,
+  sectionNumber,
+  sectionCount,
+  onSectionChange,
+  onDeleteSection,
+  onRemoveTool,
+}) {
+  return (
+      <aside className="flex h-full max-h-full w-[320px] shrink-0 flex-col overflow-hidden border-l bg-background">
+        <div className="shrink-0 border-b px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Inspector
+          </p>
+          <p className="mt-0.5 text-sm font-semibold">
+            {section ? `Section ${sectionNumber} of ${sectionCount}` : "Nothing selected"}
+          </p>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          {!section ? (
+              <p className="text-sm leading-6 text-muted-foreground">
+                Select a section in the lesson to edit its name and see what it
+                holds.
+              </p>
+          ) : (
+              <div className="space-y-5">
+                <div>
+                  <Label htmlFor="inspector-section-name" className="text-xs font-bold">
+                    Section name
+                  </Label>
+                  <Input
+                      id="inspector-section-name"
+                      value={section.sectionName ?? ""}
+                      placeholder="Untitled section"
+                      className="mt-1.5"
+                      onChange={(event) =>
+                          onSectionChange(section.id, "sectionName", event.target.value)
+                      }
+                  />
+                </div>
+
+                <div>
+                  <p className="text-xs font-bold">Content</p>
+
+                  {(section.content ?? []).length === 0 ? (
+                      <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
+                        Nothing in this section yet. Add a tool from the left.
+                      </p>
+                  ) : (
+                      <ul className="mt-1.5 space-y-1.5">
+                        {(section.content ?? []).map((block, blockIndex) => {
+                          const tool = actions.find((action) => action.type === block.type)
+
+                          return (
+                              <li
+                                  key={block.id}
+                                  className="flex items-center gap-2 rounded-lg border px-2.5 py-2"
+                              >
+                                <span className="min-w-0 flex-1 truncate text-xs font-medium">
+                                  {tool?.name ?? block.type}
+                                </span>
+
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 shrink-0"
+                                    aria-label={`Remove ${tool?.name ?? block.type}`}
+                                    onClick={() => onRemoveTool(blockIndex)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </li>
+                          )
+                        })}
+                      </ul>
+                  )}
+                </div>
+
+                <div className="border-t pt-4">
+                  <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full gap-2 text-destructive hover:text-destructive"
+                      onClick={() => onDeleteSection(section.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete section
+                  </Button>
+                </div>
+              </div>
+          )}
+        </div>
+      </aside>
+  )
+}
 
 const STATIC_MEDIA_TOOL_CONFIG = {
   image: {
@@ -1132,6 +1242,20 @@ function CreateLessons() {
     }))
   }
 
+  /* Sections that came back with nothing in them are dropped on load.
+     Generation opens a lesson with a title-only cover section, and it arrived
+     here as a full-height empty page the admin had to scroll past to reach the
+     content -- and then delete by hand on every lesson. A section with no
+     content carries nothing a learner could read, so there is nothing to lose
+     by leaving it out. Only load is filtered: a section added in the editor is
+     empty until a tool goes in it, and dropping those would make adding one
+     impossible. */
+  function withoutEmptySections(parsedSections) {
+    return parsedSections.filter(
+        (section) => (section.content ?? []).length > 0
+    )
+  }
+
   function parseLessonComponent(response) {
     const responseData = response?.data ?? response ?? {}
 
@@ -1140,7 +1264,7 @@ function CreateLessons() {
     const videoKeys = responseData.videoKeys ?? {}
 
     if (Array.isArray(structure)) {
-      return normalizeSections(structure, imageKeys, videoKeys)
+      return withoutEmptySections(normalizeSections(structure, imageKeys, videoKeys))
     }
 
     if (typeof structure !== "string" || structure.trim().length === 0) {
@@ -1150,7 +1274,9 @@ function CreateLessons() {
     try {
       const parsedStructure = JSON.parse(structure)
 
-      return normalizeSections(parsedStructure, imageKeys, videoKeys)
+      return withoutEmptySections(
+          normalizeSections(parsedStructure, imageKeys, videoKeys)
+      )
     } catch (error) {
       toast.error("Could not read saved lesson", {
         description:
@@ -1241,8 +1367,11 @@ function CreateLessons() {
       )
       const generationWarnings = getGeneratedLessonWarnings(response)
 
-      const savedGeneratedSections = await buildSavedLessonStructure(
-          generatedSections
+      /* Same filter as on load, applied at the source: generation is where
+         the empty cover section comes from, so dropping it here keeps it out
+         of the saved lesson rather than only out of this screen. */
+      const savedGeneratedSections = withoutEmptySections(
+          await buildSavedLessonStructure(generatedSections)
       )
 
       // Default behavior is to append generated sections to whatever the admin
@@ -1936,7 +2065,7 @@ function CreateLessons() {
           />
 
           <div className="min-h-0 min-w-0 flex-1 overflow-hidden p-4 sm:p-6">
-            <div className="mx-auto h-full min-h-0 w-full max-w-[1600px] overflow-hidden rounded-lg border bg-background">
+            <div className="mx-auto h-full min-h-0 w-full max-w-[1280px] overflow-hidden rounded-lg border bg-background">
               <main className="h-full min-h-0 min-w-0 overflow-y-auto overscroll-contain">
                 <div className="mx-auto w-full max-w-[1280px] p-5 sm:p-6">
                   {isLoadingLesson ? (
@@ -2021,6 +2150,15 @@ function CreateLessons() {
               </main>
             </div>
           </div>
+
+          <LessonInspectorPanel
+              section={sections[sectionIndex] ?? null}
+              sectionNumber={sectionIndex + 1}
+              sectionCount={sections.length}
+              onSectionChange={handleSectionChange}
+              onDeleteSection={handleDeleteSection}
+              onRemoveTool={(toolIndex) => handleRemoveTool(sectionIndex, toolIndex)}
+          />
         </div>
       </section>
   )
