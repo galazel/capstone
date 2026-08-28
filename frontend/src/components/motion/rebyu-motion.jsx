@@ -151,10 +151,21 @@ export function StaggerItem({ children, variants = fadeUp, as = "div", ...props 
  * max-height, which is the difference between an accordion that opens and one
  * that snaps at the end because the guess was too small.
  *
- * `overflow: hidden` is only applied while animating — leaving it on clips
- * focus rings and any popover the panel contains once it is open.
+ * `overflow: hidden` is applied only while the height is actually moving. It
+ * has to be on then, or the panel's contents spill past the animating box; it
+ * must come off after, or it clips anything the open panel legitimately hangs
+ * outside itself -- a focus ring, a popover, or the "start" bubble that sits
+ * above the first stop on the learning path, which is how this was found: the
+ * bubble was cut in half by a box that had finished animating half a second
+ * earlier.
+ *
+ * The comment above described this behaviour before the code did.
  */
 export function Collapse({ open, children, duration = 0.34 }) {
+  // Starts true: the open animation runs on mount, so the first frames need
+  // clipping just as much as a later toggle does.
+  const [animating, setAnimating] = useState(true)
+
   return (
     <AnimatePresence initial={false}>
       {open ? (
@@ -164,7 +175,9 @@ export function Collapse({ open, children, duration = 0.34 }) {
           animate={{ height: "auto", opacity: 1 }}
           exit={{ height: 0, opacity: 0 }}
           transition={{ height: { duration, ease: EASE }, opacity: { duration: duration * 0.6 } }}
-          style={{ overflow: "hidden" }}
+          onAnimationStart={() => setAnimating(true)}
+          onAnimationComplete={() => setAnimating(false)}
+          style={{ overflow: animating ? "hidden" : "visible" }}
         >
           {children}
         </motion.div>

@@ -5,6 +5,11 @@
 // Run after editing MAP below:
 //     node scripts/gen-icons.mjs
 //
+// `--check` writes nothing and exits 1 if the file on disk is not what this
+// script would produce. Worth running in CI: the generated module was hand-
+// edited once to fix a type error, and from then on regenerating it silently
+// reintroduced the error -- the fix belonged here, in the template.
+//
 // Every FA name in MAP is checked against the installed package before the file
 // is written, so a wrong name fails loudly here instead of rendering an empty
 // box in the app. The script derives the icon list from what the source
@@ -181,6 +186,7 @@ const MAP = {
   ShieldAlert: "faTriangleExclamation",
   ShieldCheck: "faShieldHalved",
   ShieldX: "faBan",
+  FastForward: "faForwardFast",
   SkipForward: "faForwardStep",
   Sparkles: "faWandMagicSparkles",
   Star: "faStar",
@@ -331,8 +337,16 @@ function icon(definition: IconDefinition, displayName: string) {
         icon={definition}
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ref={ref as any}
-        style={size === undefined ? style : { width: size, height: size, ...style }}
-        {...props}
+        // FontAwesome types \`style\` as \`CSSProperties & CSSVariables\`, whose
+        // index signature (\`--fa-font-\${string}\`) React's plain
+        // \`CSSProperties\` does not satisfy, and its props as its own SVG prop
+        // set, where \`mask\` and friends mean something else. Both are cast
+        // rather than modelled: this module's job is to accept lucide's props
+        // at the call sites, not to re-describe FontAwesome's.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        style={size === undefined ? (style as any) : ({ width: size, height: size, ...(style as any) } as any)}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        {...(props as any)}
       />
     )
   })
@@ -346,5 +360,25 @@ export type LucideIcon = ReturnType<typeof icon>
 ${resolved.map((r) => `export const ${r.name} = icon(${r.fa}, "${r.name}")`).join("\n")}
 `
 
-fs.writeFileSync(path.join(SRC, "components", "icons.tsx"), out, "utf8")
+const target = path.join(SRC, "components", "icons.tsx")
+
+if (process.argv.includes("--check")) {
+  const LF = String.fromCharCode(10)
+  const CRLF = String.fromCharCode(13) + LF
+  // Line endings are git's business (the working copy is CRLF on Windows),
+  // so compare the content rather than the bytes.
+  const onDisk = fs.existsSync(target) ? fs.readFileSync(target, "utf8") : ""
+  if (onDisk.split(CRLF).join(LF) !== out) {
+    console.error(
+      "DRIFT  src/components/icons.tsx is not what gen-icons.mjs produces." +
+        LF +
+        "       Put the change in scripts/gen-icons.mjs, then run `npm run icons`."
+    )
+    process.exit(1)
+  }
+  console.log(`OK  icons.tsx matches the generator (${resolved.length} icons)`)
+  process.exit(0)
+}
+
+fs.writeFileSync(target, out, "utf8")
 console.log(`OK  ${resolved.length} icons -> ${faImports.length} FontAwesome glyphs`)

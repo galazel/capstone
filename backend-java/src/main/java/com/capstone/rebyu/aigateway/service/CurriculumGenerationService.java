@@ -89,7 +89,8 @@ public class CurriculumGenerationService {
             CertificationDto dto,
             List<MultipartFile> files,
             String additionalInstructions,
-            Long triggeredByUserId
+            Long triggeredByUserId,
+            String reviewMode
     ) throws IOException {
         aiUploadValidator.validate(files);
 
@@ -100,7 +101,8 @@ public class CurriculumGenerationService {
         log.info("Created certification {} (structure pending async generation)", certificationId);
 
         GenerationRequest request = recordGenerationRequest(
-                certificationId, GenerationRequest.RequestType.CERTIFICATION, additionalInstructions, triggeredByUserId);
+                certificationId, GenerationRequest.RequestType.CERTIFICATION, additionalInstructions,
+                triggeredByUserId, reviewMode);
         publishAfterCommit(request.getGenerationRequestId(), certificationId);
 
         // Ingest the source so the async consumer (and later, per-lesson
@@ -121,7 +123,8 @@ public class CurriculumGenerationService {
             Long certificationId,
             List<MultipartFile> files,
             String additionalInstructions,
-            Long triggeredByUserId
+            Long triggeredByUserId,
+            String reviewMode
     ) throws IOException {
         aiUploadValidator.validate(files);
         self.assertStructureReplaceable(certificationId);
@@ -132,7 +135,8 @@ public class CurriculumGenerationService {
         self.clearStructure(certificationId);
 
         GenerationRequest request = recordGenerationRequest(
-                certificationId, GenerationRequest.RequestType.CERTIFICATION, additionalInstructions, triggeredByUserId);
+                certificationId, GenerationRequest.RequestType.CERTIFICATION, additionalInstructions,
+                triggeredByUserId, reviewMode);
         publishAfterCommit(request.getGenerationRequestId(), certificationId);
 
         ingestFiles(files, certificationId);
@@ -261,13 +265,28 @@ public class CurriculumGenerationService {
         return contexts;
     }
 
+    /**
+     * Anything other than an explicit "auto" is supervised. Unrecognised input
+     * must not silently turn a run the admin meant to review into one that
+     * finishes without them.
+     */
+    private String normalizeReviewMode(String reviewMode) {
+        return reviewMode != null && "auto".equalsIgnoreCase(reviewMode.trim()) ? "auto" : "guided";
+    }
+
     private GenerationRequest recordGenerationRequest(
             Long certificationId, GenerationRequest.RequestType type, String additionalInstructions,
-            Long triggeredByUserId) {
+            Long triggeredByUserId, String reviewMode) {
         String paramsJson;
         try {
-            paramsJson = objectMapper.writeValueAsString(
-                    Map.of("additionalInstructions", additionalInstructions == null ? "" : additionalInstructions));
+            paramsJson = objectMapper.writeValueAsString(Map.of(
+                    "additionalInstructions", additionalInstructions == null ? "" : additionalInstructions,
+                    // Read back by Python when it seeds the run: "guided"
+                    // pauses at every review checkpoint, "auto" generates
+                    // straight through. Recorded on the request rather than
+                    // sent on the queue message so a retry or restart -- which
+                    // re-reads this row -- keeps the admin's choice.
+                    "reviewMode", normalizeReviewMode(reviewMode)));
         } catch (Exception e) {
             paramsJson = null;
         }

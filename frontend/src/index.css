@@ -213,7 +213,7 @@ body.netacad-overlay-theme {
 
 .netacad-portal [data-slot="card"] {
     border-color: color-mix(in srgb, var(--border) 78%, transparent);
-    border-radius: 0.625rem;
+    border-radius: var(--radius-rb-card);
     box-shadow: none;
 }
 
@@ -238,7 +238,7 @@ body.netacad-overlay-theme {
 :is(.admin-portal, .institution-portal) :is(.rounded-xl, .rounded-2xl, .rounded-3xl).border:is(.bg-card, .bg-background, .bg-white),
 :is(.admin-portal, .institution-portal) :is(section, article).rounded-xl.border {
     border-color: color-mix(in srgb, var(--border) 78%, transparent);
-    border-radius: 0.625rem;
+    border-radius: var(--radius-rb-card);
     box-shadow: none;
 }
 
@@ -463,7 +463,7 @@ body.netacad-overlay-theme {
 
 .netacad-portal [data-slot="card"] {
     border-color: var(--border);
-    border-radius: 0.625rem;
+    border-radius: var(--radius-rb-card);
     background: #ffffff;
     box-shadow: none;
     transition: border-color 160ms ease, box-shadow 160ms ease;
@@ -483,7 +483,7 @@ body.netacad-overlay-theme {
 :is(.admin-portal, .institution-portal) :is(.rounded-xl, .rounded-2xl, .rounded-3xl).border:is(.bg-card, .bg-background, .bg-white),
 :is(.admin-portal, .institution-portal) :is(section, article).rounded-xl.border {
     border-color: var(--border);
-    border-radius: 0.625rem;
+    border-radius: var(--radius-rb-card);
     background-color: #ffffff;
     box-shadow: none;
 }
@@ -497,7 +497,7 @@ body.netacad-overlay-theme {
 /* Component language shared by inline portal UI and Radix content portaled to
    document.body. Explicit data slots keep this independent from page markup. */
 :is(.netacad-portal, .netacad-overlay-theme) [data-slot="button"] {
-    border-radius: 999px;
+    border-radius: var(--radius-rb-control);
     font-weight: 700;
     letter-spacing: 0;
 }
@@ -506,7 +506,7 @@ body.netacad-overlay-theme {
 :is(.netacad-portal, .netacad-overlay-theme) [data-slot="button"][data-variant="default"] {
     background: var(--primary);
     border: 0;
-    box-shadow: 0 4px 0 #1553c4;
+    box-shadow: 0 var(--rb-lip) 0 var(--rb-primary-lip);
 }
 
 :is(.netacad-portal, .netacad-overlay-theme) [data-slot="button"][data-variant="default"]:hover {
@@ -522,7 +522,7 @@ body.netacad-overlay-theme {
 
 :is(.netacad-portal, .netacad-overlay-theme)
     [data-slot="button"][data-variant="destructive"] {
-    box-shadow: 0 4px 0 #e03d3d;
+    box-shadow: 0 var(--rb-lip) 0 var(--color-rb-cardinal-lip);
 }
 
 :is(.netacad-portal, .netacad-overlay-theme)
@@ -548,7 +548,7 @@ body.netacad-overlay-theme {
     [data-slot="textarea"],
     [data-slot="select-trigger"]
 ) {
-    border-radius: 0.75rem;
+    border-radius: var(--radius-rb-control);
     border-width: 2px;
     border-color: var(--input);
     background: var(--card);
@@ -568,9 +568,9 @@ body.netacad-overlay-theme {
     [data-slot="dialog-content"],
     [data-slot="alert-dialog-content"]
 ) {
-    border: 1px solid var(--border);
-    border-radius: 0.75rem;
-    box-shadow: 0 24px 64px rgb(15 23 42 / 0.16);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-rb-card);
+    box-shadow: var(--rb-elev-overlay);
 }
 
 :is(.netacad-portal, .netacad-overlay-theme) :is(
@@ -590,7 +590,7 @@ body.netacad-overlay-theme {
 ) {
     border-color: var(--border);
     background: #ffffff;
-    box-shadow: 0 24px 64px rgb(15 23 42 / 0.16);
+    box-shadow: var(--rb-elev-overlay);
 }
 
 :is(.netacad-portal, .netacad-overlay-theme) :is(
@@ -599,9 +599,9 @@ body.netacad-overlay-theme {
     [data-slot="select-content"],
     [data-slot="popover-content"]
 ) {
-    border: 1px solid var(--border);
-    border-radius: 0.625rem;
-    box-shadow: 0 12px 32px rgb(15 23 42 / 0.12);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-rb-card);
+    box-shadow: var(--rb-elev-popover);
 }
 
 :is(.netacad-portal, .netacad-overlay-theme) [data-slot="tabs-list"] {
@@ -651,7 +651,7 @@ body.netacad-overlay-theme {
 }
 
 :is(.netacad-portal, .netacad-overlay-theme) [data-slot="badge"] {
-    border-radius: 999px;
+    border-radius: var(--radius-rb-control);
     font-weight: 700;
     letter-spacing: 0.01em;
 }
@@ -664,7 +664,7 @@ body.netacad-overlay-theme {
 }
 
 :is(.netacad-portal, .netacad-overlay-theme) [data-slot="accordion-trigger"] {
-    border-radius: 0.25rem;
+    border-radius: var(--radius-rb-control);
 }
 
 :is(.netacad-portal, .netacad-overlay-theme) [data-slot="accordion-trigger"]:hover {
@@ -673,17 +673,17 @@ body.netacad-overlay-theme {
 }
 
 :is(.netacad-portal, .netacad-overlay-theme) [data-slot="skeleton"] {
-    border-radius: 0.3rem;
+    border-radius: var(--radius-rb-control);
     background: #e9edf1;
 }
 
 :is(.netacad-portal, .netacad-overlay-theme) [data-slot="alert"] {
-    border-radius: 0.25rem;
+    border-radius: var(--radius-rb-card);
     border-left-width: 4px;
 }
 
 :is(.netacad-portal, .netacad-overlay-theme) [data-slot="progress"] {
-    border-radius: 999px;
+    border-radius: var(--radius-rb-pill);
     background: #dce3e9;
 }
 
@@ -708,7 +708,7 @@ body.netacad-overlay-theme {
     gap: 10px;
     overflow: hidden;
     border: 2px solid var(--border);
-    border-radius: var(--radius-rb-tile);
+    border-radius: var(--radius-rb-card);
     background: var(--popover);
     color: var(--foreground);
     padding: 14px 46px 14px 14px;
@@ -755,7 +755,7 @@ body.netacad-overlay-theme {
     align-self: center;
     flex-shrink: 0;
     height: 32px;
-    border-radius: var(--radius-rb-pill);
+    border-radius: var(--radius-rb-control);
     padding-inline: 14px;
     font-size: 0.8125rem;
     font-weight: 700;
@@ -810,7 +810,7 @@ body.netacad-overlay-theme {
     height: 24px !important;
     transform: translateY(-50%) !important;
     border: 0;
-    border-radius: var(--radius-rb-pill);
+    border-radius: var(--radius-rb-control);
     background: transparent;
     color: var(--muted-foreground);
     box-shadow: none;
@@ -1054,8 +1054,8 @@ body.netacad-overlay-theme {
     [data-slot="popover-content"]
 ) {
     border-color: var(--border);
-    border-radius: 0.75rem;
-    box-shadow: 0 12px 32px rgb(39 52 82 / 0.12);
+    border-radius: var(--radius-rb-card);
+    box-shadow: var(--rb-elev-popover);
     font-size: 0.9375rem;
 }
 
@@ -1064,7 +1064,7 @@ body.netacad-overlay-theme {
     [data-slot="select-item"]
 ) {
     min-height: 2.5rem;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-rb-control);
     font-size: 0.9375rem;
 }
 
@@ -1107,6 +1107,21 @@ body.netacad-overlay-theme {
     --rb-lip-sm: 2px;
     --rb-lip-lg: 6px;
 
+    /* Two elevations, and only two.
+
+       A lip is depth on something resting on the page; these are depth on
+       something floating above it, and every floating thing in the product is
+       one of two kinds. `popover` is the small transient surface you opened by
+       pressing something next to it -- menu, select, popover, tooltip, toast.
+       `overlay` is the surface that takes the whole screen's attention --
+       dialog, alert dialog, sheet, drawer.
+
+       Named because they were previously four different blur/spread triples
+       written out at four call sites, which is how a select ended up floating
+       at a different height from the popover directly beside it. */
+    --rb-elev-popover: 0 12px 32px rgb(15 23 42 / 0.12);
+    --rb-elev-overlay: 0 24px 64px rgb(15 23 42 / 0.16);
+
     --rb-s1: 8px;
     --rb-s2: 16px;
     --rb-s3: 24px;
@@ -1133,7 +1148,7 @@ body.netacad-overlay-theme {
 
 /* --- Buttons --------------------------------------------------------------- */
 :root [data-slot="button"] {
-    border-radius: var(--radius-rb-pill);
+    border-radius: var(--radius-rb-control);
     font-weight: 700;
     letter-spacing: 0.01em;
     transition:
@@ -1188,7 +1203,7 @@ body.netacad-overlay-theme {
 /* Buttons packed into a group keep square-ish ends so they sit flush against
    each other — the pill radius above would leave gaps between segments. */
 :root [data-slot="button-group"] [data-slot="button"] {
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-rb-control);
 }
 
 /* --- Surfaces -------------------------------------------------------------- */
@@ -1199,12 +1214,12 @@ body.netacad-overlay-theme {
 :is(.admin-portal, .institution-portal) :is(section, article).rounded-xl.border {
     border-color: var(--border);
     border-width: 2px;
-    border-radius: 1rem;
+    border-radius: var(--radius-rb-card);
     box-shadow: none;
 }
 
 .netacad-portal [data-slot="table-container"] {
-    border-radius: 1rem;
+    border-radius: var(--radius-rb-card);
 }
 
 .netacad-portal [data-slot="table-header"] {
@@ -1218,7 +1233,7 @@ body.netacad-overlay-theme {
 :root :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]) {
     border-width: 2px;
     border-color: var(--border);
-    border-radius: 0.75rem;
+    border-radius: var(--radius-rb-control);
     background: var(--card);
     transition:
         border-color 0.15s ease-out,
@@ -1276,14 +1291,14 @@ body.netacad-overlay-theme {
 ) {
     border-width: 2px;
     border-color: var(--border);
-    border-radius: var(--radius-rb-tile);
+    border-radius: var(--radius-rb-card);
     box-shadow: 0 var(--rb-lip) 0 var(--border);
     padding: 6px;
 }
 
 :root :is([data-slot="dropdown-menu-item"], [data-slot="select-item"], [data-slot="command-item"]) {
     min-height: 2.5rem;
-    border-radius: 10px;
+    border-radius: var(--radius-rb-control);
     font-weight: 500;
 }
 :root :is([data-slot="dropdown-menu-item"], [data-slot="select-item"], [data-slot="command-item"]):is(
@@ -1303,13 +1318,13 @@ body.netacad-overlay-theme {
     height: auto;
     gap: 4px;
     border: 2px solid var(--border);
-    border-radius: var(--radius-rb-pill);
+    border-radius: var(--radius-rb-control);
     background: var(--muted);
     padding: 4px;
 }
 :root [data-slot="tabs-list"]:not([data-variant="line"]) [data-slot="tabs-trigger"] {
     border: 0;
-    border-radius: var(--radius-rb-pill);
+    border-radius: var(--radius-rb-control);
     padding-inline: 16px;
     font-weight: 700;
     color: var(--muted-foreground);
@@ -1342,7 +1357,7 @@ body.netacad-overlay-theme {
 
 /* --- Tables ---------------------------------------------------------------- */
 :root [data-slot="table-container"] {
-    border-radius: var(--radius-rb-tile);
+    border-radius: var(--radius-rb-card);
     border: 2px solid var(--border);
 }
 :root [data-slot="table-header"] {
@@ -1366,7 +1381,7 @@ body.netacad-overlay-theme {
 :root [data-slot="alert"] {
     border-width: 2px;
     border-color: var(--border);
-    border-radius: var(--radius-rb-tile);
+    border-radius: var(--radius-rb-card);
     padding: var(--rb-s2);
 }
 /* Destructive alerts are outlined in Cardinal rather than tinted — the border
@@ -1405,7 +1420,7 @@ body.netacad-overlay-theme {
 }
 :root [data-slot="accordion-trigger"] {
     font-weight: 700;
-    border-radius: 10px;
+    border-radius: var(--radius-rb-control);
 }
 :root [data-slot="accordion-trigger"]:focus-visible {
     outline: 3px solid var(--rb-focus);
@@ -1414,14 +1429,14 @@ body.netacad-overlay-theme {
 
 /* --- Tooltip --------------------------------------------------------------- */
 :root [data-slot="tooltip-content"] {
-    border-radius: 10px;
+    border-radius: var(--radius-rb-control);
     font-weight: 600;
     padding: 6px 10px;
 }
 
 /* --- Badges & chips -------------------------------------------------------- */
 :root [data-slot="badge"] {
-    border-radius: var(--radius-rb-pill);
+    border-radius: var(--radius-rb-control);
     font-weight: 700;
     padding-inline: 10px;
 }
@@ -1451,7 +1466,7 @@ body.netacad-overlay-theme {
     background: var(--border);
 }
 :root [data-slot="skeleton"] {
-    border-radius: 10px;
+    border-radius: var(--radius-rb-control);
     background: var(--muted);
 }
 
@@ -1472,7 +1487,7 @@ body.netacad-overlay-theme {
    unlayered, so it would win and re-round them. Give that variant an explicit
    `rounded-none` on the content itself at the call site. */
 :root :is([data-slot="bubble-content"], [data-slot="message-content"]) {
-    border-radius: var(--radius-rb-tile);
+    border-radius: var(--radius-rb-card);
 }
 
 /* A bubble that really is interactive keeps the travel, so the affordance
@@ -1490,7 +1505,7 @@ body.netacad-overlay-theme {
    take the travel. Radius only steps up to the tile — these sit in a narrow
    rail where a full pill would waste the horizontal space. */
 :root [data-slot="sidebar-menu-button"] {
-    border-radius: 12px;
+    border-radius: var(--radius-rb-control);
     font-weight: 600;
     transition:
         transform var(--rb-press),
@@ -1510,7 +1525,7 @@ body.netacad-overlay-theme {
 }
 
 :root :is([data-slot="sidebar-menu-sub-button"], [data-slot="sidebar-group-action"], [data-slot="sidebar-menu-action"]) {
-    border-radius: 10px;
+    border-radius: var(--radius-rb-control);
 }
 
 /* --- Scroll areas ---------------------------------------------------------- */
@@ -1551,12 +1566,14 @@ body.netacad-overlay-theme {
 
 /* --- Auth shell ------------------------------------------------------------ */
 /* Overrides the compact defaults declared near the top of this file: auth is a
-   low-density, high-intent surface, so it takes the full tactile sizing —
-   the same 56px key height and tile radius the design system uses. */
+   low-density, high-intent surface, so it takes the full tactile sizing — the
+   same 56px key height the design system uses. The corner is the shared control
+   radius, not a larger one: a field on this page and a field in the portal are
+   the same kind of thing and should not be different shapes. */
 .public-auth-shell :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]) {
     min-height: 56px;
     padding-inline: var(--rb-s3);
-    border-radius: var(--radius-rb-tile);
+    border-radius: var(--radius-rb-control);
     /* Colour normally lives in the block near the top of this file, but the
        global input rule matches with equal specificity and lands after it, so
        a field here inherits `--card` — white. That was fine while the form
@@ -1572,7 +1589,7 @@ body.netacad-overlay-theme {
 .public-auth-shell [data-slot="button"] {
     min-height: 56px;
     padding-inline: var(--rb-s4);
-    border-radius: var(--radius-rb-pill);
+    border-radius: var(--radius-rb-control);
     background: var(--color-rb-feather);
     color: var(--color-rb-snow);
     box-shadow: 0 var(--rb-lip) 0 var(--color-rb-feather-lip);

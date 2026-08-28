@@ -19,8 +19,7 @@ export default function GenerateQuestionDialog({
             </DialogTrigger>
 
             <DialogContent
-                className="
-          h-[calc(100dvh-2rem)]
+                className="h-[calc(100dvh-2rem)]
           w-[calc(100vw-2rem)]
           max-w-none
           rounded-2xl

@@ -409,7 +409,7 @@ export default function InstitutionDashboardPage() {
                 <div className="text-sm text-muted-foreground">
                   No learners assigned yet.
                   <div className="mt-3">
-                    <Button asChild size="sm" variant="outline" className="rounded-full">
+                    <Button asChild size="sm" variant="outline" >
                       <Link to="/institution/certifications">Assign a learner</Link>
                     </Button>
                   </div>
@@ -501,7 +501,7 @@ export default function InstitutionDashboardPage() {
                 <div className="text-sm text-muted-foreground">
                   No invitations sent yet.
                   <div className="mt-3">
-                    <Button asChild size="sm" variant="outline" className="rounded-full">
+                    <Button asChild size="sm" variant="outline" >
                       <Link to="/institution/certifications">Invite a learner</Link>
                     </Button>
                   </div>

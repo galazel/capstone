@@ -22,7 +22,6 @@ import {
   faArrowTrendDown,
   faArrowTrendUp,
   faArrowUp,
-  faArrowUpRightFromSquare,
   faArrowsRotate,
   faAward,
   faBan,
@@ -33,13 +32,11 @@ import {
   faBookOpen,
   faBookOpenReader,
   faBookmark,
-  faBox,
   faBrain,
   faBriefcase,
   faBuilding,
   faBullhorn,
   faBullseye,
-  faCalendarCheck,
   faCalendarDays,
   faCertificate,
   faChartColumn,
@@ -67,13 +64,10 @@ import {
   faClipboardList,
   faClock,
   faClockRotateLeft,
-  faCloud,
   faCloudArrowUp,
   faCode,
-  faCodeBranch,
   faCoins,
   faComment,
-  faComments,
   faCompass,
   faCompress,
   faCopy,
@@ -96,13 +90,13 @@ import {
   faFileLines,
   faFileVideo,
   faFileZipper,
-  faFilter,
   faFire,
   faFlag,
   faFloppyDisk,
   faFolderOpen,
   faFolderTree,
   faFont,
+  faForwardFast,
   faForwardStep,
   faGauge,
   faGear,
@@ -156,7 +150,6 @@ import {
   faSort,
   faSpinner,
   faStar,
-  faStopwatch,
   faSun,
   faTableCells,
   faTableCellsLarge,
@@ -204,10 +197,15 @@ function icon(definition: IconDefinition, displayName: string) {
         icon={definition}
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ref={ref as any}
-        // Cast to any to allow CSS custom properties used by FontAwesome (e.g. --fa-font-*)
+        // FontAwesome types `style` as `CSSProperties & CSSVariables`, whose
+        // index signature (`--fa-font-${string}`) React's plain
+        // `CSSProperties` does not satisfy, and its props as its own SVG prop
+        // set, where `mask` and friends mean something else. Both are cast
+        // rather than modelled: this module's job is to accept lucide's props
+        // at the call sites, not to re-describe FontAwesome's.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         style={size === undefined ? (style as any) : ({ width: size, height: size, ...(style as any) } as any)}
-        // Spread props as any to satisfy FontAwesomeIcon prop types (SVG props like 'mask' differ)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         {...(props as any)}
       />
     )
@@ -250,7 +248,6 @@ export const BookOpenIcon = icon(faBookOpen, "BookOpenIcon")
 export const Bookmark = icon(faBookmark, "Bookmark")
 export const Bot = icon(faRobot, "Bot")
 export const BotIcon = icon(faRobot, "BotIcon")
-export const Box = icon(faBox, "Box")
 export const Brain = icon(faBrain, "Brain")
 export const BrainCircuit = icon(faBrain, "BrainCircuit")
 export const BrainCircuitIcon = icon(faBrain, "BrainCircuitIcon")
@@ -258,7 +255,6 @@ export const Briefcase = icon(faBriefcase, "Briefcase")
 export const Building = icon(faBuilding, "Building")
 export const Building2 = icon(faCity, "Building2")
 export const Building2Icon = icon(faCity, "Building2Icon")
-export const CalendarCheck = icon(faCalendarCheck, "CalendarCheck")
 export const CalendarDays = icon(faCalendarDays, "CalendarDays")
 export const Check = icon(faCheck, "Check")
 export const CheckCheck = icon(faCheckDouble, "CheckCheck")
@@ -294,7 +290,6 @@ export const ClipboardListIcon = icon(faClipboardList, "ClipboardListIcon")
 export const Clock = icon(faClock, "Clock")
 export const Clock3 = icon(faClock, "Clock3")
 export const ClockIcon = icon(faClock, "ClockIcon")
-export const Cloud = icon(faCloud, "Cloud")
 export const CloudOffIcon = icon(faPlugCircleXmark, "CloudOffIcon")
 export const Code2 = icon(faCode, "Code2")
 export const Coins = icon(faCoins, "Coins")
@@ -311,10 +306,10 @@ export const DollarSign = icon(faDollarSign, "DollarSign")
 export const Download = icon(faDownload, "Download")
 export const DownloadIcon = icon(faDownload, "DownloadIcon")
 export const Edit = icon(faPenToSquare, "Edit")
-export const ExternalLink = icon(faArrowUpRightFromSquare, "ExternalLink")
 export const Eye = icon(faEye, "Eye")
 export const EyeIcon = icon(faEye, "EyeIcon")
 export const EyeOffIcon = icon(faEyeSlash, "EyeOffIcon")
+export const FastForward = icon(faForwardFast, "FastForward")
 export const FileArchive = icon(faFileZipper, "FileArchive")
 export const FileArchiveIcon = icon(faFileZipper, "FileArchiveIcon")
 export const FileIcon = icon(faFile, "FileIcon")
@@ -325,10 +320,7 @@ export const FileSpreadsheet = icon(faFileExcel, "FileSpreadsheet")
 export const FileSpreadsheetIcon = icon(faFileExcel, "FileSpreadsheetIcon")
 export const FileText = icon(faFileLines, "FileText")
 export const FileTextIcon = icon(faFileLines, "FileTextIcon")
-export const Files = icon(faFileLines, "Files")
 export const FilesIcon = icon(faFileLines, "FilesIcon")
-export const Filter = icon(faFilter, "Filter")
-export const Flag = icon(faFlag, "Flag")
 export const FlagIcon = icon(faFlag, "FlagIcon")
 export const Flame = icon(faFire, "Flame")
 export const FlipHorizontal = icon(faArrowRightArrowLeft, "FlipHorizontal")
@@ -338,7 +330,6 @@ export const FolderTree = icon(faFolderTree, "FolderTree")
 export const Gauge = icon(faGauge, "Gauge")
 export const GaugeIcon = icon(faGauge, "GaugeIcon")
 export const Gift = icon(faGift, "Gift")
-export const GitBranch = icon(faCodeBranch, "GitBranch")
 export const GraduationCap = icon(faGraduationCap, "GraduationCap")
 export const GraduationCapIcon = icon(faGraduationCap, "GraduationCapIcon")
 export const Grid2X2 = icon(faTableCellsLarge, "Grid2X2")
@@ -392,7 +383,6 @@ export const Medal = icon(faMedal, "Medal")
 export const MegaphoneIcon = icon(faBullhorn, "MegaphoneIcon")
 export const Menu = icon(faBars, "Menu")
 export const MessageCircle = icon(faComment, "MessageCircle")
-export const MessagesSquareIcon = icon(faComments, "MessagesSquareIcon")
 export const Minimize2Icon = icon(faCompress, "Minimize2Icon")
 export const MinusCircleIcon = icon(faCircleMinus, "MinusCircleIcon")
 export const MoonIcon = icon(faMoon, "MoonIcon")
@@ -409,14 +399,12 @@ export const PanelsTopLeft = icon(faTableCells, "PanelsTopLeft")
 export const Pencil = icon(faPencil, "Pencil")
 export const PencilIcon = icon(faPencil, "PencilIcon")
 export const PinIcon = icon(faThumbtack, "PinIcon")
-export const Play = icon(faPlay, "Play")
 export const PlayCircle = icon(faCirclePlay, "PlayCircle")
 export const PlayIcon = icon(faPlay, "PlayIcon")
 export const Plus = icon(faPlus, "Plus")
 export const PlusCircleIcon = icon(faCirclePlus, "PlusCircleIcon")
 export const PlusIcon = icon(faPlus, "PlusIcon")
 export const Radio = icon(faTowerBroadcast, "Radio")
-export const ReceiptText = icon(faReceipt, "ReceiptText")
 export const ReceiptTextIcon = icon(faReceipt, "ReceiptTextIcon")
 export const RefreshCw = icon(faArrowsRotate, "RefreshCw")
 export const RefreshCwIcon = icon(faArrowsRotate, "RefreshCwIcon")
@@ -430,7 +418,6 @@ export const Search = icon(faMagnifyingGlass, "Search")
 export const Send = icon(faPaperPlane, "Send")
 export const SendHorizontal = icon(faPaperPlane, "SendHorizontal")
 export const SendIcon = icon(faPaperPlane, "SendIcon")
-export const Server = icon(faServer, "Server")
 export const ServerCog = icon(faServer, "ServerCog")
 export const Settings = icon(faGear, "Settings")
 export const SettingsIcon = icon(faGear, "SettingsIcon")
@@ -455,7 +442,6 @@ export const TargetIcon = icon(faBullseye, "TargetIcon")
 export const Terminal = icon(faTerminal, "Terminal")
 export const TerminalIcon = icon(faTerminal, "TerminalIcon")
 export const TicketIcon = icon(faTicket, "TicketIcon")
-export const Timer = icon(faStopwatch, "Timer")
 export const TimerReset = icon(faClockRotateLeft, "TimerReset")
 export const Trash2 = icon(faTrash, "Trash2")
 export const Trash2Icon = icon(faTrash, "Trash2Icon")

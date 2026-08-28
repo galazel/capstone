@@ -4,12 +4,13 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 /**
  * Boot screen.
  *
- * A spinner says "wait"; this says what the product is. The figure is the same
- * road the arenas draw for a run of problems — a path with checkpoints on it —
- * so the first thing a learner ever sees is the metaphor the rest of the app
- * uses for progress. The road paints itself, and each checkpoint lights as the
- * paint reaches it, which is the same lighting-up the curriculum's ticks do
- * when a lesson is finished.
+ * An atom: three tilted orbits turning against each other, in the product's
+ * own tones. It
+ * replaces a road that painted itself checkpoint by checkpoint: the road was
+ * the better metaphor, but it was a wide horizontal figure that only worked at
+ * a size which left the rest of the screen empty, and it took two seconds to
+ * complete a statement nobody waits around to read. A disc says "working" in
+ * the first frame and is honest at any size.
  *
  * Built to be seen for a quarter of a second. Everything is on screen by the
  * first frame — nothing fades in from nothing, no build-up before the figure
@@ -80,122 +81,67 @@ const TAG_TONE = {
 /* Checkpoints first, road second: the path is built *through* these points, so
    a node can never drift off the line it is supposed to sit on. Alternating y
    is what makes it read as a journey rather than a progress bar with dots. */
-const NODES = [
-  { x: 26, y: 74, tone: "var(--color-rb-macaw)", lip: "var(--color-rb-macaw-lip)" },
-  { x: 94, y: 42, tone: "var(--color-rb-bee)", lip: "var(--color-rb-bee-lip)" },
-  { x: 162, y: 76, tone: "var(--color-rb-beetle)", lip: "var(--color-rb-beetle-lip)" },
-  { x: 230, y: 40, tone: "var(--color-rb-fox)", lip: "var(--color-rb-fox-lip)" },
-  { x: 298, y: 70, tone: "var(--color-rb-feather)", lip: "var(--color-rb-feather-lip)" },
+/* The bar's segments, left to right, each in its own tone.
+
+   Five is the count that reads as a bar rather than as a row of separate
+   things: at three the gaps dominate and it looks like a rating, and past six
+   the segments get too narrow to carry a colour at this width.
+
+   Tones rather than one repeated colour, because a five-segment bar in a
+   single hue is a progress bar, and this measures nothing -- the sweep is the
+   product's palette moving, not a percentage climbing. */
+const BAR_TONES = [
+  "var(--color-rb-macaw)",
+  "var(--color-rb-bee)",
+  "var(--color-rb-beetle)",
+  "var(--color-rb-fox)",
+  "var(--color-rb-feather)",
 ]
 
-/** Catmull-Rom through the checkpoints, so consecutive curves meet at the same
- *  slope and the whole thing reads as one continuous road. */
-function roadPath(points) {
-  let d = `M ${points[0].x} ${points[0].y}`
+/** One full pass of the bar, in seconds. */
+const BAR_CYCLE = 1.9
 
-  for (let i = 0; i < points.length - 1; i += 1) {
-    const p0 = points[i - 1] ?? points[i]
-    const p1 = points[i]
-    const p2 = points[i + 1]
-    const p3 = points[i + 2] ?? points[i + 1]
-
-    d += ` C ${p1.x + (p2.x - p0.x) / 6} ${p1.y + (p2.y - p0.y) / 6}, ${
-      p2.x - (p3.x - p1.x) / 6
-    } ${p2.y - (p3.y - p1.y) / 6}, ${p2.x} ${p2.y}`
-  }
-
-  return d
-}
-
-const ROAD = roadPath(NODES)
-
-/** One full paint of the road, in seconds. */
-const SWEEP = 2.1
-
-/* --------------------------------------------------------------- components */
-
-function Road({ still }) {
+/**
+ * The figure: five boxes filling left to right, over and over.
+ *
+ * Each segment wipes in from its own left edge rather than fading, so the
+ * motion has a direction -- a row of boxes pulsing in place reads as an error
+ * state, and a row that travels reads as work being done. The stagger is a
+ * fraction of the cycle rather than the whole of it, so segments overlap and
+ * the bar is never entirely empty mid-pass.
+ */
+function LoadingBar({ still }) {
   return (
-    <svg
-      viewBox="0 0 324 116"
-      className="w-full"
-      fill="none"
-      aria-hidden="true"
-      role="presentation"
-    >
-      {/* Kerb, then carriageway. Two strokes rather than one with a border,
-          because SVG has no border and a filter would cost a repaint a frame. */}
-      <path d={ROAD} stroke="rgb(0 0 0 / 0.06)" strokeWidth={18} strokeLinecap="round" />
-      <path d={ROAD} stroke="var(--color-rb-swan)" strokeWidth={14} strokeLinecap="round" />
-
-      {/* The paint. `pathLength="1"` normalises the curve's arc length so the
-          travelled share is a plain 0..1 number rather than something that has
-          to be measured off four cubics. */}
-      <motion.path
-        d={ROAD}
-        pathLength="1"
-        stroke="var(--color-rb-feather)"
-        strokeWidth={14}
-        strokeLinecap="round"
-        initial={{ pathLength: still ? 1 : 0 }}
-        animate={still ? { pathLength: 1 } : { pathLength: [0, 1] }}
-        transition={
-          still
-            ? { duration: 0 }
-            : { duration: SWEEP, ease: [0.45, 0, 0.55, 1], repeat: Infinity, repeatDelay: 0.35 }
-        }
-      />
-
-      {/* Centre line last, so it sits on top of both the unpainted road and the
-          painted one and the road reads as one surface throughout. */}
-      <path
-        d={ROAD}
-        stroke="white"
-        strokeWidth={2.5}
-        strokeDasharray="7 9"
-        strokeLinecap="round"
-        opacity={0.85}
-      />
-
-      {NODES.map((node, index) => {
-        // Each checkpoint lights as the paint arrives, so the sequence is a
-        // consequence of the sweep rather than a second animation running
-        // alongside it and slowly drifting out of step.
-        const arrival = (index / (NODES.length - 1)) * SWEEP
-
-        return (
-          <g key={node.x}>
-            {/* Checkpoints ride about twice the road's width, the same ratio
-                the arena roadmap uses — any closer and they read as bulges in
-                the road rather than stops on it. The offset circle underneath
-                is the lip, so a node has the same solid-with-a-lip weight as
-                every other control in the system. */}
-            <circle cx={node.x} cy={node.y + 3} r={15} fill={node.lip} opacity={0.9} />
-            <motion.circle
-              cx={node.x}
-              cy={node.y}
-              r={15}
-              fill={node.tone}
-              initial={{ scale: still ? 1 : 0.55 }}
-              animate={still ? { scale: 1 } : { scale: [0.55, 1.18, 1] }}
-              style={{ transformBox: "fill-box", transformOrigin: "center" }}
-              transition={
-                still
-                  ? { duration: 0 }
-                  : {
-                      duration: 0.5,
-                      times: [0, 0.55, 1],
-                      ease: [0.34, 1.56, 0.64, 1],
-                      repeat: Infinity,
-                      repeatDelay: SWEEP + 0.35 - 0.5,
-                      delay: arrival,
-                    }
-              }
-            />
-          </g>
-        )
-      })}
-    </svg>
+    <div className="flex w-full items-center gap-2" aria-hidden="true">
+      {BAR_TONES.map((tone, index) => (
+        /* The track holds the segment's shape while it is empty. Without it
+           the bar collapses to nothing between passes and the layout jumps. */
+        <span
+          key={tone}
+          className="h-3.5 flex-1 overflow-hidden rounded-rb-pill bg-rb-swan"
+        >
+          <motion.span
+            className="block h-full w-full rounded-rb-pill"
+            style={{ background: tone, transformOrigin: "left center" }}
+            initial={{ scaleX: still ? 1 : 0 }}
+            animate={still ? { scaleX: 1 } : { scaleX: [0, 1, 1, 0] }}
+            transition={
+              still
+                ? undefined
+                : {
+                    duration: BAR_CYCLE,
+                    // Fill quickly, hold, then clear — a linear 0..1 alone
+                    // would spend the whole cycle mid-wipe and never look full.
+                    times: [0, 0.4, 0.75, 1],
+                    ease: "easeInOut",
+                    repeat: Infinity,
+                    delay: index * (BAR_CYCLE / BAR_TONES.length) * 0.45,
+                  }
+            }
+          />
+        </span>
+      ))}
+    </div>
   )
 }
 
@@ -225,26 +171,30 @@ export function LoadingScreen({ messages = MESSAGES }) {
   }, [reduced, list.length])
 
   return (
-    <div className="rebyu-ds flex min-h-svh flex-col items-center justify-center bg-rb-snow px-6">
-      {/* No wordmark. The figure is the whole screen — a logo above it would
-          make the road decoration under a title, which is the arrangement every
-          other splash screen already uses. Capped so it does not sprawl on an
-          ultrawide. */}
-      <div className="flex w-full max-w-4xl flex-col items-center">
-        <div className="w-full">
-          <Road still={reduced} />
+    /* Figure, then a line worth reading, centred as one block on the
+       product's own light ground.
+
+       There was a second indicator at the foot of the screen -- a sweeping
+       ring, from the splash screen this layout was taken from. On that screen
+       the thing above it was an illustration; here it is a loading bar, and
+       two indicators for one wait is one too many. The bar keeps the job and
+       the ring is gone, which also lets the composition centre instead of
+       being spread to reach a foot it no longer has. */
+    <div className="rebyu-ds flex min-h-svh flex-col items-center justify-center bg-rb-snow px-6 py-14">
+      <div className="flex w-full max-w-md flex-col items-center">
+        <div className="w-64 max-w-full">
+          <LoadingBar still={reduced} />
         </div>
 
-        {/* Tag and line swap together as one unit, so the colour, the label and
-            the sentence never disagree about which stage is being shown. The
-            fixed height stops the road above from shifting when a longer
-            message arrives. */}
         {/* The live region is this container, not the line inside it. A live
             region has to be in the DOM *before* its contents change for the
             change to be announced, and AnimatePresence unmounts and remounts
-            the line on every swap — announcing from there is unreliable. */}
+            the line on every swap -- announcing from there is unreliable.
+
+            The fixed height stops the atom above from shifting when a longer
+            message arrives. */}
         <div
-          className="mt-12 flex h-24 flex-col items-center justify-start"
+          className="mt-10 flex h-36 w-full flex-col items-center justify-start"
           role="status"
           aria-live="polite"
         >
@@ -255,23 +205,32 @@ export function LoadingScreen({ messages = MESSAGES }) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              className="flex flex-col items-center gap-4"
+              className="flex flex-col items-center"
             >
-              <span
-                className={`rounded-rb-pill px-4 py-1.5 font-rb-display text-xs font-extrabold uppercase tracking-[0.18em] ${
+              {/* The line is the hero now, at display size. It carries no
+                  quotation marks: these are statements about what the product
+                  is doing, and punctuating them as quotations would attribute
+                  them to someone. */}
+              <p className="text-balance text-center font-rb-display text-3xl font-extrabold lowercase leading-tight text-rb-eel sm:text-4xl">
+                {current.text}
+              </p>
+
+              {/* The rule and the label under it: the reference's attribution
+                  slot, holding the stage rather than a name. */}
+              <span className="mt-5 block h-0.5 w-10 rounded-rb-pill bg-rb-swan" aria-hidden="true" />
+
+              <p
+                className={`mt-4 rounded-rb-control px-3 py-1 font-rb-display text-[11px] font-extrabold uppercase tracking-[0.18em] ${
                   TAG_TONE[current.tone]
                 }`}
               >
                 {current.tag}
-              </span>
-
-              <p className="text-center text-xl font-bold text-rb-wolf sm:text-2xl">
-                {current.text}
               </p>
             </motion.div>
           </AnimatePresence>
         </div>
       </div>
+
     </div>
   )
 }

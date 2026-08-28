@@ -381,7 +381,7 @@ export default function LearnerChallengesPage() {
           </div>
 
           <div className="flex items-center justify-center gap-4">
-            <Button type="button" variant="ghost" size="icon" className="size-11 rounded-full border-2 border-border bg-card" onClick={() => move(-1)} aria-label="Previous challenge">
+            <Button type="button" variant="ghost" size="icon" className="size-11 border-2 border-border bg-card" onClick={() => move(-1)} aria-label="Previous challenge">
               <ChevronLeft className="h-5 w-5" />
             </Button>
             <div className="flex gap-1.5" aria-hidden="true">
@@ -389,7 +389,7 @@ export default function LearnerChallengesPage() {
                 <span key={challenge.title} className={`h-1.5 rounded-full transition-all ${index === safeIndex ? "w-7 bg-primary" : "w-1.5 bg-muted"}`} />
               ))}
             </div>
-            <Button type="button" variant="ghost" size="icon" className="size-11 rounded-full border-2 border-border bg-card" onClick={() => move(1)} aria-label="Next challenge">
+            <Button type="button" variant="ghost" size="icon" className="size-11 border-2 border-border bg-card" onClick={() => move(1)} aria-label="Next challenge">
               <ChevronRight className="h-5 w-5" />
             </Button>
           </div>

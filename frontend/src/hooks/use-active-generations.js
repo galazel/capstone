@@ -36,6 +36,13 @@ export function useActiveGenerations({ enabled = true } = {}) {
   // certification is not ready to open.
   const running = useRunsWithStatus("RUNNING", enabled)
   const awaitingReview = useRunsWithStatus("WAITING_FOR_REVIEW", enabled)
+  /* Failed runs are fetched for the opposite reason: not because they are
+     still the workspace's to finish, but because they are the only record of
+     *why* a certification is empty. Without them a rejected generation is
+     indistinguishable from one that never started, and the card can only say
+     "generation did not finish" -- which is the least useful true sentence
+     available when the service knows the documents did not match the topic. */
+  const failed = useRunsWithStatus("FAILED", enabled)
 
   const byCertificationId = useMemo(() => {
     const map = new Map()
@@ -49,15 +56,25 @@ export function useActiveGenerations({ enabled = true } = {}) {
     }
     ;(running.data?.runs ?? []).forEach(add)
     ;(awaitingReview.data?.runs ?? []).forEach(add)
+    // Last, so a live run always wins over a failure the admin has already
+    // retried past. `add` keeps the first entry for a certification.
+    ;(failed.data?.runs ?? []).forEach(add)
     return map
-  }, [running.data, awaitingReview.data])
+  }, [running.data, awaitingReview.data, failed.data])
 
   // When a certification stops generating, its row in Java has just gained
   // categories and lessons. Refetching the list here is what turns the card
   // from "Generating" into the finished certification without a manual reload.
   const previousIds = useRef(new Set())
   useEffect(() => {
-    const current = new Set(byCertificationId.keys())
+    // Only live runs count here. A failed run stays in the map for as long as
+    // it is the newest record, so counting it would mean the list never sees
+    // the transition and never refetches.
+    const current = new Set(
+      [...byCertificationId.entries()]
+        .filter(([, run]) => run.status !== "FAILED")
+        .map(([id]) => id)
+    )
     const finished = [...previousIds.current].some((id) => !current.has(id))
     previousIds.current = current
     if (finished) {
@@ -67,7 +84,7 @@ export function useActiveGenerations({ enabled = true } = {}) {
 
   return {
     byCertificationId,
-    isLoading: running.isPending || awaitingReview.isPending,
+    isLoading: running.isPending || awaitingReview.isPending || failed.isPending,
   }
 }
 
@@ -79,5 +96,20 @@ export function useActiveGenerations({ enabled = true } = {}) {
  */
 export function generationStatusOf(run) {
   if (!run) return null
-  return run.status === "WAITING_FOR_REVIEW" ? "AWAITING_REVIEW" : "GENERATING"
+  if (run.status === "WAITING_FOR_REVIEW") return "AWAITING_REVIEW"
+  if (run.status === "FAILED") return "FAILED"
+  return "GENERATING"
+}
+
+/**
+ * Why a run stopped, in the words the service used.
+ *
+ * The document auditor rejects a mismatch with an actual sentence -- "the
+ * document is about a mathematics reviewer, which is unrelated to a
+ * certification about Hiragana" -- and that sentence is the whole value of the
+ * failure. It reaches the browser already; nothing was reading it.
+ */
+export function generationErrorOf(run) {
+  if (!run || run.status !== "FAILED") return null
+  return run.error_message || "Generation failed without a reported reason."
 }

@@ -1,6 +1,7 @@
 import { useMemo } from "react"
 import { Link, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
+import { Skeleton } from "@/components/ui/skeleton"
 
 import { ArrowLeft } from "@/components/icons"
 import { Button } from "@/components/ui/button"
@@ -24,7 +25,7 @@ import { getAllCertifications } from "@/services/certificationService.js"
 export default function CertificationQuestionBankPage() {
   const { id: certificationId } = useParams()
 
-  const { data: certifications = [] } = useQuery({
+  const { data: certifications = [], isLoading: certificationsLoading } = useQuery({
     queryKey: ["admin-certifications", "question-bank-page"],
     queryFn: () => getAllCertifications(),
     staleTime: 5 * 60 * 1000,
@@ -51,9 +52,18 @@ export default function CertificationQuestionBankPage() {
           <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Question bank
           </p>
-          <p className="truncate text-sm font-bold text-foreground">
-            {certification?.title ?? "This certification"}
-          </p>
+          {/* A skeleton rather than the "This certification" placeholder while
+              the list is in flight. The placeholder is a real sentence, so it
+              read as the answer and then silently became a different answer --
+              a bar says the name is still coming. It stays as the fallback for
+              a certification the list genuinely does not contain. */}
+          {certificationsLoading ? (
+            <Skeleton className="mt-0.5 h-4 w-48 rounded-rb-control" />
+          ) : (
+            <p className="truncate text-sm font-bold text-foreground">
+              {certification?.title ?? "This certification"}
+            </p>
+          )}
         </div>
 
       </header>

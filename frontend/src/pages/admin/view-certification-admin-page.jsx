@@ -20,6 +20,10 @@ import AssessmentsTab, {
 } from "@/components/assessments/admin/assessments-tab.jsx"
 import CertificationPublishingChecklist from "@/components/assessments/admin/certification-publishing-checklist.jsx"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  generationErrorOf,
+  useActiveGenerations,
+} from "@/hooks/use-active-generations"
 
 function getCertification(location) {
   return (
@@ -55,6 +59,13 @@ export default function ViewCertificationAdmin() {
     queryFn: () => getAllCertifications(),
     staleTime: 5 * 60 * 1000,
   })
+
+  /* Why this certification is empty, when the reason is a rejected run.
+     Without it the page can only offer "add a major category to start
+     building", which is advice for a certification nobody has filled in yet
+     -- not for one whose generation was refused because the documents were
+     about a different subject. */
+  const { byCertificationId: generationRuns } = useActiveGenerations()
 
   /* Resolved during render, not in an effect. An effect would leave the first
      frame with nothing to show -- and with the list already cached there is no
@@ -187,6 +198,11 @@ export default function ViewCertificationAdmin() {
 
   const majorCategories = certification.majorCategory ?? []
 
+  const certificationKey = String(
+      certification.certificationId ?? certification.id ?? ""
+  )
+  const generationError = generationErrorOf(generationRuns.get(certificationKey))
+
   const totalMiddleCategories = majorCategories.reduce(
       (total, majorCategory) =>
           total + (majorCategory.middleCategory?.length ?? 0),
@@ -311,7 +327,38 @@ export default function ViewCertificationAdmin() {
                 Curriculum
               </h3>
 
-              {majorCategories.length === 0 ? (
+              {majorCategories.length === 0 && generationError ? (
+                  /* The rejected case, told properly. An empty curriculum has
+                     two very different causes -- nobody has built it yet, or a
+                     generation was refused -- and only one of them is fixed by
+                     adding a category. The auditor's own sentence is quoted in
+                     full rather than summarised, because it names the specific
+                     mismatch it found between the documents and the topic. */
+                  <div className="rounded-3xl border border-destructive/30 bg-destructive/5 p-8 shadow-sm sm:p-10">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
+                      <Layers3 className="h-7 w-7" />
+                    </div>
+
+                    <h4 className="mt-5 font-heading text-lg font-bold text-foreground">
+                      Generation was rejected
+                    </h4>
+
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                      Nothing was built, so this certification is empty. The
+                      generator gave this reason:
+                    </p>
+
+                    <p className="mt-4 rounded-xl border border-destructive/25 bg-background p-4 text-sm leading-6 text-foreground">
+                      {generationError}
+                    </p>
+
+                    <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
+                      Upload documents that match the name and description above,
+                      then generate again — or delete this certification and start
+                      over. You can also build the curriculum by hand.
+                    </p>
+                  </div>
+              ) : majorCategories.length === 0 ? (
                   <div className="rounded-3xl border border-dashed border-border bg-card p-12 text-center shadow-sm">
                     <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                       <Layers3 className="h-7 w-7" />

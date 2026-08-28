@@ -65,7 +65,21 @@ export async function generateCertificationStructure(certificationId, files, onU
     })
 }
 
-export async function addCertificationWithAi(data, files, onUploadProgress) {
+/**
+ * Queues an AI build of a new certification.
+ *
+ * `reviewMode` is the admin's answer to "do you want to approve each step?":
+ * "guided" stops at every checkpoint and waits, "auto" generates the whole
+ * certification — curriculum, lessons, quizzes, exams, question bank —
+ * without pausing. It rides on the request rather than being a server default
+ * because the same admin wants different answers on different days.
+ */
+export async function addCertificationWithAi(
+    data,
+    files,
+    onUploadProgress,
+    reviewMode = "guided"
+) {
     const formData = new FormData()
 
     formData.append(
@@ -77,7 +91,7 @@ export async function addCertificationWithAi(data, files, onUploadProgress) {
         formData.append("files", file)
     })
 
-    return await base("certifications/generate", {
+    return await base(`certifications/generate?reviewMode=${encodeURIComponent(reviewMode)}`, {
         method: "POST",
         data: formData,
         // Ten 10 MB documents is a slow upload on a bad connection. Reporting

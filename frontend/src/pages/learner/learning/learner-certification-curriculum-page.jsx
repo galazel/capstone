@@ -77,6 +77,7 @@ import { buildCurriculum, hasSatDiagnostic } from "./curriculum-model.js"
 const TONE = {
   macaw: {
     face: "bg-rb-macaw",
+    faceVar: "var(--color-rb-macaw)",
     lipVar: "var(--color-rb-macaw-lip)",
     wash: "bg-rb-macaw-wash",
     chip: "bg-rb-macaw-wash text-rb-macaw-lip",
@@ -86,6 +87,7 @@ const TONE = {
   },
   bee: {
     face: "bg-rb-bee",
+    faceVar: "var(--color-rb-bee)",
     lipVar: "var(--color-rb-bee-lip)",
     wash: "bg-rb-bee-wash",
     chip: "bg-rb-bee-wash text-rb-bee-ink",
@@ -95,6 +97,7 @@ const TONE = {
   },
   beetle: {
     face: "bg-rb-beetle",
+    faceVar: "var(--color-rb-beetle)",
     lipVar: "var(--color-rb-beetle-lip)",
     wash: "bg-rb-beetle-wash",
     chip: "bg-rb-beetle-wash text-rb-beetle-lip",
@@ -104,6 +107,7 @@ const TONE = {
   },
   cardinal: {
     face: "bg-rb-cardinal",
+    faceVar: "var(--color-rb-cardinal)",
     lipVar: "var(--color-rb-cardinal-lip)",
     wash: "bg-rb-cardinal-wash",
     chip: "bg-rb-cardinal-wash text-rb-cardinal-lip",
@@ -113,6 +117,7 @@ const TONE = {
   },
   feather: {
     face: "bg-rb-feather",
+    faceVar: "var(--color-rb-feather)",
     lipVar: "var(--color-rb-feather-lip)",
     wash: "bg-rb-feather-wash",
     chip: "bg-rb-feather-wash text-rb-feather-ink",
@@ -122,6 +127,7 @@ const TONE = {
   },
   fox: {
     face: "bg-rb-fox",
+    faceVar: "var(--color-rb-fox)",
     lipVar: "var(--color-rb-fox-lip)",
     wash: "bg-rb-fox-wash",
     chip: "bg-rb-fox-wash text-rb-fox-lip",
@@ -186,38 +192,76 @@ function XpPill({ amount, earned, upTo = false }) {
  * the same amplitude every time it comes back around.
  */
 const PATH_WIDTH = 440
-/* Tall enough for the worst case under a node: a two-line topic name, its
-   counts, and (on an exam) the XP pill -- all of which hang below the node into
-   the row's lower half. Tighter than this and a long name reached the next
-   node. */
-const PATH_ROW = 208
-const NODE_SIZE = 116
+/* The name no longer hangs below the node -- it stands beside it -- so a row
+   only has to be as tall as the node itself plus the gap the connector needs
+   to read as a line between two stops. That is most of where the page's old
+   length went: 208px per stop with the lower half reserved for text that is
+   now in space the row already had. */
+const PATH_ROW = 158
 
-/* One period of the swing. Out, further out, back to centre, and the mirror of
-   that on the other side -- eight steps, so a unit of any length keeps moving
-   instead of settling into a zigzag of two positions. Scaled with the node: the
-   swing has to clear a node's own width or the road stops looking like it
-   goes anywhere. */
-const PATH_OFFSETS = [0, 66, 104, 66, 0, -66, -104, -66]
+/* The node is an isometric plinth, not a disc: a top face in the unit's colour
+   with two shaded faces under it, and the icon standing on top. `PLINTH_H` is
+   the top face alone (2:1, which is what makes it read as isometric rather
+   than as a squashed square) and `PLINTH_D` the extruded depth beneath it. */
+const NODE_W = 132
+const PLINTH_H = 66
+const PLINTH_D = 20
+/* How far the icon floats above the plinth's centre. Sitting it flat on the
+   face made it look printed on; lifted, it reads as standing there. */
+const ICON_LIFT = 30
+const NODE_H = PLINTH_H + PLINTH_D + ICON_LIFT
+
+/* A two-position zig-zag, not the old eight-step swing.
+
+   The swing existed to keep a *centred* column moving. Now that each stop
+   carries its name out to one side, the side itself is the rhythm: left stop,
+   right stop, and the label always on the outer edge where there is nothing to
+   collide with. An eight-step swing on top of that would put two consecutive
+   nodes on the same side with their labels overlapping. */
+const PATH_OFFSETS = [88, -88]
 
 function offsetAt(index) {
   return PATH_OFFSETS[index % PATH_OFFSETS.length]
 }
 
+/** Which side of the node its name stands on: always the outer one. */
+function labelSideAt(index) {
+  return offsetAt(index) > 0 ? "right" : "left"
+}
+
 /**
- * The dotted road behind the nodes.
+ * The road behind the nodes.
  *
  * Drawn from the same offsets the nodes are placed with, so the two can never
  * disagree: each segment is a vertical-tangent cubic, which is what gives the
  * road its S-bends rather than the corners a polyline would put between them.
- * Round caps on a mostly-gap dash array turn the stroke into a line of dots.
+ *
+ * A hairline rather than the fat line of dots it used to be. The dots were
+ * competing with the stops for attention on a page whose whole subject is the
+ * stops -- a road is context, and context should be the quietest thing on the
+ * page. It also lands lower now, at the plinths' feet rather than through the
+ * middle of the icons, so the nodes stand *on* it instead of being threaded
+ * onto it.
  */
 function PathTrail({ count }) {
   if (count < 2) return null
 
+  /* The middle of the plinth's top face, not its bottom edge.
+
+     Anchoring at the bottom edge (`ICON_LIFT + PLINTH_H`) put the stroke's
+     round cap just outside the plinth's own footprint, so the road did not
+     quite end *under* the thing it connects. Whenever a node was occluded --
+     which happens to the first node of every unit, the moment the sticky unit
+     banner scrolls over it -- that cap was left hanging below the banner with
+     nothing attached to it: a line running to a stop that is no longer on
+     screen. Anchored half a face higher the cap is always beneath the plinth,
+     so an occluded node takes its road end with it and the remaining curve is
+     cut cleanly by the banner's edge instead of stopping in mid-air. */
+  const footY = ICON_LIFT + PLINTH_H / 2
+
   const points = Array.from({ length: count }, (_, index) => [
     PATH_WIDTH / 2 + offsetAt(index),
-    PATH_ROW * index + PATH_ROW / 2,
+    PATH_ROW * index + (PATH_ROW - NODE_H) / 2 + footY,
   ])
 
   const d = points
@@ -236,16 +280,15 @@ function PathTrail({ count }) {
       height={PATH_ROW * count}
       aria-hidden="true"
     >
-      {/* Swan is the border grey and disappeared against the page at this
-          size; mixed with Hare it reads as a road without competing with the
-          nodes standing on it. */}
+      {/* Swan is the border grey and disappears against the page on its own;
+          mixed toward Hare it holds as a hairline without ever competing with
+          what is standing on it. */}
       <path
         d={d}
         fill="none"
-        stroke="color-mix(in oklab, var(--color-rb-hare) 45%, var(--color-rb-swan))"
-        strokeWidth="16"
+        stroke="color-mix(in oklab, var(--color-rb-hare) 55%, var(--color-rb-swan))"
+        strokeWidth="2"
         strokeLinecap="round"
-        strokeDasharray="0.1 30"
       />
     </svg>
   )
@@ -255,82 +298,98 @@ function PathTrail({ count }) {
  * "start" over the node the learner is on.
  *
  * The one node out of a whole certification that answers "where was I?", so it
- * is the only one that gets a label of its own. It hops rather than pulses:
- * a pulse is what every other alert on this page does, and the point is that
+ * is the only one that gets a label of its own. It hops rather than pulses: a
+ * pulse is what every other alert on this page does, and the point is that
  * this one is an invitation.
+ *
+ * Above the node now rather than beside it. Beside was a workaround for names
+ * that hung below their nodes and left no room overhead; the names have moved
+ * out to the sides, so the bubble can sit where it points straight down at the
+ * thing it is talking about.
  */
-function StartBubble({ tone, side }) {
-  const right = side === "right"
-
+function StartBubble({ tone }) {
   return (
     <motion.span
-      className={`pointer-events-none absolute top-1/2 z-10 -translate-y-1/2 ${
-        right ? "left-full ml-3" : "right-full mr-3"
-      }`}
-      animate={{ x: right ? [0, 4, 0] : [0, -4, 0] }}
+      className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2"
+      animate={{ y: [0, -4, 0] }}
       transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
       aria-hidden="true"
     >
       <span
-        className={`block whitespace-nowrap rounded-rb-pill border-2 border-rb-swan bg-rb-snow px-4 py-2 font-rb-display text-sm font-extrabold uppercase tracking-wide shadow-[0_4px_0_var(--color-rb-swan)] ${tone.ink}`}
+        className={`block whitespace-nowrap rounded-rb-control px-4 py-1.5 font-rb-display text-sm font-extrabold lowercase text-white shadow-[0_3px_0_var(--bubble-lip)] ${tone.face}`}
+        style={{ "--bubble-lip": tone.lipVar }}
       >
         start
       </span>
 
-      {/* The tail, pointing back at the node. Two stacked triangles so the
-          bubble's border reads through it. */}
+      {/* The tail, pointing down at the plinth. One triangle rather than the
+          two the old outlined bubble needed -- a solid fill has no border for
+          a second triangle to read through. */}
       <span
-        className={`absolute top-1/2 size-0 -translate-y-1/2 border-y-8 border-y-transparent ${
-          right
-            ? "right-full border-r-8 border-r-rb-swan"
-            : "left-full border-l-8 border-l-rb-swan"
-        }`}
-      />
-      <span
-        className={`absolute top-1/2 size-0 -translate-y-1/2 border-y-[6px] border-y-transparent ${
-          right
-            ? "right-full border-r-[6px] border-r-rb-snow"
-            : "left-full border-l-[6px] border-l-rb-snow"
-        }`}
+        className="absolute left-1/2 top-full size-0 -translate-x-1/2 border-x-8 border-x-transparent border-t-8"
+        style={{ borderTopColor: tone.lipVar }}
       />
     </motion.span>
   )
 }
 
-/** How far through a topic the learner is, as a ring around its node. */
-function NodeRing({ value }) {
-  const pct = Math.max(0, Math.min(100, value))
-  const radius = NODE_SIZE / 2 - 3
-  const circumference = 2 * Math.PI * radius
+/**
+ * The plinth a stop stands on.
+ *
+ * Three faces of one box in isometric projection: a 2:1 rhombus on top and the
+ * two extruded sides beneath it, each a step darker so the light reads as
+ * coming from the upper left. Drawn rather than fetched — an image per node
+ * would be a network request per stop and a licence per illustration, and a
+ * drawn plinth takes the unit's own colour, which a stock illustration cannot.
+ *
+ * `face`/`lip` are the unit's tone, so a plinth belongs to its unit the same
+ * way the banner above it does.
+ */
+function Plinth({ face, lip, top }) {
+  const w = NODE_W
+  const h = PLINTH_H
+  const d = PLINTH_D
 
   return (
     <svg
-      className="pointer-events-none absolute -inset-[6px] -rotate-90"
-      viewBox={`0 0 ${NODE_SIZE + 12} ${NODE_SIZE + 12}`}
+      className="absolute left-1/2 -translate-x-1/2"
+      style={{ top: ICON_LIFT }}
+      width={w}
+      height={h + d}
+      viewBox={`0 0 ${w} ${h + d}`}
       aria-hidden="true"
     >
-      <circle
-        cx={(NODE_SIZE + 12) / 2}
-        cy={(NODE_SIZE + 12) / 2}
-        r={radius}
-        fill="none"
-        stroke="var(--color-rb-swan)"
-        strokeWidth="7"
+      {/* Sides first so the top face draws over their shared edges. */}
+      <path d={`M 0 ${h / 2} L ${w / 2} ${h} L ${w / 2} ${h + d} L 0 ${h / 2 + d} Z`} fill={lip} />
+      <path
+        d={`M ${w} ${h / 2} L ${w / 2} ${h} L ${w / 2} ${h + d} L ${w} ${h / 2 + d} Z`}
+        fill={face}
       />
-      <motion.circle
-        cx={(NODE_SIZE + 12) / 2}
-        cy={(NODE_SIZE + 12) / 2}
-        r={radius}
-        fill="none"
-        stroke="var(--color-rb-bee)"
-        strokeWidth="7"
-        strokeLinecap="round"
-        strokeDasharray={circumference}
-        initial={{ strokeDashoffset: circumference }}
-        animate={{ strokeDashoffset: circumference - (circumference * pct) / 100 }}
+      <path d={`M ${w / 2} 0 L ${w} ${h / 2} L ${w / 2} ${h} L 0 ${h / 2} Z`} fill={top} />
+    </svg>
+  )
+}
+
+/**
+ * How far through a topic the learner is.
+ *
+ * A rail under the name, not a ring around the node. The ring was drawn on the
+ * node's bounding circle, and the node is no longer a circle -- traced around a
+ * plinth it read as an ellipse floating behind the icon. Under the name it also
+ * sits with the other things the label already says about the stop.
+ */
+function NodeProgress({ value }) {
+  const pct = Math.max(0, Math.min(100, value))
+
+  return (
+    <span className="mt-1.5 block h-1.5 w-full overflow-hidden rounded-rb-pill bg-rb-swan">
+      <motion.span
+        className="block h-full rounded-rb-pill bg-rb-bee"
+        initial={{ width: 0 }}
+        animate={{ width: `${pct}%` }}
         transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
       />
-    </svg>
+    </span>
   )
 }
 
@@ -376,24 +435,47 @@ function PathNode({ node, index, onSelect, onLocked }) {
     onSelect(node)
   }
 
-  /* The lip travels with the face, so it is one variable rather than a class
-     per state: pressing a node has to sink it onto its own lip, and a fixed
-     `active:` shadow would have every node sink onto a grey one. */
+  /* Three faces from one tone. The top catches the light, the near side is the
+     tone itself and the far side is its lip, which is the same solid-shadow
+     colour the buttons use -- so a plinth is lit by the same lamp as every
+     other control in the system rather than by one invented here.
+
+     A stop the learner has not opened is a pale plinth with its colour kept for
+     the icon standing on it; locked is grey throughout. */
   const filled = done || current
-  const face = locked
-    ? "border-rb-swan bg-rb-polar text-rb-hare"
+  const faces = locked
+    ? {
+        top: "var(--color-rb-swan)",
+        face: "color-mix(in oklab, var(--color-rb-swan) 78%, var(--color-rb-hare))",
+        lip: "var(--color-rb-hare)",
+      }
     : filled
-      ? `border-black/10 text-white ${tone.face}`
-      : `border-rb-swan bg-rb-snow ${tone.ink}`
-  const lip = filled && !locked ? tone.lipVar : "var(--color-rb-swan)"
+      ? {
+          top: `color-mix(in oklab, ${tone.faceVar} 84%, white)`,
+          face: tone.faceVar,
+          lip: tone.lipVar,
+        }
+      : {
+          top: "var(--color-rb-snow)",
+          face: "var(--color-rb-polar)",
+          lip: "var(--color-rb-swan)",
+        }
+
+  const iconInk = locked
+    ? "text-rb-hare"
+    : filled
+      ? "text-white"
+      : tone.ink
+
+  const side = labelSideAt(index)
 
   return (
     <div className="relative" style={{ height: PATH_ROW }}>
-      {/* Sized to the node and nothing else. The label hangs off it absolutely
-          rather than sitting under it in flow: in flow the *column* is what
-          gets centred on the row, so a long topic name pushed the node up off
-          the trail the dots are drawn along -- and by a different amount for
-          every node, depending on how long its name was.
+      {/* Sized to the node and nothing else. The name hangs off it absolutely
+          rather than sitting beside it in flow: in flow the *pair* is what gets
+          centred on the row, so a long topic name would drag the plinth off the
+          line the road is drawn along -- and by a different amount for every
+          node, depending on how long its name was.
 
           Both axes in one inline transform rather than mixing a utility with
           it: an inline `transform` replaces the class's outright, so a
@@ -401,62 +483,96 @@ function PathNode({ node, index, onSelect, onLocked }) {
       <div
         className="absolute left-1/2 top-1/2"
         style={{
-          width: NODE_SIZE,
-          height: NODE_SIZE,
+          width: NODE_W,
+          height: NODE_H,
           transform: `translate(calc(-50% + ${offsetAt(index)}px), -50%)`,
         }}
       >
-        <motion.div animate={shake} className="relative">
-          {/* Beside the node, on whichever side has room -- a node sitting
-              left of centre gets its bubble on the right, and vice versa.
-              Above the node (where Duolingo puts it) it landed straight on the
-              previous stop's name, because the labels here hang below their
-              nodes and the two met in the gap. */}
-          {current ? <StartBubble tone={tone} side={offsetAt(index) <= 0 ? "right" : "left"} /> : null}
-
-          {/* Only where it says something: a topic part-way through. A ring at
-              0% or 100% is the state the face already carries. */}
-          {node.progress != null && node.progress > 0 && node.progress < 100 ? (
-            <NodeRing value={node.progress} />
-          ) : null}
+        <motion.div animate={shake} className="relative h-full">
+          {current ? <StartBubble tone={tone} /> : null}
 
           {/* The one node that has to be found before anything else can happen
               gets a halo. Never on a locked board -- a beacon on something that
-              will not open is just irritating. */}
+              will not open is just irritating.
+
+              An ellipse rather than the circle it was: on the ground under an
+              isometric plinth, a circle is seen at the same 2:1 squash as the
+              plinth's own top face. A true circle read as a bubble hanging in
+              front of the node instead of light pooling around its foot. */}
           {current ? (
             <motion.span
-              className={`pointer-events-none absolute -inset-3 rounded-full ${tone.face} opacity-25`}
-              animate={{ scale: [1, 1.16, 1], opacity: [0.28, 0, 0.28] }}
+              className={`pointer-events-none absolute left-1/2 -translate-x-1/2 rounded-[50%] ${tone.face} opacity-25`}
+              style={{ top: ICON_LIFT - 6, width: NODE_W + 26, height: PLINTH_H + 20 }}
+              animate={{ scale: [1, 1.14, 1], opacity: [0.3, 0, 0.3] }}
               transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
               aria-hidden="true"
             />
           ) : null}
 
+          {/* The plinth is the button. It travels down onto its own depth when
+              pressed, the way every key in the system travels onto its lip --
+              here the depth is drawn rather than cast, so the movement is the
+              whole of the press and there is no shadow to shrink alongside it. */}
           <button
             type="button"
             onClick={press}
             aria-label={`${node.label}${
               locked ? " (locked)" : retakeable ? " (already sat -- retake)" : ""
             }`}
-            className={`relative grid place-items-center rounded-full border-[3px] shadow-[0_9px_0_var(--node-lip)] transition-[transform,box-shadow] duration-100 active:translate-y-[5px] active:shadow-[0_4px_0_var(--node-lip)] ${face}`}
-            style={{ width: NODE_SIZE, height: NODE_SIZE, "--node-lip": lip }}
+            className="group absolute inset-0 block transition-transform duration-100 active:translate-y-[5px]"
           >
-            {locked ? (
-              <Lock className="size-10" aria-hidden="true" />
-            ) : retakeable ? (
-              <RotateCcw className="size-10" aria-hidden="true" />
-            ) : done ? (
-              <Check className="size-12" aria-hidden="true" />
-            ) : (
-              <Icon className="size-11" aria-hidden="true" />
-            )}
+            <Plinth top={faces.top} face={faces.face} lip={faces.lip} />
 
-            {/* A topic the plan says is urgent -- finished or not. The
-                same red dot the old list used, kept because it is the one
-                thing on a node that priority order has to be able to say. */}
+            {/* Standing on the plinth, not printed on it: the object is lifted
+                clear of the top face and carries its own drop shadow onto it,
+                which is what sells the two as objects in one space.
+
+                `node.art` is the seam for real illustration. Nothing sets it
+                yet — an icon is the fallback, not the plan — but a topic that
+                names an image gets that image standing on its plinth instead,
+                so putting drawn objects on this road is a matter of filling the
+                field in `curriculum-model.js` rather than of touching this
+                component. Kept out of the state branches deliberately: a topic
+                that is done or locked still shows its own object, and the
+                plinth beneath it is what carries the state. */}
+            <span
+              className={`absolute left-1/2 grid -translate-x-1/2 place-items-center drop-shadow-[0_6px_3px_rgb(0_0_0/0.18)] ${iconInk}`}
+              style={{ top: 0, width: NODE_W, height: ICON_LIFT + PLINTH_H / 2 }}
+            >
+              {/* The icon always renders; the illustration covers it when there
+                  is one. That order is what makes the fallback real -- an image
+                  that 404s or that a slow connection never delivers hides
+                  itself and uncovers the icon, rather than leaving an empty
+                  plinth where a stop should be. */}
+              {locked ? (
+                <Lock className="size-11" aria-hidden="true" />
+              ) : retakeable ? (
+                <RotateCcw className="size-11" aria-hidden="true" />
+              ) : done ? (
+                <Check className="size-12" aria-hidden="true" />
+              ) : (
+                <Icon className="size-11" aria-hidden="true" />
+              )}
+
+              {node.art && !locked ? (
+                <img
+                  src={node.art}
+                  alt=""
+                  className="absolute size-14 object-contain"
+                  onError={(event) => {
+                    event.currentTarget.style.display = "none"
+                  }}
+                />
+              ) : null}
+            </span>
+
+            {/* A topic the plan says is urgent -- finished or not. The same red
+                dot the old list used, kept because it is the one thing on a
+                node that priority order has to be able to say. */}
             {node.urgent && !locked ? (
               <motion.span
-                className="absolute -right-1 -top-1 size-5 rounded-full bg-rb-cardinal ring-4 ring-rb-polar"
+                className="absolute right-1 size-5 rounded-full bg-rb-cardinal ring-4 ring-rb-polar"
+                style={{ top: ICON_LIFT - 4 }}
                 animate={{ scale: [1, 1.3, 1] }}
                 transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
                 aria-hidden="true"
@@ -465,21 +581,33 @@ function PathNode({ node, index, onSelect, onLocked }) {
           </button>
         </motion.div>
 
-        {/* The name under the node, not on it. Duolingo can leave its nodes
-            unlabelled because every one of them is the same kind of thing;
-            here a stop can be a topic, a unit exam or the final, and which one
-            it is decides whether the learner has ten minutes or an hour.
+        {/* The name beside the node, on whichever side the zig-zag has put it —
+            always the outer one, where there is nothing for it to collide with.
+            A stop can be a topic, a unit exam or the final, and which one it is
+            decides whether the learner has ten minutes or an hour, so it is
+            named rather than left to its icon.
 
-            `pointer-events-none` so a two-line name never covers the node
-            below it as a click target -- the node is the control, the label
-            only says what it is. */}
-        <div className="pointer-events-none absolute left-1/2 top-full w-[230px] -translate-x-1/2 pt-2.5 text-center">
+            `pointer-events-none` so a two-line name never covers a neighbouring
+            node as a click target -- the plinth is the control, the label only
+            says what it is. */}
+        <div
+          className={`pointer-events-none absolute w-[210px] ${
+            side === "right" ? "left-full ml-4 text-left" : "right-full mr-4 text-right"
+          }`}
+          style={{ top: ICON_LIFT, height: PLINTH_H, display: "grid", alignContent: "center" }}
+        >
           <p className="font-rb-display text-[15px] font-extrabold leading-tight text-rb-eel">
             {node.label}
           </p>
 
           {node.meta ? (
             <p className="mt-1 text-[12px] font-bold text-rb-wolf">{node.meta}</p>
+          ) : null}
+
+          {/* Only where it says something: a topic part-way through. A rail at
+              0% or 100% is the state the plinth already carries. */}
+          {node.progress != null && node.progress > 0 && node.progress < 100 ? (
+            <NodeProgress value={node.progress} />
           ) : null}
 
           {/* Only on the exams. A topic pays per lesson, which is a number that
@@ -707,19 +835,31 @@ function CurriculumSkeleton() {
       <div className="mx-auto max-w-[720px] px-5 py-10">
         <div className="h-16 animate-pulse rounded-rb-card bg-rb-swan" />
 
-        {/* Four stops, on the same swing the road uses -- so the circles land
-            where the nodes will, and nothing jumps when they arrive. */}
+        {/* Four stops on the same zig-zag the road uses, each a plinth-shaped
+            block and a bar where its name will be -- so nothing moves when the
+            real nodes arrive. */}
         <div className="relative mx-auto mt-6" style={{ width: PATH_WIDTH, height: PATH_ROW * 4 }}>
           {[0, 1, 2, 3].map((index) => (
             <div key={index} className="relative" style={{ height: PATH_ROW }}>
               <div
-                className="absolute left-1/2 top-1/2 animate-pulse rounded-full bg-rb-swan"
+                className="absolute left-1/2 top-1/2"
                 style={{
-                  width: NODE_SIZE,
-                  height: NODE_SIZE,
+                  width: NODE_W,
+                  height: NODE_H,
                   transform: `translate(calc(-50% + ${offsetAt(index)}px), -50%)`,
                 }}
-              />
+              >
+                <div
+                  className="absolute left-1/2 w-full -translate-x-1/2 animate-pulse rounded-rb-tile bg-rb-swan"
+                  style={{ top: ICON_LIFT, height: PLINTH_H + PLINTH_D }}
+                />
+                <div
+                  className={`absolute h-4 w-[150px] animate-pulse rounded-rb-pill bg-rb-swan ${
+                    labelSideAt(index) === "right" ? "left-full ml-4" : "right-full mr-4"
+                  }`}
+                  style={{ top: ICON_LIFT + PLINTH_H / 2 - 8 }}
+                />
+              </div>
             </div>
           ))}
         </div>
@@ -1205,6 +1345,11 @@ export default function LearnerCertificationCurriculumPage() {
             description="This certification has no units with published lessons. Check back once content is released."
           />
         ) : (
+          /* One column. There used to be a second one for the assessments
+             that win no slot on the road, and the grid existed to make room
+             for it; with the road as the only thing here it keeps the full
+             width rather than being pinned into a narrow left lane beside
+             nothing. */
           <StaggerList className="space-y-6" stagger={0.09}>
             {/* The road. Every unit contributes a banner and a stretch of
                 nodes, and the whole certification reads as one continuous
@@ -1229,8 +1374,14 @@ export default function LearnerCertificationCurriculumPage() {
                       />
 
                       <Collapse open={open}>
+                        {/* Headroom for the "start" bubble, which hangs above
+                            the first stop and therefore above this box. A
+                            margin rather than padding: the road's SVG and its
+                            nodes are positioned against this element, so
+                            padding would move the stops off the line the road
+                            is drawn along. */}
                         <div
-                          className="relative mx-auto"
+                          className="relative mx-auto mt-6"
                           style={{ width: PATH_WIDTH, height: PATH_ROW * section.nodes.length }}
                         >
                           <PathTrail count={section.nodes.length} />
@@ -1268,69 +1419,6 @@ export default function LearnerCertificationCurriculumPage() {
               </div>
             </StaggerItem>
 
-            {/* Everything the units and the mock card do not already show.
-                The curriculum places one quiz per lesson and one exam per unit,
-                so a second exam on the same target -- or a certification-level
-                exam that is not the chosen mock -- was rendered nowhere, and
-                the page accounted for four assessments while the certification
-                held nine. They are listed rather than slotted into the units,
-                because the one-per-place layout is deliberate and widening it
-                would make an authoring mistake look like structure. */}
-            {curriculum.extraExams?.length ? (
-              <StaggerItem variants={fadeUp}>
-                <section className="rounded-rb-card border-2 border-rb-swan bg-rb-snow p-5 sm:p-6">
-                  <h2 className="font-rb-display text-lg font-extrabold lowercase text-rb-eel">
-                    other assessments
-                  </h2>
-                  <p className="mt-1 text-sm text-rb-wolf">
-                    Published for this certification but not attached to a unit above.
-                  </p>
-
-                  <ul className="mt-4 space-y-2">
-                    {curriculum.extraExams.map((exam) => {
-                      const taken = takenExamIds?.has?.(String(exam.examId))
-                      return (
-                        <li
-                          key={exam.examId}
-                          className="flex flex-wrap items-center gap-3 rounded-rb-tile border-2 border-rb-swan bg-rb-polar p-3"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-bold text-rb-eel">
-                              {exam.title ?? `Exam ${exam.examId}`}
-                            </p>
-                            <p className="mt-0.5 text-xs font-semibold text-rb-wolf">
-                              {[
-                                exam.questionCount ? `${exam.questionCount} questions` : null,
-                                exam.passingScore != null ? `${exam.passingScore}% to pass` : null,
-                                taken ? "attempted" : null,
-                              ]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </p>
-                          </div>
-
-                          <TactileButton
-                            asChild={diagnosticDone}
-                            size="sm"
-                            variant="macaw"
-                            onClick={diagnosticDone ? undefined : () => setDialogOpen(true)}
-                          >
-                            {diagnosticDone ? (
-                              <Link to={`/learner/assessments/${exam.examId}`}>
-                                start
-                                <ArrowRight className="size-4" aria-hidden="true" />
-                              </Link>
-                            ) : (
-                              <span>locked</span>
-                            )}
-                          </TactileButton>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                </section>
-              </StaggerItem>
-            ) : null}
           </StaggerList>
         )}
       </main>

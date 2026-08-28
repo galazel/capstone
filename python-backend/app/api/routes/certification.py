@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from app.core.security import require_service_key
 from app.db.session import SessionLocal
 from app.services import certification_run, workflow_registry as registry
+from app.graphs.certification.review_mode import AUTO, normalize_review_mode
 from app.graphs.certification.workflow import get_certification_graph
 from app.utils.helpers import create_id
 
@@ -44,8 +45,14 @@ class ResumeRequest(BaseModel):
     """
 
     action: Literal[
-        "approve", "edit", "improve", "regenerate", "reject", "skip", "approve_remaining"
+        "approve", "edit", "improve", "regenerate", "reject", "skip",
+        "approve_remaining", "approve_all",
     ]
+    #: "approve_all" approves this item and switches the run to unattended,
+    #: so it generates to the end without pausing again. `approve_remaining`
+    #: only drains the current phase; a reviewer who is done reviewing wants
+    #: the exams and the question bank waved through as well.
+    #:
     #: Free-form guidance for "improve".
     instructions: Optional[str] = None
     #: The reviewer's own version of the artifact, for "edit".
@@ -56,7 +63,10 @@ class ResumeRequest(BaseModel):
 
     def as_resume_value(self) -> dict[str, Any]:
         return {
-            "action": self.action,
+            # The graph has no "approve_all" action: the switch is applied to
+            # the run's state before it is resumed (see below), and what the
+            # paused node receives is a plain approval.
+            "action": "approve" if self.action == "approve_all" else self.action,
             "instructions": self.instructions,
             "payload": self.payload,
             "restored_from": self.restored_from,
@@ -197,6 +207,8 @@ async def generate_certification(
     certification_name: Annotated[str, Form()],
     certification_description: Annotated[str, Form()],
     industry: Annotated[str, Form()] = "",
+    #: "guided" pauses at every review; "auto" generates straight through.
+    review_mode: Annotated[str, Form()] = "guided",
     files: list[UploadFile] = File(default_factory=list),
 ) -> dict[str, Any]:
     """
@@ -235,6 +247,7 @@ async def generate_certification(
             "certification_description": certification_description,
             "industry": industry,
             "uploaded_files": uploaded_documents,
+            "review_mode": normalize_review_mode(review_mode),
             "status": "STARTED",
         },
         title=certification_name,
@@ -281,6 +294,12 @@ async def resume_certification(
     # the 409 rather than a cheerful 202 and a duplicate driver.
     context = _claim(thread_id, decision=request.action)
 
+    # Applied before the resume, and awaited rather than backgrounded: the
+    # run must already be unattended by the time it reaches its next review,
+    # or it stops there anyway and the reviewer is back where they started.
+    if request.action == "approve_all":
+        await certification_run.set_review_mode(thread_id, AUTO)
+
     # `execute`, not `advance`: it converts a RunFailed into a recorded
     # outcome. Nothing is waiting to catch an exception out here.
     background.add_task(
@@ -292,6 +311,62 @@ async def resume_certification(
         "status": "RESUMING",
         "action": request.action,
     }
+
+
+class ReviewModeRequest(BaseModel):
+    """A change of supervision for a run that is already going.
+
+    "auto" is the one that matters: it is the answer to watching a run pause
+    at checkpoint after checkpoint when you no longer want to be asked.
+    "guided" is accepted so the switch is reversible for a run that has not
+    reached its next checkpoint yet.
+    """
+
+    mode: Literal["auto", "guided"]
+
+
+@router.post("/{thread_id}/review-mode")
+async def set_certification_review_mode(
+    thread_id: str, request: ReviewModeRequest, background: BackgroundTasks
+) -> dict[str, Any]:
+    """Switches a run between supervised and unattended while it runs.
+
+    Separate from `/resume` because a run that is *generating* is not paused:
+    there is no decision to submit, and the reviewer wants to say "don't stop
+    for me" before it reaches the next checkpoint rather than after. Writing
+    it onto the checkpoint is safe from outside the driver -- the review nodes
+    read the flag when they run, and a node that has already passed one is not
+    affected either way.
+    """
+    with SessionLocal() as session:
+        run = registry.get_run_by_thread(session, thread_id)
+        if run is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"No run for thread {thread_id}."
+            )
+        # Read inside the session: the row is detached once it closes.
+        run_status = run.status
+
+    if run_status in registry.TERMINAL_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Run {thread_id} is {run_status}; its review mode no longer applies.",
+        )
+
+    mode = await certification_run.set_review_mode(thread_id, request.mode)
+
+    # A run parked at a checkpoint does not re-read its state until something
+    # resumes it, so flipping the flag alone would leave it sitting there. The
+    # reviewer said "don't ask me": send the approval that gets it moving.
+    resumed = False
+    if mode == AUTO and run_status == registry.WAITING_FOR_REVIEW:
+        context = _claim(thread_id, decision="approve_all")
+        background.add_task(
+            certification_run.execute, context, Command(resume={"action": "approve"})
+        )
+        resumed = True
+
+    return {"thread_id": thread_id, "review_mode": mode, "resumed": resumed}
 
 
 @router.get("/{thread_id}/versions")

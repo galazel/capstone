@@ -293,6 +293,18 @@ def test_the_researched_exam_structure_is_written_to_the_certification():
             written["structure"] = structure
 
         @staticmethod
+        def list_certification_major_categories(session, certification_id):
+            return []
+
+        @staticmethod
+        def list_certification_middle_categories(session, certification_id):
+            return []
+
+        @staticmethod
+        def list_certification_lessons(session, certification_id):
+            return []
+
+        @staticmethod
         def insert_major_category(session, certification_id, name):
             return 1
 
@@ -342,6 +354,19 @@ def test_an_unknown_exam_structure_is_not_written_over_a_known_one():
         @staticmethod
         def update_certification_exam_structure(session, certification_id, structure):
             calls.append(structure)
+
+        @staticmethod
+        def list_certification_major_categories(session, certification_id):
+            return []
+
+        @staticmethod
+        def list_certification_middle_categories(session, certification_id):
+            return []
+
+        @staticmethod
+        def list_certification_lessons(session, certification_id):
+            return []
+
 
     class _Session:
         def __enter__(self):

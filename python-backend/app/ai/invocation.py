@@ -27,6 +27,7 @@ from app.ai.json_output import extract_json_object, final_message_text
 from app.ai.prompts.question import build_question_batch_prompt
 from app.ai.router import ainvoke_with_fallback
 from app.core.config import get_settings
+from app.domain.choice_order import shuffle_batch
 from app.schemas.certification.question_schema import QuestionBatch
 
 logger = logging.getLogger(__name__)
@@ -292,4 +293,12 @@ async def invoke_question_agent(
 
 
 def questions_as_dicts(batch: QuestionBatch) -> list[dict]:
-    return [question.model_dump() for question in batch.questions]
+    """The generation boundary: every generated question in both graphs
+    becomes a plain dict here.
+
+    Which makes it the one place to randomise where each MCQ's correct answer
+    sits. The prompt asks the model to vary it and the batch check reports when
+    it did not, but neither guarantees it -- a model that has settled on the
+    second option stays settled. See `app.domain.choice_order`.
+    """
+    return shuffle_batch([question.model_dump() for question in batch.questions])

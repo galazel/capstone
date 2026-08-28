@@ -26,6 +26,7 @@ request, and any websocket client stay attached to the same run.
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -33,6 +34,7 @@ from typing import Any
 
 from app.db.session import SessionLocal
 from app.graphs.cancellation import RunCancelled
+from app.graphs.certification.review_mode import normalize_review_mode
 from app.graphs.certification.workflow import get_certification_graph
 from app.repositories import java_backend as repo
 from app.services import workflow_registry as registry
@@ -80,7 +82,21 @@ def _notify(context: RunContext, title: str, body: str) -> None:
         )
 
 
+def _title_key(value) -> str:
+    """Case- and whitespace-insensitive identity for a curriculum row's name."""
+    return " ".join(str(value or "").lower().split())
+
+
 def _persist_curriculum(certification_id: int, curriculum: dict) -> None:
+    """Writes the curriculum tree, reusing any part of it already stored.
+
+    Every row used to be inserted unconditionally, which was safe only while
+    this ran exactly once per certification. It no longer does: a run that
+    fails part-way now saves what it has (`rescue_partial_output`), and the
+    retry that finishes it writes the whole tree again. Matching on name means
+    the second write fills in what is missing instead of producing a duplicate
+    of every category and lesson.
+    """
     with SessionLocal() as session:
         # Written even when the planner returned nothing useful, so a rerun
         # that *does* find the exam's shape overwrites a stale value rather
@@ -89,25 +105,84 @@ def _persist_curriculum(certification_id: int, curriculum: dict) -> None:
         if structure and (structure.get("total_items") or structure.get("question_types")):
             repo.update_certification_exam_structure(session, certification_id, structure)
 
+        majors = {
+            _title_key(row["name"]): row["major_category_id"]
+            for row in repo.list_certification_major_categories(session, certification_id)
+        }
+        middles = {
+            (row["major_category_id"], _title_key(row["name"])): row["middle_category_id"]
+            for row in repo.list_certification_middle_categories(session, certification_id)
+        }
+        existing_lessons = {
+            (row["middle_category_id"], _title_key(row["name"]))
+            for row in repo.list_certification_lessons(session, certification_id)
+        }
+
         for major in curriculum.get("majorCategories") or []:
-            major_id = repo.insert_major_category(session, certification_id, major["name"])
+            major_key = _title_key(major["name"])
+            major_id = majors.get(major_key)
+            if major_id is None:
+                major_id = repo.insert_major_category(session, certification_id, major["name"])
+                majors[major_key] = major_id
+
             for middle in major.get("middleCategories") or []:
-                middle_id = repo.insert_middle_category(session, major_id, middle["name"])
+                middle_key = (major_id, _title_key(middle["name"]))
+                middle_id = middles.get(middle_key)
+                if middle_id is None:
+                    middle_id = repo.insert_middle_category(session, major_id, middle["name"])
+                    middles[middle_key] = middle_id
+
                 for lesson in middle.get("lessons") or []:
+                    lesson_key = (middle_id, _title_key(lesson["name"]))
+                    if lesson_key in existing_lessons:
+                        continue
                     repo.insert_lesson(session, middle_id, lesson["name"], [])
+                    existing_lessons.add(lesson_key)
         session.commit()
 
 
-def fail(context: RunContext, error: str) -> dict[str, Any]:
-    """Records a failed run everywhere an admin might look for it."""
+def fail(
+    context: RunContext,
+    error: str,
+    *,
+    remove_certification: bool = False,
+    kept: str = "",
+) -> dict[str, Any]:
+    """Records a failed run everywhere an admin might look for it.
+
+    `kept` is a sentence naming the output that was saved before the failure
+    (see `rescue_partial_output`); it rides on the notification only, so the
+    recorded error stays the technical one an engineer needs.
+
+    `remove_certification` additionally deletes the certification row the run
+    was building. Only the document-rejection path passes it: that failure
+    happens before anything is generated, so the row is an empty shell that
+    shows up as a Draft card with no curriculum and holds its title against the
+    unique index -- which is what turns "generate again with the same name"
+    into a duplicate-key error. Every other failure here happens after work has
+    been done, and deleting then would throw that work away.
+    """
     with SessionLocal() as session:
         if context.generation_request_id is not None:
             repo.mark_generation_request_failed(session, context.generation_request_id, error)
         registry.mark_failed(session, context.thread_id, error=error)
+
+    if remove_certification and context.certification_id is not None:
+        try:
+            with SessionLocal() as session:
+                repo.delete_empty_certification(session, context.certification_id)
+        except Exception:
+            # The run has already been recorded as failed; the admin is told
+            # why either way. A shell left behind is untidy, not broken, and is
+            # not worth turning into a second failure.
+            logger.exception(
+                "Could not remove certification %s after a rejected run",
+                context.certification_id,
+            )
     _notify(
         context,
         f"Generation failed: {context.certification_title}",
-        f"Curriculum generation for {context.certification_title} failed: {error}",
+        f"Curriculum generation for {context.certification_title} failed: {error}{kept}",
     )
     return {"outcome": registry.FAILED, "error": error}
 
@@ -157,10 +232,14 @@ def finalize(context: RunContext, result: dict) -> dict[str, Any]:
         return {"outcome": registry.WAITING_FOR_REVIEW, "stage": stage}
 
     if result.get("status") == "VALIDATION_FAILED":
+        # Nothing was generated, so nothing is lost by taking the empty
+        # certification with it -- and leaving it behind is what blocks a retry
+        # under the same name.
         return fail(
             context,
             result.get("error_message")
             or "Uploaded documents do not match the certification topics.",
+            remove_certification=True,
         )
 
     curriculum = result.get("curriculum")
@@ -222,6 +301,143 @@ def finalize(context: RunContext, result: dict) -> dict[str, Any]:
     }
 
 
+def _params_of(generation_request: dict | None) -> dict:
+    """`params_json` as a dict, tolerating null and malformed JSON.
+
+    A run must not be unrecoverable because the column holding its options
+    cannot be parsed; the defaults are all sensible.
+    """
+    raw = (generation_request or {}).get("params_json")
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        logger.warning("Could not parse params_json; falling back to defaults")
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def review_mode_from(params: dict | None) -> str:
+    """The review mode a queued run was started with.
+
+    Read out of `generation_requests.params_json`, where Java records what the
+    admin chose in the create form: supervise every step, or let it run to the
+    end unattended.
+    """
+    params = params or {}
+    return normalize_review_mode(
+        params.get("reviewMode", params.get("review_mode"))
+    )
+
+
+async def set_review_mode(thread_id: str, mode: str) -> str:
+    """Switches a run between supervised and unattended, mid-flight.
+
+    Written straight onto the checkpoint rather than passed through the
+    resume value, because the flag has to outlive this one decision: the
+    reviewer is saying "and every review after this one too". Every review
+    node reads it from state, so the next phase sees it without any of them
+    needing to thread it along.
+    """
+    mode = normalize_review_mode(mode)
+    graph = await get_certification_graph()
+    config = _thread_config(thread_id)
+
+    # Written twice if the first write does not stick. A run that is mid-node
+    # writes its own state when that node returns, and an update that lands
+    # inside that window is superseded -- rare, but the cost of losing it is
+    # the reviewer being asked again at the next checkpoint, having explicitly
+    # said not to be.
+    for attempt in (1, 2):
+        await graph.aupdate_state(config, {"review_mode": mode})
+        snapshot = await graph.aget_state(config)
+        applied = normalize_review_mode((snapshot.values or {}).get("review_mode"))
+        if applied == mode:
+            break
+        logger.warning(
+            "Review mode for run %s read back as %s after attempt %d; rewriting",
+            thread_id, applied, attempt,
+        )
+
+    logger.info("Run %s review mode set to %s", thread_id, mode)
+    return mode
+
+
+async def rescue_partial_output(context: RunContext) -> dict[str, Any]:
+    """Saves whatever a run had generated when it stopped.
+
+    A failed run used to leave *everything* in the LangGraph checkpoint: the
+    curriculum, every lesson body, every quiz. The database saw none of it
+    until the run reached the end, so a failure at question-bank time -- after
+    an hour of authoring -- showed the admin an empty certification, and a
+    retry that also failed showed the same empty certification again. The work
+    existed, in a table nothing but the graph reads.
+
+    So both failure paths now flush the checkpoint into Java's tables before
+    reporting. Persistence is name-matched on both sides
+    (`_persist_curriculum`, `persist_generated_assessments`), so the retry
+    that eventually finishes adds what is missing rather than duplicating what
+    is here.
+
+    Never raises: this runs while a run is already failing, and a rescue that
+    throws would replace a specific generation error with a persistence one.
+    """
+    if not context.persists_to_java:
+        return {"saved": False, "reason": "run has nothing to persist to"}
+
+    try:
+        values = await _snapshot_values(context.thread_id)
+    except Exception:
+        logger.exception("Could not read checkpoint for run %s to rescue its output", context.thread_id)
+        return {"saved": False, "reason": "checkpoint unreadable"}
+
+    curriculum = values.get("curriculum") or {}
+    if not curriculum.get("majorCategories"):
+        # Nothing has been planned yet, so there is nothing to keep. The
+        # certification row stays as it is.
+        return {"saved": False, "reason": "nothing generated yet"}
+
+    try:
+        _persist_curriculum(context.certification_id, curriculum)
+        with SessionLocal() as session:
+            summary = persist_generated_assessments(session, context.certification_id, values)
+    except Exception:
+        logger.exception("Could not save partial output for run %s", context.thread_id)
+        return {"saved": False, "reason": "partial save failed"}
+
+    for warning in summary["warnings"]:
+        logger.warning("Partial save: %s", warning)
+
+    saved = {
+        "saved": True,
+        "lessons": summary["lessons_written"],
+        "exams": len(summary["exams"]),
+        "bank_questions": summary["bank_questions"],
+    }
+    logger.info(
+        "Rescued partial output for run %s: %d lesson bod(y/ies), %d exam(s), %d bank question(s)",
+        context.thread_id, saved["lessons"], saved["exams"], saved["bank_questions"],
+    )
+    return saved
+
+
+def _kept_note(saved: dict[str, Any]) -> str:
+    """One sentence telling the admin what survived the failure, so the
+    notification does not read as "you lost everything"."""
+    if not saved.get("saved"):
+        return ""
+    parts = []
+    if saved.get("lessons"):
+        parts.append(f"{saved['lessons']} lesson bod(y/ies)")
+    if saved.get("exams"):
+        parts.append(f"{saved['exams']} assessment(s)")
+    if saved.get("bank_questions"):
+        parts.append(f"{saved['bank_questions']} question-bank item(s)")
+    detail = ", ".join(parts) if parts else "the curriculum outline"
+    return f" Everything generated so far was saved as drafts ({detail}); retrying continues from there."
+
+
 #: Threads this process is executing right now.
 #:
 #: `updated_at` says when a run last recorded something, which is enough to
@@ -281,10 +497,18 @@ async def advance(context: RunContext, graph_input: Any) -> tuple[dict[str, Any]
         # decision as a generator bug, and offer to retry the work they just
         # stopped.
         logger.info("Certification run %s stopped: %s", context.thread_id, cancelled)
-        raise RunFailed({"outcome": registry.CANCELLED, "error": str(cancelled)}) from cancelled
+        # Stopping a run is not throwing its output away: an admin who stops a
+        # run at lesson 40 keeps those 40 lessons.
+        saved = await rescue_partial_output(context)
+        raise RunFailed(
+            {"outcome": registry.CANCELLED, "error": str(cancelled), "saved": saved}
+        ) from cancelled
     except Exception as error:
         logger.exception("Certification run %s failed", context.thread_id)
-        raise RunFailed(fail(context, str(error))) from error
+        saved = await rescue_partial_output(context)
+        raise RunFailed(
+            {**fail(context, str(error), kept=_kept_note(saved)), "saved": saved}
+        ) from error
     finally:
         # Released as soon as the graph returns or raises. Finalisation below
         # is database work measured in milliseconds, and holding the claim
@@ -460,9 +684,19 @@ async def reconcile(run) -> dict[str, Any]:
             "Reconciling run %s: claimed WAITING_FOR_REVIEW, but %s is pending with no interrupt",
             run.run_id, stage,
         )
+        # This checkpoint holds real output -- the resume died after the run
+        # had generated its way to a review. Marking it failed without saving
+        # that first is how an hour of authoring became an empty
+        # certification.
+        saved = await rescue_partial_output(context)
         return {
             "reconciled": True,
-            "outcome": fail(context, f"Resuming failed inside {stage}; the run can be retried."),
+            "outcome": fail(
+                context,
+                f"Resuming failed inside {stage}; the run can be retried.",
+                kept=_kept_note(saved),
+            ),
+            "saved": saved,
         }
 
     logger.info("Reconciling run %s: the graph finished but the outcome was never applied", run.run_id)
@@ -646,6 +880,9 @@ async def prepare_restart(run) -> tuple[RunContext, dict]:
             "certification_description": certification["description"] or "",
             "industry": certification["industry"] or "",
             "document_refs": document_refs_from(documents),
+            # Restarting keeps the supervision choice the run was started
+            # with, so an unattended run does not come back asking for review.
+            "review_mode": review_mode_from(_params_of(generation_request)),
             "status": "STARTED",
         }
         if not seed["document_refs"]:
@@ -664,6 +901,7 @@ async def prepare_restart(run) -> tuple[RunContext, dict]:
         "certification_name": values.get("certification_name", ""),
         "certification_description": values.get("certification_description", ""),
         "industry": values.get("industry", ""),
+        "review_mode": normalize_review_mode(values.get("review_mode")),
         "status": "STARTED",
     }
     if values.get("certification_id") is not None:

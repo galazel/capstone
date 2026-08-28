@@ -120,6 +120,10 @@ async def handle_certification_generation_requested(payload: dict) -> None:
             "certification_description": certification["description"] or "",
             "industry": certification["industry"] or "",
             "document_refs": document_refs,
+            # Supervised or unattended, as chosen in the create form. An
+            # unattended run never raises a review interrupt, so it reaches
+            # the end without anyone having to sit with it.
+            "review_mode": certification_run.review_mode_from(params),
             "status": "STARTED",
         },
     )

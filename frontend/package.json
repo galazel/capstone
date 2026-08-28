@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "icons": "node scripts/gen-icons.mjs",
+    "icons:check": "node scripts/gen-icons.mjs --check",
     "shoot:attempt": "node scripts/shoot-attempt-screenshots.mjs"
   },
   "dependencies": {

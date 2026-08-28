@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { AlertTriangle, Ban, ChevronDown, Loader2 } from "@/components/icons"
+import { AlertTriangle, Ban, ChevronDown, FastForward, Loader2 } from "@/components/icons"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,7 @@ import {
   getPendingReview,
   getWorkflowVersions,
   listWorkflowRuns,
+  setCertificationReviewMode,
   submitCertificationReview,
 } from "@/services/aiWorkflowService"
 import { ActivityPanel } from "@/components/generation/activity-panel"
@@ -114,8 +115,30 @@ export function InlineGenerationMonitor({ certificationId, onClose }) {
   const cancel = useMutation({
     mutationFn: () => cancelWorkflowRun(runId),
     onSuccess: () =>
-      toast.success("Cancellation requested. The run will stop at the next safe point."),
+      toast.success("Cancellation requested. The run will stop at the next safe point.", {
+        description: "Everything it has generated so far is saved as drafts.",
+      }),
     onError: () => toast.error("Could not cancel this run."),
+  })
+
+  /* Whether this run still intends to stop and ask. Held locally because the
+     flag lives on the graph's checkpoint, which this component does not read
+     — and the only thing it changes here is whether the button is still worth
+     offering. */
+  const [unattended, setUnattended] = useState(false)
+
+  const finishWithoutReview = useMutation({
+    mutationFn: () => setCertificationReviewMode(run?.thread_id, "auto"),
+    onSuccess: () => {
+      setUnattended(true)
+      toast.success("It will finish on its own", {
+        description:
+          "No more review stops. Everything it generates is saved as drafts for you to edit.",
+      })
+      queryClient.invalidateQueries({ queryKey: ["workflow-review", runId] })
+    },
+    onError: (error) =>
+      toast.error(error?.response?.data?.detail || "Could not switch this run to unattended."),
   })
 
   if (!runId) {
@@ -176,6 +199,23 @@ export function InlineGenerationMonitor({ certificationId, onClose }) {
               which is a good way to get the destructive one clicked by
               mistake. Leaving and stopping stay distinct; leaving just is not
               this component's job. */}
+          {/* The way out of a run that keeps stopping to ask. Reviewing every
+              lesson is a real choice, and so is deciding halfway through that
+              you would rather have the whole thing and edit it afterwards --
+              without that, the only alternative to sitting through the
+              checkpoints was stopping the run. */}
+          {!isTerminal && !unattended ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={finishWithoutReview.isPending || !run?.thread_id}
+              onClick={() => finishWithoutReview.mutate()}
+            >
+              <FastForward className="mr-2 size-4" />
+              Finish without review
+            </Button>
+          ) : null}
+
           {!isTerminal ? (
             <Button
               size="sm"

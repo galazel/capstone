@@ -80,6 +80,21 @@ export const submitCertificationReview = (threadId, { action, instructions, payl
     data: { action, instructions, payload, restored_from: restoredFrom },
   })
 
+/**
+ * Switches a certification run between supervised and unattended mid-flight.
+ *
+ * `mode` is "auto" (generate to the end without stopping) or "guided" (pause
+ * at every checkpoint). Distinct from the `approve_all` review action: this
+ * works on a run that is still generating, where there is no pending decision
+ * to submit — which is the moment an admin actually decides they do not want
+ * to sit through the reviews.
+ */
+export const setCertificationReviewMode = (threadId, mode) =>
+  base(`ai/workflows/certification/${threadId}/review-mode`, {
+    method: "POST",
+    data: { mode },
+  })
+
 export const submitQuestionBatchReview = (threadId, { action, instructions, questions, restoredFrom } = {}) =>
   base(`ai/workflows/question-bank/${threadId}/review`, {
     method: "POST",

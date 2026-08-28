@@ -132,6 +132,19 @@ public class WorkflowGatewayController {
         return workflowClient.resumeCertification(threadId, decision);
     }
 
+    /**
+     * Sets whether a running certification generation pauses for review.
+     *
+     * <p>Body: {@code mode} — "auto" to let it generate to the end, "guided"
+     * to keep stopping at each checkpoint.
+     */
+    @PostMapping("/certification/{threadId}/review-mode")
+    public Map<String, Object> setCertificationReviewMode(
+            @PathVariable String threadId,
+            @RequestBody Map<String, Object> body) {
+        return workflowClient.setCertificationReviewMode(threadId, body);
+    }
+
     /** The question-bank equivalent, which reviews a batch at a time. */
     @PostMapping("/question-bank/{threadId}/review")
     public Map<String, Object> reviewQuestionBatch(

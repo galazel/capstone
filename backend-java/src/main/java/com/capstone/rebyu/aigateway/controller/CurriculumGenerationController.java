@@ -32,12 +32,13 @@ public class CurriculumGenerationController {
             @AuthenticationPrincipal Jwt jwt,
             @RequestParam("certificationId") Long certificationId,
             @RequestParam(value = "files", required = false) List<MultipartFile> files,
-            @RequestParam(value = "additionalInstructions", required = false) String additionalInstructions
+            @RequestParam(value = "additionalInstructions", required = false) String additionalInstructions,
+            @RequestParam(value = "reviewMode", required = false) String reviewMode
     ) throws IOException {
         Long triggeredByUserId = resolveUserId(jwt);
         log.info("Curriculum generation requested for certificationId={}", certificationId);
         CertificationDto result = curriculumGenerationService.generateForExistingCertification(
-                certificationId, files, additionalInstructions, triggeredByUserId
+                certificationId, files, additionalInstructions, triggeredByUserId, reviewMode
         );
         return ResponseEntity.ok(result);
     }

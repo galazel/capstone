@@ -31,8 +31,7 @@ export default function QuestionNavigator({
 
         {/* Scrollable, but scrollbar is hidden */}
         <div
-            className="
-          mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 pt-1.5 pb-3
+            className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 pt-1.5 pb-3
           [scrollbar-width:none]
           [-ms-overflow-style:none]
           [&::-webkit-scrollbar]:hidden

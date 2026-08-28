@@ -1,4 +1,6 @@
+import { Suspense } from "react"
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
+import { PortalPageSkeleton } from "@/components/portal-page-skeleton.jsx"
 import { LogOutIcon, SettingsIcon, UserIcon } from "@/components/icons"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -75,8 +77,12 @@ export default function DashboardLayout() {
           </>
         }
       />
+      {/* The boundary sits here rather than around the router, so the admin
+          nav stays put while the next page's chunk arrives. */}
       <main className={`rebyu-page ${isBleedPage ? "rebyu-page-bleed" : ""}`}>
-        <Outlet />
+        <Suspense fallback={<PortalPageSkeleton />}>
+          <Outlet />
+        </Suspense>
       </main>
     </div>
   )

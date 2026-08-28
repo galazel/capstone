@@ -134,7 +134,7 @@ export function InstitutionErrorState({ title, description, onRetry }) {
           "The organization data could not be loaded right now. It may require a signed-in organization account."}
       </p>
       {onRetry ? (
-        <Button variant="outline" size="sm" className="mt-4 rounded-full" onClick={onRetry}>
+        <Button variant="outline" size="sm" className="mt-4" onClick={onRetry}>
           <RefreshCw aria-hidden="true" />
           Try again
         </Button>

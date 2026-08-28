@@ -165,7 +165,7 @@ function PayloadTile({ icon: Icon, tone, name, meta, actionLabel, onAction }) {
             </div>
 
             {onAction ? (
-                <Button type="button" size="sm" variant="outline" className="shrink-0 rounded-full" onClick={onAction}>
+                <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={onAction}>
                     {actionLabel}
                 </Button>
             ) : null}
@@ -250,7 +250,7 @@ function CircleHeader({ circle, onToggleJoin, onDelete, onBack }) {
                         <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-muted-foreground">
                             owner
                         </span>
-                        <Button type="button" variant="outline" size="sm" className="rounded-full text-destructive" onClick={onDelete}>
+                        <Button type="button" variant="outline" size="sm" className="text-destructive" onClick={onDelete}>
                             Delete circle
                         </Button>
                     </>
@@ -1190,10 +1190,10 @@ export default function Community() {
                             something an icon alone communicates. */}
                         <div className="mt-3 flex items-center gap-2 border-t-2 border-border pt-3">
                             <div className="flex min-w-0 flex-wrap items-center gap-0.5">
-                                <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => openComposer("discussion")} title="Start a discussion"><MessageCircle className="size-4 text-rb-macaw-lip sm:mr-2" /><span className="hidden sm:inline">Discussion</span></Button>
-                                <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => openComposer("quiz")} title="Share a quiz"><BookOpen className="size-4 text-rb-feather-lip sm:mr-2" /><span className="hidden sm:inline">Quiz</span></Button>
-                                <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => openComposer("flashcard")} title="Share flashcards"><Sparkles className="size-4 text-rb-beetle-lip sm:mr-2" /><span className="hidden sm:inline">Flashcards</span></Button>
-                                <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => openComposer("reviewer")} title="Share a PDF or Word reviewer"><FileText className="size-4 text-rb-cardinal-lip sm:mr-2" /><span className="hidden sm:inline">Reviewer</span></Button>
+                                <Button type="button" variant="ghost" size="sm"  onClick={() => openComposer("discussion")} title="Start a discussion"><MessageCircle className="size-4 text-rb-macaw-lip sm:mr-2" /><span className="hidden sm:inline">Discussion</span></Button>
+                                <Button type="button" variant="ghost" size="sm"  onClick={() => openComposer("quiz")} title="Share a quiz"><BookOpen className="size-4 text-rb-feather-lip sm:mr-2" /><span className="hidden sm:inline">Quiz</span></Button>
+                                <Button type="button" variant="ghost" size="sm"  onClick={() => openComposer("flashcard")} title="Share flashcards"><Sparkles className="size-4 text-rb-beetle-lip sm:mr-2" /><span className="hidden sm:inline">Flashcards</span></Button>
+                                <Button type="button" variant="ghost" size="sm"  onClick={() => openComposer("reviewer")} title="Share a PDF or Word reviewer"><FileText className="size-4 text-rb-cardinal-lip sm:mr-2" /><span className="hidden sm:inline">Reviewer</span></Button>
                             </div>
 
                         </div>
@@ -1218,7 +1218,7 @@ export default function Community() {
                                     { value: "reviewer", label: "Reviewer", icon: FileText },
                                 ].map((type) => {
                                     const Icon = type.icon
-                                    return <Button key={type.value} type="button" variant={shareType === type.value ? "secondary" : "ghost"} size="sm" className="shrink-0 rounded-full" onClick={() => { setShareType(type.value); setAttachedFile(null) }}><Icon className="mr-1.5 size-4" />{type.label}</Button>
+                                    return <Button key={type.value} type="button" variant={shareType === type.value ? "secondary" : "ghost"} size="sm" className="shrink-0" onClick={() => { setShareType(type.value); setAttachedFile(null) }}><Icon className="mr-1.5 size-4" />{type.label}</Button>
                                 })}
                             </div>
 
@@ -1249,8 +1249,8 @@ export default function Community() {
                             </div>
 
                             <div className="mt-4 flex justify-end gap-2 border-t-2 border-border pt-4">
-                                <Button type="button" variant="ghost" className="rounded-full" onClick={() => { setComposerOpen(false); setAttachedFile(null) }}>Cancel</Button>
-                                <Button type="button" className="rounded-full" onClick={publishPost} disabled={isPublishing || isUploadingAttachment || (["quiz", "flashcard"].includes(shareType) ? !selectedStudyItemId : !shareTitle.trim() || !shareDescription.trim() || (shareType === "reviewer" && !attachedFile))}><Send className="mr-2 size-4" />Post</Button>
+                                <Button type="button" variant="ghost"  onClick={() => { setComposerOpen(false); setAttachedFile(null) }}>Cancel</Button>
+                                <Button type="button"  onClick={publishPost} disabled={isPublishing || isUploadingAttachment || (["quiz", "flashcard"].includes(shareType) ? !selectedStudyItemId : !shareTitle.trim() || !shareDescription.trim() || (shareType === "reviewer" && !attachedFile))}><Send className="mr-2 size-4" />Post</Button>
                             </div>
                         </section>
                     ) : null}
@@ -1284,7 +1284,7 @@ export default function Community() {
                             </div>
 
                             {showSavedOnly ? (
-                                <Button type="button" variant="ghost" size="sm" className="shrink-0 rounded-full" onClick={() => setShowSavedOnly(false)}>
+                                <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={() => setShowSavedOnly(false)}>
                                     <X className="mr-2 h-4 w-4" />
                                     Back to feed
                                 </Button>

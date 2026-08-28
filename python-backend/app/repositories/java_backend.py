@@ -7,10 +7,11 @@ FastAPI's get_db().
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import insert, select, update
+from sqlalchemy import insert, select, text, update
 from sqlalchemy.orm import Session
 
 from app.db.java_tables import (
@@ -33,6 +34,9 @@ from app.db.java_tables import (
     questions,
     text_question_configs,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_generation_request(session: Session, generation_request_id: int) -> dict[str, Any] | None:
@@ -70,6 +74,57 @@ def mark_generation_request_failed(session: Session, generation_request_id: int,
         .values(status="FAILED", error_message=error_message, updated_at=datetime.now(timezone.utc))
     )
     session.commit()
+
+
+def delete_empty_certification(session: Session, certification_id: int) -> bool:
+    """Removes a certification that a rejected run left behind.
+
+    The certification row is created in Java *before* the run starts, because
+    the run needs something to attach its output to. When the document auditor
+    then refuses the documents, nothing is ever attached, and what remains is a
+    Draft card with no curriculum -- and, worse, a row that holds the title
+    against the unique index, so retrying with the same name fails with a
+    duplicate-key error rather than working.
+
+    Guarded rather than trusted: the delete only proceeds when the
+    certification genuinely has no major categories. Anything with structure is
+    a run that got further than validation, and deleting it would destroy work
+    an admin may want to keep. Returns whether the row was removed.
+
+    Dependents go first. The schema comes from Hibernate, whose foreign keys
+    carry no ON DELETE CASCADE, so a bare delete of the parent raises instead
+    of cascading.
+    """
+    has_structure = session.execute(
+        text(
+            "SELECT 1 FROM major_categories WHERE certification_id = :cid LIMIT 1"
+        ),
+        {"cid": certification_id},
+    ).first()
+
+    if has_structure is not None:
+        logger.warning(
+            "Refusing to remove certification %s: it has major categories.",
+            certification_id,
+        )
+        return False
+
+    session.execute(
+        text("DELETE FROM knowledge_documents WHERE certification_id = :cid"),
+        {"cid": certification_id},
+    )
+    session.execute(
+        text("DELETE FROM generation_requests WHERE certification_id = :cid"),
+        {"cid": certification_id},
+    )
+    session.execute(
+        text("DELETE FROM certifications WHERE certification_id = :cid"),
+        {"cid": certification_id},
+    )
+    session.commit()
+
+    logger.info("Removed empty certification %s after a rejected run", certification_id)
+    return True
 
 
 def get_lesson(session: Session, lesson_id: int) -> dict[str, Any] | None:
@@ -226,6 +281,46 @@ def list_certification_middle_categories(
         .where(major_categories.c.certification_id == certification_id)
     ).mappings().all()
     return [dict(row) for row in rows]
+
+
+def list_certification_exams(session: Session, certification_id: int) -> list[dict[str, Any]]:
+    """Every exam already stored under a certification.
+
+    Read before persisting generated assessments, so writing a run's output
+    twice -- a partial save after a failure, then the full save when the retry
+    finishes -- adds the missing exams rather than a second copy of the ones
+    already there.
+    """
+    rows = session.execute(
+        select(exams.c.exam_id, exams.c.title, exams.c.target_scope)
+        .where(exams.c.certification_id == certification_id)
+    ).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def list_certification_question_texts(session: Session, certification_id: int) -> list[str]:
+    """The text of every question hanging off this certification's lessons.
+
+    The question bank has no exam row to key on, so its only identity is what
+    the question says. Same purpose as `list_certification_exams`: keep a
+    re-persist additive.
+    """
+    rows = session.execute(
+        select(questions.c.question_text)
+        .select_from(
+            questions.join(lessons, lessons.c.lesson_id == questions.c.lesson_id)
+            .join(
+                middle_categories,
+                middle_categories.c.middle_category_id == lessons.c.middle_category_id,
+            )
+            .join(
+                major_categories,
+                major_categories.c.major_category_id == middle_categories.c.major_category_id,
+            )
+        )
+        .where(major_categories.c.certification_id == certification_id)
+    ).scalars().all()
+    return [row or "" for row in rows]
 
 
 def get_exam_type_id(session: Session, exam_type_text: str) -> int | None:

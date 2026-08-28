@@ -1,15 +1,16 @@
 import { useState } from "react"
-import { Check, CheckCheck, Pencil, RotateCw, SkipForward, Sparkles, X } from "@/components/icons"
+import { Check, CheckCheck, FastForward, Pencil, RotateCw, SkipForward, Sparkles, X } from "@/components/icons"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 
 /**
  * The decision controls for a human-in-the-loop checkpoint.
  *
- * Six actions, matching what the graph supports:
+ * Seven actions, matching what the graph supports:
  *
  *   Approve            accept and move on
  *   Approve remaining  accept this and everything left in the phase, unattended
+ *   Finish without me  accept this and every checkpoint after it, to the end
  *   Edit manually      submit the reviewer's own version
  *   Improve with AI    regenerate, guided by written feedback
  *   Regenerate         regenerate from scratch, no guidance
@@ -17,6 +18,12 @@ import { Textarea } from "@/components/ui/textarea"
  *
  * "Skip" is the graph's `reject`. The UI word describes the effect — the item is
  * left out and the walk continues — where "reject" reads like a failure.
+ *
+ * "Finish without me" is the wider version of "Approve remaining": that one
+ * only drains the phase in front of it, so a reviewer who was done reviewing
+ * still got stopped at the next phase, and again for the mock exam, the
+ * diagnostic, and the question bank. This one switches the whole run to
+ * unattended.
  *
  * Actions only: the artifact, the automated checks, and the version history are
  * the checkpoint card's job (see `ReviewCheckpoint`). Splitting them keeps this
@@ -138,6 +145,17 @@ export function ReviewActions({ payload, total, onSubmit, submitting, disabled }
           Approve remaining
         </Button>
       ) : null}
+
+      <Button
+        size="sm"
+        variant="secondary"
+        disabled={busy}
+        title="Approve this and every remaining checkpoint — the run generates the rest on its own"
+        onClick={() => submit("approve_all")}
+      >
+        <FastForward className="mr-2 size-4" />
+        Finish without me
+      </Button>
 
       <span className="mx-1 hidden h-5 w-px bg-border sm:block" aria-hidden="true" />
 

@@ -75,12 +75,15 @@ public class CertificationController {
             @AuthenticationPrincipal Jwt jwt,
             @RequestPart("data") @Valid CertificationDto dto,
             @RequestPart(value = "files", required = false) List<MultipartFile> files,
-            @RequestParam(value = "additionalInstructions", required = false) String additionalInstructions
+            @RequestParam(value = "additionalInstructions", required = false) String additionalInstructions,
+            /* "guided" (default) pauses for admin review at every checkpoint;
+               "auto" generates the whole certification without stopping. */
+            @RequestParam(value = "reviewMode", required = false) String reviewMode
     ) throws IOException {
         CurrentUserDto user = requireAdmin(jwt);
-        log.info("AI certification creation requested for '{}'", dto.getTitle());
+        log.info("AI certification creation requested for '{}' (reviewMode={})", dto.getTitle(), reviewMode);
         return curriculumGenerationService.generateForNewCertification(
-                dto, files, additionalInstructions, user.userId()
+                dto, files, additionalInstructions, user.userId(), reviewMode
         );
     }
 

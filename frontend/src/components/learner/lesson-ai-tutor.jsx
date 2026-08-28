@@ -558,7 +558,7 @@ export function LessonAiTutor({
                 <TactileButton
                     variant="snow"
                     size="sm"
-                    className="!h-auto !gap-1.5 !rounded-full !border-2 !border-rb-beetle/30 !bg-white !px-3.5 !py-2 !text-rb-beetle-lip hover:!border-rb-beetle hover:!bg-rb-beetle-wash"
+                    className="!h-auto !gap-1.5 !border-2 !border-rb-beetle/30 !bg-white !px-3.5 !py-2 !text-rb-beetle-lip hover:!border-rb-beetle hover:!bg-rb-beetle-wash"
                     disabled={pending}
                     onClick={() =>
                         sendTutorMessage("Explain this lesson in simple words.")
@@ -571,7 +571,7 @@ export function LessonAiTutor({
                 <TactileButton
                     variant="snow"
                     size="sm"
-                    className="!h-auto !gap-1.5 !rounded-full !border-2 !border-rb-beetle/30 !bg-white !px-3.5 !py-2 !text-rb-beetle-lip hover:!border-rb-beetle hover:!bg-rb-beetle-wash"
+                    className="!h-auto !gap-1.5 !border-2 !border-rb-beetle/30 !bg-white !px-3.5 !py-2 !text-rb-beetle-lip hover:!border-rb-beetle hover:!bg-rb-beetle-wash"
                     disabled={pending}
                     onClick={() =>
                         sendTutorMessage(
@@ -586,7 +586,7 @@ export function LessonAiTutor({
                 <TactileButton
                     variant="snow"
                     size="sm"
-                    className="!h-auto !gap-1.5 !rounded-full !border-2 !border-rb-beetle/30 !bg-white !px-3.5 !py-2 !text-rb-beetle-lip hover:!border-rb-beetle hover:!bg-rb-beetle-wash"
+                    className="!h-auto !gap-1.5 !border-2 !border-rb-beetle/30 !bg-white !px-3.5 !py-2 !text-rb-beetle-lip hover:!border-rb-beetle hover:!bg-rb-beetle-wash"
                     disabled={pending}
                     onClick={() =>
                         sendTutorMessage(
@@ -671,7 +671,7 @@ export function LessonAiTutor({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="rb-btn-icon shrink-0 self-center !rounded-full"
+                    className="rb-btn-icon shrink-0 self-center"
                     disabled={pending || Boolean(generating)}
                     aria-label="Create study aid"
                 >
@@ -719,7 +719,7 @@ export function LessonAiTutor({
                 type="submit"
                 variant="beetle"
                 size="sm"
-                className="rb-btn-icon shrink-0 self-center !rounded-full"
+                className="rb-btn-icon shrink-0 self-center"
                 disabled={pending || Boolean(generating) || !draft.trim()}
                 aria-label="Send message"
             >

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useNavigate, useOutletContext } from "react-router-dom"
 import { toast } from "sonner"
+import { isSoundEnabled, setSoundEnabled, playAchievementChime } from "@/lib/sound.js"
 import {
   Bell,
   Bot,
@@ -111,6 +112,20 @@ export default function LearnerAccountPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const entitlements = useLearnerEntitlements()
+
+  /* Read once into state rather than calling `isSoundEnabled()` during render:
+     localStorage is outside React, so a bare read would not re-render the
+     switch when it changed and the control would fight the user. */
+  const [soundOn, setSoundOn] = useState(() => isSoundEnabled())
+
+  const toggleSound = (value) => {
+    setSoundOn(value)
+    setSoundEnabled(value)
+    /* Turning it on plays it. A toggle for something you cannot hear from the
+       settings page is a toggle you have to earn an achievement to test, and
+       the press is itself the gesture the autoplay policy wants. */
+    if (value) playAchievementChime()
+  }
   const learner = data.learner
   const user = data.user
   const fullName =
@@ -353,6 +368,19 @@ export default function LearnerAccountPage() {
           <PreferenceRow title="Learning reminders" description="Study-plan reminders and upcoming learning tasks." checked={preferences.learningReminders} onCheckedChange={(value) => updatePreference("learningReminders", value)} />
           <PreferenceRow title="Certification updates" description="New assignments, invitations, and certification changes." checked={preferences.certificationUpdates} onCheckedChange={(value) => updatePreference("certificationUpdates", value)} />
           <PreferenceRow title="Product news" description="Occasional REBYU feature announcements." checked={preferences.productNews} onCheckedChange={(value) => updatePreference("productNews", value)} />
+
+          {/* Not one of the three above: those are account preferences that
+              travel with the learner, and this one is a property of the device
+              in front of them. Muting a shared laptop should not mute the phone
+              they study on. It is here because this is where a learner comes
+              looking for "stop making noise at me", not because it shares their
+              storage. */}
+          <PreferenceRow
+            title="Achievement sound"
+            description="Play a short chime when you unlock an achievement. Saved on this device only."
+            checked={soundOn}
+            onCheckedChange={toggleSound}
+          />
         </div>
       )
     }

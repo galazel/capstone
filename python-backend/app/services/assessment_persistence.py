@@ -30,6 +30,12 @@ from app.repositories import java_backend as repo
 logger = logging.getLogger(__name__)
 
 
+def _title_key(value: Any) -> str:
+    """Case- and whitespace-insensitive identity for an exam title or a
+    question's text, used to recognise an artifact that is already stored."""
+    return " ".join(str(value or "").lower().split())
+
+
 def _persist_one_question(session: Session, question: dict[str, Any]) -> int:
     """Writes a question plus whatever type-specific config it needs."""
     question_type = question.get("question_type", "MCQ")
@@ -255,6 +261,31 @@ def persist_generated_assessments(
 
     created: list[int] = []
     warnings: list[str] = []
+    #: Exams this pass did not write because they were already stored. Counted
+    #: out of `expected` below, so "generated seven, saved none" still reads as
+    #: a systemic failure while "all seven were already saved" does not.
+    skipped_exams: list[str] = []
+
+    # What is already stored. A run's output can reach this function twice --
+    # once as a partial save when the run failed or was stopped, once in full
+    # when the retry finishes -- and every insert below is unconditional, so
+    # without this the second pass duplicated every exam and every bank
+    # question. An artifact already present is left alone rather than
+    # rewritten: the stored copy may have been edited since.
+    existing_exams = {
+        (row.get("target_scope"), _title_key(row.get("title")))
+        for row in repo.list_certification_exams(session, certification_id)
+    }
+    existing_question_texts = {
+        _title_key(text) for text in repo.list_certification_question_texts(session, certification_id)
+    }
+
+    def _already_stored(scope: str, title: str) -> bool:
+        key = _title_key(title)
+        # `target_scope` is what this module writes, but a row created by
+        # another path may have none -- so a title match with no scope counts
+        # too, rather than being written a second time.
+        return (scope, key) in existing_exams or (None, key) in existing_exams
 
     # Lesson bodies first: they belong to the curriculum rows, not to any exam.
     lessons_written, lesson_warnings = persist_lesson_content(
@@ -267,16 +298,31 @@ def persist_generated_assessments(
             created.append(exam_id)
         warnings.extend(exam_warnings)
 
+    def _store_exam(*, scope: str, title: str, **kwargs) -> None:
+        """Persists one exam unless an exam of that scope and title is
+        already stored for this certification."""
+        if _already_stored(scope, title):
+            logger.info(
+                "Exam '%s' (%s) is already stored for certification %s; keeping the stored copy",
+                title, scope, certification_id,
+            )
+            skipped_exams.append(title)
+            return
+        existing_exams.add((scope, _title_key(title)))
+        _record(*persist_exam(
+            session, certification_id=certification_id, scope=scope, title=title, **kwargs
+        ))
+
     for quiz in result.get("lesson_quizzes") or []:
         lesson_name = quiz.get("lesson", "")
         resolved = lesson_index.get(
             " ".join(lesson_name.lower().split()), default_lesson_id
         )
-        _record(*persist_exam(
-            session, certification_id=certification_id, scope="LESSON",
-            title=f"{lesson_name} Quiz", questions=quiz.get("questions") or [],
+        _store_exam(
+            scope="LESSON", title=f"{lesson_name} Quiz",
+            questions=quiz.get("questions") or [],
             lesson_index=lesson_index, fallback_lesson_id=resolved, lesson_id=resolved,
-        ))
+        )
 
     for quiz in result.get("middle_quizzes") or []:
         middle_name = quiz.get("middleCategory") or "Middle Category"
@@ -286,13 +332,12 @@ def persist_generated_assessments(
                 f"Middle exam '{middle_name}' matched no middle category; it will not "
                 f"satisfy that category's publishing requirement."
             )
-        _record(*persist_exam(
-            session, certification_id=certification_id, scope="MIDDLE",
-            title=f"{middle_name} Exam",
+        _store_exam(
+            scope="MIDDLE", title=f"{middle_name} Exam",
             questions=quiz.get("questions") or [],
             lesson_index=lesson_index, fallback_lesson_id=default_lesson_id,
             middle_category_id=middle_category_id,
-        ))
+        )
 
     for quiz in result.get("major_quizzes") or []:
         major_name = quiz.get("majorCategory") or "Major Category"
@@ -302,37 +347,49 @@ def persist_generated_assessments(
                 f"Major exam '{major_name}' matched no major category; it will not "
                 f"satisfy that category's publishing requirement."
             )
-        _record(*persist_exam(
-            session, certification_id=certification_id, scope="MAJOR",
-            title=f"{major_name} Exam",
+        _store_exam(
+            scope="MAJOR", title=f"{major_name} Exam",
             questions=quiz.get("questions") or [],
             lesson_index=lesson_index, fallback_lesson_id=default_lesson_id,
             major_category_id=major_category_id,
-        ))
+        )
 
     diagnostic = result.get("diagnostic_exam") or {}
     if diagnostic.get("questions"):
-        _record(*persist_exam(
-            session, certification_id=certification_id, scope="DIAGNOSTIC",
-            title="Diagnostic Exam", questions=diagnostic["questions"],
+        _store_exam(
+            scope="DIAGNOSTIC", title="Diagnostic Exam",
+            questions=diagnostic["questions"],
             lesson_index=lesson_index, fallback_lesson_id=default_lesson_id,
-        ))
+        )
 
     mock = result.get("mock_exam") or {}
     if mock.get("questions"):
-        _record(*persist_exam(
-            session, certification_id=certification_id, scope="MOCK",
-            title="Mock Exam", questions=mock["questions"],
+        _store_exam(
+            scope="MOCK", title="Mock Exam",
+            questions=mock["questions"],
             lesson_index=lesson_index, fallback_lesson_id=default_lesson_id,
-        ))
+        )
 
     # The bank is a pool for adaptive selection/practice, not a sittable
     # exam, so it becomes questions without an `exams` row.
     bank = result.get("question_bank") or []
+    # Anything already stored under this certification is dropped here rather
+    # than written again -- the bank has no exam row to key on, so its text is
+    # its identity.
+    fresh_bank = [
+        question
+        for question in bank
+        if _title_key(question.get("question")) not in existing_question_texts
+    ]
+    if len(fresh_bank) != len(bank):
+        logger.info(
+            "%d of %d bank question(s) are already stored for certification %s; skipping those",
+            len(bank) - len(fresh_bank), len(bank), certification_id,
+        )
     bank_ids: list[int] = []
-    if bank:
+    if fresh_bank:
         bank_ids, bank_warnings = persist_questions(
-            session, bank, lesson_index, fallback_lesson_id=default_lesson_id
+            session, fresh_bank, lesson_index, fallback_lesson_id=default_lesson_id
         )
         warnings.extend(bank_warnings)
 
@@ -344,14 +401,18 @@ def persist_generated_assessments(
     # still reported "completed". Counting both sides is what lets `finalize`
     # tell a successful run from an empty one.
     expected = {
-        "exams": (
+        "exams": max(
+            0,
             len(result.get("lesson_quizzes") or [])
             + len(result.get("middle_quizzes") or [])
             + len(result.get("major_quizzes") or [])
             + (1 if diagnostic.get("questions") else 0)
             + (1 if mock.get("questions") else 0)
+            - len(skipped_exams),
         ),
-        "bank_questions": len(bank),
+        # What this pass actually tried to write. Counting the whole bank here
+        # would report a re-persist of already-stored work as a total loss.
+        "bank_questions": len(fresh_bank),
         "lessons": len(result.get("lessons") or []),
     }
 

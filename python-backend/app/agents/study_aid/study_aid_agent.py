@@ -23,6 +23,15 @@ STUDY_AID_SYSTEM_PROMPT = """
     - For a quiz item: write 4 plausible choices as plain strings (one obviously
       correct once you know the lesson, three real distractors -- not throwaway
       options), and set `correctAnswer` to the exact text of the correct choice.
+    - Vary how the questions read. Do not open item after item the same way
+      ("A ...", "The ...", "Which of the following ..."), and do not make them
+      all definition lookups -- mix in applying the concept, reasoning about
+      why it behaves as it does, and short situations with a decision in them.
+    - Keep the four choices parallel: similar length, structure, and level of
+      detail, each a mistake a learner could actually make. The correct one
+      must not stand out as the longest, most detailed, or most carefully
+      worded, and it must not always sit in the same position. A learner who
+      has not read the lesson should have nothing to go on but guessing.
     - For a flashcard item: `question` is the front, `answer` is the back. Leave
       `choices` and `correctAnswer` empty.
     - `difficulty` is one of EASY, AVERAGE, HARD, judged against how directly the

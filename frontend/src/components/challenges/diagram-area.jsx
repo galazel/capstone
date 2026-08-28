@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronLeft, ChevronRight } from "@/components/icons"
 import { DrawIoEmbed } from "react-drawio"
 
+import { getDiagramToolPreset } from "./diagram-tool-presets.js"
+
 const EMPTY_GRID_DIAGRAM = `
 <mxGraphModel
   dx="1200"
@@ -25,71 +27,6 @@ const EMPTY_GRID_DIAGRAM = `
   </root>
 </mxGraphModel>
 `
-
-// Each entry's `libs` scopes the draw.io sidebar to shapes valid for that
-// diagram type only (spec: "show only the tools valid for the selected
-// diagram type"). Unknown/未-registered draw.io library ids degrade
-// gracefully — draw.io just omits that sidebar section — so it's safe to
-// list a type-specific lib alongside "general" as a fallback.
-const DIAGRAM_TOOL_PRESETS = {
-    ERD: {
-        label: "ER Diagram",
-        libs: "er;general",
-    },
-    UML_CLASS: {
-        label: "UML Class Diagram",
-        libs: "uml;general",
-    },
-    UML_SEQUENCE: {
-        label: "UML Sequence Diagram",
-        // draw.io's sequence-diagram shapes live inside the same "uml" stencil set.
-        libs: "uml;general",
-    },
-    FLOWCHART: {
-        label: "Flowchart",
-        libs: "flowchart;general",
-    },
-    DFD: {
-        label: "Data Flow Diagram",
-        libs: "flowchart;er;general",
-    },
-    MIND_MAP: {
-        label: "Mind Map",
-        libs: "mindmap;general",
-    },
-    NETWORK_DIAGRAM: {
-        label: "Network Diagram",
-        libs: "network;general",
-    },
-    // Additional configured types the question bank already supports.
-    ACTIVITY_DIAGRAM: {
-        label: "Activity Diagram",
-        libs: "uml;flowchart;general",
-    },
-    UML_COMPONENT: {
-        label: "Component Diagram",
-        libs: "uml;general",
-    },
-    UI_DESIGN: {
-        label: "UI Design",
-        libs: "mockups;ios;android;bootstrap;general",
-    },
-    USE_CASE: {
-        label: "Use Case Diagram",
-        libs: "uml;general",
-    },
-}
-
-// Back-compat aliases for values authored before the canonical type list was
-// aligned to ERD/UML_CLASS/UML_SEQUENCE/FLOWCHART/DFD/MIND_MAP/NETWORK_DIAGRAM.
-const DIAGRAM_TYPE_ALIASES = {
-    SEQUENCE_DIAGRAM: "UML_SEQUENCE",
-}
-
-function getDiagramToolPreset(diagramType) {
-    const resolved = DIAGRAM_TYPE_ALIASES[diagramType] ?? diagramType
-    return DIAGRAM_TOOL_PRESETS[resolved] ?? DIAGRAM_TOOL_PRESETS.ERD
-}
 
 function normalizeXml(xml) {
     return typeof xml === "string" && xml.trim() ? xml : EMPTY_GRID_DIAGRAM

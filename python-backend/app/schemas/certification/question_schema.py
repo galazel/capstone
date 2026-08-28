@@ -24,6 +24,91 @@ MCQ_CHOICE_COUNT = 4
 #: fresh generation (a reviewer's manual edit, say).
 MIN_EXPLANATION_CHARS = 20
 
+#: A programming task needs enough cases to check the edges it states, not
+#: just that the happy path runs. Mirrored in
+#: `app.domain.validation.questions`, which reports the same floor for
+#: questions that never went through generation.
+MIN_PROGRAMMING_TEST_CASES = 3
+
+#: The diagram types a DIAGRAM question may ask for.
+#:
+#: These are the values the *editor* already offers
+#: (`DIAGRAM_TYPE_OPTIONS` in `frontend/src/components/questions/
+#: question-editors.jsx`) and the values the diagram playground keys its tool
+#: palette on: a question whose `diagram_type` is not one of them lands the
+#: learner in a canvas holding some other diagram's shapes, because the
+#: playground falls back to ERD for anything it does not recognise.
+#:
+#: The field used to be free text, so the model wrote "ERD", "er diagram" and
+#: "Entity Relationship Diagram" for the same thing and only the first one
+#: matched.
+DIAGRAM_TYPES: tuple[str, ...] = (
+    "ACTIVITY_DIAGRAM",
+    "UML_CLASS",
+    "UML_COMPONENT",
+    "ERD",
+    "FLOWCHART",
+    "SEQUENCE_DIAGRAM",
+    "USE_CASE",
+)
+
+#: What a model actually writes, mapped onto the canonical value. Matching is
+#: on the alphanumeric core of the string, so "UML Class", "uml-class" and
+#: "Class Diagram" all arrive at UML_CLASS.
+_DIAGRAM_TYPE_ALIASES = {
+    "activity": "ACTIVITY_DIAGRAM",
+    "activitydiagram": "ACTIVITY_DIAGRAM",
+    "umlactivity": "ACTIVITY_DIAGRAM",
+    "umlactivitydiagram": "ACTIVITY_DIAGRAM",
+    "class": "UML_CLASS",
+    "classdiagram": "UML_CLASS",
+    "umlclass": "UML_CLASS",
+    "umlclassdiagram": "UML_CLASS",
+    "component": "UML_COMPONENT",
+    "componentdiagram": "UML_COMPONENT",
+    "umlcomponent": "UML_COMPONENT",
+    "umlcomponentdiagram": "UML_COMPONENT",
+    "er": "ERD",
+    "erd": "ERD",
+    "erdiagram": "ERD",
+    "entityrelationship": "ERD",
+    "entityrelationshipdiagram": "ERD",
+    "flow": "FLOWCHART",
+    "flowchart": "FLOWCHART",
+    "flowdiagram": "FLOWCHART",
+    "processflowchart": "FLOWCHART",
+    "sequence": "SEQUENCE_DIAGRAM",
+    "sequencediagram": "SEQUENCE_DIAGRAM",
+    "umlsequence": "SEQUENCE_DIAGRAM",
+    "umlsequencediagram": "SEQUENCE_DIAGRAM",
+    "usecase": "USE_CASE",
+    "usecasediagram": "USE_CASE",
+    "umlusecase": "USE_CASE",
+    "umlusecasediagram": "USE_CASE",
+}
+
+
+def normalize_diagram_type(value: str | None) -> str | None:
+    """Maps whatever was written onto one of `DIAGRAM_TYPES`, or None.
+
+    None means "not a diagram type this product can present", which the
+    validator turns into a rejection so the model is asked again -- rather
+    than storing a type the playground cannot equip and the learner meets as
+    the wrong set of shapes.
+    """
+    key = "".join(ch for ch in (value or "").lower() if ch.isalnum())
+    if not key:
+        return None
+    canonical = key.upper()
+    if canonical in DIAGRAM_TYPES:
+        return canonical
+    # "UML_CLASS" arrives as "umlclass" once punctuation is stripped.
+    stripped = {"".join(c for c in t.lower() if c.isalnum()): t for t in DIAGRAM_TYPES}
+    if key in stripped:
+        return stripped[key]
+    return _DIAGRAM_TYPE_ALIASES.get(key)
+
+
 #: Lower than the item-level floor because a per-choice note is one sentence
 #: about one distractor, but high enough to reject "Incorrect." / "Wrong.",
 #: which teach nothing.
@@ -269,12 +354,30 @@ class QuestionDraft(BaseModel):
                 raise ValueError("DESCRIPTIVE must set rubric_answer")
 
         elif self.question_type == "PROGRAMMING":
-            if not self.test_cases:
-                raise ValueError("PROGRAMMING must include at least one test case")
+            if len(self.test_cases) < MIN_PROGRAMMING_TEST_CASES:
+                # One test case checks that the happy path runs and nothing
+                # else, which is how a "coding question" ends up being a
+                # syntax quiz. Three is the floor for covering the ordinary
+                # case and the edges the problem statement describes.
+                raise ValueError(
+                    f"PROGRAMMING must include at least {MIN_PROGRAMMING_TEST_CASES} "
+                    f"test cases covering the ordinary case and its edges"
+                )
 
         elif self.question_type == "DIAGRAM":
             if not (self.diagram_type or "").strip():
                 raise ValueError("DIAGRAM must set diagram_type")
+            # Normalised in place: the model's spelling is not worth a retry
+            # when the meaning is unambiguous ("ER Diagram" -> ERD), but a
+            # type outside the supported set is, because the learner would
+            # be handed a canvas equipped for a different diagram.
+            canonical = normalize_diagram_type(self.diagram_type)
+            if canonical is None:
+                raise ValueError(
+                    f"diagram_type '{self.diagram_type}' is not supported; use one of: "
+                    + ", ".join(DIAGRAM_TYPES)
+                )
+            self.diagram_type = canonical
             if not (self.instructions or "").strip():
                 raise ValueError("DIAGRAM must set instructions")
 

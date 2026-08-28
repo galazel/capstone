@@ -21,7 +21,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
-import { generationStatusOf } from "@/hooks/use-active-generations"
+import { generationErrorOf, generationStatusOf } from "@/hooks/use-active-generations"
 import CertificationCover from "@/components/certifications/certification-cover.jsx"
 import {
   deleteCertification,
@@ -107,8 +107,15 @@ function CertificationCard({ item, certification, generationRun = null }) {
   const [showGeneration, setShowGeneration] = useState(false)
 
   const generationStatus = generationStatusOf(generationRun)
-  const isGenerating = Boolean(generationStatus)
+  /* A failed run is a status, not a state of work. `isGenerating` used to be
+     `Boolean(generationStatus)`, which was fine while the only statuses were
+     the two live ones -- now that a rejection is reported too, a failed run
+     would otherwise disable the card, spin the badge and claim to be building
+     something that stopped minutes ago. */
+  const isFailed = generationStatus === "FAILED"
+  const isGenerating = generationStatus === "GENERATING" || generationStatus === "AWAITING_REVIEW"
   const awaitingReview = generationStatus === "AWAITING_REVIEW"
+  const generationError = generationErrorOf(generationRun)
 
   // "Generating…" for four minutes tells an admin nothing about whether it is
   // progressing or wedged. The run already reports the node it is on, so show
@@ -278,7 +285,13 @@ function CertificationCard({ item, certification, generationRun = null }) {
     // lessons and no assessments, so the detail page renders a blank shell.
     // Saying why here beats navigating to an empty page and leaving the admin
     // to work out whether it is broken or still loading.
-    if (isEmpty) {
+    /* A rejected certification is worth opening. The page used to be a blank
+       shell -- which is why this click was blocked at all -- but it now leads
+       with the reason the run was refused and what to do about it, and a
+       reason you can read at your own pace beats a toast that takes it away
+       after a few seconds. Only the case with nothing to say is still stopped
+       here. */
+    if (isEmpty && !generationError) {
       toast.error("Nothing to open", {
         description:
             `"${certificationTitle}" has no content — generation did not finish. Delete it and generate again.`,
@@ -326,7 +339,10 @@ function CertificationCard({ item, certification, generationRun = null }) {
     if (isEmpty) {
       toast.error("Nothing to publish", {
         description:
-            `"${certificationTitle}" has no categories or lessons. Generation did not finish — delete it and try again.`,
+            generationError
+              ? `Generation failed: ${generationError}`
+              : `"${certificationTitle}" has no categories or lessons. Generation did not finish — delete it and try again.`,
+        duration: isFailed ? 12_000 : undefined,
       })
       return
     }
@@ -514,13 +530,23 @@ function CertificationCard({ item, certification, generationRun = null }) {
               </DropdownMenu>
             </div>
 
-            <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
-              {isGenerating
-                  ? generationStatus === "AWAITING_REVIEW"
-                      ? "Paused for your review in the generation workspace."
-                      : "Building categories, lessons, and assessments. This can take several minutes."
-                  : certificationDescription}
-            </p>
+            {isFailed && generationError ? (
+                /* Not `line-clamp-2`: the auditor's sentence names the mismatch
+                   it found, and truncating it to "The document sample content
+                   is about a PH Exam reviewer focusing on…" cuts off precisely
+                   the half that says what to do about it. */
+                <p className="mt-2 rounded-md border border-destructive/30 bg-destructive/5 p-2.5 text-sm leading-6 text-destructive">
+                  {generationError}
+                </p>
+            ) : (
+                <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
+                  {isGenerating
+                      ? generationStatus === "AWAITING_REVIEW"
+                          ? "Paused for your review in the generation workspace."
+                          : "Building categories, lessons, and assessments. This can take several minutes."
+                      : certificationDescription}
+                </p>
+            )}
 
             <div className="mt-auto pt-5">
               {isGenerating ? (

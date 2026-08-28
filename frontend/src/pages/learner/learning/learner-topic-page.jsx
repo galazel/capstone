@@ -57,6 +57,10 @@ import {
 import { getExams, getExamTypes } from "@/services/assessmentService.js"
 import { getProgressAnalytics } from "@/services/learnerAnalyticsService.js"
 import { buildCurriculum, findMiddle } from "./curriculum-model.js"
+import {
+  SectionStackSkeleton,
+  TopicPageSkeleton,
+} from "@/components/learner/learning-skeletons.jsx"
 
 /**
  * The study surface: one middle category, start to finish.
@@ -1234,94 +1238,6 @@ function AssessmentView({ exam, position, total, backTo, taken }) {
 
 /* One grey block, one pulse, everywhere on this page. Two loading states drawn
    at two different rhythms read as two different things happening. */
-const SKELETON_BLOCK = "animate-pulse rounded-rb-tile bg-rb-swan"
-
-/** A run of placeholder sections: a heading over three lines of copy. */
-function SectionStackSkeleton({ count = 3 }) {
-  return (
-    <div className="space-y-10">
-      {Array.from({ length: count }, (_, section) => (
-        <div key={section} className="space-y-3">
-          <div className={`${SKELETON_BLOCK} h-6 w-1/2 max-w-sm`} />
-          <div className={`${SKELETON_BLOCK} h-4 w-full`} />
-          <div className={`${SKELETON_BLOCK} h-4 w-full`} />
-          <div className={`${SKELETON_BLOCK} h-4 w-4/5`} />
-        </div>
-      ))}
-    </div>
-  )
-}
-
-/**
- * The topic page's own geometry, greyed out.
- *
- * It replaces a centred "Loading topic" card, which threw the layout away and
- * left the rest of the screen empty -- a small box floating in white reads as
- * something having gone wrong, and when the content did arrive it arrived as a
- * jump. Holding the real frame -- outline rail, lesson header, section stack --
- * means the load is the page filling in rather than the page replacing itself.
- *
- * Deliberately the two-column shape, never the three-column one: the tutor
- * panel is only offered on a lesson and only when the learner has opened it, so
- * a third column here would collapse the moment the real page rendered.
- */
-function TopicSkeleton() {
-  const block = SKELETON_BLOCK
-
-  return (
-    <div
-      className="rebyu-ds min-h-dvh w-full bg-rb-polar"
-      role="status"
-      aria-label="Loading topic"
-    >
-      <div className="grid min-h-dvh xl:grid-cols-[340px_minmax(0,1fr)]">
-        {/* The outline rail. Rows fade down the list -- the eye is told where
-            the content starts, not that eight identical things are pending. */}
-        <aside className="hidden min-h-0 border-r-2 border-rb-swan bg-rb-snow xl:block">
-          <div className="sticky top-0 h-dvh space-y-6 p-5">
-            <div className="space-y-2">
-              <div className={`${block} h-3 w-24`} />
-              <div className={`${block} h-5 w-40`} />
-              <div className={`${block} h-2 w-full`} />
-            </div>
-
-            <div className="space-y-2">
-              {Array.from({ length: 8 }, (_, row) => (
-                <div
-                  key={row}
-                  className={`${block} h-9 w-full`}
-                  style={{ opacity: 1 - row * 0.1 }}
-                />
-              ))}
-            </div>
-          </div>
-        </aside>
-
-        <main className="min-w-0 bg-rb-snow">
-          {/* The lesson header: eyebrow, title, chip row -- the same three
-              lines, at the same sizes, that are about to land here. */}
-          <div className="border-b-2 border-rb-swan px-5 py-6 sm:px-8">
-            <div className="mx-auto w-full max-w-6xl space-y-3">
-              <div className={`${block} h-3 w-28`} />
-              <div className={`${block} h-7 w-2/3 max-w-md`} />
-
-              <div className="flex flex-wrap gap-2">
-                {[88, 132, 116, 96].map((width) => (
-                  <div key={width} className={`${block} h-7`} style={{ width }} />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-8">
-            <SectionStackSkeleton />
-          </div>
-        </main>
-      </div>
-    </div>
-  )
-}
-
 export default function LearnerTopicPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -1640,7 +1556,7 @@ export default function LearnerTopicPage() {
   }
 
   if (examsQuery.isLoading || examTypesQuery.isLoading || !curriculum) {
-    return <TopicSkeleton />
+    return <TopicPageSkeleton />
   }
 
   if (!middle || !major) {

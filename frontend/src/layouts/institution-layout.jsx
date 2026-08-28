@@ -1,6 +1,7 @@
-import { useMemo } from "react"
+import { Suspense, useMemo } from "react"
 import { Outlet, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
+import { PortalPageSkeleton } from "@/components/portal-page-skeleton.jsx"
 import { FilesIcon, LogOutIcon, SettingsIcon } from "@/components/icons"
 
 import { PortalTopNavigation } from "@/components/navigation/portal-navigation.jsx"
@@ -146,8 +147,12 @@ export default function InstitutionLayout() {
            </DropdownMenu>
       </>} />
 
+        {/* The boundary sits here rather than around the router, so the top
+            nav stays put while the next page's chunk arrives. */}
         <main className="rebyu-page">
-          <Outlet context={outletContext} />
+          <Suspense fallback={<PortalPageSkeleton />}>
+            <Outlet context={outletContext} />
+          </Suspense>
         </main>
     </div>
   )

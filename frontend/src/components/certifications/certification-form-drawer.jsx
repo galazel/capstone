@@ -27,6 +27,7 @@ import { DocumentUploadStep } from "@/components/certifications/document-upload-
 
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import {
     Drawer,
     DrawerClose,
@@ -59,6 +60,82 @@ import {
    back a step to fix it. Editing keeps its second step because the category and
    lesson tree is a screenful on its own. */
 const EDIT_STEP_LABELS = ["Certification details", "Categories and lessons"]
+
+/* How closely the admin wants to supervise the build.
+
+   The graph was written review-first: it pauses after the curriculum, after
+   every category, after every lesson, and again for each exam and the question
+   bank. That is right when someone intends to shape the material as it is
+   written, and wrong the rest of the time — an unattended run stops at the
+   first checkpoint and waits, so "start it and check back later" produced a
+   certification that had generated one thing and then sat still.
+
+   So it is a choice, made here, before anything starts. */
+const REVIEW_MODES = [
+    {
+        value: "auto",
+        title: "Generate everything",
+        description:
+            "Builds the whole certification without stopping — curriculum, lessons, quizzes, exams, and the question bank. Everything is saved as drafts for you to edit afterwards.",
+    },
+    {
+        value: "guided",
+        title: "Review each step",
+        description:
+            "Pauses after each part and waits for you to approve, edit, or regenerate it. The run holds until you come back to it.",
+    },
+]
+
+function ReviewModeChoice({ value, onChange, disabled }) {
+    return (
+        <fieldset disabled={disabled} className="space-y-3">
+            <legend className="text-sm font-medium text-foreground">
+                How should this run?
+            </legend>
+
+            <p className="text-sm text-muted-foreground">
+                Either way the work happens on the server and keeps going if you
+                close this.
+            </p>
+
+            <RadioGroup
+                value={value}
+                onValueChange={onChange}
+                className="gap-3 pt-1"
+            >
+                {REVIEW_MODES.map((mode) => (
+                    <label
+                        key={mode.value}
+                        htmlFor={`review-mode-${mode.value}`}
+                        className={cn(
+                            "flex cursor-pointer gap-3 rounded-lg border p-4 transition",
+                            value === mode.value
+                                ? "border-primary bg-primary/5"
+                                : "border-border hover:bg-muted/50",
+                            disabled && "cursor-not-allowed opacity-60"
+                        )}
+                    >
+                        <RadioGroupItem
+                            id={`review-mode-${mode.value}`}
+                            value={mode.value}
+                            className="mt-0.5"
+                        />
+
+                        <span className="space-y-1">
+                            <span className="block text-sm font-medium text-foreground">
+                                {mode.title}
+                            </span>
+
+                            <span className="block text-sm text-muted-foreground">
+                                {mode.description}
+                            </span>
+                        </span>
+                    </label>
+                ))}
+            </RadioGroup>
+        </fieldset>
+    )
+}
 
 
 const MIN_TITLE_LENGTH = 3
@@ -333,6 +410,9 @@ export default function CertificationFormDrawer({
     // is how a generated certification gets corrected afterwards.
     const [sourceDocuments, setSourceDocuments] = useState([])
     const [uploadPercent, setUploadPercent] = useState(0)
+    /* Unattended by default: it is what an admin wants nearly every time, and
+       the supervised alternative is one click away and clearly labelled. */
+    const [reviewMode, setReviewMode] = useState("auto")
 
     // Update only. The create branch this used to carry called `addCertification`
     // to save a hand-built structure; creating now always goes through
@@ -348,11 +428,17 @@ export default function CertificationFormDrawer({
         mutateAsync: createWithAi,
         isPending: isQueueingGeneration,
     } = useMutation({
-        mutationFn: ({ payload, documents }) =>
-            addCertificationWithAi(payload, documents, (event) =>
-                setUploadPercent(
-                    event.total ? Math.round((event.loaded / event.total) * 100) : 0
-                )
+        mutationFn: ({ payload, documents, mode }) =>
+            addCertificationWithAi(
+                payload,
+                documents,
+                (event) =>
+                    setUploadPercent(
+                        event.total
+                            ? Math.round((event.loaded / event.total) * 100)
+                            : 0
+                    ),
+                mode
             ),
     })
 
@@ -374,6 +460,7 @@ export default function CertificationFormDrawer({
 
         setSourceDocuments([])
         setUploadPercent(0)
+        setReviewMode("auto")
         setDetailsErrors({})
         setSubmissionError("")
         setSubmissionDialog(emptySubmissionDialog)
@@ -584,6 +671,7 @@ export default function CertificationFormDrawer({
             const savedCertification = await createWithAi({
                 payload,
                 documents: sourceDocuments,
+                mode: reviewMode,
             })
 
             await onSaved?.(savedCertification)
@@ -608,8 +696,9 @@ export default function CertificationFormDrawer({
 
             toast.info("Generating the certification", {
                 description:
-                    "This runs on the server and keeps going if you leave. " +
-                    "Open it from the list to watch its progress.",
+                    reviewMode === "auto"
+                        ? "It will build the whole thing without stopping. Open it from the list to watch its progress."
+                        : "It will pause at each step for your approval. Open it from the list to review.",
             })
         } catch (error) {
             const message = getErrorMessage(error)
@@ -731,12 +820,21 @@ export default function CertificationFormDrawer({
                                     onChange={handleDetailsChange}
                                     errors={detailsErrors}
                                     mode={mode}
+                                    disabled={isBusy}
                                 />
 
                                 <div className="border-t border-border pt-8">
                                     <DocumentUploadStep
                                         disabled={isBusy}
                                         onFilesChange={handleDocumentsChange}
+                                    />
+                                </div>
+
+                                <div className="border-t border-border pt-8">
+                                    <ReviewModeChoice
+                                        value={reviewMode}
+                                        onChange={setReviewMode}
+                                        disabled={isBusy}
                                     />
                                 </div>
                             </div>
@@ -746,6 +844,7 @@ export default function CertificationFormDrawer({
                                 onChange={handleDetailsChange}
                                 errors={detailsErrors}
                                 mode={mode}
+                                disabled={isBusy}
                             />
                         ) : (
                             <CertificationModules

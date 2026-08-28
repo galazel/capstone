@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react"
+import React, { Suspense, useEffect, useMemo, useState } from "react"
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
@@ -41,6 +41,10 @@ import { PortalThemeMenuItem } from "@/components/portal-theme-toggle"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useLearnerEntitlements } from "@/hooks/use-learner-entitlements.js"
 import { StudyActivityHost } from "@/components/learner/study-activity-host.jsx"
+import {
+  CurriculumPageSkeleton,
+  TopicPageSkeleton,
+} from "@/components/learner/learning-skeletons.jsx"
 
 function getInitials(name = "", email = "") {
   const source = name || email || "Learner"
@@ -217,8 +221,27 @@ export default function LearnerLayout() {
     navigate("/login", { replace: true })
   }
 
+  /* Which loading shape this route should show. Used both while the portal
+     query is in flight and as the Suspense fallback for the page's own chunk,
+     because from the learner's side those are the same wait. */
+  function RouteSkeleton() {
+    if (isTopicPage) return <TopicPageSkeleton />
+    if (isCurriculumPage) return <CurriculumPageSkeleton />
+    return <LearnerLoadingSkeleton />
+  }
+
+  /* `rebyu-ds` sits on the shell rather than on each page. The pages that had
+     it were opting in one at a time, which is why a learner moving from the
+     curriculum to their practice history crossed a visible border between two
+     different design systems. Scoped here, every route under the learner
+     portal resolves the same tokens and the same type voice.
+
+     `netacad-portal` stays alongside it. The two occupy different token
+     namespaces — semantic shadcn variables there, `--color-rb-*` here — so the
+     shadcn primitives the portal is built from keep working while anything
+     reaching for an `rb-` token now finds one. */
   return (
-    <div className="netacad-portal learner-portal flex min-h-screen flex-col">
+    <div className="rebyu-ds netacad-portal learner-portal flex min-h-screen flex-col">
       {!isTopicPage ? (
       <PortalTopNavigation role="LEARNER" actions={<>
             {/* Ahead of the action icons: these are what the learner is
@@ -302,11 +325,16 @@ export default function LearnerLayout() {
           }`}
         >
           {query.isLoading ? (
-            <LearnerLoadingSkeleton />
+            <RouteSkeleton />
           ) : query.isError ? (
             <LearnerErrorState error={query.error} onRetry={query.refetch} />
           ) : (
-            <Outlet context={outletContext} />
+            /* Inside the shell, not around it. The nav, the status strip and
+               the mobile bar stay painted while the next page's chunk loads --
+               only the content region waits. */
+            <Suspense fallback={<RouteSkeleton />}>
+              <Outlet context={outletContext} />
+            </Suspense>
           )}
         </main>
       {!isTopicPage ? <LearnerMobileNavigation /> : null}

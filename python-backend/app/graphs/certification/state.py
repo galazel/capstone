@@ -80,6 +80,12 @@ class CertificationState(TypedDict, total=False):
     middle_cursor: int
     lesson_cursor: int
 
+    # "GUIDED" (pause at every review) or "AUTO" (generate straight through
+    # without ever interrupting). Chosen when the run is started and settable
+    # mid-run, so a reviewer who has seen enough can let the rest finish
+    # unattended. See app/graphs/certification/review_mode.py.
+    review_mode: str
+
     # Scopes ("MAJOR" | "MIDDLE" | "LESSON") the reviewer chose "Approve
     # Remaining" for. The review node checks this before interrupting, so the
     # rest of that phase drains without further pauses. Per-scope rather than

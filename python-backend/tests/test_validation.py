@@ -103,16 +103,33 @@ def test_descriptive_requires_rubric():
         QuestionDraft(question_type="DESCRIPTIVE", question="Explain normalization.")
 
 
-def test_programming_requires_a_test_case():
-    with pytest.raises(ValidationError, match="test case"):
+def test_programming_requires_test_cases():
+    with pytest.raises(ValidationError, match="test cases"):
         QuestionDraft(question_type="PROGRAMMING", question="Reverse a string.")
 
 
-def test_programming_accepts_with_test_case():
+def test_programming_requires_more_than_one_test_case():
+    """One case checks that the happy path runs and nothing else, which is how
+    a coding task degrades into a syntax quiz. The floor is what makes the
+    prompt's "cover the edges" a constraint rather than a request."""
+    with pytest.raises(ValidationError, match="at least 3 test cases"):
+        QuestionDraft(
+            question_type="PROGRAMMING",
+            question="Reverse a string.",
+            test_cases=[ProgrammingTestCase(input_data="ab", expected_output="ba")],
+            explanation="Reversing walks the string from the end to the start.",
+        )
+
+
+def test_programming_accepts_a_covered_task():
     q = QuestionDraft(
         question_type="PROGRAMMING",
         question="Reverse a string.",
-        test_cases=[ProgrammingTestCase(input_data="ab", expected_output="ba")],
+        test_cases=[
+            ProgrammingTestCase(input_data="ab", expected_output="ba"),
+            ProgrammingTestCase(input_data="", expected_output=""),
+            ProgrammingTestCase(input_data="a", expected_output="a"),
+        ],
         explanation="Reversing walks the string from the end to the start.",
     )
     assert q.test_cases[0].expected_output == "ba"

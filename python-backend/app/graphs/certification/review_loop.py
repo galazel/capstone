@@ -23,6 +23,7 @@ from langgraph.graph import END
 from langgraph.types import interrupt
 
 from app.graphs.cancellation import is_cancel_requested
+from app.graphs.certification.review_mode import auto_approving
 from app.graphs.certification.state import CertificationState
 from app.graphs.instrumentation import instrument
 
@@ -153,17 +154,17 @@ def make_gate_router(phase: LoopPhase):
 
 
 def make_review_node(phase: LoopPhase):
-    """Pauses for this one item -- unless the reviewer already chose
-    "Approve Remaining" for this scope, in which case it passes straight
-    through so the phase can drain without further clicks."""
+    """Pauses for this one item -- unless the run is unattended, or the
+    reviewer already chose "Approve Remaining" for this scope, in which case
+    it passes straight through so the phase can drain without further clicks."""
 
     def review(state: CertificationState):
         item = current_item(state, phase)
         label = phase.label_of(item) if item is not None else ""
         index = current_index(state, phase)
 
-        if phase.scope in (state.get("auto_approve_scopes") or []):
-            logger.info("Auto-approving %s '%s' (approve-remaining active)", phase.scope, label)
+        if auto_approving(state, phase.scope):
+            logger.info("Auto-approving %s '%s' (no review pending)", phase.scope, label)
             return {"review_decision": APPROVE, "status": f"{phase.scope}_AUTO_APPROVED"}
 
         decision = interrupt(

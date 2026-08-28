@@ -25,7 +25,17 @@ const MAX_TITLE_LENGTH = 150
 const MIN_DESCRIPTION_LENGTH = 20
 const MAX_DESCRIPTION_LENGTH = 300
 
-function CertificationDetails({ value, onChange, errors = {} }) {
+/**
+ * `disabled` locks every control at once.
+ *
+ * The drawer starts a generation and keeps the form on screen while the job is
+ * queued and handed off. Editing the name or the description during that
+ * window changes nothing about the run -- the payload was sent when the button
+ * was pressed -- so the field is a control that silently does not work, and
+ * the admin only finds out when the finished certification carries the text
+ * they thought they had replaced.
+ */
+function CertificationDetails({ value, onChange, errors = {}, disabled = false }) {
   function updateField(fieldName, fieldValue) {
     onChange({
       ...value,
@@ -45,6 +55,7 @@ function CertificationDetails({ value, onChange, errors = {} }) {
             <Input
                 id="certification-title"
                 type="text"
+                disabled={disabled}
                 value={value.title ?? ""}
                 minLength={MIN_TITLE_LENGTH}
                 maxLength={MAX_TITLE_LENGTH}
@@ -80,6 +91,7 @@ function CertificationDetails({ value, onChange, errors = {} }) {
               </FieldLabel>
 
               <Select
+                  disabled={disabled}
                   value={value.industry ?? ""}
                   onValueChange={(selectedIndustry) => {
                     updateField("industry", selectedIndustry)
@@ -121,6 +133,8 @@ function CertificationDetails({ value, onChange, errors = {} }) {
             </FieldLabel>
 
             <Textarea
+
+                disabled={disabled}
                 id="certification-description"
                 value={value.description ?? ""}
                 minLength={MIN_DESCRIPTION_LENGTH}

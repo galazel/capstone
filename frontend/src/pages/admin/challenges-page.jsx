@@ -21,6 +21,8 @@ import {
 } from "@/services/challengeService.js"
 
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
+import { InstitutionErrorState } from "@/components/institution/institution-ui.jsx"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -243,6 +245,24 @@ export default function Challenges({
             cap, bubbles, icon medallion, matching wash below. The kebab menu is
             gone — with two actions and room for them, they sit in the card as
             buttons rather than hiding behind a click. */}
+        {/* The three cards are a fixed local list, so they can always be
+            drawn -- but what an admin actually manages here (each arena's
+            assigned industries) comes from the server, and until it lands the
+            cards state an emptiness that is not true. Skeletons hold the grid
+            rather than showing three arenas that look unconfigured. */}
+        {arenasQuery.isLoading ? (
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3" aria-busy="true" aria-label="Loading arenas">
+            {challenges.map((challenge) => (
+              <Skeleton key={challenge.challengeId} className="h-72 rounded-rb-card" />
+            ))}
+          </div>
+        ) : arenasQuery.isError ? (
+          <InstitutionErrorState
+            title="Unable to load the arenas"
+            description="The arena settings could not be read. The three arenas themselves are unaffected."
+            onRetry={arenasQuery.refetch}
+          />
+        ) : (
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {challenges.map((challenge) => {
             const assignedIndustries = challenge.assignedIndustries ?? []
@@ -330,6 +350,7 @@ export default function Challenges({
             )
           })}
         </div>
+        )}
 
         <Dialog
             open={assignDialogOpen}

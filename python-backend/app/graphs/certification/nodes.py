@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.schemas.certification.curriculum_schema import Curriculum
 from app.schemas.certification.lesson_audit import LessonAuditResult
 from app.schemas.certification.lesson_schema import GeneratedLesson
+from .review_mode import auto_approving
 from .state import CertificationState
 from app.ai import tasks
 from app.ai.invocation import (
@@ -234,16 +235,34 @@ async def curriculum_planning_agent_node(state: CertificationState):
         raise RuntimeError("Curriculum generation failed.") from e
 
 
+def _await_review(state: CertificationState, stage: str, payload) -> dict:
+    """One whole-artifact HITL checkpoint.
+
+    An unattended run (`review_mode == "AUTO"`) approves without pausing: the
+    interrupt is never raised, rather than raised and immediately resumed, so
+    the run reaches the end with nobody watching it.
+
+    The decision is reduced to its action string here. A reviewer's decision
+    arrives over HTTP as `{"action": ..., "instructions": ...}`, and storing
+    that dict whole is why `route_after_review` -- which compares against the
+    string `"regenerate"` -- could never route a regenerate at these four
+    stages: the comparison was dict-against-string and silently approved.
+    """
+    if auto_approving(state):
+        logger.info("Auto-approving %s: run is unattended", stage)
+        return {"review_decision": "approve", "status": f"{stage}_AUTO_APPROVED"}
+
+    decision = interrupt({"stage": stage, "payload": payload})
+    action = decision if isinstance(decision, str) else (decision or {}).get("action", "approve")
+    return {"review_decision": action, "status": f"{stage}_REVIEWED"}
+
+
 def await_curriculum_review_node(state: CertificationState):
     """HITL checkpoint: pauses after the curriculum is planned, before any
     quizzes/lessons are generated from it, so an admin can review the
     structure. Resume with Command(resume="approve") or
     Command(resume="regenerate")."""
-    decision = interrupt({
-        "stage": "CURRICULUM",
-        "payload": state["curriculum"],
-    })
-    return {"review_decision": decision, "status": "CURRICULUM_REVIEWED"}
+    return _await_review(state, "CURRICULUM", state["curriculum"])
 
 
 def route_after_review(state: CertificationState) -> str:
@@ -317,11 +336,7 @@ async def generate_diagnostic_exam_node(state: CertificationState):
 
 
 def await_diagnostic_exam_review_node(state: CertificationState):
-    decision = interrupt({
-        "stage": "DIAGNOSTIC_EXAM",
-        "payload": state.get("diagnostic_exam", {}),
-    })
-    return {"review_decision": decision, "status": "DIAGNOSTIC_EXAM_REVIEWED"}
+    return _await_review(state, "DIAGNOSTIC_EXAM", state.get("diagnostic_exam", {}))
 
 
 def _exam_structure(state: CertificationState) -> dict:
@@ -414,11 +429,7 @@ async def generate_mock_exam_node(state: CertificationState):
 
 
 def await_mock_exam_review_node(state: CertificationState):
-    decision = interrupt({
-        "stage": "MOCK_EXAM",
-        "payload": state.get("mock_exam", {}),
-    })
-    return {"review_decision": decision, "status": "MOCK_EXAM_REVIEWED"}
+    return _await_review(state, "MOCK_EXAM", state.get("mock_exam", {}))
 
 
 async def generate_question_bank_node(state: CertificationState):
@@ -440,11 +451,7 @@ async def generate_question_bank_node(state: CertificationState):
 
 
 def await_question_bank_review_node(state: CertificationState):
-    decision = interrupt({
-        "stage": "QUESTION_BANK",
-        "payload": state.get("question_bank", []),
-    })
-    return {"review_decision": decision, "status": "QUESTION_BANK_REVIEWED"}
+    return _await_review(state, "QUESTION_BANK", state.get("question_bank", []))
 
 
 # ==========================================================================

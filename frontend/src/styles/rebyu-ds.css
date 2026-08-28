@@ -44,6 +44,12 @@
     --color-rb-humpback: #2b70c9;
     --color-rb-humpback-lip: #225aa3;
 
+    /* Deep accent surface. The reference's fourth surface level, and the one
+       REBYU never had a token for — full-bleed bands and dark CTAs were each
+       picking their own near-black. It is a navy rather than a black, so it
+       sits under the blue brand instead of fighting it. */
+    --color-rb-ink: #000437;
+
     /* Neutrals */
     --color-rb-eel: #4b4b4b;
     --color-rb-wolf: #777777;
@@ -72,10 +78,64 @@
         "DIN Next Rounded", "DIN Next Rounded LT Pro", "Nunito Sans", ui-sans-serif, system-ui,
         sans-serif;
 
-    /* Shape */
-    --radius-rb-card: 24px;
-    --radius-rb-tile: 16px;
+    /* Shape.
+       The reference sets every button, link, tag and nav item at 12px and
+       forbids sharp corners anywhere — `rb-control` is that radius, and it is
+       what the buttons, answer options and tags below use. `rb-pill` stays
+       fully round because it is only ever on genuinely circular geometry
+       (skill nodes, progress rails, avatars), not on rectangular controls.
+       `rb-card` steps up one notch so a card still reads as a larger surface
+       than the controls sitting on it. */
+    --radius-rb-control: 12px;
+    --radius-rb-card: 16px;
+    --radius-rb-tile: 12px;
     --radius-rb-pill: 999px;
+
+    /* THE SHAPE RULE. Three radii, and every component in the product is one
+       of the three. Written down because the alternative is what was here
+       before: buttons at 999px in the portal and 12px in the design system,
+       cards at 10px in one rule and 16px in another, and dropdown content
+       declared three separate times at three different corners, so a select
+       and the popover beside it were visibly different objects.
+
+         control (12px)  something you press or type into — button, input,
+                         select trigger, menu item, tab, badge, chip, tooltip,
+                         accordion trigger, sidebar button, skeleton.
+         card    (16px)  something that holds content — card, dialog, alert
+                         dialog, sheet, drawer, dropdown/select/popover panel,
+                         toast, alert, table container.
+         pill   (999px)  something actually round — progress rail, avatar,
+                         switch track, the curriculum's skill nodes.
+
+       `tile` is control under an older name, kept because ~22 components still
+       write `rounded-rb-tile`. It is not a fourth step: if the two ever need
+       to differ, that is a decision to take here, not by editing one of them.
+
+       Depth follows the same discipline: `--rb-lip*` for things resting on the
+       page, and exactly two elevations (`--rb-elev-popover`, `--rb-elev-overlay`,
+       both in index.css) for things floating above it. */
+
+    /* Type scale — a fixed px ladder, not a fluid one. The reference's rhythm
+       depends on the exact steps (13/15/17/19/32/48/64); interpolating between
+       them with clamp() lands the page on sizes the system never defines.
+       Display sizes keep a clamp for narrow windows, floored on the ladder. */
+    --text-rb-caption: 13px;
+    --text-rb-nav: 15px;
+    --text-rb-body: 17px;
+    --text-rb-subheading: 19px;
+    --text-rb-heading-sm: 32px;
+    --text-rb-heading: 48px;
+    --text-rb-display: 64px;
+
+    --leading-rb-caption: 1.23;
+    --leading-rb-nav: 1.33;
+    --leading-rb-body: 1.18;
+    --leading-rb-subheading: 1.4;
+    --leading-rb-display: 1.2;
+
+    /* Uppercase nav labels are the one place tracking opens up. Never on body. */
+    --tracking-rb-nav: 0.053em;
+    --tracking-rb-display: -0.02em;
 }
 
 /* --- Self-hosting the licensed faces ---------------------------------------
@@ -126,8 +186,55 @@
     --rb-lip: 4px;
     --rb-lip-lg: 6px;
 
-    /* Marketing surface is light-only; ignore any inherited portal dark mode. */
     color-scheme: light;
+}
+
+/* --- Dark ------------------------------------------------------------------
+   This block exists because the system stopped being marketing-only. While
+   `.rebyu-ds` was a landing-page scope, pinning `color-scheme: light` and
+   walking away was correct — a marketing page has no theme toggle. The learner
+   portal does, and it is `.dark` on the document element, so extending this
+   scope over the portal without a dark ramp would have left every learner who
+   picks dark mode staring at a Snow-white page the toggle cannot move.
+
+   Only the neutral ramp inverts. The brand hues do not: `rb-feather` and the
+   accents carry meaning (correct, wrong, streak) and must read as the same
+   colour in both themes. The washes are the one derived set — each is its own
+   accent laid thinly over the dark ground, which is what the light washes
+   already are over Snow, so they are expressed as that mix rather than as
+   thirteen hand-picked hexes that would drift apart the first time an accent
+   changes.
+
+   `.rb-light-only` opts a surface back out. The landing page and the auth
+   shell carry it: they are marketing, they are seen before anyone has a theme
+   preference to honour, and their artwork is composed against Snow. The
+   opt-out is on them rather than the ramp being scoped to the portal, so a new
+   portal surface gets dark mode by default and only a deliberately light page
+   has to say so. */
+.dark .rebyu-ds:not(.rb-light-only) {
+    color-scheme: dark;
+
+    /* Neutrals invert: Snow becomes the ground, Eel becomes the ink. */
+    --color-rb-snow: #16181f;
+    --color-rb-polar: #1e2029;
+    --color-rb-swan: #2f323d;
+    --color-rb-hare: #6f7484;
+    --color-rb-wolf: #a8adbb;
+    --color-rb-eel: #eceef3;
+
+    /* Each wash is its accent at low strength over the (now dark) ground. */
+    --color-rb-feather-wash: color-mix(in srgb, var(--color-rb-feather) 18%, #16181f);
+    --color-rb-macaw-wash: color-mix(in srgb, var(--color-rb-macaw) 18%, #16181f);
+    --color-rb-bee-wash: color-mix(in srgb, var(--color-rb-bee) 18%, #16181f);
+    --color-rb-fox-wash: color-mix(in srgb, var(--color-rb-fox) 18%, #16181f);
+    --color-rb-leaf-wash: color-mix(in srgb, var(--color-rb-leaf) 18%, #16181f);
+    --color-rb-beetle-wash: color-mix(in srgb, var(--color-rb-beetle) 18%, #16181f);
+    --color-rb-cardinal-wash: color-mix(in srgb, var(--color-rb-cardinal) 18%, #16181f);
+
+    /* The -ink shades are tuned for AA against a light wash. On a dark wash the
+       contrast runs the other way, so they lighten to their accent instead. */
+    --color-rb-feather-ink: var(--color-rb-mask);
+    --color-rb-bee-ink: var(--color-rb-fox);
 }
 
 /* Inherited defaults live in @layer base so a `bg-rb-polar` / `text-*` utility
@@ -152,24 +259,31 @@
     font-weight: 800;
     text-transform: lowercase;
     text-align: left;
-    letter-spacing: -0.02em;
-    line-height: 1.05;
+    letter-spacing: var(--tracking-rb-display);
+    line-height: var(--leading-rb-display);
     color: var(--color-rb-eel);
 }
 
+/* Each step tops out on a ladder rung (64 / 48 / 32 / 19px) rather than on an
+   arbitrary clamp ceiling. The clamp only governs the way down on a narrow
+   window; at full width every heading lands on a size the system names. */
 .rebyu-ds .rb-display-xl {
-    font-size: clamp(2.5rem, 6vw, 4.25rem);
+    font-size: clamp(2.5rem, 6vw, var(--text-rb-display));
 }
 .rebyu-ds .rb-display-lg {
-    font-size: clamp(2rem, 4.2vw, 3rem);
+    font-size: clamp(2rem, 4.2vw, var(--text-rb-heading));
 }
 .rebyu-ds .rb-display-md {
-    font-size: clamp(1.5rem, 2.6vw, 2rem);
-    line-height: 1.15;
+    font-size: clamp(1.5rem, 2.6vw, var(--text-rb-heading-sm));
 }
+/* Below 48px the display face is off-duty — the reference calls it a display
+   face only, and subheadings at 19-32px belong to the body face at 700. */
 .rebyu-ds .rb-display-sm {
-    font-size: 1.25rem;
-    line-height: 1.25;
+    font-family: var(--font-rb-body);
+    font-weight: 700;
+    font-size: var(--text-rb-subheading);
+    line-height: var(--leading-rb-subheading);
+    letter-spacing: normal;
 }
 
 /* Eyebrow: uppercase utility label. Body face — it is data, not voice. */
@@ -183,13 +297,31 @@
 }
 
 .rebyu-ds .rb-body {
-    font-size: 1rem;
-    line-height: 1.6;
+    font-size: var(--text-rb-body);
+    line-height: var(--leading-rb-body);
     color: var(--color-rb-wolf);
 }
 .rebyu-ds .rb-body-lg {
-    font-size: 1.125rem;
-    line-height: 1.65;
+    font-size: var(--text-rb-subheading);
+    line-height: var(--leading-rb-subheading);
+    color: var(--color-rb-wolf);
+}
+.rebyu-ds .rb-caption {
+    font-size: var(--text-rb-caption);
+    line-height: var(--leading-rb-caption);
+    color: var(--color-rb-wolf);
+}
+
+/* Nav labels are the only place uppercase and open tracking are allowed —
+   navigation, tabs and selector pills. Applying this to body copy is the
+   single most common way to make the system stop looking like itself. */
+.rebyu-ds .rb-nav-label {
+    font-family: var(--font-rb-body);
+    font-size: var(--text-rb-nav);
+    line-height: var(--leading-rb-nav);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-rb-nav);
     color: var(--color-rb-wolf);
 }
 
@@ -203,8 +335,13 @@
 
 /* ---------------------------------------------------------------------------
    TACTILE BUTTON
-   56px tall, fully rounded, solid lip beneath. Pressing compresses the button
+   56px tall, 12px corners, solid lip beneath. Pressing compresses the button
    into its own shadow so the travel is visible rather than implied.
+
+   The corner is 12px, not a full pill: a pill button and a circular skill node
+   stop being distinguishable shapes, and the reference puts every rectangular
+   control — button, link, tag, nav item — on the same 12px corner. The lip is
+   what carries the tactility here, not the roundness.
    --------------------------------------------------------------------------- */
 .rebyu-ds .rb-btn {
     --rb-btn-face: var(--color-rb-feather);
@@ -219,7 +356,7 @@
     min-height: 56px;
     padding: 0 var(--rb-s4);
     border: 0;
-    border-radius: var(--radius-rb-pill);
+    border-radius: var(--radius-rb-control);
     background: var(--rb-btn-face);
     color: var(--rb-btn-ink);
     box-shadow: 0 var(--rb-lip) 0 var(--rb-btn-lip);
@@ -880,7 +1017,7 @@
     align-items: center;
     gap: 6px;
     padding: 6px 14px;
-    border-radius: var(--radius-rb-pill);
+    border-radius: var(--radius-rb-control);
     background: var(--color-rb-polar);
     color: var(--color-rb-wolf);
     font-family: var(--font-rb-body);

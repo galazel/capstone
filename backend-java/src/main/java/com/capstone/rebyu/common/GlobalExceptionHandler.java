@@ -44,12 +44,63 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(HttpStatus.BAD_REQUEST.value(), "Validation failed", fieldErrors));
     }
 
+    /**
+     * The value from a Postgres unique-violation detail line, or null.
+     *
+     * Postgres reports the clash as {@code Detail: Key (title)=(Philippine
+     * Entrance Exam) already exists.} -- the column in one pair of brackets and
+     * the offending value in the next. Parsed by hand rather than by regex: the
+     * value itself may contain brackets, so a pattern would have to be
+     * non-greedy in one place and greedy in another, and the two-marker scan
+     * below says what it is looking for without that subtlety.
+     */
+    private static String duplicateValueIn(String cause) {
+        int keyAt = cause.indexOf("Key (");
+        if (keyAt < 0) return null;
+
+        int valueOpen = cause.indexOf(")=(", keyAt);
+        if (valueOpen < 0) return null;
+
+        int valueClose = cause.lastIndexOf(") already exists");
+        if (valueClose <= valueOpen) return null;
+
+        return cause.substring(valueOpen + 3, valueClose).trim();
+    }
+
+    /**
+     * Integrity violations, in words the caller can act on.
+     *
+     * This used to return {@code getMostSpecificCause().getMessage()} verbatim,
+     * so an admin who reused a certification name was shown the Hibernate-
+     * generated constraint name and the raw Postgres text. That is a leak as
+     * well as a usability problem: constraint and column names are schema
+     * details, and the one fact the admin needed -- "a certification called
+     * this already exists" -- was buried in the middle of it.
+     *
+     * The full cause still goes to the log, where it belongs.
+     */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> handleDataIntegrity(DataIntegrityViolationException ex) {
-        String message = ex.getMostSpecificCause().getMessage();
-        log.warn("Data integrity violation: {}", message);
+        String cause = ex.getMostSpecificCause().getMessage();
+        log.warn("Data integrity violation: {}", cause);
+
+        String message = "That change conflicts with data that already exists.";
+
+        if (cause != null) {
+            String duplicate = duplicateValueIn(cause);
+            if (duplicate != null) {
+                message = duplicate.isEmpty()
+                        ? "That name is already taken. Choose a different one."
+                        : "\"" + duplicate + "\" already exists. Choose a different name.";
+            } else if (cause.contains("violates foreign key constraint")) {
+                message = "That item is still referenced by something else and cannot be changed.";
+            } else if (cause.contains("null value in column")) {
+                message = "A required field was missing.";
+            }
+        }
+
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(new ErrorResponse(HttpStatus.CONFLICT.value(), "Data integrity violation: " + message, null));
+                .body(new ErrorResponse(HttpStatus.CONFLICT.value(), message, null));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

@@ -34,7 +34,7 @@ export default function AuthShell({
          the macaw wash, which put a blue behind the form and a louder blue
          beside it — two colours competing over a screen whose only job is to
          get you through a form. The form side is plain now. */
-      className={`rebyu-ds public-auth-shell min-h-dvh bg-rb-snow text-rb-eel lg:grid lg:grid-cols-2 ${
+      className={`rebyu-ds rb-light-only public-auth-shell min-h-dvh bg-rb-snow text-rb-eel lg:grid lg:grid-cols-2 ${
         compact ? "lg:h-dvh lg:overflow-hidden" : ""
       }`}
     >

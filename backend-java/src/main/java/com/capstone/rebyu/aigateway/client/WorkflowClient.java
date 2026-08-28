@@ -135,6 +135,15 @@ public class WorkflowClient {
         return post("/certification/{threadId}/resume", threadId, decision);
     }
 
+    /**
+     * Switches a certification run between supervised and unattended while it
+     * is running, so an admin who no longer wants to be asked at every
+     * checkpoint can let it finish on its own.
+     */
+    public Map<String, Object> setCertificationReviewMode(String threadId, Map<String, Object> body) {
+        return post("/certification/{threadId}/review-mode", threadId, body);
+    }
+
     /** The question-bank equivalent, which reviews a whole batch at a time. */
     public Map<String, Object> reviewQuestionBatch(String threadId, Map<String, Object> decision) {
         return post("/question-bank/{threadId}/review", threadId, decision);

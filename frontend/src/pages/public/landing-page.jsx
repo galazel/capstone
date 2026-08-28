@@ -2157,7 +2157,7 @@ export default function LandingPage() {
        the navbar scrolled away. `clip` does the same horizontal trimming (the
        hero's rotated cards and offscreen blobs need it) without creating a
        scroll container. */
-    <div ref={rootRef} className="rebyu-ds min-h-screen overflow-x-clip">
+    <div ref={rootRef} className="rebyu-ds rb-light-only min-h-screen overflow-x-clip">
       <LandingNavbar />
       <main>
         <HeroSection />

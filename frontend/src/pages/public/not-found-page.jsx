@@ -9,7 +9,7 @@ export default function NotFoundPage() {
   const homePath = status === "authenticated" ? roleHomePath(user?.role) : "/"
 
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-6 px-4 text-center">
+    <div className="rebyu-ds rb-light-only flex min-h-svh flex-col items-center justify-center gap-6 px-4 text-center">
       <CompassIcon className="size-12 text-muted-foreground" aria-hidden="true" />
 
       <div className="space-y-2">

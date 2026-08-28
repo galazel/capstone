@@ -303,7 +303,7 @@ export function LearnerErrorState({ title = "Could not load data", error, onRetr
         {error?.response?.data?.message || error?.message || "Please try again."}
       </p>
       {onRetry && (
-        <Button className="mt-4 rounded-full" variant="outline" onClick={onRetry}>
+        <Button className="mt-4" variant="outline" onClick={onRetry}>
           Retry
         </Button>
       )}
@@ -436,19 +436,22 @@ export function CertificationProgressCard({ certification, lessons, onContinue, 
 }
 
 /**
- * The tones a certification card can wear — cool hues only.
+ * The four tones a certification card can wear.
  *
- * Deliberately not the full rota. Red, orange and green carry meaning
- * everywhere else in the portal: the mastery bands, the priority seals, a
- * wrong answer. A certification wearing orange would be the one place hue said
- * nothing, and a learner cannot tell a decorative colour from a diagnostic one
- * by looking. Restricting identity to the cool half keeps the warm half
- * readable as status.
+ * Blue, purple, teal and orange — four hues far enough apart that a grid
+ * separates at a glance, which two blues and a violet did not.
  *
- * Four is enough to separate a grid at a glance without the set turning into
- * a swatch book.
+ * Orange is a deliberate call, not an oversight. Warm hues do carry meaning
+ * elsewhere in the portal — the mastery bands, the priority seals, a wrong
+ * answer — so a certification wearing one is the single place where hue is
+ * decorative. It stays because a wall of cool cards read as flat, and the
+ * places where colour is diagnostic all carry a label, an icon or a number
+ * beside them; none of them ask the learner to read the hue alone.
+ *
+ * Four, not more: past that the set stops being an identity and becomes a
+ * swatch book.
  */
-const CERTIFICATION_TONES = ["macaw", "feather", "beetle", "bee"]
+const CERTIFICATION_TONES = ["macaw", "beetle", "bee", "fox"]
 
 /**
  * Stable per certification, so a track is the same colour on every page.
