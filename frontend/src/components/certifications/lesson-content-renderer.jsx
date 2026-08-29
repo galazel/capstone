@@ -1,6 +1,6 @@
-﻿import { useState } from "react"
+﻿import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
-import { getFileViewUrl } from "@/services/fileService.js"
+import { fetchFileBlob, getFileViewUrl } from "@/services/fileService.js"
 import { parseLessonStructure } from "@/services/learnerService.js"
 import { Maximize, RotateCcw } from "@/components/icons"
 import { Card } from "@/components/ui/card"
@@ -237,7 +237,24 @@ const LIGHTBOX_MEDIA =
  */
 function LessonImage({ imageKey, alt = "", className, sourceUrl, sourceName }) {
   const [open, setOpen] = useState(false)
-  const src = resolveMediaSrc(imageKey)
+  // Not `resolveMediaSrc`: an admin-uploaded key points at the authenticated
+  // `/files/view`, which an <img> cannot load on its own. See
+  // {@link useAuthedMediaSrc}.
+  const src = useAuthedMediaSrc(imageKey)
+
+  // The image box is held at its final size while the fetch is in flight, so
+  // the surrounding copy does not reflow when it lands. `className` carries the
+  // block's own sizing (`aspect-video w-full`, `min-h-72`, ...), so reusing it
+  // here keeps the placeholder exactly the shape of what replaces it.
+  if (imageKey && !src) {
+    return (
+        <div
+            className={`${className} !border-dashed motion-safe:animate-pulse`}
+            aria-label={alt ? `Loading ${alt}` : "Loading image"}
+            role="img"
+        />
+    )
+  }
 
   return (
       <div>
@@ -563,6 +580,214 @@ function FlipCard({ frontTitle, backTitle, description, accent = ACCENTS[0] }) {
   )
 }
 
+/**
+ * An image the learner explores by opening labelled points on it.
+ *
+ * The detail sits in a panel *below* the image rather than in a popover
+ * anchored to the pin. A popover over a diagram covers the very thing the pin
+ * is pointing at, and on a phone it either overflows the viewport or shrinks
+ * to a few words -- both of which defeat the block. Below, the image stays
+ * whole and the text has the full column width at any size.
+ *
+ * Pins are positioned in percentages (written by the authoring tool), so they
+ * track their feature as the image box resizes. That only holds while the
+ * rendered box has the image's own aspect ratio, which is why this block uses
+ * `object-contain` on an `inline-block` wrapper that the image sizes itself --
+ * not the fixed `aspect-video` box the plain image block uses. A letterboxed
+ * image would leave the pins floating over the backing instead of the picture.
+ */
+/**
+ * A media key as something an `<img>` can actually load.
+ *
+ * `resolveMediaSrc` is not enough on its own for an admin-uploaded file. It
+ * points at `/files/view`, which calls `requireAuth`, and a browser attaches
+ * no Authorization header to an `<img src>` -- so the request arrives
+ * unauthenticated and comes back `400 Authentication is required`, rendering
+ * as a broken image however correct the URL looks. The file has to be fetched
+ * through `base()` (which does send the bearer token) and handed to the tag as
+ * an object URL instead.
+ *
+ * AI-sourced images are stored as absolute URLs rather than storage keys, and
+ * those are public, so they skip the fetch and are used as-is.
+ */
+function useAuthedMediaSrc(key) {
+  const isAbsolute = Boolean(key) && /^https?:\/\//.test(key)
+  const [blobSrc, setBlobSrc] = useState("")
+
+  useEffect(() => {
+    if (!key || isAbsolute) {
+      setBlobSrc("")
+      return
+    }
+
+    let cancelled = false
+    let objectUrl = ""
+
+    fetchFileBlob(key)
+        .then((blob) => {
+          if (cancelled) return
+          objectUrl = URL.createObjectURL(blob)
+          setBlobSrc(objectUrl)
+        })
+        .catch(() => {
+          if (!cancelled) setBlobSrc("")
+        })
+
+    return () => {
+      cancelled = true
+      // Revoked on unmount and on every key change -- an object URL held for
+      // the life of the tab is a leaked copy of the whole file.
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [key, isAbsolute])
+
+  return isAbsolute ? key : blobSrc
+}
+
+function ImageHotspotBlock({ data, accent }) {
+  const hotspots = Array.isArray(data.hotspots) ? data.hotspots : []
+  const [openId, setOpenId] = useState(null)
+  // Every pin the learner has opened at least once. The pulse is a "there is
+  // something here" cue, so it has done its job the moment a pin is opened and
+  // keeping it going afterwards is just motion nagging about content already
+  // read. Tracked separately from `openId` because closing a pin must not make
+  // it start pulsing again -- once all of them are opened, the image goes
+  // still for good.
+  const [visitedIds, setVisitedIds] = useState(() => new Set())
+
+  const src = useAuthedMediaSrc(data.imageKey)
+
+  function toggleHotspot(hotspotId, isOpen) {
+    setOpenId(isOpen ? null : hotspotId)
+
+    if (!isOpen) {
+      setVisitedIds((previous) =>
+          previous.has(hotspotId) ? previous : new Set(previous).add(hotspotId)
+      )
+    }
+  }
+  const openIndex = hotspots.findIndex((hotspot) => hotspot.id === openId)
+  const openHotspot = openIndex === -1 ? null : hotspots[openIndex]
+
+  // Keyed on the stored value, not on `src`: `src` is empty for the moment the
+  // authenticated fetch is in flight, and returning null on that would blank a
+  // block that is about to have an image.
+  if (!data.imageKey) {
+    return null
+  }
+
+  return (
+      <div className="space-y-4">
+        <SectionIntro smallHeader={data.smallHeader} description={data.description} accent={accent} />
+
+        <div className="flex justify-center rounded-[var(--radius-rb-tile)] border-2 border-border/70 bg-muted p-2">
+          {/* The pins are placed in percentages of this box, so they are only
+              correct once the image has laid out. Held back until then rather
+              than drawn over an empty box, where they would cluster in the
+              corner and then jump. */}
+          {!src ? (
+              <div className="flex aspect-video w-full items-center justify-center text-sm text-muted-foreground">
+                Loading image...
+              </div>
+          ) : (
+          <div className="relative inline-block max-w-full">
+            <img
+                src={src}
+                alt={data.altText || "Lesson diagram with labelled points"}
+                className="max-h-[560px] w-auto max-w-full rounded-[calc(var(--radius-rb-tile)-4px)]"
+            />
+
+            {hotspots.map((hotspot, hotspotIndex) => {
+              const isOpen = hotspot.id === openId
+              const isVisited = visitedIds.has(hotspot.id)
+
+              return (
+                  <button
+                      key={hotspot.id ?? hotspotIndex}
+                      type="button"
+                      onClick={() => toggleHotspot(hotspot.id, isOpen)}
+                      style={{ left: `${hotspot.x}%`, top: `${hotspot.y}%` }}
+                      aria-label={`Point ${hotspotIndex + 1}: ${hotspot.title}`}
+                      aria-pressed={isOpen}
+                      // `isolate` so the halo's negative z-index is contained
+                      // by the pin and lands behind its own opaque background
+                      // rather than behind the image.
+                      className={`absolute isolate grid h-8 w-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full text-sm font-bold shadow-md ring-2 ring-background transition hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
+                          isOpen
+                              ? `scale-110 text-white ${accent.bgSolid}`
+                              : "bg-foreground text-background"
+                      }`}
+                  >
+                    {hotspotIndex + 1}
+
+                    {/* An echo on the unopened pins. Without it they read as
+                        numbers printed on the diagram and learners never
+                        discover there is anything to open.
+
+                        Two layers, not one. The static halo is the part that
+                        always draws: it carries the affordance on its own, so
+                        the block still works for a reader who has asked their
+                        OS for less motion. The ping rides on top under
+                        `motion-safe:`, which compiles to a
+                        `prefers-reduced-motion: no-preference` query -- that
+                        respondent gets the pulse, everyone else gets a pin
+                        that is just as legible and holds still. Indefinite
+                        auto-starting motion with no pause control is what
+                        WCAG 2.2.2 is about, and a lesson can stack several of
+                        these blocks on one page. */}
+                    {isOpen ? null : (
+                        <span
+                            aria-hidden="true"
+                            className={`absolute -inset-1 -z-10 rounded-full opacity-25 ${accent.bgSolid}`}
+                        />
+                    )}
+
+                    {/* The pulse, only while this pin is still unread. It stops
+                        for good once opened -- see `visitedIds` above. */}
+                    {isOpen || isVisited ? null : (
+                        <span
+                            aria-hidden="true"
+                            className={`absolute -inset-1 -z-10 rounded-full opacity-40 motion-safe:animate-ping ${accent.bgSolid}`}
+                        />
+                    )}
+                  </button>
+              )
+            })}
+          </div>
+          )}
+        </div>
+
+        {openHotspot ? (
+            <Card className={`!border-l-4 p-5 ${accent.border} ${accent.bgSoft}`}>
+              <div className="flex items-start gap-3">
+                <span
+                    className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full text-sm font-bold text-white ${accent.bgSolid}`}
+                >
+                  {openIndex + 1}
+                </span>
+
+                <div className="min-w-0">
+                  <h3 className="font-heading text-lg font-semibold text-foreground">
+                    {openHotspot.title}
+                  </h3>
+
+                  {openHotspot.description ? (
+                      <p className="mt-2 leading-7 text-muted-foreground">
+                        {openHotspot.description}
+                      </p>
+                  ) : null}
+                </div>
+              </div>
+            </Card>
+        ) : (
+            <p className="text-center text-sm text-muted-foreground">
+              Select a numbered point on the image to read about it.
+            </p>
+        )}
+      </div>
+  )
+}
+
 function LessonTool({ tool, index = 0 }) {
   const data = tool?.data ?? {}
   const accent = accentFor(index)
@@ -674,6 +899,10 @@ function LessonTool({ tool, index = 0 }) {
             className="aspect-video w-full rounded-[var(--radius-rb-tile)] border-2 border-border/70 bg-foreground"
         />
     ) : null
+  }
+
+  if (tool.type === "image-hotspot") {
+    return <ImageHotspotBlock data={data} accent={accent} />
   }
 
   if (tool.type === "image-left-text" || tool.type === "image-right-text") {

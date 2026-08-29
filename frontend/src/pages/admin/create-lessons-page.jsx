@@ -19,6 +19,7 @@ import {
   PanelsTopLeft,
   Plus,
   Save,
+  Target,
   Trash2,
   Type,
 } from "@/components/icons"
@@ -201,6 +202,19 @@ const individualActions = [
     createData: () => ({
       file: null,
       videoKey: "",
+    }),
+  },
+  {
+    // Admin-authored only -- the lesson generator has no counterpart for this
+    // block, by design. See `ImageHotspotTool` in tools.jsx for why.
+    type: "image-hotspot",
+    name: "Image with Hotspots",
+    description: "Pin labelled points on an image",
+    icon: Target,
+    createData: () => ({
+      file: null,
+      imageKey: "",
+      hotspots: [],
     }),
   },
 ]
@@ -472,6 +486,10 @@ const STATIC_MEDIA_TOOL_CONFIG = {
     folderName: "photo",
     keyField: "imageKey",
   },
+  "image-hotspot": {
+    folderName: "photo",
+    keyField: "imageKey",
+  },
 }
 
 const MEDIA_TOOL_TYPES = new Set([
@@ -687,6 +705,37 @@ function normalizeTabItems(items) {
   )
 }
 
+/**
+ * Not built on `normalizeArrayItems`: that helper seeds one blank entry when
+ * the list is empty, which is right for tabs and cards but wrong here. A
+ * hotspot tool legitimately starts with zero pins -- the admin adds them by
+ * clicking the image -- and a phantom pin at 0,0 would sit in the corner of
+ * every freshly placed block.
+ */
+function normalizeHotspots(hotspots) {
+  if (!Array.isArray(hotspots)) {
+    return []
+  }
+
+  return hotspots.map((hotspot) => ({
+    id: hotspot?.id || createId(),
+    x: clampPercentage(hotspot?.x),
+    y: clampPercentage(hotspot?.y),
+    title: hotspot?.title ?? "",
+    description: hotspot?.description ?? "",
+  }))
+}
+
+function clampPercentage(value) {
+  const numeric = Number(value)
+
+  if (!Number.isFinite(numeric)) {
+    return 0
+  }
+
+  return Math.min(100, Math.max(0, numeric))
+}
+
 function normalizeToolData(type, data = {}, toolId, imageKeys = {}, videoKeys = {}) {
   const normalizedData = {
     ...data,
@@ -742,6 +791,10 @@ function normalizeToolData(type, data = {}, toolId, imageKeys = {}, videoKeys = 
         normalizedData.layout === "image-right" ? "image-right" : "image-left"
   }
 
+  if (type === "image-hotspot") {
+    normalizedData.hotspots = normalizeHotspots(normalizedData.hotspots)
+  }
+
   if (MEDIA_TOOL_TYPES.has(type)) {
     normalizedData.file = null
   }
@@ -752,6 +805,7 @@ function normalizeToolData(type, data = {}, toolId, imageKeys = {}, videoKeys = 
       type === "image-right-text" ||
       type === "intro-image-card" ||
       type === "image-feature-grid" ||
+      type === "image-hotspot" ||
       type === "media-text-block"
   ) {
     normalizedData.imageKey = imageKeys[toolId] ?? normalizedData.imageKey ?? ""
@@ -1202,6 +1256,28 @@ function CreateLessons() {
     if (tool.type === "video") {
       if (!hasMediaFileOrKey(data, "videoKey")) {
         return `${toolLabel}: upload a video first.`
+      }
+    }
+
+    if (tool.type === "image-hotspot") {
+      if (!hasMediaFileOrKey(data, "imageKey")) {
+        return `${toolLabel}: upload an image first.`
+      }
+
+      const hotspots = Array.isArray(data.hotspots) ? data.hotspots : []
+
+      if (hotspots.length === 0) {
+        return `${toolLabel}: click the image to place at least one hotspot.`
+      }
+
+      // A pin with no title is invisible to a learner in the list beside the
+      // image and opens an empty panel when clicked, so it is a save-blocker
+      // rather than something to quietly drop. The description is optional --
+      // some pins only need to name the part they point at.
+      const untitledIndex = hotspots.findIndex((hotspot) => isBlank(hotspot?.title))
+
+      if (untitledIndex !== -1) {
+        return `${toolLabel}: hotspot ${untitledIndex + 1} needs a title.`
       }
     }
 

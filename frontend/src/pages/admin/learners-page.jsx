@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 import {
   Award,
   Eye,
@@ -45,7 +46,17 @@ import {
   TableToolbar,
   useTableSort,
 } from "@/components/commons/data-table.jsx"
-import { getAllLearners } from "@/services/adminLearnerService"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { deleteLearner, getAllLearners } from "@/services/adminLearnerService"
 
 const ALL_FILTER_VALUE = "all"
 
@@ -276,11 +287,27 @@ export default function Learners({
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const { sort, toggle, sortRows } = useTableSort()
+  const [pendingDelete, setPendingDelete] = useState(null)
+  const queryClient = useQueryClient()
 
   const { data: fetchedLearners = [], isLoading } = useQuery({
     queryKey: ["admin-learners"],
     queryFn: () => getAllLearners(),
     staleTime: 5 * 60 * 1000,
+  })
+
+  const deleteMutation = useMutation({
+    // Not getLearnerId: that falls back to a synthetic row key for display, and
+    // a DELETE addressed to "learner-3" is not a delete of anything.
+    mutationFn: (learner) => deleteLearner(learner.learnerId ?? learner.id),
+    onSuccess: (_result, learner) => {
+      setPendingDelete(null)
+      queryClient.invalidateQueries({ queryKey: ["admin-learners"] })
+      toast.success(`${getLearnerName(learner)} and all of their data were deleted.`)
+    },
+    onError: (error) => {
+      toast.error(error?.message ?? "The learner could not be deleted.")
+    },
   })
 
   const list = Array.isArray(fetchedLearners) ? fetchedLearners : []
@@ -774,7 +801,11 @@ export default function Learners({
                                     <DropdownMenuSeparator />
 
                                     <DropdownMenuItem
-                                        onSelect={() => onDelete?.(learner)}
+                                        onSelect={() =>
+                                            onDelete
+                                                ? onDelete(learner)
+                                                : setPendingDelete(learner)
+                                        }
                                         className="text-destructive focus:text-destructive"
                                     >
                                       <Trash2 className="mr-2 h-4 w-4" />
@@ -820,6 +851,44 @@ export default function Learners({
             />
           </TableCard>
         </div>
+
+        {/* Deletion is total and has no undo, so it is spelled out before it runs. */}
+        <AlertDialog
+            open={pendingDelete != null}
+            onOpenChange={(open) => !open && setPendingDelete(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                Delete {pendingDelete ? getLearnerName(pendingDelete) : "this learner"}?
+              </AlertDialogTitle>
+
+              <AlertDialogDescription>
+                This erases the account and everything belonging to it:
+                enrolments, assessment attempts and results, achievements and
+                XP, mastery estimates, community posts, uploaded files, and the
+                sign-in itself. It cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleteMutation.isPending}>
+                Cancel
+              </AlertDialogCancel>
+
+              <AlertDialogAction
+                  onClick={(event) => {
+                    event.preventDefault()
+                    deleteMutation.mutate(pendingDelete)
+                  }}
+                  disabled={deleteMutation.isPending}
+                  className="bg-destructive text-white hover:bg-destructive/90"
+              >
+                {deleteMutation.isPending ? "Deleting..." : "Delete learner"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </section>
   )
 }

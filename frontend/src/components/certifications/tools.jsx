@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/accordion"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { API } from "@/services/base"
+import { fetchFileBlob } from "@/services/fileService.js"
 
 const FILE_API_URL = `${API}/files/download`
 
@@ -56,6 +57,50 @@ function useObjectUrl(file) {
     }, [file])
 
     return url
+}
+
+/**
+ * An already-uploaded file as a URL an `<img>` can load.
+ *
+ * `getDownloadUrl` alone is not enough: `/files/download` calls `requireAuth`,
+ * and a browser sends no Authorization header on an `<img src>`, so the
+ * request comes back `400 Authentication is required` and renders broken. The
+ * bytes have to come through `base()` -- which does attach the bearer token --
+ * and reach the tag as an object URL.
+ *
+ * AI-sourced media is stored as a public absolute URL rather than a storage
+ * key, so those pass through without a fetch.
+ */
+function useStoredFileUrl(key) {
+    const isAbsolute = Boolean(key) && /^https?:\/\//.test(key)
+    const [url, setUrl] = useState("")
+
+    useEffect(() => {
+        if (!key || isAbsolute) {
+            setUrl("")
+            return
+        }
+
+        let cancelled = false
+        let objectUrl = ""
+
+        fetchFileBlob(key)
+            .then((blob) => {
+                if (cancelled) return
+                objectUrl = URL.createObjectURL(blob)
+                setUrl(objectUrl)
+            })
+            .catch(() => {
+                if (!cancelled) setUrl("")
+            })
+
+        return () => {
+            cancelled = true
+            if (objectUrl) URL.revokeObjectURL(objectUrl)
+        }
+    }, [key, isAbsolute])
+
+    return isAbsolute ? key : url
 }
 
 function FloatingDeleteButton({ onClick }) {
@@ -1098,6 +1143,259 @@ export function MediaTextBlockTool({ data, onDataChange, onDelete }) {
                     />
                 </div>
             </div>
+        </ToolShell>
+    )
+}
+
+/**
+ * Image with hotspots -- an admin-only tool.
+ *
+ * Deliberately absent from the AI lesson catalogue in
+ * `python-backend/app/agents/certification/lesson_agent.py`: placing a pin
+ * means knowing where a thing sits in a specific picture, and the generator
+ * only ever supplies an image *query*, never the pixels. A model can invent
+ * plausible coordinates for an image it has never seen, which is the one
+ * failure mode this tool cannot survive -- a mislabelled diagram teaches the
+ * wrong thing with full confidence. So it is authored by hand or not at all.
+ *
+ * Coordinates are percentages of the image box, not pixels, so a pin stays on
+ * its feature at every rendered width.
+ */
+function HotspotEditor({ data, onDataChange }) {
+    const hotspots = data?.hotspots ?? []
+    const selectedFile = data?.file ?? null
+    const uploadedPreview = useObjectUrl(selectedFile)
+    const storedPreview = useStoredFileUrl(data?.imageKey)
+    const previewUrl = uploadedPreview || storedPreview
+
+    const [selectedId, setSelectedId] = useState(null)
+    // Set while a pin is being dragged, so the image's own click handler knows
+    // not to read the drag's mouseup as "place a new pin here".
+    const [draggingId, setDraggingId] = useState(null)
+
+    const { getRootProps, getInputProps, isDragActive } = useDropzone({
+        accept: {
+            "image/jpeg": [".jpeg", ".jpg", ".jfif"],
+            "image/png": [".png"],
+            "image/webp": [".webp"],
+            "image/gif": [".gif"],
+        },
+        multiple: false,
+        onDrop: (acceptedFiles) => {
+            const imageFile = acceptedFiles[0]
+            if (!imageFile) return
+
+            // Pins survive a re-upload: the usual reason to replace an image is
+            // a better version of the same diagram, and silently discarding the
+            // labels would punish that.
+            onDataChange({ ...data, file: imageFile, imageKey: "" })
+        },
+    })
+
+    function updateHotspots(nextHotspots) {
+        onDataChange({ ...data, hotspots: nextHotspots })
+    }
+
+    function updateHotspot(hotspotId, field, value) {
+        updateHotspots(
+            hotspots.map((hotspot) =>
+                hotspot.id === hotspotId ? { ...hotspot, [field]: value } : hotspot
+            )
+        )
+    }
+
+    function removeHotspot(hotspotId) {
+        updateHotspots(hotspots.filter((hotspot) => hotspot.id !== hotspotId))
+        if (selectedId === hotspotId) setSelectedId(null)
+    }
+
+    /** Pointer position as a percentage of the image box, clamped to it. */
+    function toPercentage(event, element) {
+        const bounds = element.getBoundingClientRect()
+        const x = ((event.clientX - bounds.left) / bounds.width) * 100
+        const y = ((event.clientY - bounds.top) / bounds.height) * 100
+
+        return {
+            x: Math.min(100, Math.max(0, Number(x.toFixed(2)))),
+            y: Math.min(100, Math.max(0, Number(y.toFixed(2)))),
+        }
+    }
+
+    function handleSurfaceClick(event) {
+        if (draggingId) return
+
+        const { x, y } = toPercentage(event, event.currentTarget)
+        const hotspotId = createId("hotspot")
+
+        updateHotspots([...hotspots, { id: hotspotId, x, y, title: "", description: "" }])
+        setSelectedId(hotspotId)
+    }
+
+    function handlePinPointerDown(event, hotspotId) {
+        event.stopPropagation()
+        setSelectedId(hotspotId)
+
+        const surface = event.currentTarget.parentElement
+        if (!surface) return
+
+        // Pointer capture on the surface, not the pin: the cursor routinely
+        // outruns a 28px target mid-drag, and without capture the pin is
+        // dropped the moment that happens.
+        surface.setPointerCapture(event.pointerId)
+        setDraggingId(hotspotId)
+
+        function handleMove(moveEvent) {
+            const { x, y } = toPercentage(moveEvent, surface)
+
+            onDataChange({
+                ...data,
+                hotspots: hotspots.map((hotspot) =>
+                    hotspot.id === hotspotId ? { ...hotspot, x, y } : hotspot
+                ),
+            })
+        }
+
+        function handleUp() {
+            surface.releasePointerCapture(event.pointerId)
+            surface.removeEventListener("pointermove", handleMove)
+            surface.removeEventListener("pointerup", handleUp)
+            // Cleared after the event loop settles, so the click this pointerup
+            // synthesises still sees `draggingId` set and is ignored.
+            setTimeout(() => setDraggingId(null), 0)
+        }
+
+        surface.addEventListener("pointermove", handleMove)
+        surface.addEventListener("pointerup", handleUp)
+    }
+
+    if (!previewUrl) {
+        return (
+            <div
+                {...getRootProps()}
+                className={`cursor-pointer rounded-xl border-2 border-dashed p-7 text-center transition ${
+                    isDragActive
+                        ? "border-primary bg-primary/10"
+                        : "border-border bg-muted/40 hover:border-primary/40 hover:bg-muted/60"
+                }`}
+            >
+                <input {...getInputProps()} />
+                <div className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-lg bg-muted text-muted-foreground">
+                    <ImagePlus className="h-5 w-5" />
+                </div>
+                <p className="font-medium text-foreground">
+                    {isDragActive ? "Drop the image here" : "Upload the image to annotate"}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                    JPG, PNG, WebP, GIF, or JFIF. You place the pins next.
+                </p>
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+                <p className="min-w-0 text-sm text-muted-foreground">
+                    Click the image to place a pin. Drag a pin to move it.
+                </p>
+
+                <div {...getRootProps()} className="shrink-0">
+                    <input {...getInputProps()} />
+                    <button
+                        type="button"
+                        className="rounded-full bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted/70"
+                    >
+                        Replace image
+                    </button>
+                </div>
+            </div>
+
+            {/* `touch-none` so a drag on a touch device moves the pin instead of
+                scrolling the page out from under it. */}
+            <div
+                onClick={handleSurfaceClick}
+                className="relative w-full cursor-crosshair touch-none select-none overflow-hidden rounded-xl bg-muted/40"
+            >
+                <img
+                    src={previewUrl}
+                    alt="Hotspot image"
+                    draggable={false}
+                    className="pointer-events-none max-h-[520px] w-full object-contain"
+                />
+
+                {hotspots.map((hotspot, index) => (
+                    <button
+                        key={hotspot.id}
+                        type="button"
+                        onPointerDown={(event) => handlePinPointerDown(event, hotspot.id)}
+                        onClick={(event) => event.stopPropagation()}
+                        style={{ left: `${hotspot.x}%`, top: `${hotspot.y}%` }}
+                        title={hotspot.title || `Pin ${index + 1}`}
+                        className={`absolute z-10 grid h-7 w-7 -translate-x-1/2 -translate-y-1/2 cursor-grab place-items-center rounded-full text-xs font-bold shadow-md ring-2 ring-background transition active:cursor-grabbing ${
+                            selectedId === hotspot.id
+                                ? "scale-110 bg-primary text-primary-foreground"
+                                : "bg-foreground text-background"
+                        }`}
+                    >
+                        {index + 1}
+                    </button>
+                ))}
+            </div>
+
+            {hotspots.length === 0 ? (
+                <p className="rounded-lg bg-muted/40 p-4 text-center text-sm text-muted-foreground">
+                    No pins yet. Click anywhere on the image above to add the first one.
+                </p>
+            ) : (
+                <div className="space-y-3">
+                    {hotspots.map((hotspot, index) => (
+                        <div
+                            key={hotspot.id}
+                            onClick={() => setSelectedId(hotspot.id)}
+                            className={`rounded-xl p-4 transition ${
+                                selectedId === hotspot.id ? "bg-primary/10" : "bg-muted/40"
+                            }`}
+                        >
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="flex min-w-0 flex-1 items-center gap-3">
+                                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-foreground text-xs font-bold text-background">
+                                        {index + 1}
+                                    </span>
+
+                                    <InlineField
+                                        value={hotspot.title}
+                                        onChange={(value) => updateHotspot(hotspot.id, "title", value)}
+                                        placeholder="What is at this point?"
+                                        className="text-base font-semibold text-foreground"
+                                    />
+                                </div>
+
+                                <RemoveButton onClick={() => removeHotspot(hotspot.id)} />
+                            </div>
+
+                            <TextAreaField
+                                value={hotspot.description}
+                                onChange={(value) => updateHotspot(hotspot.id, "description", value)}
+                                placeholder="Explain it..."
+                                rows={3}
+                                className="mt-3"
+                            />
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    )
+}
+
+export function ImageHotspotTool({ data, onDataChange, onDelete }) {
+    return (
+        <ToolShell
+            title="Image with hotspots"
+            description="An image the learner explores by opening labelled points on it."
+            onDelete={onDelete}
+        >
+            <HotspotEditor data={data ?? {}} onDataChange={onDataChange} />
         </ToolShell>
     )
 }

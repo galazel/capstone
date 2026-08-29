@@ -17,6 +17,7 @@ import java.util.List;
 public class UserService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
+    private final AccountDeletionService accountDeletionService;
 
     public List<UserDto> getAll() {
         return userRepository.findAll().stream().map(userMapper::toDto).toList();
@@ -39,8 +40,14 @@ public class UserService {
         return userMapper.toDto(userRepository.save(entity));
     }
 
+    /**
+     * Deleting a user erases the whole account -- the learner profile behind it,
+     * their enrolments, attempts, achievements, posts, files, BKT mastery and
+     * Cognito sign-in -- rather than just the row. See AccountDeletionService.
+     */
     public void delete(Long id) {
-        userRepository.delete(findEntity(id));
+        findEntity(id); // 404 for an unknown id, before anything is removed
+        accountDeletionService.deleteUser(id);
     }
 
     private User findEntity(Long id) {

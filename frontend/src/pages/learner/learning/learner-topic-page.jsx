@@ -20,7 +20,6 @@ import {
   Circle,
   CircleHelp,
   Clock,
-  ListChecks,
   Loader2,
   PanelLeft,
   Sparkles,
@@ -42,7 +41,7 @@ import {
 } from "@/components/motion/rebyu-motion.jsx"
 import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
 import { LessonAiTutor } from "@/components/learner/lesson-ai-tutor.jsx"
-import { PriorityBookmark, PriorityChip } from "@/components/learner/priority-tag.jsx"
+import { PriorityBookmark } from "@/components/learner/priority-tag.jsx"
 import { ASSESSMENT_MAX_XP, LESSON_COMPLETION_XP } from "@/lib/xp.js"
 import { announceRewards, snapshotRewards } from "@/components/learner/xp-award-modal.jsx"
 import { LessonTool } from "@/components/certifications/lesson-content-renderer.jsx"
@@ -205,7 +204,12 @@ function OutlineRow({
             aria-hidden="true"
           />
         ) : null}
-        <span className="w-1 shrink-0" aria-hidden="true" />
+        {/* Reserves the width the active bar occupies, so a row does not shift
+            when it becomes active. Dropped while collapsed: there it is the
+            only thing left of the icon, and 4px of spacer plus the row's 4px
+            gap push every icon 8px right of the rail's centre -- which is what
+            made the collapsed icons look off-axis against the toggle above. */}
+        {!collapsed ? <span className="w-1 shrink-0" aria-hidden="true" /> : null}
         <button
           type="button"
           onClick={() => onSelect(item)}
@@ -378,47 +382,63 @@ function Outline({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-rb-snow">
+      {/* RB_TOPBAR_H, shared with the lesson header in <LessonView>. The two
+          sit side by side at the top of the page, so their bottom borders read
+          as one continuous rule across the screen -- but only if both are
+          exactly this tall. Anything that would grow this box (the progress
+          readout, previously in here) belongs below it instead, otherwise the
+          rule steps down over the outline and the alignment is lost the moment
+          a topic title wraps.
+
+          `justify-center` when collapsed, not `justify-between`: with the
+          title gone the toggle is the only child, and `between` pins a lone
+          child to the left of the rail instead of centring it in it. */}
       <div
-        className={`shrink-0 border-b-2 border-rb-swan ${collapsed ? "px-2 py-4" : "px-4 py-5"}`}
+        className={`flex h-[var(--rb-topbar-h)] shrink-0 items-center border-b-2 border-rb-swan ${
+          collapsed ? "justify-center px-2" : "gap-2 px-4"
+        }`}
       >
-        <div className="flex items-center justify-between gap-2">
-          {!collapsed ? (
-            <div className="min-w-0">
-              <p className="rb-eyebrow line-clamp-1" title={`Unit ${major.index} · ${major.name}`}>
-                unit {major.index} · {major.name}
-              </p>
-              <p
-                className="mt-1 line-clamp-2 font-rb-display text-base font-extrabold leading-snug text-rb-eel"
-                title={middle.name}
-              >
-                {middle.name}
-              </p>
-            </div>
-          ) : null}
-
-          <button
-            type="button"
-            onClick={onCollapse}
-            aria-label={collapsed ? "Expand outline" : "Collapse outline"}
-            title={collapsed ? "Expand outline" : "Collapse outline"}
-            className="grid size-9 shrink-0 place-items-center rounded-xl border-2 border-rb-swan bg-rb-snow text-rb-wolf transition hover:text-rb-eel"
-          >
-            <PanelLeft className="size-4" aria-hidden="true" />
-          </button>
-        </div>
-
         {!collapsed ? (
-          <div className="mt-4">
-            <div className="flex items-baseline justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wide text-rb-wolf">
-                {done} of {lessons.length} lessons
-              </span>
-              <CountUp value={progress} suffix="%" className="rb-numeric text-xs" />
-            </div>
-            <ProgressBar value={progress} tone="macaw" label="Topic progress" className="mt-2 !h-3" />
+          <div className="min-w-0 flex-1">
+            <p className="rb-eyebrow line-clamp-1" title={`Unit ${major.index} · ${major.name}`}>
+              unit {major.index} · {major.name}
+            </p>
+            <p
+              className="mt-0.5 line-clamp-1 font-rb-display text-base font-extrabold leading-snug text-rb-eel"
+              title={middle.name}
+            >
+              {middle.name}
+            </p>
           </div>
         ) : null}
+
+        <button
+          type="button"
+          onClick={onCollapse}
+          aria-label={collapsed ? "Expand outline" : "Collapse outline"}
+          title={collapsed ? "Expand outline" : "Collapse outline"}
+          className="grid size-9 shrink-0 place-items-center rounded-xl border-2 border-rb-swan bg-rb-snow text-rb-wolf transition hover:text-rb-eel"
+        >
+          <PanelLeft className="size-4" aria-hidden="true" />
+        </button>
       </div>
+
+      {/* Moved out of the header above so that box can hold a fixed height.
+          Pinned to RB_SUBBAR_H from xl up -- the width at which the outline is
+          actually beside the lesson column and the two rules have to agree.
+          Below xl the outline is a drawer over the page, nothing to align to,
+          so it keeps its natural padding. */}
+      {!collapsed ? (
+        <div className="shrink-0 border-b-2 border-rb-swan px-4 py-3">
+          <div className="flex items-baseline justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-rb-wolf">
+              {done} of {lessons.length} lessons
+            </span>
+            <CountUp value={progress} suffix="%" className="rb-numeric text-xs" />
+          </div>
+          <ProgressBar value={progress} tone="macaw" label="Topic progress" className="mt-2 !h-3" />
+        </div>
+      ) : null}
 
       <nav className="min-h-0 flex-1 overflow-y-auto py-2" aria-label="Topic outline">
         {/* `amount: 0` — the rail is on screen from the moment the page mounts,
@@ -538,7 +558,10 @@ function textVolume(value) {
  * panel fights it.
  */
 function sectionTone(section, index) {
-  const hasMedia = section.tools.some((tool) => tool.type === "image" || tool.type === "video")
+  const hasMedia = section.tools.some(
+    (tool) =>
+      tool.type === "image" || tool.type === "video" || tool.type === "image-hotspot",
+  )
   const volume = section.tools.reduce((total, tool) => total + textVolume(tool.data ?? {}), 0)
 
   if (!hasMedia && volume < 420) return "statement"
@@ -715,7 +738,6 @@ function LessonView({
     }
   }, [sections, onReadSection, onReadLesson])
 
-  const readCount = sections.filter((section) => readSections.has(section.key)).length
 
   return (
     <article
@@ -725,8 +747,14 @@ function LessonView({
       style={{ "--lesson-header-h": "116px" }}
       className="w-full px-4 pb-10 sm:px-6 lg:px-8"
     >
-      <div ref={headerRef} className="sticky top-0 z-10 -mx-4 border-b-2 border-rb-swan bg-rb-snow/95 px-4 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)] backdrop-blur supports-[backdrop-filter]:bg-rb-snow/80 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-        <div className="flex items-center justify-between gap-4">
+      {/* RB_TOPBAR_H again -- see the note in <Outline>. This bar and the
+          outline's own header are the two halves of one rule across the top of
+          the page, so the height lives in a variable on the page root rather
+          than being set twice and drifting. The chips that used to sit in here
+          are their own bar below: a second row of content is what made this
+          box a head taller than the outline beside it. */}
+      <div ref={headerRef} className="sticky top-0 z-10 -mx-4 border-b-2 border-rb-swan bg-rb-snow/95 px-4 shadow-[0_1px_0_rgba(0,0,0,0.02)] backdrop-blur supports-[backdrop-filter]:bg-rb-snow/80 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <div className="flex h-[var(--rb-topbar-h)] items-center justify-between gap-4">
           <div className="min-w-0">
             <p className="rb-eyebrow">
               lesson {position} of {total}
@@ -750,52 +778,8 @@ function LessonView({
             </TactileButton>
           ) : null}
         </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="rb-chip">
-            <ListChecks className="size-3.5" aria-hidden="true" />
-            {sections.length} section{sections.length === 1 ? "" : "s"}
-          </span>
-          {lessonItem.quiz ? (
-            <span className="rb-chip bg-rb-beetle-wash text-rb-beetle-lip">
-              <CircleHelp className="size-3.5" aria-hidden="true" />
-              quick check · {lessonItem.quiz.totalQuestions} questions
-            </span>
-          ) : null}
-          <span
-            className={`rb-chip ${lessonDone ? "bg-rb-feather-wash text-rb-feather-ink" : ""}`}
-            aria-live="polite"
-          >
-            <CheckCircle2 className="size-3.5" aria-hidden="true" />
-            {lessonDone ? "lesson complete" : `${readCount} of ${sections.length} sections read`}
-          </span>
-
-          {/* What finishing this lesson is worth. Paid once -- re-marking a
-              lesson complete is a no-op server-side -- so the chip reads as a
-              receipt rather than a standing offer once it has been earned. */}
-          <span
-            className={`rb-chip ${lessonDone ? "" : "bg-rb-bee-wash text-rb-bee-lip"}`}
-            title={lessonDone ? "Already earned" : "Earned the first time you finish this lesson"}
-          >
-            <Zap className="size-3.5" aria-hidden="true" />
-            {lessonDone ? `${LESSON_COMPLETION_XP} XP earned` : `+${LESSON_COMPLETION_XP} XP`}
-          </span>
-
-          {/* Last in the row and in the row's own shape: a priority is a fact
-              about this lesson like the section count beside it, not a badge
-              from another design.
-
-              Shown whether or not the lesson is finished. Reading a lesson and
-              knowing it are different things -- mastery moves with every
-              question answered, so a lesson ticked off in the morning can be
-              critical by the evening if its quiz went badly. Hiding the tag on
-              completion meant the learner could only see that where they were
-              least likely to look for it. */}
-          {lessonItem.priorityTag ? (
-            <PriorityChip tag={lessonItem.priorityTag} />
-          ) : null}
-        </div>
       </div>
+
 
       {/* Full width, not capped. The cap moved down onto the things inside it,
           because the section bands have to reach the column's edges while
@@ -1117,8 +1101,8 @@ function AssessmentView({ exam, position, total, backTo, taken }) {
     <div className="w-full pb-10">
       {/* Same sticky frame the lesson view wears, so stepping from the last
           lesson onto the assessment does not drop the title and the way out. */}
-      <div className="sticky top-0 z-10 border-b-2 border-rb-swan bg-rb-snow/95 px-5 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)] backdrop-blur supports-[backdrop-filter]:bg-rb-snow/80 sm:px-10 lg:px-14">
-        <div className="flex items-center justify-between gap-4">
+      <div className="sticky top-0 z-10 border-b-2 border-rb-swan bg-rb-snow/95 px-5 shadow-[0_1px_0_rgba(0,0,0,0.02)] backdrop-blur supports-[backdrop-filter]:bg-rb-snow/80 sm:px-10 lg:px-14">
+        <div className="flex h-[var(--rb-topbar-h)] items-center justify-between gap-4">
           <div className="min-w-0">
             <p className="rb-eyebrow">
               lesson {position} of {total}
@@ -1143,17 +1127,8 @@ function AssessmentView({ exam, position, total, backTo, taken }) {
           ) : null}
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="rb-chip">
-            <ClipboardCheck className="size-3.5" aria-hidden="true" />
-            unit assessment · {exam.totalQuestions} questions
-          </span>
-          <span className="rb-chip bg-rb-bee-wash text-rb-bee-lip">
-            <Zap className="size-3.5" aria-hidden="true" />
-            up to {ASSESSMENT_MAX_XP} XP
-          </span>
-        </div>
       </div>
+
 
       <div className="px-5 py-16 sm:px-10 lg:px-14">
       <Reveal
@@ -1614,7 +1589,12 @@ export default function LearnerTopicPage() {
   )
 
   return (
-    <div className="rebyu-ds min-h-dvh w-full bg-rb-polar">
+    // `--rb-topbar-h` is the height of BOTH top bars -- the outline's header
+    // and the lesson header in the column beside it. Declared once here, on
+    // the ancestor of both, so the rule they draw across the top of the page
+    // stays one unbroken line instead of two that have to be kept in sync by
+    // hand.
+    <div className="rebyu-ds min-h-dvh w-full bg-rb-polar" style={{ "--rb-topbar-h": "72px" }}>
       <div className={`grid min-h-dvh ${columns}`}>
         {/* ---------------------------------------------------------- left */}
         <aside className="hidden min-h-0 border-r-2 border-rb-swan xl:block">

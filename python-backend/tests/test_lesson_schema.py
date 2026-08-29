@@ -13,7 +13,11 @@ import pytest
 
 from app.domain.lesson_blocks import lesson_to_blocks
 from app.domain.validation import validate_lesson, validate_lessons
-from app.schemas.certification.lesson_schema import GeneratedLesson, KeyTerm
+from app.schemas.certification.lesson_schema import (
+    ADMIN_ONLY_BLOCK_TYPES,
+    GeneratedLesson,
+    KeyTerm,
+)
 
 
 def _blocks(n: int = 4) -> list[dict]:
@@ -192,8 +196,8 @@ def test_aggregate_report_on_no_lessons_is_an_error():
 # directly and the bookkeeping those tools did happens here.
 
 
-def _lesson_with(section: dict) -> list[dict]:
-    return _lesson(sections=[*_blocks(), section]).sections
+def _lesson_with(*sections: dict) -> list[dict]:
+    return _lesson(sections=[*_blocks(), *sections]).sections
 
 
 def test_list_items_are_given_ids_the_model_never_has_to_write():
@@ -246,23 +250,55 @@ def test_a_malformed_block_is_passed_through_for_the_anatomy_check_to_judge():
     assert _lesson_with({"type": "heading"})[-1] == {"type": "heading"}
 
 
-def test_every_block_type_the_prompt_documents_is_one_the_renderer_handles():
-    """The prompt is now the only description of the block shapes -- the
-    builder tools used to be. A type it invents renders as nothing, and a type
-    it omits is a block the UI supports but no lesson can ever use.
-    """
+def _prompt_and_renderer_block_types():
+    """The block types the prompt documents, and the ones the renderer draws."""
     import re
     from pathlib import Path
 
     from app.agents.certification.lesson_agent import build_system_prompt
 
-    SYSTEM_PROMPT = build_system_prompt()
-
     renderer = Path(__file__).parents[2] / "frontend/src/components/certifications/lesson-content-renderer.jsx"
     if not renderer.exists():  # pragma: no cover - backend checked out alone
         pytest.skip("frontend not present")
 
-    documented = set(re.findall(r'"type": "([a-z-]+)"', SYSTEM_PROMPT))
+    documented = set(re.findall(r'"type": "([a-z-]+)"', build_system_prompt()))
     rendered = set(re.findall(r'tool\.type === "([a-z-]+)"', renderer.read_text(encoding="utf-8")))
 
-    assert documented == rendered
+    return documented, rendered
+
+
+def test_every_block_type_the_prompt_documents_is_one_the_renderer_handles():
+    """A type the prompt invents renders as nothing on the page."""
+    documented, rendered = _prompt_and_renderer_block_types()
+
+    assert documented <= rendered
+
+
+def test_the_only_blocks_the_renderer_has_and_the_prompt_lacks_are_admin_only():
+    """The other half of what used to be one equality assertion.
+
+    It read `documented == rendered`, which encoded a rule that no longer
+    holds: that every block the UI can draw is one the generator may write.
+    `ADMIN_ONLY_BLOCK_TYPES` is the deliberate exception, so the check is now
+    "the difference is exactly the admin-only set" rather than "there is no
+    difference" -- still a closed set, so a type quietly dropped out of the
+    prompt catalogue by accident still fails here.
+    """
+    documented, rendered = _prompt_and_renderer_block_types()
+
+    assert rendered - documented == set(ADMIN_ONLY_BLOCK_TYPES)
+
+
+def test_an_admin_only_block_is_dropped_from_generated_output():
+    """The generator has no way to place a hotspot correctly -- it never sees
+    the image -- so a block of one is discarded rather than shown to a learner
+    with invented coordinates."""
+    sections = _lesson_with(
+        {"type": "image-hotspot", "data": {"imageKey": "x", "hotspots": [{"x": 10, "y": 20}]}},
+        {"type": "heading", "data": {"text": "Kept"}},
+    )
+
+    assert [block["type"] for block in sections if isinstance(block, dict)].count(
+        "image-hotspot"
+    ) == 0
+    assert {"type": "heading", "data": {"text": "Kept"}} in sections

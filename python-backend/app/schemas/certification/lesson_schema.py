@@ -25,6 +25,20 @@ ACCORDION_BLOCK_TYPES = ("accordion", "content-accordion-block")
 #: the searched URL). Absent from model output, present in every stored block.
 MEDIA_KEYS = ("imageKey", "videoKey")
 
+#: Block types an admin authors by hand and the generator must never emit.
+#:
+#: `image-hotspot` pins labels to coordinates on a specific picture. The
+#: generator never sees a picture -- it writes an `imageQuery` and something
+#: downstream resolves it -- so any coordinates it produced would be invented
+#: for an image it has not looked at. That failure is invisible: the block
+#: renders perfectly, with every label on the wrong part of the diagram.
+#:
+#: These types are simply absent from the catalogue in the agent prompt, so a
+#: block of one is already off-script. This is the backstop for when the model
+#: reaches for it anyway, having seen the type in an existing lesson passed
+#: back as context.
+ADMIN_ONLY_BLOCK_TYPES = ("image-hotspot",)
+
 
 class KeyTerm(BaseModel):
     term: str
@@ -81,6 +95,12 @@ class GeneratedLesson(BaseModel):
         for block in value:
             if not isinstance(block, dict):
                 blocks.append(block)
+                continue
+
+            # Dropped, not raised on: a lesson is expensive to generate, and
+            # discarding one off-script block leaves the other twenty usable
+            # where rejecting the lesson wholesale would bin all of them.
+            if block.get("type") in ADMIN_ONLY_BLOCK_TYPES:
                 continue
 
             data = block.get("data")

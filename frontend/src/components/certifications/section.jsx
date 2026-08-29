@@ -20,6 +20,7 @@ import {
     ContentAccordionBlockTool,
     ContentTabsBlockTool,
     MediaTextBlockTool,
+    ImageHotspotTool,
 } from "./tools.jsx"
 
 const TOOL_COMPONENTS = {
@@ -42,6 +43,7 @@ const TOOL_COMPONENTS = {
     "content-accordion-block": ContentAccordionBlockTool,
     "content-tabs-block": ContentTabsBlockTool,
     "media-text-block": MediaTextBlockTool,
+    "image-hotspot": ImageHotspotTool,
 }
 
 function Section({

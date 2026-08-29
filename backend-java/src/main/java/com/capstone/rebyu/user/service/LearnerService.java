@@ -47,7 +47,7 @@ public class LearnerService {
     private final LearnerCertificationRepository learnerCertificationRepository;
     private final InvitationTokenService invitationTokenService;
     private final InstitutionGroupAssigneeRepository institutionGroupAssigneeRepository;
-    private final LearnerDeletionService learnerDeletionService;
+    private final AccountDeletionService accountDeletionService;
     private final InstitutionGroupRepository institutionGroupRepository;
     private final NotificationService notificationService;
 
@@ -388,11 +388,11 @@ public class LearnerService {
 
     /**
      * Deleting a learner erases everything of theirs -- posts, attempts, files,
-     * account and sign-in -- rather than just the row. See LearnerDeletionService.
+     * account and sign-in -- rather than just the row. See AccountDeletionService.
      */
     public void delete(Long id) {
         findEntity(id); // 404 for an unknown id, before anything is removed
-        learnerDeletionService.deleteLearner(id);
+        accountDeletionService.deleteLearner(id);
     }
 
     private Learner findEntity(Long id) {
