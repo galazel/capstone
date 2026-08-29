@@ -261,7 +261,7 @@ export function LearnerHeader({ data, onMenuClick, searchValue, onSearchChange }
 export function LearnerMobileSidebar({ open, onOpenChange, data }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="left" className="w-80 p-0" showCloseButton={false}>
+      <SheetContent side="left" className="p-0" showCloseButton={false}>
         <SheetTitle className="sr-only">Learner navigation</SheetTitle>
         <LearnerSidebar data={data} onNavigate={() => onOpenChange(false)} />
       </SheetContent>
@@ -397,6 +397,8 @@ export function CertificationProgressCard({ certification, lessons, onContinue, 
   return (
     <BubbleCard
       tone={tone}
+      cap="flat"
+      body="card"
       icon={GraduationCap}
       eyebrow={certification.industry || "Certification"}
       title={certification.title}
@@ -436,42 +438,22 @@ export function CertificationProgressCard({ certification, lessons, onContinue, 
 }
 
 /**
- * The four tones a certification card can wear.
+ * One tone for every certification: `feather`, the brand blue.
  *
- * Blue, purple, teal and orange — four hues far enough apart that a grid
- * separates at a glance, which two blues and a violet did not.
+ * This used to hash a certification into one of four hues so a track kept its
+ * own colour across pages. It was stable, but it was not consistent — three
+ * learner surfaces and the admin console each drew the same catalog in a
+ * different set of colours, and the blue on the certification covers matched
+ * none of them. Hue here was decorative by its own admission, so it is not
+ * worth four palettes: cap, button and progress fill now all speak `feather`,
+ * the same blue the covers and the admin arenas wear.
  *
- * Orange is a deliberate call, not an oversight. Warm hues do carry meaning
- * elsewhere in the portal — the mastery bands, the priority seals, a wrong
- * answer — so a certification wearing one is the single place where hue is
- * decorative. It stays because a wall of cool cards read as flat, and the
- * places where colour is diagnostic all carry a label, an icon or a number
- * beside them; none of them ask the learner to read the hue alone.
- *
- * Four, not more: past that the set stops being an identity and becomes a
- * swatch book.
+ * Kept as a function rather than inlined — the callers ask "what colour is
+ * this certification", which is still the right question, and the answer can
+ * become per-industry later without any of them changing.
  */
-const CERTIFICATION_TONES = ["macaw", "beetle", "bee", "fox"]
-
-/**
- * Stable per certification, so a track is the same colour on every page.
- *
- * Hashed rather than assigned in order: a list's index shifts the moment a
- * certification is added, unenrolled or re-sorted, and a card that changes
- * colour between visits is worse than no colour at all.
- *
- * The card itself is the arena card from the challenges page — gradient cap,
- * bubbles, icon medallion, matching wash below — so a certification and a
- * challenge read as the same object in the same product rather than as two
- * card designs that happen to share a grid.
- */
-export function toneForCertification(certification) {
-  const seed = String(
-    certification?.certificationId ?? certification?.title ?? certification?.name ?? ""
-  )
-  let total = 0
-  for (let index = 0; index < seed.length; index += 1) total += seed.charCodeAt(index)
-  return CERTIFICATION_TONES[total % CERTIFICATION_TONES.length]
+export function toneForCertification() {
+  return "feather"
 }
 
 export function LessonRow({ lesson, onOpen }) {

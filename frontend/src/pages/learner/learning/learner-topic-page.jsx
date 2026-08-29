@@ -546,10 +546,14 @@ function sectionTone(section, index) {
 }
 
 /* Each tone also carries the colours for the section's own furniture: the
-   eyebrow above the title, the rule under it, and the ghost numeral in the
-   corner. Kept here rather than derived at the call site so a tone stays one
-   decision -- adding a fourth surface means filling in one object, not
-   hunting four conditionals through the JSX.
+   eyebrow above the title and the rule under it. Kept here rather than derived
+   at the call site so a tone stays one decision -- adding a fourth surface
+   means filling in one object, not hunting four conditionals through the JSX.
+
+   There was a third: a huge ghost numeral in the bottom-left corner of every
+   section, repeating the number the eyebrow states in words directly above the
+   title. Removed -- on a section whose copy did not fill the screen it was the
+   loudest thing on it, and it said nothing the eyebrow had not.
 
    Plain and wash share one accent. They used to differ -- Fox on plain, Macaw
    on wash -- on the reasoning that the alternation should be felt rather than
@@ -568,7 +572,6 @@ const SECTION_TONE = {
     heading: "text-white",
     eyebrow: "text-white/70",
     rule: "bg-white/30",
-    ghost: "text-white/10",
     /* Reversing the tools out of the panel has to be done from outside them:
        LessonTool renders body copy in `text-foreground`/`text-muted-foreground`
        and knows nothing about sitting on a dark surface, and it is shared with
@@ -594,7 +597,6 @@ const SECTION_TONE = {
     heading: "text-rb-eel",
     eyebrow: "text-rb-macaw-lip",
     rule: "bg-rb-macaw",
-    ghost: "text-rb-macaw/10",
     content: "",
   },
   /* No background of its own -- it is the page showing through, and that is
@@ -606,7 +608,6 @@ const SECTION_TONE = {
     heading: "text-rb-eel",
     eyebrow: "text-rb-macaw-lip",
     rule: "bg-rb-macaw",
-    ghost: "text-rb-swan/70",
     content: "",
   },
 }
@@ -908,24 +909,6 @@ function LessonView({
                      underneath the header. */
                   className={`relative flex min-h-[calc(100dvh-var(--lesson-header-h))] snap-start scroll-mt-[var(--lesson-header-h)] flex-col justify-center overflow-hidden px-4 py-14 sm:px-6 lg:px-8 ${tone.shell}`}
                 >
-                  {/* The section's number, set huge and barely-there in the
-                      corner. Same wordmark idiom the unit cards and the
-                      curriculum band use, and it earns its place here: a
-                      section owns a whole screen, so without it the lower half
-                      of a short section is empty surface with nothing saying
-                      where you are. Decorative only -- the eyebrow below
-                      states the same thing in text.
-
-                      Bottom LEFT, not right: the AI tutor's launcher is fixed
-                      at the viewport's `bottom-6 right-6`, and a numeral this
-                      size in the right corner sat underneath it. */}
-                  <span
-                    aria-hidden="true"
-                    className={`pointer-events-none absolute -bottom-3 left-2 select-none font-rb-display text-[5rem] font-black leading-none tabular-nums sm:text-[6.5rem] ${tone.ghost}`}
-                  >
-                    {String(sectionIndex + 1).padStart(2, "0")}
-                  </span>
-
                   {/* The band runs edge to edge; its copy does not. */}
                   <div className="relative mx-auto w-full max-w-6xl">
                     <p
@@ -1787,14 +1770,14 @@ export default function LearnerTopicPage() {
       {/* Narrow windows get the outline and the tutor as sheets rather than
           columns — three columns on a laptop leaves nothing for the reading. */}
       <Sheet open={railOpen} onOpenChange={setRailOpen}>
-        <SheetContent side="left" className="rebyu-ds w-full p-0 sm:max-w-sm">
+        <SheetContent side="left" className="rebyu-ds p-0">
           <SheetTitle className="sr-only">Topic outline</SheetTitle>
           {outline}
         </SheetContent>
       </Sheet>
 
       <Sheet open={tutorVisible && !isXl} onOpenChange={(open) => !open && setTutorOpen(false)}>
-        <SheetContent side="right" className="rebyu-ds w-full gap-0 p-0 sm:max-w-md">
+        <SheetContent side="right" className="rebyu-ds gap-0 p-0">
           <SheetTitle className="sr-only">AI tutor</SheetTitle>
           <LessonAiTutor
             lessonId={activeLessonId}

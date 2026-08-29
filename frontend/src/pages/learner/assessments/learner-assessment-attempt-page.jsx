@@ -63,6 +63,7 @@ import {
   startAssessmentAttempt,
   submitAssessmentAttempt,
 } from "@/services/assessmentService.js"
+import { GeneratedQuizArena } from "@/components/practice/generated-quiz-arena.jsx"
 
 function formatClock(totalSeconds) {
   const minutes = Math.floor(totalSeconds / 60)
@@ -841,6 +842,38 @@ export default function LearnerAssessmentAttemptPage() {
       />
   )
 
+  /* The tutor's generated quiz is played, not sat.
+   *
+   * Everything below this line -- item navigator, flags, skips, the exam-hall
+   * chrome -- is what a mock exam or a certification assessment needs, and it
+   * is furniture around a ten-question warm-up generated from one lesson. The
+   * arena is the same attempt on the same endpoints, so autosave, resume and
+   * submission are unchanged; only the frame is.
+   *
+   * Every other assessment type keeps the formal runner. A diagnostic or a
+   * mock exam is a paper the learner is meant to work through at their own
+   * pace, revisiting flagged items -- a per-question countdown would change
+   * what the score means. */
+  if (attempt.assessmentType === "GENERATED_QUIZ" && !timeUp) {
+    return (
+        <GeneratedQuizArena
+            attempt={attempt}
+            questions={questions}
+            answers={answers}
+            onAnswer={setAnswer}
+            currentIndex={currentIndex}
+            onIndexChange={setCurrentIndex}
+            onFinish={() => submitMutation.mutate()}
+            /* Straight out, no "are you sure": the confirmation dialog lives
+               in the runner below, and the attempt is autosaved and resumable
+               -- coming back re-opens it where it was left. */
+            onLeave={() => navigate(-1)}
+            isSubmitting={submitMutation.isPending}
+            remainingSeconds={remainingSeconds}
+        />
+    )
+  }
+
   return (
       <div className="rebyu-ds flex h-dvh flex-col overflow-hidden bg-rb-polar">
         {/* Window chrome, matching the workspace shown on the landing hero. */}
@@ -903,7 +936,7 @@ export default function LearnerAssessmentAttemptPage() {
                   <ListIcon />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-[300px] overflow-hidden p-4">
+              <SheetContent side="right" className="overflow-hidden p-4">
                 <SheetHeader className="p-0 pb-3">
                   <SheetTitle>Item Navigation</SheetTitle>
                 </SheetHeader>

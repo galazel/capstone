@@ -1,124 +1,381 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, Layers3, Sparkles, Trophy } from "@/components/icons"
+import { Layers3, Trophy } from "@/components/icons"
 import { toast } from "sonner"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Progress } from "@/components/ui/progress"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Skeleton } from "@/components/ui/skeleton"
-import { completePracticeAttempt, getStudySet, startPracticeAttempt, submitPracticeAnswer } from "@/services/practiceService"
+import {
+  AnswerTile,
+  ArenaHeader,
+  ArenaShell,
+  CountdownRing,
+  speedPoints,
+  useQuestionClock,
+} from "@/components/practice/kahoot-arena.jsx"
+import {
+  completePracticeAttempt,
+  getStudySet,
+  startPracticeAttempt,
+  submitPracticeAnswer,
+} from "@/services/practiceService"
+
+/* How long each kind of item gets. A multiple-choice item is a recognition
+   task -- twenty seconds is long enough to read four options and short enough
+   that you answer rather than deliberate. Typed recall needs longer because it
+   needs typing. */
+const MCQ_SECONDS = 20
+const RECALL_SECONDS = 30
+
+const RATINGS = [
+  ["AGAIN", "Again"],
+  ["HARD", "Hard"],
+  ["GOOD", "Good"],
+  ["EASY", "Easy"],
+]
 
 function choicesOf(item) {
-  try { return typeof item.choicesJson === "string" ? JSON.parse(item.choicesJson) : (item.choicesJson ?? []) } catch { return [] }
+  try {
+    return typeof item.choicesJson === "string"
+      ? JSON.parse(item.choicesJson)
+      : (item.choicesJson ?? [])
+  } catch {
+    return []
+  }
 }
 
 export default function LearnerPracticeAttemptPage() {
   const { studySetId } = useParams()
   const navigate = useNavigate()
+
   const [studySet, setStudySet] = useState(null)
   const [attempt, setAttempt] = useState(null)
   const [index, setIndex] = useState(0)
   const [answers, setAnswers] = useState({})
   const [results, setResults] = useState({})
-  const [revealed, setRevealed] = useState(false)
   const [flashcardRating, setFlashcardRating] = useState("GOOD")
   const [isSaving, setIsSaving] = useState(false)
   const [completion, setCompletion] = useState(null)
+  const [score, setScore] = useState(0)
+  const [streak, setStreak] = useState(0)
 
   useEffect(() => {
     let live = true
     Promise.all([getStudySet(studySetId), startPracticeAttempt(studySetId)])
-      .then(([set, nextAttempt]) => { if (live) { setStudySet(set); setAttempt(nextAttempt) } })
+      .then(([set, nextAttempt]) => {
+        if (live) {
+          setStudySet(set)
+          setAttempt(nextAttempt)
+        }
+      })
       .catch(() => toast.error("This practice set could not be opened."))
-    return () => { live = false }
+    return () => {
+      live = false
+    }
   }, [studySetId])
 
   const item = studySet?.items?.[index]
   const isFlashcard = studySet?.type === "FLASHCARD"
-  const progress = studySet ? ((index + 1) / studySet.items.length) * 100 : 0
+  const seconds = isFlashcard ? RECALL_SECONDS : MCQ_SECONDS
   const answer = item ? (answers[item.id] ?? "") : ""
-  const hasAnswer = Boolean(String(answer).trim())
+  const result = item ? results[item.id] : null
+  const locked = Boolean(result)
   const isLast = studySet && index === studySet.items.length - 1
-  const choices = useMemo(() => item ? choicesOf(item) : [], [item])
+  const choices = useMemo(() => (item ? choicesOf(item) : []), [item])
 
-  async function saveCurrent() {
-    if (!item || !attempt || !hasAnswer || results[item.id]) return true
-    setIsSaving(true)
+  /* The clock's own reading at the moment the answer was locked in. Reading
+     `remaining` when the points are awarded would score whatever the clock had
+     ticked down to by the time the request came back, which turns a slow
+     network into a lower score. */
+  const remainingRef = useRef(seconds)
+
+  const lockIn = useCallback(
+    async (value) => {
+      if (!item || !attempt || locked || isSaving) return
+
+      const submitted = String(value ?? "")
+      const earnedFrom = remainingRef.current
+
+      setIsSaving(true)
+      setAnswers((current) => ({ ...current, [item.id]: submitted }))
+
+      try {
+        const saved = await submitPracticeAnswer(attempt.id, {
+          studyItemId: item.id,
+          answer: submitted,
+          flashcardRating: isFlashcard ? flashcardRating : null,
+        })
+
+        setResults((current) => ({ ...current, [item.id]: saved }))
+        setScore(
+          (current) =>
+            current +
+            speedPoints({ correct: saved.correct, remaining: earnedFrom, total: seconds })
+        )
+        setStreak((current) => (saved.correct ? current + 1 : 0))
+      } catch {
+        toast.error("Your answer could not be saved.")
+      } finally {
+        setIsSaving(false)
+      }
+    },
+    [attempt, flashcardRating, isFlashcard, isSaving, item, locked, seconds]
+  )
+
+  /* Time up is an answer: whatever is in the box goes, blank included, and the
+     server scores blank as wrong. Leaving the question open instead would make
+     the clock decorative. */
+  const remaining = useQuestionClock({
+    seconds,
+    index,
+    running: Boolean(item) && !locked && !completion,
+    onExpire: () => {
+      void lockIn(answers[item?.id] ?? "")
+    },
+  })
+
+  if (!locked) remainingRef.current = remaining
+
+  async function advance() {
+    if (!isLast) {
+      setIndex((value) => value + 1)
+      setFlashcardRating("GOOD")
+      return
+    }
+
     try {
-      const result = await submitPracticeAnswer(attempt.id, {
-        studyItemId: item.id,
-        answer,
-        flashcardRating: isFlashcard ? flashcardRating : null,
-      })
-      setResults((current) => ({ ...current, [item.id]: result }))
-      return true
+      setCompletion(await completePracticeAttempt(attempt.id))
     } catch {
-      toast.error("Your answer could not be saved.")
-      return false
-    } finally { setIsSaving(false) }
-  }
-
-  async function goNext() {
-    if (!hasAnswer) { toast.error(isFlashcard ? "Type the answer you recalled first." : "Choose an answer first."); return }
-    if (!await saveCurrent()) return
-    if (!isLast) { setIndex((value) => value + 1); setRevealed(false); setFlashcardRating("GOOD"); return }
-    try { setCompletion(await completePracticeAttempt(attempt.id)) } catch (error) { toast.error("Finish every item before completing.") }
+      toast.error("Finish every item before completing.")
+    }
   }
 
   async function rateFlashcard(value) {
     setFlashcardRating(value)
     if (!item || !attempt || !results[item.id]) return
+
     try {
-      const result = await submitPracticeAnswer(attempt.id, { studyItemId: item.id, answer, flashcardRating: value })
-      setResults((current) => ({ ...current, [item.id]: result }))
-    } catch { toast.error("Your flashcard rating could not be saved.") }
+      const saved = await submitPracticeAnswer(attempt.id, {
+        studyItemId: item.id,
+        answer,
+        flashcardRating: value,
+      })
+      setResults((current) => ({ ...current, [item.id]: saved }))
+    } catch {
+      toast.error("Your flashcard rating could not be saved.")
+    }
   }
 
-  if (!studySet || !attempt) return <div className="mx-auto max-w-4xl p-6"><Skeleton className="h-10 w-44" /><Skeleton className="mt-6 h-[440px] w-full" /></div>
-  if (completion) return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,var(--color-rb-feather-wash),transparent_45%),linear-gradient(135deg,var(--color-rb-polar),var(--color-rb-feather-wash))] px-5 py-12">
-      <section className="mx-auto max-w-xl rounded-3xl border bg-background p-8 text-center shadow-xl">
-        <div className="mx-auto flex size-20 items-center justify-center rounded-full bg-rb-fox-wash text-rb-fox-lip"><Trophy className="size-10" /></div>
-        <p className="mt-6 text-sm font-semibold uppercase tracking-[0.2em] text-primary">Practice complete</p>
-        <h1 className="mt-2 text-4xl font-bold">{Math.round(completion.percentage)}%</h1>
-        <p className="mt-3 text-muted-foreground">You got {completion.score} of {completion.totalItems} correct.</p>
-        {completion.xpEarned > 0 || completion.coinEarned > 0 ? <p className="mt-4 text-sm font-semibold text-rb-beetle-lip">+{completion.xpEarned} XP {completion.coinEarned > 0 ? `· +${completion.coinEarned} coins` : ""}</p> : null}
-        <div className="mt-7 flex justify-center gap-3"><Button variant="outline" onClick={() => navigate(`/learner/practice-review/${completion.id}`)}>Review answers</Button><Button onClick={() => navigate("/learner/library")}>Back to library</Button></div>
-      </section>
-    </main>
-  )
+  if (!studySet || !attempt) {
+    return (
+      <div className="mx-auto max-w-4xl p-6">
+        <Skeleton className="h-10 w-44" />
+        <Skeleton className="mt-6 h-[440px] w-full" />
+      </div>
+    )
+  }
+
+  if (completion) {
+    return (
+      <ArenaShell>
+        <section className="m-auto w-full max-w-xl rounded-3xl bg-white/10 p-8 text-center backdrop-blur">
+          <div className="mx-auto flex size-20 items-center justify-center rounded-full bg-rb-fox text-white">
+            <Trophy className="size-10" />
+          </div>
+
+          <p className="mt-6 font-rb-display text-xs font-extrabold uppercase tracking-[0.2em] text-white/70">
+            Practice complete
+          </p>
+
+          <h1 className="mt-2 font-rb-display text-5xl font-extrabold text-white">
+            {Math.round(completion.percentage)}%
+          </h1>
+
+          <p className="mt-3 text-white/80">
+            You got {completion.score} of {completion.totalItems} correct.
+          </p>
+
+          {/* Two numbers, told apart. The percentage above is the attempt as the
+              server recorded it; this one is the round's own game score and is
+              not saved anywhere. */}
+          <p className="mt-4 font-rb-display text-lg font-extrabold text-rb-fox">
+            {score.toLocaleString()} speed points
+            <span className="ml-2 align-middle text-xs font-bold uppercase tracking-wide text-white/50">
+              this run only
+            </span>
+          </p>
+
+          {completion.xpEarned > 0 || completion.coinEarned > 0 ? (
+            <p className="mt-2 font-semibold text-rb-macaw">
+              +{completion.xpEarned} XP
+              {completion.coinEarned > 0 ? ` · +${completion.coinEarned} coins` : ""}
+            </p>
+          ) : null}
+
+          <div className="mt-8 flex flex-wrap justify-center gap-3">
+            <Button
+              variant="outline"
+              className="border-white/40 bg-transparent text-white hover:bg-white/10"
+              onClick={() => navigate(`/learner/practice-review/${completion.id}`)}
+            >
+              Review answers
+            </Button>
+            <Button onClick={() => navigate("/learner/library")}>Back to library</Button>
+          </div>
+        </section>
+      </ArenaShell>
+    )
+  }
+
+  const correctText =
+    item.correctAnswer ??
+    choices.find((choice) => choice.isCorrect)?.text ??
+    ""
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,var(--color-rb-feather-wash),transparent_40%),linear-gradient(135deg,var(--color-rb-polar),var(--color-rb-feather-wash))] px-4 py-5 sm:px-6">
-      <section className="mx-auto max-w-4xl">
-        <header className="flex items-center gap-4 rounded-2xl border bg-background/85 p-4 shadow-sm backdrop-blur">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Leave practice"><ArrowLeft className="size-5" /></Button>
-          <div className="min-w-0 flex-1"><p className="truncate font-semibold">{studySet.title}</p><p className="text-xs text-muted-foreground">{isFlashcard ? "Recall practice" : "Quiz challenge"}</p></div>
-          <Badge variant="secondary">{index + 1} / {studySet.items.length}</Badge>
-        </header>
-        <Progress value={progress} className="mt-4 h-2" />
-
-        <article className="mt-6 rounded-3xl border bg-background p-6 shadow-xl sm:p-10">
-          <div className="flex items-center gap-2"><Badge variant="outline">{item.type === "MCQ" ? "Multiple choice" : "Flashcard recall"}</Badge>{item.difficulty && <span className="text-xs font-medium text-muted-foreground">{item.difficulty.toLowerCase()}</span>}</div>
-          <h1 className="mt-6 text-2xl font-bold leading-tight sm:text-3xl">{item.questionText}</h1>
-          {isFlashcard ? (
-            <div className="mt-8 rounded-2xl border-2 border-rb-beetle/30 bg-rb-beetle-wash p-5">
-              <div className="flex items-center gap-2 text-sm font-semibold text-rb-beetle-lip"><Layers3 className="size-4" />Recall the answer</div>
-              <Input className="mt-4 h-12 bg-background" value={answer} onChange={(event) => setAnswers((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Type what you remember" />
-              {!revealed ? <Button type="button" variant="outline" className="mt-4" disabled={!hasAnswer || isSaving} onClick={async () => { if (await saveCurrent()) setRevealed(true) }}>Reveal answer</Button> : <div className="mt-4 rounded-xl border bg-background p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recall result</p><p className="mt-1 font-medium leading-6">{results[item.id]?.correct ? "You recalled it correctly." : "Review the explanation below, then rate your recall."}</p><p className="mt-3 text-xs font-semibold text-muted-foreground">How well did you remember it?</p><div className="mt-2 grid grid-cols-4 gap-2">{[["AGAIN", "Again"], ["HARD", "Hard"], ["GOOD", "Good"], ["EASY", "Easy"]].map(([value, label]) => <Button key={value} type="button" size="sm" variant={flashcardRating === value ? "default" : "outline"} onClick={() => rateFlashcard(value)}>{label}</Button>)}</div></div>}
+    <ArenaShell
+      header={
+        <ArenaHeader
+          title={studySet.title}
+          subtitle={isFlashcard ? "Recall round" : "Quiz round"}
+          position={index + 1}
+          total={studySet.items.length}
+          onLeave={() => navigate(-1)}
+          right={
+            <div className="flex items-center gap-4">
+              <div className="hidden text-right sm:block">
+                <p className="font-rb-display text-xl font-extrabold tabular-nums">
+                  {score.toLocaleString()}
+                </p>
+                <p className="text-[11px] uppercase tracking-wide text-white/60">
+                  {streak > 1 ? `${streak} in a row` : "Points"}
+                </p>
+              </div>
+              <CountdownRing remaining={remaining} total={seconds} paused={locked} />
             </div>
+          }
+        />
+      }
+    >
+      <h1 className="py-6 text-center font-rb-display text-2xl leading-tight font-extrabold text-white sm:py-10 sm:text-4xl">
+        {item.questionText}
+      </h1>
+
+      {isFlashcard ? (
+        <div className="mx-auto w-full max-w-2xl rounded-3xl bg-white/10 p-6 backdrop-blur">
+          <div className="flex items-center gap-2 font-rb-display text-sm font-extrabold text-white/80">
+            <Layers3 className="size-4" />
+            Type what you remember
+          </div>
+
+          <Input
+            autoFocus
+            className="mt-4 h-14 border-white/30 bg-white/95 text-lg text-rb-eel"
+            value={answer}
+            disabled={locked}
+            onChange={(event) =>
+              setAnswers((current) => ({ ...current, [item.id]: event.target.value }))
+            }
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !locked) void lockIn(answer)
+            }}
+            placeholder="Your answer"
+          />
+
+          {!locked ? (
+            <Button
+              type="button"
+              className="mt-4 w-full"
+              disabled={isSaving}
+              onClick={() => void lockIn(answer)}
+            >
+              Lock it in
+            </Button>
           ) : (
-            <RadioGroup value={answer} onValueChange={(value) => setAnswers((current) => ({ ...current, [item.id]: value }))} className="mt-8 gap-3">
-              {choices.map((choice, choiceIndex) => <label key={`${choice.text}-${choiceIndex}`} className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-4 transition hover:border-primary/50 ${answer === choice.text ? "border-primary bg-primary/5" : "bg-background"}`}><RadioGroupItem value={choice.text} /><span className="font-medium">{choice.text}</span></label>)}
-            </RadioGroup>
+            <div className="mt-5">
+              <p className="font-rb-display text-xs font-extrabold uppercase tracking-wide text-white/60">
+                How well did you remember it?
+              </p>
+              <div className="mt-2 grid grid-cols-4 gap-2">
+                {RATINGS.map(([value, label]) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    size="sm"
+                    variant={flashcardRating === value ? "default" : "outline"}
+                    className={
+                      flashcardRating === value
+                        ? ""
+                        : "border-white/40 bg-transparent text-white hover:bg-white/10"
+                    }
+                    onClick={() => rateFlashcard(value)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            </div>
           )}
-          {results[item.id] && <div className={`mt-6 rounded-xl p-4 text-sm ${results[item.id].correct ? "bg-rb-bee-wash text-rb-bee-ink" : "bg-rb-fox-wash text-rb-fox-lip"}`}><div className="flex items-center gap-2 font-semibold"><CheckCircle2 className="size-4" />{results[item.id].correct ? "Correct" : "Saved — review this one later"}</div>{results[item.id].explanation && <p className="mt-2 leading-6">{results[item.id].explanation}</p>}</div>}
-          <div className="mt-10 flex justify-between gap-3"><Button variant="outline" disabled={index === 0 || isSaving} onClick={() => { setIndex((value) => value - 1); setRevealed(false); setFlashcardRating("GOOD") }}><ChevronLeft className="mr-1 size-4" />Back</Button><Button disabled={!hasAnswer || isSaving || (isFlashcard && !revealed)} onClick={goNext}>{isLast ? <><Sparkles className="mr-2 size-4" />Finish</> : <>Continue<ChevronRight className="ml-1 size-4" /></>}</Button></div>
-        </article>
-      </section>
-    </main>
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {choices.map((choice, choiceIndex) => (
+            <AnswerTile
+              key={`${choice.text}-${choiceIndex}`}
+              index={choiceIndex}
+              label={choice.text}
+              selected={answer === choice.text}
+              disabled={locked || isSaving}
+              state={
+                !locked
+                  ? "idle"
+                  : choice.text === correctText
+                    ? "correct"
+                    : answer === choice.text
+                      ? "wrong"
+                      : "dimmed"
+              }
+              onSelect={() => void lockIn(choice.text)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* The verdict, full width under the tiles: at this size a learner is
+          looking at the middle of the screen, not at a line of small type. */}
+      {locked ? (
+        <div
+          className={`mt-6 rounded-2xl p-5 text-center ${
+            result.correct ? "bg-rb-leaf text-white" : "bg-rb-cardinal text-white"
+          }`}
+        >
+          <p className="font-rb-display text-2xl font-extrabold">
+            {result.correct ? "Correct!" : "Not quite"}
+          </p>
+
+          {!result.correct && correctText ? (
+            <p className="mt-1 font-semibold">Answer: {correctText}</p>
+          ) : null}
+
+          {result.explanation ? (
+            <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-white/90">
+              {result.explanation}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="mt-auto flex justify-end py-6">
+        <Button
+          size="lg"
+          disabled={!locked}
+          onClick={advance}
+          className="min-w-40 font-rb-display font-extrabold"
+        >
+          {isLast ? "Finish" : "Next"}
+        </Button>
+      </div>
+    </ArenaShell>
   )
 }

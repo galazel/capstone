@@ -7,11 +7,7 @@ import {
   BetweenHorizontalEnd,
   CheckCircle2,
   CircleAlert,
-  Download,
-  FileIcon,
   FilePlay,
-  FileSpreadsheet,
-  FileText,
   FlipHorizontal,
   Heading as HeadingIcon,
   Image as ImageIcon,
@@ -23,11 +19,8 @@ import {
   PanelsTopLeft,
   Plus,
   Save,
-  Sparkles,
   Trash2,
   Type,
-  UploadCloud,
-  UploadIcon,
 } from "@/components/icons"
 
 import {
@@ -40,28 +33,12 @@ import {
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { formatBytes, useFileUpload } from "@/hooks/use-file-upload"
 import { Card, CardContent } from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-
 import Section from "../../components/certifications/section"
-import AiGenerationProgress from "../../components/commons/ai-generation-progress.jsx"
 import {
-  generateLessonFromFiles,
   getLessonComponent,
   setLessonComponent,
 } from "../../services/lessonService.js"
-import {
-  getGeneratedLessonWarnings,
-  mapGeneratedLessonDraftsToSections,
-} from "../../utils/generated-lesson-draft-mapper.js"
 import { saveFile as MediaFileUpload } from "../../services/fileService.js"
 
 function getBackendErrorMessage(error, fallbackMessage) {
@@ -643,386 +620,6 @@ function LessonFeedbackDialog({
   )
 }
 
-function getLessonGenerationFileIcon(file) {
-  const fileType = file.file?.type ?? ""
-  const fileName = (file.file?.name ?? "").toLowerCase()
-
-  if (
-      fileType.includes("pdf") ||
-      fileName.endsWith(".pdf") ||
-      fileType.includes("word") ||
-      fileName.endsWith(".doc") ||
-      fileName.endsWith(".docx")
-  ) {
-    return <FileText className="h-4 w-4 opacity-60" />
-  }
-
-  if (
-      fileType.includes("csv") ||
-      fileType.includes("excel") ||
-      fileName.endsWith(".csv") ||
-      fileName.endsWith(".xls") ||
-      fileName.endsWith(".xlsx")
-  ) {
-    return <FileSpreadsheet className="h-4 w-4 opacity-60" />
-  }
-
-  return <FileIcon className="h-4 w-4 opacity-60" />
-}
-
-function getLessonGenerationFileType(file) {
-  const fileType = file.file?.type ?? ""
-  const fileName = (file.file?.name ?? "").toLowerCase()
-
-  if (fileType.includes("pdf") || fileName.endsWith(".pdf")) {
-    return "PDF"
-  }
-
-  if (
-      fileType.includes("word") ||
-      fileName.endsWith(".doc") ||
-      fileName.endsWith(".docx")
-  ) {
-    return "WORD"
-  }
-
-  if (fileType.includes("csv") || fileName.endsWith(".csv")) {
-    return "CSV"
-  }
-
-  return fileType.split("/")[1]?.toUpperCase() || "UNKNOWN"
-}
-
-function GenerateLessonFromFileDialog({
-                                        open,
-                                        onOpenChange,
-                                        onGenerate,
-                                        lessonName,
-                                        isGenerating = false,
-                                      }) {
-  const maxFiles = 10
-  const maxSizeMB = 10
-  const maxSize = maxSizeMB * 1024 * 1024
-
-  const [submitError, setSubmitError] = useState("")
-  const [mode, setMode] = useState("append")
-
-  const [
-    { files, isDragging, errors },
-    {
-      handleDragEnter,
-      handleDragLeave,
-      handleDragOver,
-      handleDrop,
-      openFileDialog,
-      removeFile,
-      clearFiles,
-      getInputProps,
-    },
-  ] = useFileUpload({
-    accept: [
-      "application/pdf",
-      "application/msword",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "text/csv",
-      ".pdf",
-      ".doc",
-      ".docx",
-      ".csv",
-    ].join(","),
-    initialFiles: [],
-    maxFiles,
-    maxSize,
-    multiple: true,
-  })
-
-  useEffect(() => {
-    if (files.length > 0 && submitError) {
-      setSubmitError("")
-    }
-  }, [files.length, submitError])
-
-  function resetForm() {
-    clearFiles()
-    setSubmitError("")
-    setMode("append")
-  }
-
-  function handleOpenChange(nextOpen) {
-    if (isGenerating) {
-      return
-    }
-
-    if (!nextOpen) {
-      resetForm()
-    }
-
-    onOpenChange(nextOpen)
-  }
-
-  function handleCancel() {
-    if (isGenerating) {
-      return
-    }
-
-    resetForm()
-    onOpenChange(false)
-  }
-
-  async function handleGenerate() {
-    const selectedDocuments = files.map((item) => item.file)
-
-    if (selectedDocuments.length === 0) {
-      setSubmitError("Upload at least one source file before generating the lesson.")
-      return
-    }
-
-    if (errors.length > 0) {
-      setSubmitError("Fix the upload error before generating the lesson.")
-      return
-    }
-
-    setSubmitError("")
-
-    try {
-      await onGenerate?.(selectedDocuments, mode)
-      resetForm()
-    } catch (error) {
-      setSubmitError(
-          getBackendErrorMessage(
-              error,
-              "Lesson generation failed. Please try again."
-          )
-      )
-    }
-  }
-
-  const hasUploadError = Boolean(submitError || errors.length > 0)
-
-  return (
-      <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Generate Lesson from File</DialogTitle>
-
-            <DialogDescription className="leading-6">
-              Upload source material for{" "}
-              <span className="font-medium text-foreground">{lessonName}</span>.
-              REBYU will generate and save editable lesson content.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex flex-col gap-2">
-            <div
-                className={`flex min-h-56 flex-col items-center overflow-hidden rounded-xl border border-dashed p-4 transition-colors not-data-[files]:justify-center has-[input:focus]:ring-[3px] data-[files]:hidden data-[dragging=true]:bg-accent/50 ${
-                    hasUploadError
-                        ? "border-destructive bg-destructive/5 has-[input:focus]:border-destructive has-[input:focus]:ring-destructive/20"
-                        : "border-input has-[input:focus]:border-ring has-[input:focus]:ring-ring/50"
-                }`}
-                data-dragging={isDragging || undefined}
-                data-files={files.length > 0 || undefined}
-                onDragEnter={handleDragEnter}
-                onDragLeave={handleDragLeave}
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-            >
-              <input
-                  {...getInputProps()}
-                  aria-label="Upload source documents for lesson generation"
-                  className="sr-only"
-              />
-
-              <div className="flex flex-col items-center justify-center text-center">
-                <div
-                    aria-hidden="true"
-                    className="mb-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-full border bg-background"
-                >
-                  <FileIcon className="h-4 w-4 opacity-60" />
-                </div>
-
-                <p className="mb-1.5 text-sm font-medium">Upload files</p>
-
-                <p className="text-xs text-muted-foreground">
-                  PDF, DOC, DOCX, or CSV · Max {maxFiles} files · Up to{" "}
-                  {formatBytes(maxSize)}
-                </p>
-
-                <Button
-                    type="button"
-                    className="mt-4"
-                    onClick={openFileDialog}
-                    variant="outline"
-                >
-                  <UploadIcon aria-hidden="true" className="mr-2 h-4 w-4 opacity-60" />
-                  Select files
-                </Button>
-              </div>
-            </div>
-
-            {(submitError || errors.length > 0) && (
-                <div
-                    className="flex items-start gap-1.5 text-xs leading-5 text-destructive"
-                    role="alert"
-                >
-                  <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  <span>{submitError || errors[0]}</span>
-                </div>
-            )}
-
-            {files.length > 0 && (
-                <>
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-sm font-medium">
-                      Files ({files.length} of {maxFiles})
-                    </h3>
-
-                    <div className="flex gap-2">
-                      <Button
-                          type="button"
-                          onClick={openFileDialog}
-                          size="sm"
-                          variant="outline"
-                      >
-                        <UploadCloud className="mr-1.5 h-3.5 w-3.5 opacity-60" />
-                        Add files
-                      </Button>
-
-                      <Button
-                          type="button"
-                          onClick={resetForm}
-                          size="sm"
-                          variant="outline"
-                      >
-                        <Trash2 className="mr-1.5 h-3.5 w-3.5 opacity-60" />
-                        Remove all
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="overflow-hidden rounded-md border bg-background">
-                    <Table>
-                      <TableHeader className="text-xs">
-                        <TableRow className="bg-muted/50">
-                          <TableHead className="h-9 py-2">Name</TableHead>
-                          <TableHead className="h-9 py-2">Type</TableHead>
-                          <TableHead className="h-9 py-2">Size</TableHead>
-                          <TableHead className="h-9 w-0 py-2 text-right">
-                            Actions
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-
-                      <TableBody className="text-[13px]">
-                        {files.map((file) => (
-                            <TableRow key={file.id}>
-                              <TableCell className="max-w-48 py-2 font-medium">
-                          <span className="flex items-center gap-2">
-                            <span className="shrink-0">
-                              {getLessonGenerationFileIcon(file)}
-                            </span>
-
-                            <span className="truncate">{file.file.name}</span>
-                          </span>
-                              </TableCell>
-
-                              <TableCell className="py-2 text-muted-foreground">
-                                {getLessonGenerationFileType(file)}
-                              </TableCell>
-
-                              <TableCell className="py-2 text-muted-foreground">
-                                {formatBytes(file.file.size)}
-                              </TableCell>
-
-                              <TableCell className="whitespace-nowrap py-2 text-right">
-                                <Button
-                                    type="button"
-                                    aria-label={`Open ${file.file.name}`}
-                                    className="h-8 w-8 text-muted-foreground/80 hover:bg-transparent hover:text-foreground"
-                                    onClick={() =>
-                                        window.open(
-                                            file.preview,
-                                            "_blank",
-                                            "noopener,noreferrer"
-                                        )
-                                    }
-                                    size="icon"
-                                    variant="ghost"
-                                >
-                                  <Download className="h-4 w-4" />
-                                </Button>
-
-                                <Button
-                                    type="button"
-                                    aria-label={`Remove ${file.file.name}`}
-                                    className="h-8 w-8 text-muted-foreground/80 hover:bg-transparent hover:text-foreground"
-                                    onClick={() => removeFile(file.id)}
-                                    size="icon"
-                                    variant="ghost"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-2 pt-2">
-            <span className="text-sm font-medium">When generation finishes</span>
-
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                  type="button"
-                  variant={mode === "append" ? "default" : "outline"}
-                  onClick={() => setMode("append")}
-                  disabled={isGenerating}
-                  className="h-auto flex-col items-start gap-0.5 py-2 text-left"
-              >
-                <span className="text-sm font-medium">Add to lesson</span>
-                <span className="text-xs font-normal opacity-80">
-                  Keep existing sections, append new ones
-                </span>
-              </Button>
-
-              <Button
-                  type="button"
-                  variant={mode === "replace" ? "default" : "outline"}
-                  onClick={() => setMode("replace")}
-                  disabled={isGenerating}
-                  className="h-auto flex-col items-start gap-0.5 py-2 text-left"
-              >
-                <span className="text-sm font-medium">Replace lesson</span>
-                <span className="text-xs font-normal opacity-80">
-                  Discard existing sections and start fresh
-                </span>
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button
-                type="button"
-                variant="outline"
-                onClick={handleCancel}
-                disabled={isGenerating}
-            >
-              Cancel
-            </Button>
-
-            <Button type="button" onClick={handleGenerate} disabled={isGenerating}>
-              <Sparkles className="mr-2 h-4 w-4" />
-              {isGenerating ? "Generating..." : "Generate & Save Lesson"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-  )
-}
-
 function normalizeArrayItems(items, createDefaultItem, normalizeItem) {
   const sourceItems = Array.isArray(items) && items.length > 0 ? items : [createDefaultItem()]
 
@@ -1204,9 +801,6 @@ function CreateLessons() {
   const [isSuccessDialogOpen, setIsSuccessDialogOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isLoadingLesson, setIsLoadingLesson] = useState(true)
-  const [isGeneratingLesson, setIsGeneratingLesson] = useState(false)
-  const [isLessonFileGeneratorOpen, setIsLessonFileGeneratorOpen] =
-      useState(false)
 
   const [isErrorAddingToolWithoutSection, setIsErrorAddingToolWithoutSection] =
       useState(false)
@@ -1340,68 +934,6 @@ function CreateLessons() {
 
   function handleCancel() {
     navigate(-1)
-  }
-
-  function handleGenerateLesson() {
-    if (isLoadingLesson || isGeneratingLesson) {
-      return
-    }
-
-    setIsLessonFileGeneratorOpen(true)
-  }
-
-  async function handleGenerateLessonFromFiles(selectedDocuments, mode = "append") {
-    if (!lessonId) {
-      throw new Error(
-          "This lesson has no saved ID yet. Open the lesson from its certification page first."
-      )
-    }
-
-    try {
-      setIsGeneratingLesson(true)
-
-      const response = await generateLessonFromFiles(lessonId, selectedDocuments)
-
-      const generatedSections = normalizeSections(
-          mapGeneratedLessonDraftsToSections(response)
-      )
-      const generationWarnings = getGeneratedLessonWarnings(response)
-
-      /* Same filter as on load, applied at the source: generation is where
-         the empty cover section comes from, so dropping it here keeps it out
-         of the saved lesson rather than only out of this screen. */
-      const savedGeneratedSections = withoutEmptySections(
-          await buildSavedLessonStructure(generatedSections)
-      )
-
-      // Default behavior is to append generated sections to whatever the admin
-      // has already authored; only "replace" discards the existing structure.
-      const existingSections = mode === "replace" ? [] : sections
-      const mergedSections = [...existingSections, ...savedGeneratedSections]
-
-      await setLessonComponent(lessonId, mergedSections)
-
-      setSections(mergedSections)
-      setSectionIndex(
-          mode === "replace" ? 0 : Math.max(existingSections.length, 0)
-      )
-      setIsLessonFileGeneratorOpen(false)
-
-      toast.success("Lesson generated and saved", {
-        description:
-            mode === "replace"
-                ? "Existing sections were replaced with the generated content and saved."
-                : "Generated sections were appended to your lesson and saved.",
-      })
-
-      generationWarnings.forEach((warning) => {
-        toast.warning("Generation warning", {
-          description: warning,
-        })
-      })
-    } finally {
-      setIsGeneratingLesson(false)
-    }
   }
 
   function handleAddSection() {
@@ -1980,17 +1512,6 @@ function CreateLessons() {
 
             <Button
                 type="button"
-                variant="outline"
-                onClick={handleGenerateLesson}
-                disabled={isLoadingLesson || isGeneratingLesson}
-                className="hidden gap-2 sm:inline-flex"
-            >
-              <Sparkles className="h-4 w-4" />
-              {isGeneratingLesson ? "Generating..." : "Generate"}
-            </Button>
-
-            <Button
-                type="button"
                 onClick={handleSaveLesson}
                 disabled={isSaving || isLoadingLesson}
                 className="gap-2"
@@ -2011,28 +1532,6 @@ function CreateLessons() {
             </Button>
           </div>
         </header>
-
-        <GenerateLessonFromFileDialog
-            open={isLessonFileGeneratorOpen}
-            onOpenChange={setIsLessonFileGeneratorOpen}
-            onGenerate={handleGenerateLessonFromFiles}
-            lessonName={lessonName}
-            isGenerating={isGeneratingLesson}
-        />
-
-        <AiGenerationProgress
-            open={isGeneratingLesson}
-            title="Generating and saving your lesson"
-            description={lessonName}
-            stepDurationMs={5000}
-            steps={[
-              "Reading your documents",
-              "Extracting the key topics",
-              "Writing lesson sections",
-              "Building lists and review activities",
-              "Saving generated content",
-            ]}
-        />
 
         <LessonFeedbackDialog
             open={isSuccessDialogOpen}

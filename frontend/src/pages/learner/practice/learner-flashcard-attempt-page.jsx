@@ -1,22 +1,57 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { ArrowLeft, ChevronLeft, ChevronRight, Layers3, Sparkles, Trophy } from "@/components/icons"
+import { Layers3, Trophy } from "@/components/icons"
 import { toast } from "sonner"
-import { Badge } from "@/components/ui/badge"
+
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { completePracticeAttempt, getStudySet, startPracticeAttempt, submitPracticeAnswer } from "@/services/practiceService"
+import {
+  ArenaHeader,
+  ArenaShell,
+  CountdownRing,
+  useQuestionClock,
+} from "@/components/practice/kahoot-arena.jsx"
+import {
+  completePracticeAttempt,
+  getStudySet,
+  startPracticeAttempt,
+  submitPracticeAnswer,
+} from "@/services/practiceService"
 
-const RATINGS = [["AGAIN", "Again"], ["HARD", "Hard"], ["GOOD", "Good"], ["EASY", "Easy"]]
+/* Long enough to actually try to remember, short enough that you commit to an
+   answer instead of reading the question forty times. When it runs out the card
+   flips itself -- the recall attempt is over either way, and the rating that
+   follows is the honest record of how it went. */
+const RECALL_SECONDS = 25
+
+/* Generated answers are not one line. A card face is a fixed box, so the type
+   steps down as the text grows and the face scrolls past the point where even
+   the smallest step would spill -- the alternative was an answer running out of
+   the bottom of the card and over the rating buttons. */
+function faceType(text) {
+  const length = String(text ?? "").length
+  if (length > 320) return "text-base sm:text-xl"
+  if (length > 160) return "text-lg sm:text-2xl"
+  if (length > 80) return "text-xl sm:text-3xl"
+  return "text-2xl sm:text-4xl"
+}
+
+const RATINGS = [
+  ["AGAIN", "Again", "var(--color-rb-cardinal)"],
+  ["HARD", "Hard", "var(--color-rb-fox)"],
+  ["GOOD", "Good", "var(--color-rb-feather)"],
+  ["EASY", "Easy", "var(--color-rb-leaf)"],
+]
 
 export default function LearnerFlashcardAttemptPage() {
   const { studySetId } = useParams()
   const navigate = useNavigate()
+
   const [studySet, setStudySet] = useState(null)
   const [attempt, setAttempt] = useState(null)
   const [index, setIndex] = useState(0)
   const [flipped, setFlipped] = useState(false)
-  const [rating, setRating] = useState("GOOD")
+  const [rating, setRating] = useState(null)
   const [saving, setSaving] = useState(false)
   const [completion, setCompletion] = useState(null)
 
@@ -24,33 +59,60 @@ export default function LearnerFlashcardAttemptPage() {
     let live = true
     Promise.all([getStudySet(studySetId), startPracticeAttempt(studySetId)])
       .then(([set, nextAttempt]) => {
-        if (live) { setStudySet(set); setAttempt(nextAttempt) }
+        if (live) {
+          setStudySet(set)
+          setAttempt(nextAttempt)
+        }
       })
       .catch(() => toast.error("This flashcard set could not be opened."))
-    return () => { live = false }
+    return () => {
+      live = false
+    }
   }, [studySetId])
 
+  const reveal = useCallback(() => setFlipped(true), [])
+
+  /* Paused once the card is face up: the clock times the recall, not the
+     rating, and a countdown ticking while you decide between Hard and Good is
+     pressure on the wrong decision. */
+  const remaining = useQuestionClock({
+    seconds: RECALL_SECONDS,
+    index,
+    running: Boolean(studySet) && !flipped && !completion,
+    onExpire: reveal,
+  })
+
   if (!studySet || !attempt) {
-    return <div className="mx-auto max-w-3xl space-y-5 p-6"><Skeleton className="h-10 w-44" /><Skeleton className="h-[500px] w-full" /></div>
+    return (
+      <div className="mx-auto max-w-3xl space-y-5 p-6">
+        <Skeleton className="h-10 w-44" />
+        <Skeleton className="h-[500px] w-full" />
+      </div>
+    )
   }
 
   const item = studySet.items[index]
   const isLast = index === studySet.items.length - 1
-  const progress = ((index + 1) / studySet.items.length) * 100
 
-  async function finishCard() {
+  async function rateAndAdvance(value) {
+    if (saving) return
+
+    setRating(value)
     setSaving(true)
+
     try {
       await submitPracticeAnswer(attempt.id, {
         studyItemId: item.id,
         answer: item.correctAnswer ?? "",
-        flashcardRating: rating,
+        flashcardRating: value,
       })
-      if (isLast) setCompletion(await completePracticeAttempt(attempt.id))
-      else {
-        setIndex((value) => value + 1)
+
+      if (isLast) {
+        setCompletion(await completePracticeAttempt(attempt.id))
+      } else {
+        setIndex((current) => current + 1)
         setFlipped(false)
-        setRating("GOOD")
+        setRating(null)
       }
     } catch {
       toast.error("This flashcard could not be saved.")
@@ -61,52 +123,131 @@ export default function LearnerFlashcardAttemptPage() {
 
   if (completion) {
     return (
-      <main className="min-h-screen bg-rb-polar px-5 py-12">
-        <section className="mx-auto max-w-xl rounded-3xl border bg-background p-8 text-center shadow-xl">
-          <Trophy className="mx-auto size-14 text-rb-fox-lip" />
-          <p className="mt-5 text-sm font-semibold uppercase tracking-[0.2em] text-primary">Flashcards complete</p>
-          <h1 className="mt-2 text-4xl font-bold">{Math.round(completion.percentage)}%</h1>
-          <p className="mt-3 text-muted-foreground">You reviewed {completion.totalItems} cards.</p>
-          <Button className="mt-7" onClick={() => navigate("/learner/library")}>Back to library</Button>
+      <ArenaShell>
+        <section className="m-auto w-full max-w-xl rounded-3xl bg-white/10 p-8 text-center backdrop-blur">
+          <Trophy className="mx-auto size-14 text-rb-fox" />
+
+          <p className="mt-5 font-rb-display text-xs font-extrabold uppercase tracking-[0.2em] text-white/70">
+            Flashcards complete
+          </p>
+
+          <h1 className="mt-2 font-rb-display text-5xl font-extrabold text-white">
+            {Math.round(completion.percentage)}%
+          </h1>
+
+          <p className="mt-3 text-white/80">You reviewed {completion.totalItems} cards.</p>
+
+          {completion.xpEarned > 0 || completion.coinEarned > 0 ? (
+            <p className="mt-2 font-semibold text-rb-macaw">
+              +{completion.xpEarned} XP
+              {completion.coinEarned > 0 ? ` · +${completion.coinEarned} coins` : ""}
+            </p>
+          ) : null}
+
+          <Button className="mt-8" onClick={() => navigate("/learner/library")}>
+            Back to library
+          </Button>
         </section>
-      </main>
+      </ArenaShell>
     )
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,var(--color-rb-feather-wash),transparent_45%),linear-gradient(135deg,var(--color-rb-polar),var(--color-rb-feather-wash))] px-4 py-5 sm:px-6">
-      <section className="mx-auto max-w-3xl">
-        <header className="flex items-center gap-3 rounded-2xl border bg-background/85 p-4 shadow-sm backdrop-blur">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Leave flashcards"><ArrowLeft className="size-5" /></Button>
-          <div className="min-w-0 flex-1"><p className="truncate font-semibold">{studySet.title}</p><p className="text-xs text-muted-foreground">Flip-card review</p></div>
-          <Badge variant="secondary">{index + 1} / {studySet.items.length}</Badge>
-        </header>
-        <div className="mt-5 h-2 overflow-hidden rounded-full bg-rb-swan"><div className="h-full bg-rb-beetle transition-all" style={{ width: `${progress}%` }} /></div>
+    <ArenaShell
+      header={
+        <ArenaHeader
+          title={studySet.title}
+          subtitle="Flip-card round"
+          position={index + 1}
+          total={studySet.items.length}
+          onLeave={() => navigate(-1)}
+          right={
+            <CountdownRing remaining={remaining} total={RECALL_SECONDS} paused={flipped} />
+          }
+        />
+      }
+    >
+      <button
+        type="button"
+        className="group mt-2 block w-full flex-1 [perspective:1400px]"
+        onClick={() => setFlipped((value) => !value)}
+        aria-label={flipped ? "Show the question" : "Reveal the answer"}
+      >
+        <div
+          className={`relative h-full min-h-[22rem] w-full transition-transform duration-500 [transform-style:preserve-3d] ${
+            flipped ? "[transform:rotateY(180deg)]" : ""
+          }`}
+        >
+          <div className="absolute inset-0 flex flex-col items-center justify-center overflow-y-auto rounded-[2rem] bg-white p-8 text-center text-rb-eel shadow-2xl [backface-visibility:hidden]">
+            <Layers3 className="size-10 text-rb-feather" />
 
-        <button type="button" className="group mt-8 block h-[430px] w-full [perspective:1200px]" onClick={() => setFlipped((value) => !value)} aria-label={flipped ? "Show question" : "Reveal answer"}>
-          <div className={`relative h-full w-full transition-transform duration-500 [transform-style:preserve-3d] ${flipped ? "[transform:rotateY(180deg)]" : ""}`}>
-            <div className="absolute inset-0 flex flex-col items-center justify-center rounded-[2rem] border-2 border-rb-beetle/30 bg-rb-beetle-wash p-8 text-center shadow-xl [backface-visibility:hidden]">
-              <Layers3 className="size-10 text-rb-beetle-lip" />
-              <p className="mt-6 text-xs font-bold uppercase tracking-[0.2em] text-rb-beetle-lip">Question</p>
-              <h1 className="mt-4 text-2xl font-bold leading-tight sm:text-4xl">{item.questionText}</h1>
-              <p className="mt-8 text-sm font-medium text-muted-foreground">Click the card to reveal the answer</p>
-            </div>
-            <div className="absolute inset-0 flex flex-col items-center justify-center rounded-[2rem] border-2 border-rb-macaw/30 bg-rb-macaw-wash p-8 text-center shadow-xl [backface-visibility:hidden] [transform:rotateY(180deg)]">
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-rb-macaw-lip">Answer</p>
-              <p className="mt-5 text-2xl font-semibold leading-relaxed sm:text-3xl">{item.correctAnswer || "Review this concept in the lesson."}</p>
-              {item.explanation ? <p className="mt-6 max-w-xl text-sm leading-6 text-muted-foreground">{item.explanation}</p> : null}
-            </div>
+            <p className="mt-6 font-rb-display text-xs font-extrabold uppercase tracking-[0.2em] text-rb-feather">
+              Question
+            </p>
+
+            <h1
+              className={`mt-4 font-rb-display leading-tight font-extrabold text-rb-eel ${faceType(
+                item.questionText
+              )}`}
+            >
+              {item.questionText}
+            </h1>
+
+            <p className="mt-8 text-sm font-medium text-muted-foreground">
+              Tap the card to reveal the answer
+            </p>
           </div>
-        </button>
 
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-          {RATINGS.map(([value, label]) => <Button key={value} size="sm" variant={rating === value ? "default" : "outline"} disabled={!flipped || saving} onClick={() => setRating(value)}>{label}</Button>)}
+          <div className="absolute inset-0 flex flex-col items-center justify-center overflow-y-auto rounded-[2rem] bg-rb-feather p-8 text-center text-white shadow-2xl [backface-visibility:hidden] [transform:rotateY(180deg)]">
+            <p className="font-rb-display text-xs font-extrabold uppercase tracking-[0.2em] text-white/75">
+              Answer
+            </p>
+
+            <p
+              className={`mt-5 font-rb-display leading-snug font-extrabold ${faceType(
+                item.correctAnswer
+              )}`}
+            >
+              {item.correctAnswer || "Review this concept in the lesson."}
+            </p>
+
+            {item.explanation ? (
+              <p className="mt-6 max-w-2xl text-sm leading-6 text-white/85">
+                {item.explanation}
+              </p>
+            ) : null}
+          </div>
         </div>
-        <div className="mt-6 flex justify-between gap-3">
-          <Button variant="outline" disabled={index === 0 || saving} onClick={() => { setIndex((value) => value - 1); setFlipped(false) }}><ChevronLeft className="mr-1 size-4" />Back</Button>
-          <Button disabled={!flipped || saving} onClick={finishCard}>{isLast ? <><Sparkles className="mr-2 size-4" />Finish</> : <>Next<ChevronRight className="ml-1 size-4" /></>}</Button>
+      </button>
+
+      {/* Rating IS the next button. The old screen asked for a rating and then
+          asked again for Next, and the second click carried no decision. */}
+      <div className="py-6">
+        <p className="pb-3 text-center font-rb-display text-xs font-extrabold uppercase tracking-wide text-white/60">
+          {flipped ? "How well did you remember it?" : "Answer first, then rate your recall"}
+        </p>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {RATINGS.map(([value, label, face]) => (
+            <button
+              key={value}
+              type="button"
+              disabled={!flipped || saving}
+              onClick={() => rateAndAdvance(value)}
+              style={{ background: face }}
+              className={`rounded-2xl px-4 py-5 font-rb-display text-lg font-extrabold text-white transition enabled:hover:-translate-y-0.5 disabled:opacity-35 focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-white ${
+                rating === value ? "ring-4 ring-white" : ""
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
-      </section>
-    </main>
+
+        <p className="pt-3 text-center text-xs text-white/50">
+          {isLast ? "Rating the last card finishes the round." : "Rating moves you on."}
+        </p>
+      </div>
+    </ArenaShell>
   )
 }

@@ -355,13 +355,13 @@ export default function Organizations({ onEdit, onDelete }) {
   )
 
   return (
-      <section className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+      <section className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         {/* Three counts, not three cards. They were bordered panels sitting in
             a bordered strip inside a padded page -- three frames deep for three
             numbers. A figure with its label under it is already legible; the
             border was only telling you where one number stopped and the next
             began, which the spacing does. */}
-        <div className="flex shrink-0 flex-wrap items-baseline gap-x-10 gap-y-3 border-b border-border px-4 py-3 sm:px-6">
+        <div className="flex shrink-0 flex-wrap items-baseline gap-x-10 gap-y-3 border-b border-border pb-4">
           <div className="flex items-baseline gap-2">
             <Building2 className="h-4 w-4 self-center text-primary" />
             <p className="text-xl font-semibold tabular-nums">{list.length}</p>
@@ -387,10 +387,12 @@ export default function Organizations({ onEdit, onDelete }) {
           </div>
         </div>
 
-        {/* The table is the page from here down: no card around it, no gutter
-            beside it, and the rows -- not the window -- are what scrolls. */}
+        {/* The table fills what the summary strip leaves, inside the portal's
+            own gutter -- the same inset every other admin page's content sits
+            in. The rows are what scrolls; the toolbar and the pager stay put
+            at the card's two edges. */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <TableCard className="flex min-h-0 flex-1 flex-col rounded-none border-0 bg-transparent">
+          <TableCard className="flex min-h-0 flex-1 flex-col">
             <TableToolbar
                 pageSize={pageSize}
                 onPageSizeChange={setPageSize}
@@ -428,225 +430,230 @@ export default function Organizations({ onEdit, onDelete }) {
               </Select>
             </TableToolbar>
 
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <SortableHead
-                      column="organization"
-                      label="Organization"
-                      sort={sort}
-                      onSort={toggle}
-                      className="min-w-64"
-                  />
-                  <SortableHead
-                      column="contact"
-                      label="Primary contact"
-                      sort={sort}
-                      onSort={toggle}
-                      className="min-w-56"
-                  />
-                  <SortableHead
-                      column="industry"
-                      label="Industry"
-                      sort={sort}
-                      onSort={toggle}
-                      className="min-w-40"
-                  />
-                  <SortableHead
-                      column="learners"
-                      label="Learners"
-                      sort={sort}
-                      onSort={toggle}
-                      className="w-28 text-center"
-                  />
-                  <SortableHead
-                      column="certifications"
-                      label="Certifications"
-                      sort={sort}
-                      onSort={toggle}
-                      className="w-32 text-center"
-                  />
-                  <SortableHead
-                      column="status"
-                      label="Status"
-                      sort={sort}
-                      onSort={toggle}
-                      className="w-28"
-                  />
-                  <SortableHead
-                      column="added"
-                      label="Date added"
-                      sort={sort}
-                      onSort={toggle}
-                      className="min-w-32"
-                  />
-                  <PlainHead label="Actions" align="right" className="w-16" />
-                </TableRow>
-              </TableHeader>
+            {/* The rows scroll, the pager does not: with a short list the page still
+                ends where the window does rather than leaving the pager stranded
+                halfway up a blank page. */}
+            <div className="min-h-0 flex-1 overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <SortableHead
+                        column="organization"
+                        label="Organization"
+                        sort={sort}
+                        onSort={toggle}
+                        className="min-w-64"
+                    />
+                    <SortableHead
+                        column="contact"
+                        label="Primary contact"
+                        sort={sort}
+                        onSort={toggle}
+                        className="min-w-56"
+                    />
+                    <SortableHead
+                        column="industry"
+                        label="Industry"
+                        sort={sort}
+                        onSort={toggle}
+                        className="min-w-40"
+                    />
+                    <SortableHead
+                        column="learners"
+                        label="Learners"
+                        sort={sort}
+                        onSort={toggle}
+                        className="w-28 text-center"
+                    />
+                    <SortableHead
+                        column="certifications"
+                        label="Certifications"
+                        sort={sort}
+                        onSort={toggle}
+                        className="w-32 text-center"
+                    />
+                    <SortableHead
+                        column="status"
+                        label="Status"
+                        sort={sort}
+                        onSort={toggle}
+                        className="w-28"
+                    />
+                    <SortableHead
+                        column="added"
+                        label="Date added"
+                        sort={sort}
+                        onSort={toggle}
+                        className="min-w-32"
+                    />
+                    <PlainHead label="Actions" align="right" className="w-16" />
+                  </TableRow>
+                </TableHeader>
 
-              <TableBody>
-                {isLoading ? (
-                    Array.from({ length: 5 }).map((_, index) => (
-                        <TableRow key={`loading-${index}`}>
-                          <TableCell colSpan={8} className="h-16">
-                            <div className="h-4 w-full animate-pulse rounded bg-muted" />
-                          </TableCell>
-                        </TableRow>
-                    ))
-                ) : paginatedOrganizations.length > 0 ? (
-                    paginatedOrganizations.map((organization, index) => {
-                      const organizationName = getOrganizationName(organization)
-                      const learnerCount = Number(
-                          organization.learnerCount ??
-                          organization.totalLearners ??
-                          organization.learnersCount ??
-                          0
-                      )
-                      const certificationCount = Number(
-                          organization.certificationCount ??
-                          organization.totalCertifications ??
-                          organization.certificationsCount ??
-                          0
-                      )
+                <TableBody>
+                  {isLoading ? (
+                      Array.from({ length: 5 }).map((_, index) => (
+                          <TableRow key={`loading-${index}`}>
+                            <TableCell colSpan={8} className="h-16">
+                              <div className="h-4 w-full animate-pulse rounded bg-muted" />
+                            </TableCell>
+                          </TableRow>
+                      ))
+                  ) : paginatedOrganizations.length > 0 ? (
+                      paginatedOrganizations.map((organization, index) => {
+                        const organizationName = getOrganizationName(organization)
+                        const learnerCount = Number(
+                            organization.learnerCount ??
+                            organization.totalLearners ??
+                            organization.learnersCount ??
+                            0
+                        )
+                        const certificationCount = Number(
+                            organization.certificationCount ??
+                            organization.totalCertifications ??
+                            organization.certificationsCount ??
+                            0
+                        )
 
-                      return (
-                          <TableRow
-                              key={getOrganizationId(organization, index)}
-                              className="group"
-                          >
-                            <TableCell>
-                              <div className="flex min-w-0 items-center gap-3">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-primary/5 text-xs font-bold text-primary">
-                                  {getInitials(organizationName)}
+                        return (
+                            <TableRow
+                                key={getOrganizationId(organization, index)}
+                                className="group"
+                            >
+                              <TableCell>
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-primary/5 text-xs font-bold text-primary">
+                                    {getInitials(organizationName)}
+                                  </div>
+
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-semibold text-foreground">
+                                      {organizationName}
+                                    </p>
+
+                                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                      ID: {getOrganizationId(organization, index)}
+                                    </p>
+                                  </div>
                                 </div>
+                              </TableCell>
 
+                              <TableCell>
                                 <div className="min-w-0">
-                                  <p className="truncate text-sm font-semibold text-foreground">
-                                    {organizationName}
+                                  <p className="truncate text-sm font-medium text-foreground">
+                                    {organization.primaryContactName ??
+                                        organization.contactPerson ??
+                                        organization.contactName ??
+                                        "Not assigned"}
                                   </p>
 
                                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                    ID: {getOrganizationId(organization, index)}
+                                    {organization.primaryContactEmail ??
+                                        organization.contactEmail ??
+                                        organization.email ??
+                                        "No email provided"}
                                   </p>
                                 </div>
-                              </div>
-                            </TableCell>
+                              </TableCell>
 
-                            <TableCell>
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-medium text-foreground">
-                                  {organization.primaryContactName ??
-                                      organization.contactPerson ??
-                                      organization.contactName ??
-                                      "Not assigned"}
-                                </p>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {organization.industry ?? "Not specified"}
+                              </TableCell>
 
-                                <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                  {organization.primaryContactEmail ??
-                                      organization.contactEmail ??
-                                      organization.email ??
-                                      "No email provided"}
-                                </p>
-                              </div>
-                            </TableCell>
+                              <TableCell className="text-center font-medium tabular-nums">
+                                {learnerCount.toLocaleString()}
+                              </TableCell>
 
-                            <TableCell className="text-sm text-muted-foreground">
-                              {organization.industry ?? "Not specified"}
-                            </TableCell>
+                              <TableCell className="text-center font-medium tabular-nums">
+                                {certificationCount}
+                              </TableCell>
 
-                            <TableCell className="text-center font-medium tabular-nums">
-                              {learnerCount.toLocaleString()}
-                            </TableCell>
+                              <TableCell>
+                                <InstitutionStatusBadge
+                                    status={organization.status}
+                                />
+                              </TableCell>
 
-                            <TableCell className="text-center font-medium tabular-nums">
-                              {certificationCount}
-                            </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {formatDate(
+                                    organization.joinedAt ??
+                                    organization.createdAt ??
+                                    organization.dateCreated ??
+                                    organization.createdDate
+                                )}
+                              </TableCell>
 
-                            <TableCell>
-                              <InstitutionStatusBadge
-                                  status={organization.status}
-                              />
-                            </TableCell>
+                              <TableCell className="text-right">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        aria-label={`Actions for ${organizationName}`}
+                                    >
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
 
-                            <TableCell className="text-sm text-muted-foreground">
-                              {formatDate(
-                                  organization.joinedAt ??
-                                  organization.createdAt ??
-                                  organization.dateCreated ??
-                                  organization.createdDate
-                              )}
-                            </TableCell>
+                                  <DropdownMenuContent align="end" className="w-40">
+                                    <DropdownMenuItem
+                                        onSelect={() =>
+                                            navigate(
+                                                `/admin/organizations/${getOrganizationId(organization, index)}`
+                                            )
+                                        }
+                                    >
+                                      <Eye className="mr-2 h-4 w-4" />
+                                      View details
+                                    </DropdownMenuItem>
 
-                            <TableCell className="text-right">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8"
-                                      aria-label={`Actions for ${organizationName}`}
-                                  >
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
+                                    <DropdownMenuItem
+                                        onSelect={() => onEdit?.(organization)}
+                                    >
+                                      <Pencil className="mr-2 h-4 w-4" />
+                                      Edit
+                                    </DropdownMenuItem>
 
-                                <DropdownMenuContent align="end" className="w-40">
-                                  <DropdownMenuItem
-                                      onSelect={() =>
-                                          navigate(
-                                              `/admin/organizations/${getOrganizationId(organization, index)}`
-                                          )
-                                      }
-                                  >
-                                    <Eye className="mr-2 h-4 w-4" />
-                                    View details
-                                  </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
 
-                                  <DropdownMenuItem
-                                      onSelect={() => onEdit?.(organization)}
-                                  >
-                                    <Pencil className="mr-2 h-4 w-4" />
-                                    Edit
-                                  </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        onSelect={() => onDelete?.(organization)}
+                                        className="text-destructive focus:text-destructive"
+                                    >
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </TableCell>
+                            </TableRow>
+                        )
+                      })
+                  ) : (
+                      <TableRow>
+                        <TableCell colSpan={8} className="h-64 text-center">
+                          <div className="mx-auto flex max-w-sm flex-col items-center">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                              <Building2 className="h-5 w-5 text-muted-foreground" />
+                            </div>
 
-                                  <DropdownMenuSeparator />
+                            <p className="mt-4 text-sm font-semibold">
+                              No organizations found
+                            </p>
 
-                                  <DropdownMenuItem
-                                      onSelect={() => onDelete?.(organization)}
-                                      className="text-destructive focus:text-destructive"
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Delete
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </TableCell>
-                          </TableRow>
-                      )
-                    })
-                ) : (
-                    <TableRow>
-                      <TableCell colSpan={8} className="h-64 text-center">
-                        <div className="mx-auto flex max-w-sm flex-col items-center">
-                          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                            <Building2 className="h-5 w-5 text-muted-foreground" />
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                              Try changing the search or filter, or add a new
+                              organization.
+                            </p>
                           </div>
-
-                          <p className="mt-4 text-sm font-semibold">
-                            No organizations found
-                          </p>
-
-                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                            Try changing the search or filter, or add a new
-                            organization.
-                          </p>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                        </TableCell>
+                      </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
 
             <TablePagination
                 page={currentPage}

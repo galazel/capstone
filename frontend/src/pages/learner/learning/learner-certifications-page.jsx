@@ -51,6 +51,8 @@ function CertificationCard({
   return (
       <BubbleCard
           tone={tone}
+          cap="flat"
+          body="card"
           icon={GraduationCap}
           eyebrow={category}
           title={

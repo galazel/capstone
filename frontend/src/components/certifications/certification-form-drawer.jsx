@@ -20,6 +20,13 @@ import {
     getCertificationId,
     mapCertificationToModuleStructure,
 } from "@/utils/certification-structure"
+/* The rulebook lives in one place now: the certification page edits the same
+   fields in place, and two copies of "a description must be 20 characters"
+   drift the moment one of them is corrected. */
+import {
+    formatLocalDateTime,
+    validateCertificationDetails,
+} from "@/utils/certification-edit"
 
 import CertificationDetails from "@/components/certifications/certification-details"
 import CertificationModules from "@/components/certifications/certification-modules"
@@ -138,22 +145,6 @@ function ReviewModeChoice({ value, onChange, disabled }) {
 }
 
 
-const MIN_TITLE_LENGTH = 3
-const MAX_TITLE_LENGTH = 150
-
-const MIN_DESCRIPTION_LENGTH = 20
-const MAX_DESCRIPTION_LENGTH = 2000
-
-const INVALID_INDUSTRY_VALUES = new Set([
-    "",
-    "all",
-    "none",
-    "select",
-    "select industry",
-    "undefined",
-    "null",
-])
-
 const emptySubmissionDialog = {
     open: false,
     title: "",
@@ -168,26 +159,6 @@ function getEmptyDetails() {
     }
 }
 
-function formatLocalDateTime(date = new Date()) {
-    const pad = (value) => String(value).padStart(2, "0")
-
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
-        date.getDate()
-    )}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(
-        date.getSeconds()
-    )}`
-}
-
-function normalizeText(value) {
-    return String(value ?? "")
-        .trim()
-        .replace(/\s+/g, " ")
-}
-
-function hasMeaningfulText(value) {
-    return /[\p{L}\p{N}]/u.test(value)
-}
-
 function toDetails(certification) {
     if (!certification) {
         return getEmptyDetails()
@@ -198,72 +169,6 @@ function toDetails(certification) {
         industry: certification.industry ?? "",
         description: certification.description ?? "",
     }
-}
-
-function validateCertificationDetails(details) {
-    const errors = {}
-
-    const title = normalizeText(details?.title)
-    const description = normalizeText(details?.description)
-    const industry = normalizeText(details?.industry)
-
-    if (!title) {
-        errors.title = "Certification name is required."
-    } else if (title.length < MIN_TITLE_LENGTH) {
-        errors.title = `Certification name must be at least ${MIN_TITLE_LENGTH} characters.`
-    } else if (title.length > MAX_TITLE_LENGTH) {
-        errors.title = `Certification name must not exceed ${MAX_TITLE_LENGTH} characters.`
-    } else if (!hasMeaningfulText(title)) {
-        errors.title =
-            "Certification name must contain letters or numbers, not symbols only."
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    if (INVALID_INDUSTRY_VALUES.has(industry.toLowerCase())) {
-        errors.industry = "Please select an industry."
-    } else if (industry.length > 100) {
-        errors.industry = "Industry must not exceed 100 characters."
-    }
-
-
-
-
-    if (!description) {
-        errors.description = "Description is required."
-    } else if (description.length < MIN_DESCRIPTION_LENGTH) {
-        errors.description =
-            `Description must be at least ${MIN_DESCRIPTION_LENGTH} characters.`
-    } else if (description.length > MAX_DESCRIPTION_LENGTH) {
-        errors.description =
-            `Description must not exceed ${MAX_DESCRIPTION_LENGTH} characters.`
-    } else if (!hasMeaningfulText(description)) {
-        errors.description =
-            "Description must contain meaningful text, not symbols only."
-    }
-
-
-
-
-
-
-
-    // No cover-image rule any more: the cover is drawn from the title, so
-    // there is no file to validate and nothing that can block a save.
-
-    return errors
 }
 
 function isModuleStructureValid(categories) {
@@ -753,15 +658,28 @@ export default function CertificationFormDrawer({
                 `inset-y-0`, so it is already full-height. */}
             <DrawerContent
                 className={cn(
-                    "flex w-[96vw] flex-col gap-0 overflow-hidden p-0",
-                    // Editing holds a whole category tree and wants the room.
-                    // Creating is a form: three fields and a drop zone, read top
-                    // to bottom in one scroll. Sized to a comfortable measure
-                    // rather than a share of the screen — at 76vw the name field
-                    // was a metre of empty input.
-                    isEditing
-                        ? "data-[vaul-drawer-direction=right]:sm:max-w-none sm:w-[92vw] lg:w-[86vw] xl:w-[76vw] 2xl:w-[68vw]"
-                        : "data-[vaul-drawer-direction=right]:sm:max-w-[680px] sm:w-[92vw]",
+                    "flex flex-col gap-0 overflow-hidden p-0",
+                    /* Half the window, both modes. Editing holds a whole
+                       category tree and creating is three fields and a drop
+                       zone, so they used to be sized apart -- 76vw against a
+                       680px measure. Two drawers of the same name opening at
+                       two different widths read as two different surfaces, and
+                       the wide one covered the page it was opened from. Half
+                       is room for the tree and still a panel over a page.
+
+                       Below `lg` the panel keeps the window: at that size half
+                       of it is a column too narrow for either form. */
+                    /* Every width carries the direction prefix, for the
+                       reason the note above gives: the primitive sets
+                       `data-[vaul-drawer-direction=right]:w-3/4`, an attribute
+                       selector, and a bare `lg:w-[50vw]` loses to it on
+                       specificity rather than on order. Written unprefixed,
+                       this drawer opened at three quarters of the window and
+                       looked like nothing had changed. */
+                    "data-[vaul-drawer-direction=right]:sm:max-w-none",
+                    "data-[vaul-drawer-direction=right]:w-[96vw]",
+                    "data-[vaul-drawer-direction=right]:sm:w-[92vw]",
+                    "data-[vaul-drawer-direction=right]:lg:w-[50vw]",
                 )}
             >
                 {/* Unlike DialogContent, DrawerContent renders no close button

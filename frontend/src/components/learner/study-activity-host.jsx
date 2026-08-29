@@ -181,6 +181,14 @@ export function StudyActivityHost() {
   const technique = activeTask.event.technique
   const title = ACTIVITY_TITLES[technique] ?? "Scheduled study session"
 
+  /* Spaced repetition takes the window rather than a panel in the middle of
+     one. Recall is what the session asks for, and the page still legible
+     behind a 32rem box is the first thing that undermines it -- the answer is
+     often on it. The other two techniques stay dialogs: a pomodoro timer and
+     a "start your recall exam" prompt are both notices, and a notice that
+     covers everything is a worse notice. */
+  const fullWindow = technique === "spaced-repetition"
+
   return (
     <Dialog
       open
@@ -188,18 +196,37 @@ export function StudyActivityHost() {
         if (!next) finishTask(null)
       }}
     >
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+      <DialogContent
+        showCloseButton={!fullWindow}
+        className={
+          fullWindow
+            ? "inset-0 top-0 left-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-y-auto rounded-none border-0 bg-transparent p-0 shadow-none sm:max-w-none"
+            : "sm:max-w-lg"
+        }
+      >
+        {fullWindow ? (
+          /* Radix requires a title for the dialog to be announced; the arena
+             draws its own, so this one is for screen readers only. */
+          <DialogHeader className="sr-only">
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription>
+              {formatWhen(activeTask.event, now)}
+              {activeTask.certification ? ` · ${activeTask.certification}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+        ) : (
+          <DialogHeader>
+            <DialogTitle>{title}</DialogTitle>
 
-          {/* Says what this is and why it appeared. A modal that opens by
-              itself owes the learner that much -- without it, an exam
-              appearing unbidden reads as a bug. */}
-          <DialogDescription>
-            {formatWhen(activeTask.event, now)}
-            {activeTask.certification ? ` · ${activeTask.certification}` : ""}
-          </DialogDescription>
-        </DialogHeader>
+            {/* Says what this is and why it appeared. A modal that opens by
+                itself owes the learner that much -- without it, an exam
+                appearing unbidden reads as a bug. */}
+            <DialogDescription>
+              {formatWhen(activeTask.event, now)}
+              {activeTask.certification ? ` · ${activeTask.certification}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+        )}
 
         {technique === "pomodoro" ? (
           <PomodoroSession

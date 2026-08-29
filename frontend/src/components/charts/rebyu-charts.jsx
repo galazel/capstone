@@ -558,6 +558,45 @@ export function TrendAreaChart({
  * target vs below it — ordering carries priority, colour only says which side
  * of the line a bar landed on.
  */
+/**
+ * One line per band on a category axis, clipped with an ellipsis.
+ *
+ * Recharts' own tick wraps a long label onto as many lines as it needs, and
+ * the band it sits in does not grow to match: four-line certification names
+ * ran into the names above and below them until the axis was unreadable. The
+ * legend under every one of these charts already carries each name in full, so
+ * the axis only has to say which bar is which -- a clipped line does that, and
+ * a `<title>` keeps the whole name reachable on hover and to a screen reader.
+ *
+ * Width is estimated at 0.58em per character, which is close enough for the
+ * 11px semibold the axis uses; a couple of characters either way only changes
+ * where the ellipsis lands.
+ */
+function CategoryTick({ x, y, payload, width, fill }) {
+  const label = String(payload?.value ?? "")
+  const maxCharacters = Math.max(6, Math.floor((width ?? 100) / (11 * 0.58)))
+
+  const shown =
+    label.length > maxCharacters
+      ? `${label.slice(0, maxCharacters - 1).trimEnd()}…`
+      : label
+
+  return (
+    <text
+      x={x}
+      y={y}
+      dy={4}
+      textAnchor="end"
+      fill={fill}
+      fontSize={11}
+      fontWeight={600}
+    >
+      <title>{label}</title>
+      {shown}
+    </text>
+  )
+}
+
 export function BarBreakdownChart({
   data,
   categoryKey,
@@ -599,7 +638,15 @@ export function BarBreakdownChart({
                   type="category"
                   dataKey={categoryKey}
                   width={categoryWidth}
+                  interval={0}
                   {...axisProps(theme)}
+                  tick={(tickProps) => (
+                    <CategoryTick
+                      {...tickProps}
+                      width={categoryWidth - 8}
+                      fill={theme.ink.secondary}
+                    />
+                  )}
                 />
               </>
             ) : (

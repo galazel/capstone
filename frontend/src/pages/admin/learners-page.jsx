@@ -453,11 +453,11 @@ export default function Learners({
   )
 
   return (
-      <section className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+      <section className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         {/* Counts and the one action on a single line: the button had a row of
             its own above a row of bordered panels, so the page opened with two
             bands of chrome before any learner. */}
-        <div className="flex shrink-0 flex-wrap items-center gap-x-10 gap-y-3 border-b border-border px-4 py-3 sm:px-6">
+        <div className="flex shrink-0 flex-wrap items-center gap-x-10 gap-y-3 border-b border-border pb-4">
           <div className="flex items-baseline gap-2">
             <Users className="self-center h-4 w-4 text-primary" />
             <p className="text-xl font-semibold tabular-nums">
@@ -503,10 +503,12 @@ export default function Learners({
           </Button>
         </div>
 
-        {/* The table is the page from here down: no card around it, no gutter
-            beside it, and the rows -- not the window -- are what scrolls. */}
+        {/* The table fills what the summary strip leaves, inside the portal's
+            own gutter -- the same inset every other admin page's content sits
+            in. The rows are what scrolls; the toolbar and the pager stay put
+            at the card's two edges. */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <TableCard className="flex min-h-0 flex-1 flex-col rounded-none border-0 bg-transparent">
+          <TableCard className="flex min-h-0 flex-1 flex-col">
             <TableToolbar
                 pageSize={pageSize}
                 onPageSizeChange={setPageSize}
@@ -565,242 +567,247 @@ export default function Learners({
               </Select>
             </TableToolbar>
 
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <SortableHead
-                      column="learner"
-                      label="Learner"
-                      sort={sort}
-                      onSort={toggle}
-                      className="min-w-64"
-                  />
-                  <SortableHead
-                      column="organization"
-                      label="Organization"
-                      sort={sort}
-                      onSort={toggle}
-                      className="min-w-52"
-                  />
-                  <SortableHead
-                      column="type"
-                      label="Type"
-                      sort={sort}
-                      onSort={toggle}
-                      className="w-32"
-                  />
-                  <SortableHead
-                      column="certifications"
-                      label="Certifications"
-                      sort={sort}
-                      onSort={toggle}
-                      className="w-32 text-center"
-                  />
-                  <SortableHead
-                      column="progress"
-                      label="Progress"
-                      sort={sort}
-                      onSort={toggle}
-                      className="min-w-52"
-                  />
-                  <SortableHead
-                      column="status"
-                      label="Status"
-                      sort={sort}
-                      onSort={toggle}
-                      className="w-28"
-                  />
-                  <SortableHead
-                      column="joined"
-                      label="Date joined"
-                      sort={sort}
-                      onSort={toggle}
-                      className="min-w-32"
-                  />
-                  <PlainHead label="Actions" align="right" className="w-16" />
-                </TableRow>
-              </TableHeader>
+            {/* The rows scroll, the pager does not: with a short list the page still
+                ends where the window does rather than leaving the pager stranded
+                halfway up a blank page. */}
+            <div className="min-h-0 flex-1 overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <SortableHead
+                        column="learner"
+                        label="Learner"
+                        sort={sort}
+                        onSort={toggle}
+                        className="min-w-64"
+                    />
+                    <SortableHead
+                        column="organization"
+                        label="Organization"
+                        sort={sort}
+                        onSort={toggle}
+                        className="min-w-52"
+                    />
+                    <SortableHead
+                        column="type"
+                        label="Type"
+                        sort={sort}
+                        onSort={toggle}
+                        className="w-32"
+                    />
+                    <SortableHead
+                        column="certifications"
+                        label="Certifications"
+                        sort={sort}
+                        onSort={toggle}
+                        className="w-32 text-center"
+                    />
+                    <SortableHead
+                        column="progress"
+                        label="Progress"
+                        sort={sort}
+                        onSort={toggle}
+                        className="min-w-52"
+                    />
+                    <SortableHead
+                        column="status"
+                        label="Status"
+                        sort={sort}
+                        onSort={toggle}
+                        className="w-28"
+                    />
+                    <SortableHead
+                        column="joined"
+                        label="Date joined"
+                        sort={sort}
+                        onSort={toggle}
+                        className="min-w-32"
+                    />
+                    <PlainHead label="Actions" align="right" className="w-16" />
+                  </TableRow>
+                </TableHeader>
 
-              <TableBody>
-                {isLoading ? (
-                    Array.from({ length: 5 }).map((_, index) => (
-                        <TableRow key={`loading-${index}`}>
-                          <TableCell colSpan={8} className="h-16">
-                            <div className="h-4 w-full animate-pulse rounded bg-muted" />
-                          </TableCell>
-                        </TableRow>
-                    ))
-                ) : paginatedLearners.length > 0 ? (
-                    paginatedLearners.map((learner, index) => {
-                      const learnerName = getLearnerName(learner)
-                      const organizationName =
-                          learner.organizationName ??
-                          learner.organization?.name ??
-                          learner.organization?.organizationName
-
-                      const learnerType = String(
-                          learner.learnerType ??
-                          learner.type ??
-                          (organizationName ? "institution" : "individual")
-                      ).toLowerCase()
-
-                      const certificationCount = Number(
-                          learner.certificationCount ??
-                          learner.totalCertifications ??
-                          learner.certificationsCount ??
-                          0
-                      )
-
-                      const progressPercentage = Math.min(
-                          100,
-                          Math.max(
-                              0,
-                              Number(
-                                  learner.progressPercentage ??
-                                  learner.progress ??
-                                  learner.overallProgress ??
-                                  0
-                              )
-                          )
-                      )
-
-                      return (
-                          <TableRow
-                              key={getLearnerId(learner, index)}
-                              className="group"
-                          >
-                            <TableCell>
-                              <div className="flex min-w-0 items-center gap-3">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border bg-primary/5 text-xs font-bold text-primary">
-                                  {getInitials(learnerName)}
-                                </div>
-
-                                <div className="min-w-0">
-                                  <p className="truncate text-sm font-semibold text-foreground">
-                                    {learnerName}
-                                  </p>
-
-                                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                    {learner.email ?? "No email provided"}
-                                  </p>
-                                </div>
-                              </div>
-                            </TableCell>
-
-                            <TableCell>
-                              {organizationName ? (
-                                  <div className="min-w-0">
-                                    <p className="truncate text-sm font-medium text-foreground">
-                                      {organizationName}
-                                    </p>
-                                    <p className="mt-0.5 text-xs text-muted-foreground">
-                                      Organization learner
-                                    </p>
-                                  </div>
-                              ) : (
-                                  <span className="text-sm text-muted-foreground">
-                            Not affiliated
-                          </span>
-                              )}
-                            </TableCell>
-
-                            <TableCell>
-                              <LearnerTypeBadge type={learnerType} />
-                            </TableCell>
-
-                            <TableCell className="text-center font-medium tabular-nums">
-                              {certificationCount}
-                            </TableCell>
-
-                            <TableCell>
-                              <div className="flex min-w-40 items-center gap-3">
-                                <Progress
-                                    value={progressPercentage}
-                                    className="h-2 flex-1"
-                                />
-                                <span className="w-10 text-right text-xs font-medium tabular-nums text-muted-foreground">
-                            {progressPercentage}%
-                          </span>
-                              </div>
-                            </TableCell>
-
-                            <TableCell>
-                              <LearnerStatusBadge status={learner.status} />
-                            </TableCell>
-
-                            <TableCell className="text-sm text-muted-foreground">
-                              {formatDate(
-                                  learner.joinedAt ??
-                                  learner.createdAt ??
-                                  learner.dateCreated
-                              )}
-                            </TableCell>
-
-                            <TableCell className="text-right">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8"
-                                      aria-label={`Actions for ${learnerName}`}
-                                  >
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-
-                                <DropdownMenuContent align="end" className="w-40">
-                                  <DropdownMenuItem
-                                      onSelect={() => onView?.(learner)}
-                                  >
-                                    <Eye className="mr-2 h-4 w-4" />
-                                    View profile
-                                  </DropdownMenuItem>
-
-                                  <DropdownMenuItem
-                                      onSelect={() => onEdit?.(learner)}
-                                  >
-                                    <Pencil className="mr-2 h-4 w-4" />
-                                    Edit
-                                  </DropdownMenuItem>
-
-                                  <DropdownMenuSeparator />
-
-                                  <DropdownMenuItem
-                                      onSelect={() => onDelete?.(learner)}
-                                      className="text-destructive focus:text-destructive"
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Delete
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                <TableBody>
+                  {isLoading ? (
+                      Array.from({ length: 5 }).map((_, index) => (
+                          <TableRow key={`loading-${index}`}>
+                            <TableCell colSpan={8} className="h-16">
+                              <div className="h-4 w-full animate-pulse rounded bg-muted" />
                             </TableCell>
                           </TableRow>
-                      )
-                    })
-                ) : (
-                    <TableRow>
-                      <TableCell colSpan={8} className="h-64 text-center">
-                        <div className="mx-auto flex max-w-sm flex-col items-center">
-                          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                            <Users className="h-5 w-5 text-muted-foreground" />
+                      ))
+                  ) : paginatedLearners.length > 0 ? (
+                      paginatedLearners.map((learner, index) => {
+                        const learnerName = getLearnerName(learner)
+                        const organizationName =
+                            learner.organizationName ??
+                            learner.organization?.name ??
+                            learner.organization?.organizationName
+
+                        const learnerType = String(
+                            learner.learnerType ??
+                            learner.type ??
+                            (organizationName ? "institution" : "individual")
+                        ).toLowerCase()
+
+                        const certificationCount = Number(
+                            learner.certificationCount ??
+                            learner.totalCertifications ??
+                            learner.certificationsCount ??
+                            0
+                        )
+
+                        const progressPercentage = Math.min(
+                            100,
+                            Math.max(
+                                0,
+                                Number(
+                                    learner.progressPercentage ??
+                                    learner.progress ??
+                                    learner.overallProgress ??
+                                    0
+                                )
+                            )
+                        )
+
+                        return (
+                            <TableRow
+                                key={getLearnerId(learner, index)}
+                                className="group"
+                            >
+                              <TableCell>
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border bg-primary/5 text-xs font-bold text-primary">
+                                    {getInitials(learnerName)}
+                                  </div>
+
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-semibold text-foreground">
+                                      {learnerName}
+                                    </p>
+
+                                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                      {learner.email ?? "No email provided"}
+                                    </p>
+                                  </div>
+                                </div>
+                              </TableCell>
+
+                              <TableCell>
+                                {organizationName ? (
+                                    <div className="min-w-0">
+                                      <p className="truncate text-sm font-medium text-foreground">
+                                        {organizationName}
+                                      </p>
+                                      <p className="mt-0.5 text-xs text-muted-foreground">
+                                        Organization learner
+                                      </p>
+                                    </div>
+                                ) : (
+                                    <span className="text-sm text-muted-foreground">
+                              Not affiliated
+                            </span>
+                                )}
+                              </TableCell>
+
+                              <TableCell>
+                                <LearnerTypeBadge type={learnerType} />
+                              </TableCell>
+
+                              <TableCell className="text-center font-medium tabular-nums">
+                                {certificationCount}
+                              </TableCell>
+
+                              <TableCell>
+                                <div className="flex min-w-40 items-center gap-3">
+                                  <Progress
+                                      value={progressPercentage}
+                                      className="h-2 flex-1"
+                                  />
+                                  <span className="w-10 text-right text-xs font-medium tabular-nums text-muted-foreground">
+                              {progressPercentage}%
+                            </span>
+                                </div>
+                              </TableCell>
+
+                              <TableCell>
+                                <LearnerStatusBadge status={learner.status} />
+                              </TableCell>
+
+                              <TableCell className="text-sm text-muted-foreground">
+                                {formatDate(
+                                    learner.joinedAt ??
+                                    learner.createdAt ??
+                                    learner.dateCreated
+                                )}
+                              </TableCell>
+
+                              <TableCell className="text-right">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        aria-label={`Actions for ${learnerName}`}
+                                    >
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+
+                                  <DropdownMenuContent align="end" className="w-40">
+                                    <DropdownMenuItem
+                                        onSelect={() => onView?.(learner)}
+                                    >
+                                      <Eye className="mr-2 h-4 w-4" />
+                                      View profile
+                                    </DropdownMenuItem>
+
+                                    <DropdownMenuItem
+                                        onSelect={() => onEdit?.(learner)}
+                                    >
+                                      <Pencil className="mr-2 h-4 w-4" />
+                                      Edit
+                                    </DropdownMenuItem>
+
+                                    <DropdownMenuSeparator />
+
+                                    <DropdownMenuItem
+                                        onSelect={() => onDelete?.(learner)}
+                                        className="text-destructive focus:text-destructive"
+                                    >
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </TableCell>
+                            </TableRow>
+                        )
+                      })
+                  ) : (
+                      <TableRow>
+                        <TableCell colSpan={8} className="h-64 text-center">
+                          <div className="mx-auto flex max-w-sm flex-col items-center">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                              <Users className="h-5 w-5 text-muted-foreground" />
+                            </div>
+
+                            <p className="mt-4 text-sm font-semibold">
+                              No learners found
+                            </p>
+
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                              Try changing the search or filters, or add a new learner.
+                            </p>
                           </div>
-
-                          <p className="mt-4 text-sm font-semibold">
-                            No learners found
-                          </p>
-
-                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                            Try changing the search or filters, or add a new learner.
-                          </p>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                        </TableCell>
+                      </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
 
             <TablePagination
                 page={currentPage}

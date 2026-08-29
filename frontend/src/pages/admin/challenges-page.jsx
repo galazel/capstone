@@ -56,9 +56,12 @@ const INDUSTRIES = industries
    nothing to remove — an admin manages their problems and decides which
    industries see them. That is the whole page.
 
-   `tone`, `role` and `format` are copied from the landing page's arena cards so
-   an arena is the same colour and carries the same line to an admin as it does
-   to a visitor and to the learner who enters it. */
+   `role` and `format` are copied from the landing page's arena cards, so an
+   arena carries the same line to an admin as it does to a visitor and to the
+   learner who enters it. The tone is not: inside the admin console every
+   managed entity wears the brand blue -- the same `feather` the certification
+   covers use -- so the three arenas read as one section rather than as three
+   differently coloured things. The landing page keeps its per-arena colours. */
 const INITIAL_CHALLENGES = [
   {
     challengeId: 1,
@@ -67,7 +70,7 @@ const INITIAL_CHALLENGES = [
     description:
         "Ten coding problems back to back, judged against real unit tests and scored on time complexity as well as correctness.",
     icon: Code2,
-    tone: "macaw",
+    tone: "feather",
     role: "Coding Skills",
     tag: "Solo",
     format: "solo · 10 problems",
@@ -84,7 +87,7 @@ const INITIAL_CHALLENGES = [
     description:
         "Ten UML and system design problems on a drag-and-drop canvas, checked against structural rules rather than opinion.",
     icon: Network,
-    tone: "beetle",
+    tone: "feather",
     role: "Design Skills",
     tag: "Solo",
     format: "solo · 10 problems",
@@ -101,7 +104,7 @@ const INITIAL_CHALLENGES = [
     description:
         "An eight-player bracket on one certification track — quarterfinals, semis, and a timed grand final.",
     icon: Trophy,
-    tone: "fox",
+    tone: "feather",
     role: "Exam Readiness",
     tag: "Tournament",
     format: "8 players · live bracket",
@@ -274,6 +277,8 @@ export default function Challenges({
                 <BubbleCard
                     key={challenge.challengeId}
                     tone={challenge.tone}
+                    cap="flat"
+                    body="card"
                     icon={challenge.icon}
                     eyebrow={challenge.role}
                     title={

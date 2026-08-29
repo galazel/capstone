@@ -25,16 +25,19 @@ export default function DashboardLayout() {
 
   /* Pages that run edge to edge and pad themselves. The portal's gutter would
      only frame them in white -- a full-width banner stopping short of the
-     window, or a table inset inside a page that is itself inset.
+     window reads as a mistake rather than as restraint.
+
+     The three table pages used to be here too, which is why they alone met the
+     window edge while every other admin page's content sat in the gutter. A
+     table is not a banner: it has a card around it, and that card wants the
+     same inset as the cards on every other page. They take the gutter now and
+     grow into it, so the pager lands at the bottom of the page.
 
      Matched on the path rather than announced by the page, because the gutter
      belongs to the layout: a child cannot unset padding applied above it
      without negative margins, which break the moment the cap changes. */
   const BLEED_PATHS = [
     /^\/admin\/certification\/[^/]+$/,
-    /^\/admin\/organizations$/,
-    /^\/admin\/partnership-requests$/,
-    /^\/admin\/learners$/,
   ]
 
   const isBleedPage = BLEED_PATHS.some((pattern) => pattern.test(location.pathname))

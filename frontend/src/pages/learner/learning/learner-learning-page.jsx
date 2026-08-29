@@ -247,6 +247,8 @@ function CourseCard({ course, onOpen }) {
   return (
       <BubbleCard
           tone={tone}
+          cap="flat"
+          body="card"
           icon={needsDiagnostic ? LockKeyhole : completed ? Award : CirclePlay}
           eyebrow="REBYU Certification Review"
           title={

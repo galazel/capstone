@@ -11,8 +11,28 @@ import {
   Pencil,
 } from "@/components/icons"
 
+import { toast } from "sonner"
+
 import { Badge } from "@/components/ui/badge"
-import { getAllCertifications } from "@/services/certificationService.js"
+import {
+  getAllCertifications,
+  updateCertification,
+} from "@/services/certificationService.js"
+import { industries } from "@/constants/industries.js"
+import { InlineEditable } from "@/components/certifications/inline-editable.jsx"
+import {
+  toCertificationUpdatePayload,
+  validateCertificationDescription,
+  validateCertificationTitle,
+  validateStructureName,
+} from "@/utils/certification-edit.js"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import CertificationFormDrawer from "@/components/certifications/certification-form-drawer"
 import AssessmentsTab, {
@@ -152,6 +172,102 @@ export default function ViewCertificationAdmin() {
     })
   }
 
+  /**
+   * One edit, saved where it was made.
+   *
+   * `produce` returns the certification as it should be after the change; this
+   * serialises the whole thing and PUTs it, because that endpoint rebuilds the
+   * certification from what it is sent. Sending a partial tree there does not
+   * leave the rest alone -- it deletes it -- which is why every edit on this
+   * page goes out as the complete, current certification with one field
+   * different.
+   *
+   * The server's own copy comes back and wins: it carries the ids of anything
+   * it created and the shape it actually stored.
+   */
+  async function saveCertificationEdit(produce, successMessage) {
+    const next = produce(certification)
+    const payload = toCertificationUpdatePayload(next)
+
+    const saved = await updateCertification(payload.certificationId, payload)
+
+    setCertification((current) => ({
+      ...current,
+      ...next,
+      ...(saved && typeof saved === "object" ? saved : {}),
+    }))
+
+    await queryClient.invalidateQueries({ queryKey: ["admin-certifications"] })
+
+    toast.success(successMessage)
+  }
+
+  /* The three tree renames, each rebuilding only the branch it touches so the
+     objects either side keep their identity. */
+  function renameMajorCategory(majorIndex, title) {
+    return saveCertificationEdit(
+        (current) => ({
+          ...current,
+          majorCategory: (current.majorCategory ?? []).map((major, index) =>
+              index === majorIndex ? { ...major, title } : major
+          ),
+        }),
+        "Major category renamed"
+    )
+  }
+
+  function renameMiddleCategory(majorIndex, middleIndex, title) {
+    return saveCertificationEdit(
+        (current) => ({
+          ...current,
+          majorCategory: (current.majorCategory ?? []).map((major, index) =>
+              index !== majorIndex
+                  ? major
+                  : {
+                    ...major,
+                    middleCategory: (major.middleCategory ?? []).map(
+                        (middle, position) =>
+                            position === middleIndex
+                                ? { ...middle, title }
+                                : middle
+                    ),
+                  }
+          ),
+        }),
+        "Module renamed"
+    )
+  }
+
+  function renameLesson(majorIndex, middleIndex, lessonIndex, name) {
+    return saveCertificationEdit(
+        (current) => ({
+          ...current,
+          majorCategory: (current.majorCategory ?? []).map((major, index) =>
+              index !== majorIndex
+                  ? major
+                  : {
+                    ...major,
+                    middleCategory: (major.middleCategory ?? []).map(
+                        (middle, position) =>
+                            position !== middleIndex
+                                ? middle
+                                : {
+                                  ...middle,
+                                  lessons: (middle.lessons ?? []).map(
+                                      (lesson, lessonPosition) =>
+                                          lessonPosition === lessonIndex
+                                              ? { ...lesson, name }
+                                              : lesson
+                                  ),
+                                }
+                    ),
+                  }
+          ),
+        }),
+        "Lesson renamed"
+    )
+  }
+
   function handleCreateAssessment(request) {
     setCreateAssessmentRequest({
       ...request,
@@ -229,20 +345,90 @@ export default function ViewCertificationAdmin() {
             card — there is no uploaded image to blur behind this header now. */}
         <header className="relative isolate overflow-hidden border-b border-border bg-rb-feather px-6 py-12 sm:px-10 lg:px-20 lg:py-16">
           <div className="relative z-10 mx-auto max-w-6xl">
-            <Badge
-                variant="secondary"
-                className="mb-5 border border-black/10 bg-white/85 px-3 py-1 text-xs font-semibold text-black shadow-sm backdrop-blur-sm hover:bg-white/85"
-            >
-              {certification.industry || "General"}
-            </Badge>
+            {/* The header is the certification's own record of itself, so it
+                is edited here rather than in a panel that covers it. Each
+                field is the same markup it always was until you click the
+                pencil. */}
+            <div className="mb-5 flex items-center gap-2">
+              <Badge
+                  variant="secondary"
+                  className="border border-black/10 bg-white/85 px-3 py-1 text-xs font-semibold text-black shadow-sm backdrop-blur-sm hover:bg-white/85"
+              >
+                {certification.industry || "General"}
+              </Badge>
 
-            <h1 className="max-w-3xl font-heading text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
-              {certification.title}
-            </h1>
+              {/* A select, not a text field: the industry has to match the one
+                  vocabulary certifications and challenge arenas are both
+                  filtered by, and a typed one silently matches nothing. */}
+              <Select
+                  value={certification.industry || ""}
+                  onValueChange={(industry) => {
+                    void saveCertificationEdit(
+                        (current) => ({ ...current, industry }),
+                        "Industry updated"
+                    ).catch((error) =>
+                        toast.error("Could not update the industry", {
+                          description:
+                              error?.response?.data?.message ?? error?.message,
+                        })
+                    )
+                  }}
+              >
+                <SelectTrigger
+                    aria-label="Change industry"
+                    className="h-8 w-8 justify-center border-white/30 bg-white/15 p-0 text-white [&>svg]:opacity-90"
+                >
+                  <SelectValue aria-hidden="true" className="sr-only" />
+                </SelectTrigger>
 
-            <p className="mt-4 max-w-3xl text-sm leading-7 text-white/85 sm:text-base">
-              {certification.description || "No description available."}
-            </p>
+                <SelectContent>
+                  {industries.map((industry) => (
+                      <SelectItem key={industry} value={industry}>
+                        {industry}
+                      </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <InlineEditable
+                value={certification.title}
+                label="Certification name"
+                tone="dark"
+                className="max-w-3xl"
+                validate={validateCertificationTitle}
+                onSave={(title) =>
+                    saveCertificationEdit(
+                        (current) => ({ ...current, title }),
+                        "Certification name updated"
+                    )
+                }
+                renderValue={(title) => (
+                    <h1 className="font-heading text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
+                      {title}
+                    </h1>
+                )}
+            />
+
+            <InlineEditable
+                value={certification.description}
+                label="Description"
+                tone="dark"
+                multiline
+                className="mt-4 max-w-3xl"
+                validate={validateCertificationDescription}
+                onSave={(description) =>
+                    saveCertificationEdit(
+                        (current) => ({ ...current, description }),
+                        "Description updated"
+                    )
+                }
+                renderValue={(description) => (
+                    <p className="text-sm leading-7 text-white/85 sm:text-base">
+                      {description || "No description available."}
+                    </p>
+                )}
+            />
 
             <div className="mt-8 flex flex-wrap gap-3 text-sm">
               <div className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-white/90 backdrop-blur-sm">
@@ -381,6 +567,9 @@ export default function ViewCertificationAdmin() {
                             certification={certification}
                             majorCategory={majorCategory}
                             majorIndex={majorIndex}
+                            onRenameMajor={renameMajorCategory}
+                            onRenameMiddle={renameMiddleCategory}
+                            onRenameLesson={renameLesson}
                         />
                     ))}
                   </div>
@@ -413,16 +602,35 @@ export default function ViewCertificationAdmin() {
   )
 }
 
-function MajorCategorySection({ certification, majorCategory, majorIndex }) {
+function MajorCategorySection({
+                                certification,
+                                majorCategory,
+                                majorIndex,
+                                onRenameMajor,
+                                onRenameMiddle,
+                                onRenameLesson,
+                              }) {
   const middleCategories = majorCategory.middleCategory ?? []
 
   return (
       <section className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="font-heading text-lg font-bold text-foreground">
-            <span className="text-primary">Major Category {majorIndex + 1}:</span>{" "}
-            {majorCategory.title}
-          </p>
+          {/* Only the title is editable -- "Major Category 3" is this
+              category's position in the list, not a name someone chose. */}
+          <InlineEditable
+              value={majorCategory.title}
+              label="Major category title"
+              validate={(value) => validateStructureName(value, "Major category title")}
+              onSave={(title) => onRenameMajor(majorIndex, title)}
+              renderValue={(title) => (
+                  <p className="font-heading text-lg font-bold text-foreground">
+                    <span className="text-primary">
+                      Major Category {majorIndex + 1}:
+                    </span>{" "}
+                    {title}
+                  </p>
+              )}
+          />
 
           {majorCategory.priority && (
               <Badge
@@ -446,6 +654,10 @@ function MajorCategorySection({ certification, majorCategory, majorIndex }) {
                       certification={certification}
                       majorCategory={majorCategory}
                       middleCategory={middleCategory}
+                      majorIndex={majorIndex}
+                      middleIndex={middleIndex}
+                      onRenameMiddle={onRenameMiddle}
+                      onRenameLesson={onRenameLesson}
                   />
               ))}
             </div>
@@ -454,7 +666,15 @@ function MajorCategorySection({ certification, majorCategory, majorIndex }) {
   )
 }
 
-function MiddleCategoryCard({ certification, majorCategory, middleCategory }) {
+function MiddleCategoryCard({
+                              certification,
+                              majorCategory,
+                              middleCategory,
+                              majorIndex,
+                              middleIndex,
+                              onRenameMiddle,
+                              onRenameLesson,
+                            }) {
   const [isOpen, setIsOpen] = useState(false)
   const navigate = useNavigate()
 
@@ -477,16 +697,24 @@ function MiddleCategoryCard({ certification, majorCategory, middleCategory }) {
 
   return (
       <article className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md">
-        <button
-            type="button"
-            onClick={() => setIsOpen((current) => !current)}
-            aria-expanded={isOpen}
-            className="flex w-full items-center justify-between gap-4 px-5 py-5 text-left transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        >
+        {/* The whole header used to be one button, which is why the title
+            could not be edited in place: a pencil inside a button is a button
+            inside a button, which the browser will not nest and a screen
+            reader cannot announce. The toggle is now the chevron and the line
+            beside it; the title sits outside it and owns its own edit. */}
+        <div className="flex items-start justify-between gap-4 px-5 py-5">
           <div className="min-w-0">
-            <h3 className="truncate font-heading text-base font-bold text-foreground">
-              {middleCategory.title}
-            </h3>
+            <InlineEditable
+                value={middleCategory.title}
+                label="Module title"
+                validate={(value) => validateStructureName(value, "Module title")}
+                onSave={(title) => onRenameMiddle(majorIndex, middleIndex, title)}
+                renderValue={(title) => (
+                    <h3 className="font-heading text-base font-bold text-foreground">
+                      {title}
+                    </h3>
+                )}
+            />
 
             <p className="mt-1 text-xs text-muted-foreground">
               Middle Category · {lessons.length}{" "}
@@ -494,20 +722,24 @@ function MiddleCategoryCard({ certification, majorCategory, middleCategory }) {
             </p>
           </div>
 
-          <span
-              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all ${
+          <button
+              type="button"
+              onClick={() => setIsOpen((current) => !current)}
+              aria-expanded={isOpen}
+              aria-label={`${isOpen ? "Hide" : "Show"} lessons in ${middleCategory.title}`}
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
                   isOpen
                       ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted/70"
               }`}
           >
-          {isOpen ? (
-              <ChevronDown className="h-4 w-4" />
-          ) : (
-              <ChevronRight className="h-4 w-4" />
-          )}
-        </span>
-        </button>
+            {isOpen ? (
+                <ChevronDown className="h-4 w-4" />
+            ) : (
+                <ChevronRight className="h-4 w-4" />
+            )}
+          </button>
+        </div>
 
         {isOpen && (
             <div className="border-t border-border bg-muted/20 px-5 py-4">
@@ -528,9 +760,26 @@ function MiddleCategoryCard({ certification, majorCategory, middleCategory }) {
                     </span>
 
                             <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold text-foreground">
-                                {getLessonTitle(lesson)}
-                              </p>
+                              <InlineEditable
+                                  value={getLessonTitle(lesson)}
+                                  label="Lesson name"
+                                  validate={(value) =>
+                                      validateStructureName(value, "Lesson name")
+                                  }
+                                  onSave={(name) =>
+                                      onRenameLesson(
+                                          majorIndex,
+                                          middleIndex,
+                                          lessonIndex,
+                                          name
+                                      )
+                                  }
+                                  renderValue={(name) => (
+                                      <p className="text-sm font-semibold text-foreground">
+                                        {name}
+                                      </p>
+                                  )}
+                              />
 
                               <p className="mt-0.5 text-xs text-muted-foreground">
                                 Lesson {lessonIndex + 1}

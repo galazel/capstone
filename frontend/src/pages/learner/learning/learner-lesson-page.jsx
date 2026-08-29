@@ -839,7 +839,7 @@ export default function LearnerLessonPage() {
 
         {/* Mobile Course Outline */}
         <Sheet open={navOpen} onOpenChange={setNavOpen}>
-          <SheetContent side="left" className="w-full p-0 sm:max-w-sm">
+          <SheetContent side="left" className="p-0">
             <SheetTitle className="sr-only">Course Outline</SheetTitle>
 
             <CourseOutline
@@ -860,7 +860,7 @@ export default function LearnerLessonPage() {
               }
             }}
         >
-          <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-md">
+          <SheetContent side="right" className="gap-0 p-0">
             <SheetTitle className="sr-only">AI Tutor</SheetTitle>
 
             <LessonAiTutor

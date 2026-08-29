@@ -8,6 +8,7 @@ import {
   signIn,
   signOut,
   signUp,
+  updatePassword,
 } from "aws-amplify/auth"
 
 import { base } from "./base"
@@ -174,6 +175,30 @@ export async function loginWithCognito(email, password) {
 export function logoutFromCognito() {
   storeSignInContext(null)
   return signOut()
+}
+
+/**
+ * Changes the password of the signed-in user.
+ *
+ * Cognito owns the credential, so this goes straight to it rather than through
+ * our API -- the backend never sees either password and has nothing to store.
+ * It requires the current one, which is what makes this safe to expose on a
+ * settings page: a borrowed session cannot change the password without it.
+ */
+export function changePassword(oldPassword, newPassword) {
+  return updatePassword({ oldPassword, newPassword })
+}
+
+/**
+ * Signs out everywhere, not just here.
+ *
+ * `signOut()` clears this browser. The global form revokes every refresh token
+ * the user has, which is the one useful thing a learner can do from a settings
+ * page about a device they no longer have.
+ */
+export function signOutEverywhere() {
+  storeSignInContext(null)
+  return signOut({ global: true })
 }
 
 export function requestPasswordReset(email) {

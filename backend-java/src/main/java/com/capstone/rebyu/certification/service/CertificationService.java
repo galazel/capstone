@@ -218,6 +218,21 @@ public class CertificationService {
             );
         }
 
+        /*
+         * Fields the client never sends, carried over rather than dropped.
+         *
+         * This method replaces the entity wholesale with one mapped from the
+         * DTO, so anything the DTO does not carry came back as the field's own
+         * default. Status is the damaging one: the mapper ignores it and the
+         * entity initialises to DRAFT, so editing a PUBLISHED certification --
+         * even renaming one module -- quietly unpublished it and took it away
+         * from every learner. The exam blueprint is written by the Python
+         * generation service and is not in the DTO at all, so it was being
+         * erased by the same mechanism.
+         */
+        updatedCertification.setStatus(existingCertification.getStatus());
+        updatedCertification.setExamStructure(existingCertification.getExamStructure());
+
         updatedCertification.setDateUpdated(LocalDateTime.now());
 
         connectChildEntities(updatedCertification);

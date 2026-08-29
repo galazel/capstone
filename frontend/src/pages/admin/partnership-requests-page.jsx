@@ -185,11 +185,11 @@ export default function PartnershipRequests() {
     detail && (detail.status === "PENDING" || detail.status === "UNDER_REVIEW")
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
       {/* Three counts on one line rather than three cards on a grid: each held
           a single number, and a card's job is to separate things that would
           otherwise run together -- which spacing already does here. */}
-      <div className="flex shrink-0 flex-wrap items-center gap-x-10 gap-y-3 border-b border-border px-4 py-3 sm:px-6">
+      <div className="flex shrink-0 flex-wrap items-center gap-x-10 gap-y-3 border-b border-border pb-4">
         <SummaryCard icon={Clock} label="Pending" value={counts.PENDING} />
         <SummaryCard icon={CheckCircle2} label="Approved" value={counts.APPROVED} />
         <SummaryCard icon={XCircle} label="Rejected" value={counts.REJECTED} />
@@ -200,7 +200,7 @@ export default function PartnershipRequests() {
           of every row to keep in step, and a request is read by comparing
           slots and dates down a column, which cards cannot do. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <TableCard className="flex min-h-0 flex-1 flex-col rounded-none border-0 bg-transparent">
+      <TableCard className="flex min-h-0 flex-1 flex-col">
         <TableToolbar
           pageSize={pageSize}
           onPageSizeChange={setPageSize}
@@ -221,108 +221,113 @@ export default function PartnershipRequests() {
           </Select>
         </TableToolbar>
 
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <SortableHead
-                column="organization"
-                label="Organization"
-                sort={sort}
-                onSort={toggle}
-                className="min-w-56"
-              />
-              <SortableHead
-                column="reference"
-                label="Reference"
-                sort={sort}
-                onSort={toggle}
-              />
-              <SortableHead
-                column="certifications"
-                label="Certifications"
-                sort={sort}
-                onSort={toggle}
-                align="right"
-              />
-              <SortableHead
-                column="slots"
-                label="Slots"
-                sort={sort}
-                onSort={toggle}
-                align="right"
-              />
-              <SortableHead
-                column="submitted"
-                label="Submitted"
-                sort={sort}
-                onSort={toggle}
-              />
-              <SortableHead column="status" label="Status" sort={sort} onSort={toggle} />
-              <PlainHead label="Actions" align="right" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {listQuery.isLoading ? (
-              Array.from({ length: 5 }).map((_, index) => (
-                <TableRow key={`loading-${index}`}>
-                  <TableCell colSpan={7} className="h-16">
-                    <Skeleton className="h-4 w-full" />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : paged.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={7}
-                  className="h-48 text-center text-sm text-muted-foreground"
-                >
-                  No partnership requests match your filters.
-                </TableCell>
+        {/* The rows scroll, the pager does not: with a short list the page still
+            ends where the window does rather than leaving the pager stranded
+            halfway up a blank page. */}
+        <div className="min-h-0 flex-1 overflow-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <SortableHead
+                  column="organization"
+                  label="Organization"
+                  sort={sort}
+                  onSort={toggle}
+                  className="min-w-56"
+                />
+                <SortableHead
+                  column="reference"
+                  label="Reference"
+                  sort={sort}
+                  onSort={toggle}
+                />
+                <SortableHead
+                  column="certifications"
+                  label="Certifications"
+                  sort={sort}
+                  onSort={toggle}
+                  align="right"
+                />
+                <SortableHead
+                  column="slots"
+                  label="Slots"
+                  sort={sort}
+                  onSort={toggle}
+                  align="right"
+                />
+                <SortableHead
+                  column="submitted"
+                  label="Submitted"
+                  sort={sort}
+                  onSort={toggle}
+                />
+                <SortableHead column="status" label="Status" sort={sort} onSort={toggle} />
+                <PlainHead label="Actions" align="right" />
               </TableRow>
-            ) : (
-              paged.map((r) => (
-                <TableRow key={r.requestId}>
-                  <TableCell>
-                    <div className="font-bold">{r.organizationName}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {r.organizationEmail}
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs">
-                    {r.referenceNumber}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {r.certificationCount}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {r.totalRequestedSlots}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {formatDate(r.submittedAt)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={STATUS_VARIANT[r.status] ?? "secondary"}>
-                      {r.status.replaceAll("_", " ").toLowerCase()}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="rounded-full"
-                      onClick={() => {
-                        setRemarks("")
-                        setDetailId(r.requestId)
-                      }}
-                    >
-                      Review
-                    </Button>
+            </TableHeader>
+            <TableBody>
+              {listQuery.isLoading ? (
+                Array.from({ length: 5 }).map((_, index) => (
+                  <TableRow key={`loading-${index}`}>
+                    <TableCell colSpan={7} className="h-16">
+                      <Skeleton className="h-4 w-full" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : paged.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={7}
+                    className="h-48 text-center text-sm text-muted-foreground"
+                  >
+                    No partnership requests match your filters.
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                paged.map((r) => (
+                  <TableRow key={r.requestId}>
+                    <TableCell>
+                      <div className="font-bold">{r.organizationName}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {r.organizationEmail}
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {r.referenceNumber}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {r.certificationCount}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {r.totalRequestedSlots}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {formatDate(r.submittedAt)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={STATUS_VARIANT[r.status] ?? "secondary"}>
+                        {r.status.replaceAll("_", " ").toLowerCase()}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() => {
+                          setRemarks("")
+                          setDetailId(r.requestId)
+                        }}
+                      >
+                        Review
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
         <TablePagination
           page={page}
