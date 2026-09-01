@@ -6,7 +6,7 @@ import CertificationCard from "../../components/certifications/certification-car
 import CertificationFormDrawer from "@/components/certifications/certification-form-drawer"
 
 import { getAllCertifications } from "../../services/certificationService"
-import { useActiveGenerations } from "@/hooks/use-active-generations"
+import { markGenerationQueued, useActiveGenerations } from "@/hooks/use-active-generations"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -56,7 +56,23 @@ function Certifications() {
     )
   }, [items, chosenIndustry])
 
-  async function handleCertificationSaved() {
+  async function handleCertificationSaved(savedCertification) {
+    /* Mark it generating BEFORE the list refetches, so the card is already in
+       its building state the moment the drawer closes.
+       
+       Without this there is a gap -- Java has queued the message, but the
+       Python consumer has not registered the run and this page polls for runs
+       only every ten seconds -- during which a certification that is about to
+       build looks like an idle empty draft. That gap is not cosmetic: it is
+       what led to a certification being deleted moments after its generation
+       was started, on the reasonable assumption that nothing had happened. */
+    const certificationId =
+        savedCertification?.certificationId ?? savedCertification?.id
+
+    if (certificationId != null) {
+      markGenerationQueued(certificationId)
+    }
+
     await queryClient.invalidateQueries({
       queryKey: ["admin-certifications"],
     })
@@ -155,7 +171,6 @@ function Certifications() {
           ))}
 
           <CertificationFormDrawer
-              mode="create"
               open={isCreateDrawerOpen}
               onOpenChange={setIsCreateDrawerOpen}
               onSaved={handleCertificationSaved}

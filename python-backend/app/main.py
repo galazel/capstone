@@ -19,6 +19,7 @@ from app.api.ws import workflows as workflow_ws
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.messaging.registry import build_consumer_manager
+from app.db.training_view import ensure_training_view
 from app.services import run_recovery
 from app.utils.helpers import close_checkpointer
 
@@ -30,6 +31,11 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     settings.ensure_directories()
+
+    # Idempotent, and never fatal -- see `app.db.training_view`. Without this
+    # the training view exists only where somebody remembered to run the SQL
+    # by hand, which is how training failed on 2026-08-29.
+    ensure_training_view()
 
     consumer_manager = build_consumer_manager()
     try:

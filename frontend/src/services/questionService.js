@@ -35,9 +35,17 @@ export async function getQuestionsByLesson(lessonId, includeGroupId) {
 // Omit includeGroupId for official questions only (what every existing caller
 // does). Pass a group id to also include that group's own questions -- the
 // caller must be able to act on that group, enforced server-side.
-export async function getQuestions(includeGroupId) {
-    const query = includeGroupId != null ? `?includeGroupId=${includeGroupId}` : ""
-    return await base(`questions${query}`, {
+//
+// certificationId narrows the read to one certification's lessons. Omitted,
+// this is the whole-bank read every existing caller makes; passed, the server
+// does the narrowing the caller would otherwise do over every question on the
+// platform.
+export async function getQuestions(includeGroupId, certificationId) {
+    const params = new URLSearchParams()
+    if (includeGroupId != null) params.set("includeGroupId", includeGroupId)
+    if (certificationId != null) params.set("certificationId", certificationId)
+    const query = params.toString()
+    return await base(`questions${query ? `?${query}` : ""}`, {
         method: "GET",
     })
 }

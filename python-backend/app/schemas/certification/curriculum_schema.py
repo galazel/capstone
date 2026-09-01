@@ -226,17 +226,76 @@ _LESSON_FLOOR_RATIO = 0.33
 
 
 def required_major_categories() -> int:
+    # Under autosize the planner is told to size from the document, so a thin
+    # source is *supposed* to produce a small plan. Holding it to a floor
+    # derived from knobs it was never given would resample a correct answer.
+    if get_settings().curriculum_autosize:
+        return 1
     return max(1, math.ceil(get_settings().curriculum_min_majors * _MAJOR_FLOOR_RATIO))
 
 
 def required_total_lessons() -> int:
     settings = get_settings()
+    if settings.curriculum_autosize:
+        return 1
     smallest_ask = (
         settings.curriculum_min_majors
         * settings.curriculum_min_middles
         * settings.curriculum_min_lessons
     )
     return max(1, math.ceil(smallest_ask * _LESSON_FLOOR_RATIO))
+
+
+def _enforce_total_lesson_backstop(majors: List[Any]) -> List[Any]:
+    """Caps the TOTAL lesson count under `curriculum_autosize`.
+
+    Not a size knob -- a circuit breaker. Autosize deliberately lets the
+    planner decide the shape, which means nothing else bounds how much work the
+    build stage is about to be handed. An unbounded plan is what drained the
+    account on 2026-08-24 (see `_enforce_ceiling`), and per-lesson cost rises
+    as a run goes on, so the tail of a very long plan is also its most
+    expensive part.
+
+    Trims whole lessons off the end, in plan order, so what survives is the
+    planner's own leading material -- which it writes most-fundamental-first.
+    Set `curriculum_autosize_max_lessons` to 0 to remove the cap.
+    """
+    cap = get_settings().curriculum_autosize_max_lessons
+    if cap <= 0:
+        return majors
+
+    total = 0
+    trimmed: List[Any] = []
+    for major in majors:
+        if not isinstance(major, dict):
+            trimmed.append(major)
+            continue
+        middles: List[Any] = []
+        for mid in (major.get("middleCategories") or []):
+            if not isinstance(mid, dict):
+                middles.append(mid)
+                continue
+            room = cap - total
+            if room <= 0:
+                break
+            lessons = (mid.get("lessons") or [])[:room]
+            if not lessons:
+                continue
+            total += len(lessons)
+            middles.append({**mid, "lessons": lessons})
+        # A major whose middles were all cut carries no lessons; dropping it
+        # keeps the plan structurally valid rather than leaving an empty shell.
+        if middles:
+            trimmed.append({**major, "middleCategories": middles})
+
+    if total >= cap:
+        logger.warning(
+            "Autosized curriculum hit the %d-lesson backstop and was trimmed. "
+            "The planner wanted more; raise curriculum_autosize_max_lessons "
+            "(or set it to 0) if that is intended.",
+            cap,
+        )
+    return trimmed
 
 
 def _enforce_ceiling(majors: List[Any]) -> List[Any]:
@@ -262,6 +321,15 @@ def _enforce_ceiling(majors: List[Any]) -> List[Any]:
     which it writes most-fundamental-first.
     """
     settings = get_settings()
+
+    # Autosize: the per-level caps are not applied at all -- the planner was
+    # asked to derive the shape from the document, and trimming it back to
+    # numbers it was never shown would silently undo that. Only the
+    # total-lesson backstop survives, and only to prevent a runaway plan
+    # draining the account mid-build (the 2026-08-24 incident above).
+    if settings.curriculum_autosize:
+        return _enforce_total_lesson_backstop(majors)
+
     max_majors = settings.curriculum_max_majors
     max_middles = settings.curriculum_max_middles
     max_lessons = settings.curriculum_max_lessons

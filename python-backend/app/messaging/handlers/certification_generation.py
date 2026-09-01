@@ -111,19 +111,37 @@ async def handle_certification_generation_requested(payload: dict) -> None:
         triggered_by_user_id=generation_request.get("triggered_by_user_id"),
     )
 
-    await certification_run.execute(
-        context,
-        {
-            "thread_id": thread_id,
-            "certification_id": certification_id,
-            "certification_name": certification["title"],
-            "certification_description": certification["description"] or "",
-            "industry": certification["industry"] or "",
-            "document_refs": document_refs,
-            # Supervised or unattended, as chosen in the create form. An
-            # unattended run never raises a review interrupt, so it reaches
-            # the end without anyone having to sit with it.
-            "review_mode": certification_run.review_mode_from(params),
-            "status": "STARTED",
-        },
-    )
+    seed = {
+        "thread_id": thread_id,
+        "certification_id": certification_id,
+        "certification_name": certification["title"],
+        "certification_description": certification["description"] or "",
+        "industry": certification["industry"] or "",
+        "document_refs": document_refs,
+        # Supervised or unattended, as chosen in the create form. An
+        # unattended run never raises a review interrupt, so it reaches
+        # the end without anyone having to sit with it.
+        "review_mode": certification_run.review_mode_from(params),
+        "status": "STARTED",
+    }
+
+    # RESUME rather than re-seed when this thread already has progress.
+    #
+    # Seeding a thread that holds checkpoints does not continue it -- the seed
+    # sets `status` back to STARTED and the run re-enters at the first node,
+    # re-ingesting the documents and re-planning the curriculum it had already
+    # produced. On 2026-08-31 that discarded a run's work three times over,
+    # each redelivery paying again for lessons already written and leaving the
+    # certification an empty shell.
+    #
+    # `execute(context, None)` is the resume LangGraph actually offers: it
+    # picks the thread up at the node that was pending. It is what the retry
+    # endpoint has always used; this path simply never did.
+    graph_input = seed
+    if await certification_run.has_progress(thread_id):
+        logger.info(
+            "Thread %s already has checkpoints; resuming instead of restarting", thread_id
+        )
+        graph_input = None
+
+    await certification_run.execute(context, graph_input)

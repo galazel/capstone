@@ -22,3 +22,17 @@ export const ASSESSMENT_XP = {
 
 /** What an unattempted assessment can be advertised as being worth. */
 export const ASSESSMENT_MAX_XP = ASSESSMENT_XP.perfect
+
+/**
+ * The pop-up knowledge check pays the same tiers at a quarter of the size.
+ *
+ * It fires by itself and mints a fresh exam every time, so at the full tiers a
+ * perfect five-question check would pay more than finishing a whole lesson.
+ * See `AssessmentAttemptService.CHECK_ATTEMPTED_XP` for the reasoning; these
+ * mirror it and are display-only, as above.
+ */
+export const KNOWLEDGE_CHECK_XP = {
+  attempted: 10,
+  passed: 25,
+  perfect: 50,
+}

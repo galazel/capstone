@@ -37,6 +37,13 @@ public class LearnerQuestionHistoryService {
    * was: a question missed four times is a worse gap than one missed once
    * yesterday.
    *
+   * <p>Every submitted assessment counts, not just quizzes: a mistake on a
+   * mock exam is the same evidence of a gap as one on a lesson quiz.
+   *
+   * @param certificationId optional — null spans every certification the
+   *                        learner has sat, for callers that are not scoped to
+   *                        one (the pop-up knowledge check draws on whatever
+   *                        the learner has finished, wherever it came from)
    * @param lessonId optional — narrows to one topic, for a session scheduled
    *                 against a specific lesson
    */
@@ -50,11 +57,15 @@ public class LearnerQuestionHistoryService {
         JOIN exams e ON e.exam_id = a.exam_id
         LEFT JOIN questions q ON q.question_id = aq.source_question_id
         WHERE a.learner_id = ? AND a.status = 'SUBMITTED' AND ans.is_correct = false
-          AND e.certification_id = ?
           AND aq.source_question_id IS NOT NULL
         """);
 
-    List<Object> params = new ArrayList<>(List.of(learnerId, certificationId));
+    List<Object> params = new ArrayList<>(List.of(learnerId));
+
+    if (certificationId != null) {
+      sql.append(" AND e.certification_id = ?\n");
+      params.add(certificationId);
+    }
 
     if (lessonId != null) {
       sql.append(" AND coalesce(aq.lesson_id, q.lesson_id) = ?\n");

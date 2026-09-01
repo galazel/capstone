@@ -113,9 +113,12 @@ function TranscriptGroup({ group, currentTaskId, defaultOpen }) {
 
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
           {group.label}
+          {/* "3 of 20" once the curriculum is known, "#3" before then: the
+              total is what says whether the run is nearly done, and a bare
+              "#3" was the number that read as least informative in the feed. */}
           {group.itemNumber ? (
-            <span className="ml-1.5 font-mono text-xs font-normal text-muted-foreground">
-              #{group.itemNumber}
+            <span className="ml-1.5 font-mono text-xs font-normal tabular-nums text-muted-foreground">
+              {group.itemTotal ? `${group.itemNumber} of ${group.itemTotal}` : `#${group.itemNumber}`}
             </span>
           ) : null}
         </span>
@@ -206,33 +209,88 @@ export function GenerationStatusBar({
   live,
   connected,
   terminal,
+  /** `runProgress()` output. Omit to draw the bar-less status line. */
+  progress,
+  /** `{ number, total }` for the item being generated, when inside a loop. */
+  item,
   actions,
   className,
 }) {
   const elapsed = useElapsedMs(startedAt, live)
 
   return (
-    <div
-      className={cn(
-        "flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border bg-background/95 px-3 py-2.5",
-        className,
-      )}
-    >
-      <TaskStatusIcon status={status} />
+    <div className={cn("border-t border-border bg-background/95 px-3 py-2.5", className)}>
+      {progress ? <RunProgressBar {...progress} className="mb-2" /> : null}
 
-      <span className="min-w-0 flex-1 truncate text-sm">
-        <span className="font-medium text-foreground">{stage}</span>
-        {live && elapsed != null ? (
-          <span className="ml-2 font-mono text-xs tabular-nums text-muted-foreground">
-            {formatDuration(elapsed)}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <TaskStatusIcon status={status} />
+
+        <span className="min-w-0 flex-1 truncate text-sm">
+          <span className="font-medium text-foreground">{stage}</span>
+          {item?.number ? (
+            <span className="ml-1.5 font-mono text-xs tabular-nums text-muted-foreground">
+              {item.total ? `${item.number} of ${item.total}` : `#${item.number}`}
+            </span>
+          ) : null}
+          {live && elapsed != null ? (
+            <span className="ml-2 font-mono text-xs tabular-nums text-muted-foreground">
+              {formatDuration(elapsed)}
+            </span>
+          ) : null}
+          {!terminal && connected === false ? (
+            <span className="ml-2 text-xs text-muted-foreground">reconnecting…</span>
+          ) : null}
+        </span>
+
+        {progress?.percent != null ? (
+          <span className="shrink-0 font-mono text-xs font-medium tabular-nums text-foreground">
+            {progress.percent}%
           </span>
         ) : null}
-        {!terminal && connected === false ? (
-          <span className="ml-2 text-xs text-muted-foreground">reconnecting…</span>
-        ) : null}
-      </span>
 
-      {actions ? <span className="flex shrink-0 items-center gap-2">{actions}</span> : null}
+        {actions ? <span className="flex shrink-0 items-center gap-2">{actions}</span> : null}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * How far through the run is, as a bar.
+ *
+ * Indeterminate until the curriculum is planned: until then the run genuinely
+ * has no denominator (see `runProgress`), and a bar guessing at one would be
+ * inventing a number the reviewer has no way to check. A sweeping bar says
+ * "working, length unknown" instead.
+ *
+ * The percentage is repeated as text beside it, because a bar alone is only
+ * readable to within about a quarter and "is this a third done or nearly
+ * finished" is the entire question being asked.
+ */
+function RunProgressBar({ percent, done, total, className }) {
+  const indeterminate = percent == null
+
+  return (
+    <div
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={indeterminate ? undefined : percent}
+      aria-valuetext={
+        indeterminate
+          ? "Planning the curriculum — remaining work not known yet"
+          : `${percent}%, step ${done} of ${total}`
+      }
+      className={cn("h-1 w-full overflow-hidden rounded-full bg-border", className)}
+    >
+      <div
+        className={cn(
+          "h-full rounded-full bg-primary",
+          indeterminate
+            ? "w-1/3 animate-progress-sweep"
+            : "transition-[width] duration-700 ease-out",
+        )}
+        style={indeterminate ? undefined : { width: `${percent}%` }}
+      />
     </div>
   )
 }

@@ -27,7 +27,7 @@ from app.ai.prompts.certification import (
 )
 from app.rag.chunking import chunk_documents
 from app.rag.loaders import fetch_document_ref, load_upload, resolve_documents
-from app.rag.retriever import retrieve_context
+from app.rag.retriever import retrieve_balanced_context, retrieve_context
 from app.rag.store import add_documents, namespace_for
 from app.rag.visuals import capture_document_visuals
 from app.agents.certification.auditor_document_agent import get_auditor_agent
@@ -70,8 +70,25 @@ def mock_exam_count() -> int:
     return get_settings().mock_exam_questions
 
 
-def question_bank_count() -> int:
-    return get_settings().question_bank_questions
+def question_bank_count(curriculum: dict | None = None) -> int:
+    """How many bank questions to author.
+
+    Per-lesson when `question_bank_questions_per_lesson` is set, so every
+    lesson gets its own pool rather than sharing one flat certification-wide
+    bank -- see that setting for why the per-lesson readers need it. Falls back
+    to the flat total when the curriculum is unavailable, so a caller without
+    state still gets a sane number instead of zero.
+    """
+    settings = get_settings()
+    per_lesson = settings.question_bank_questions_per_lesson
+    if per_lesson <= 0:
+        return settings.question_bank_questions
+
+    lessons = len(_flatten_lessons(curriculum or {}))
+    if lessons <= 0:
+        return settings.question_bank_questions
+
+    return per_lesson * lessons
 
 
 def _namespace(state: CertificationState) -> str:
@@ -209,8 +226,15 @@ async def curriculum_planning_agent_node(state: CertificationState):
         # No metadata filter: the index is already scoped to this
         # certification, so cross-certification bleed is impossible by
         # construction rather than by post-filtering.
+        #
+        # Balanced, not top-ranked. This is the one retrieval in the run whose
+        # job is coverage rather than relevance -- it decides which domains
+        # exist at all, and a document it does not see becomes a domain the
+        # certification does not have. Plain top-k let one file take every
+        # slot: six TOPCIT documents, one per domain, produced a three-major
+        # curriculum because only three files survived the ranking.
         context = await asyncio.to_thread(
-            retrieve_context,
+            retrieve_balanced_context,
             _namespace(state),
             f"certification domains, exam objectives, knowledge areas, skills and "
             f"learning requirements for {state['certification_name']}",
@@ -358,6 +382,30 @@ def exam_structure_is_known(state: CertificationState) -> bool:
     return bool(structure.get("total_items") or structure.get("question_types"))
 
 
+def researched_question_types(state: CertificationState, default: str) -> str:
+    """The certification's own question types, for any stage that generates items.
+
+    The planner researches what the real paper actually contains and writes it
+    to `exam_structure.question_types` -- for TOPCIT that is MCQ, short answer,
+    descriptive, programming and diagramming. That research was then read in
+    exactly one place, the mock exam, while every other stage asked for a
+    hardcoded list. So a TOPCIT run produced 311 MCQ, 204 short answer, 158
+    descriptive, 2 diagram and *zero* programming items: the run knew the
+    certification had programming tasks and never asked for one outside the
+    mock.
+
+    Practising a format only in the final mock is the wrong way round -- the
+    lesson quizzes and unit exams are where a learner should meet it first.
+
+    `default` is the stage's own list, used when the planner could not
+    determine the paper's shape. Unchanged behaviour for a certification whose
+    structure is unknown; see UNKNOWN_EXAM_QUESTION_TYPES for why guessing is
+    worse than defaulting.
+    """
+    types = _exam_structure(state).get("question_types") or []
+    return ", ".join(types) if types else default
+
+
 def mock_exam_count_for(state: CertificationState) -> int:
     """The real exam's item count when the planner found it, else the
     configured fallback (`mock_exam_questions`, 50). Certifications differ far
@@ -411,7 +459,7 @@ async def generate_mock_exam_node(state: CertificationState):
     difficulty = (
         " and simulating the real exam's difficulty"
         if known
-        else ". Mix EASY, AVERAGE and DIFFICULT items"
+        else ". Mix EASY, AVERAGE and HARD items"
     )
 
     batch = await invoke_question_agent(
@@ -434,15 +482,55 @@ def await_mock_exam_review_node(state: CertificationState):
 
 async def generate_question_bank_node(state: CertificationState):
     scope = f"Adaptive learning question bank for {state['certification_name']}"
-    context = _curriculum_outline(state["curriculum"])
+    curriculum = state.get("curriculum", {}) or {}
+    context = _curriculum_outline(curriculum)
+
+    settings = get_settings()
+    total = question_bank_count(curriculum)
+    per_lesson = settings.question_bank_questions_per_lesson
+    lessons = len(_flatten_lessons(curriculum))
+
+    if per_lesson > 0 and lessons > 0:
+        # Stated per lesson AND as a total. The per-lesson figure is what makes
+        # the distribution even; the total is what stops the model stopping
+        # early, which it does when given only a rate.
+        spread = (
+            f"Generate exactly {total} questions: {per_lesson} for EVERY ONE of the "
+            f"{lessons} lessons in the curriculum, with none left without its own "
+            "questions. Set lesson_ref on each question to the lesson it tests -- a "
+            "question with no lesson_ref cannot be used by the per-lesson quizzes, "
+            "the knowledge check, or mastery tracking, so it is wasted work. "
+        )
+    elif lessons > 0:
+        # A flat pool still has to reach every lesson. Told only "distribute
+        # across major categories", the model clusters on whatever it found
+        # most to say about, and lessons at the tail of the syllabus get
+        # nothing -- which the per-lesson readers then experience as a lesson
+        # with no questions at all.
+        spread = (
+            f"Generate exactly {total} questions covering ALL {lessons} lessons "
+            "in the curriculum. EVERY lesson must get at least one question "
+            "before any lesson gets a second, then spread the remainder by how "
+            "much material each lesson actually holds. Set lesson_ref on each "
+            "question to the lesson it tests -- a question with no lesson_ref "
+            "cannot be used by the per-lesson quizzes, the knowledge check, or "
+            "mastery tracking, so it is wasted work. "
+        )
+    else:
+        spread = (
+            f"Generate exactly {total} questions distributed across every "
+            "major category, setting lesson_ref on each question to the lesson it "
+            "tests. "
+        )
+
     batch = await invoke_question_agent(
         scope, context,
-        f"Generate exactly {question_bank_count()} questions distributed across every "
-        "major category and all supported types (MCQ, SHORT_ANSWER, DESCRIPTIVE, PROGRAMMING, "
-        "DIAGRAM), spanning EASY, AVERAGE, and DIFFICULT. This bank is the primary source for "
+        spread
+        + "Use all supported types (MCQ, SHORT_ANSWER, DESCRIPTIVE, PROGRAMMING, "
+        "DIAGRAM), spanning EASY, AVERAGE, and HARD. This bank is the primary source for "
         "future adaptive assessments, remediation, and practice, so cover the curriculum "
         "broadly rather than deeply on any one topic.",
-        count=question_bank_count(),
+        count=total,
     )
     return {
         "question_bank": questions_as_dicts(batch),
@@ -679,9 +767,10 @@ async def major_generate_node(state: CertificationState):
             state,
             f"Generate exactly {major_quiz_count()} questions drawn from the lesson "
             "content above, covering every middle category under this major category "
-            "proportionally. Test only material the lessons actually teach. Mix MCQ, "
-            "SHORT_ANSWER, and DESCRIPTIVE types. Set lesson_ref on each question to "
-            "the lesson it tests.",
+            "proportionally. Test only material the lessons actually teach. Use these "
+            f"question types: "
+            f"{researched_question_types(state, 'MCQ, SHORT_ANSWER, DESCRIPTIVE')}. "
+            "Set lesson_ref on each question to the lesson it tests.",
         ),
         count=major_quiz_count(),
     )
@@ -711,8 +800,9 @@ async def middle_generate_node(state: CertificationState):
             state,
             f"Generate exactly {middle_quiz_count()} questions drawn from the lesson "
             "content above, covering every lesson under this middle category. Test only "
-            "material the lessons actually teach. Mix MCQ, SHORT_ANSWER, and DESCRIPTIVE "
-            "types. Set lesson_ref on each question to the lesson it tests.",
+            "material the lessons actually teach. Use these question types: "
+            f"{researched_question_types(state, 'MCQ, SHORT_ANSWER, DESCRIPTIVE')}. "
+            "Set lesson_ref on each question to the lesson it tests.",
         ),
         count=middle_quiz_count(),
     )
@@ -781,7 +871,9 @@ async def lesson_quiz_generate_node(state: CertificationState):
         _with_improvement(
             state,
             f"Generate exactly {lesson_quiz_count()} questions that test this lesson's "
-            f"content directly, mixing MCQ and SHORT_ANSWER types. Set lesson_ref to '{name}'.",
+            f"content directly, using these question types: "
+            f"{researched_question_types(state, 'MCQ, SHORT_ANSWER')}. "
+            f"Set lesson_ref to '{name}'.",
         ),
         count=lesson_quiz_count(),
     )
@@ -844,6 +936,38 @@ def middle_validate_node(state: CertificationState):
     }
 
 
+def _checkpoint_every_n_lessons(state: CertificationState) -> None:
+    """Writes the run's output down every Nth lesson.
+
+    Called from the lesson checkpoint because that is the one place where a
+    lesson and its quiz are both already merged into the state -- the content
+    node and the quiz node each see only their own half.
+
+    The import is local on purpose: `services.certification_run` imports the
+    compiled graph, which imports this module, so a module-level import here
+    would close that cycle at startup.
+
+    Silent when there is nothing to attach output to (a direct-upload run has
+    no certification row) and when the feature is switched off.
+    """
+    every = get_settings().lesson_checkpoint_every
+    if every <= 0:
+        return
+
+    written = len(state.get("lessons") or [])
+    if written == 0 or written % every != 0:
+        return
+
+    certification_id = state.get("certification_id")
+    if certification_id is None:
+        return
+
+    from app.services.certification_run import checkpoint_progress
+
+    logger.info("Reached %d lessons; checkpointing progress to the database", written)
+    checkpoint_progress(certification_id, dict(state))
+
+
 async def lesson_validate_node(state: CertificationState):
     """Validates the lesson *and* its quiz -- both are what the reviewer
     judges at this checkpoint.
@@ -872,6 +996,8 @@ async def lesson_validate_node(state: CertificationState):
                 "Lesson '%s' failed curriculum alignment: %s",
                 lesson.get("name"), audit.summary,
             )
+
+    _checkpoint_every_n_lessons(state)
 
     return {
         "validation_report": {

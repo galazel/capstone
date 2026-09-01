@@ -31,6 +31,8 @@ import {
 import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
 import { LessonTool } from "@/components/certifications/lesson-content-renderer.jsx"
 import { LessonAiTutor } from "@/components/learner/lesson-ai-tutor.jsx"
+import { LessonKnowledgeCheck } from "@/components/learner/lesson-knowledge-check.jsx"
+import { useKnowledgeCheckTrigger } from "@/hooks/useKnowledgeCheckTrigger.js"
 
 
 
@@ -599,6 +601,14 @@ export default function LearnerLessonPage() {
     completionSentRef.current = false
   }, [lessonId])
 
+  /* The pop-up check. Armed only once there is a lesson with content actually
+     on screen -- a lesson still loading, or one with no published blocks, has
+     nothing to read and so nothing to interrupt. */
+  const knowledgeCheck = useKnowledgeCheckTrigger({
+    lessonId,
+    enabled: Boolean(data?.learnerId) && sections.length > 0,
+  })
+
   useEffect(() => {
     const sentinel = completionSentinelRef.current
 
@@ -850,6 +860,17 @@ export default function LearnerLessonPage() {
             />
           </SheetContent>
         </Sheet>
+
+        {/* The pop-up knowledge check. Rendered last so it overlays the
+            outline and tutor panels as well as the lesson itself -- a gate the
+            learner can read around is not a gate. */}
+        <LessonKnowledgeCheck
+            open={Boolean(knowledgeCheck.offer)}
+            lessonId={lessonId}
+            itemCount={knowledgeCheck.offer?.itemCount}
+            lessonNames={knowledgeCheck.offer?.lessonNames}
+            onDismiss={knowledgeCheck.dismiss}
+        />
 
         {/* Mobile AI Tutor */}
         <Sheet

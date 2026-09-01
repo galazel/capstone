@@ -122,6 +122,7 @@ export function buildTasks(events) {
         durationMs: null,
         retryCount: event.retry_count ?? 0,
         itemNumber: event.payload?.item_number ?? null,
+        itemTotal: event.payload?.item_total ?? null,
         error: null,
         seq: event.seq,
       }
@@ -142,6 +143,7 @@ export function buildTasks(events) {
           startedAt: null,
           retryCount: event.retry_count ?? 0,
           itemNumber: null,
+          itemTotal: null,
           seq: event.seq,
         }
         tasks.push(target)
@@ -150,6 +152,7 @@ export function buildTasks(events) {
       target.durationMs = event.duration_ms ?? null
       target.error = event.payload?.error ?? null
       if (event.payload?.item_number) target.itemNumber = event.payload.item_number
+      if (event.payload?.item_total) target.itemTotal = event.payload.item_total
       openByStage.delete(stage)
       return
     }
@@ -205,6 +208,12 @@ export function findCurrentTask(tasks) {
  */
 const STAGE_FAMILIES = {
   validate_documents: "documents",
+  // Runs BETWEEN validating and ingesting (see the graph's edges). Grouping is
+  // by consecutive family, so leaving this stage unmapped gave it a family of
+  // its own and split the document phase into two "Source documents" groups
+  // with an unrelated row wedged between them -- one showing the validate step,
+  // one showing the ingest step, as though documents were read twice.
+  capture_document_visuals: "documents",
   ingest_documents: "documents",
   plan_curriculum: "curriculum",
   CURRICULUM: "curriculum",
@@ -303,6 +312,7 @@ export function buildTranscript(tasks) {
       family,
       label: FAMILY_LABELS[family] ?? stageTitle(task.stage),
       itemNumber: task.itemNumber ?? null,
+      itemTotal: task.itemTotal ?? null,
       steps: [task],
     })
   })
@@ -325,4 +335,109 @@ export function buildTranscript(tasks) {
 function stageTitle(stage) {
   if (!stage) return "Workflow"
   return stage.replace(/_/g, " ").replace(/^\w/, (character) => character.toUpperCase())
+}
+
+/**
+ * How many instrumented steps each unit of work runs, read off the graph's
+ * wiring in `app/graphs/certification/workflow.py`.
+ *
+ * Documents is validate → capture visuals → ingest; a lesson is content →
+ * quiz → check; a category is generate → check. Review pauses are not counted:
+ * they are not instrumented nodes, and a run left waiting is not a run making
+ * progress.
+ *
+ * Steps are counted, not timed. Weighting them by an estimated duration would
+ * put a number on the bar that looks more precise than it is — the actual cost
+ * of a step swings with the model, the document set, and how much of the
+ * curriculum a retry re-did.
+ */
+export const PLANNED_STEPS = {
+  documents: 3,
+  curriculum: 1,
+  lesson: 3,
+  middle: 2,
+  major: 2,
+  mock_exam: 1,
+  diagnostic_exam: 1,
+  question_bank: 1,
+}
+
+/** Everything the run always does, whatever the curriculum turns out to be. */
+const FIXED_STEPS =
+  PLANNED_STEPS.documents +
+  PLANNED_STEPS.curriculum +
+  PLANNED_STEPS.mock_exam +
+  PLANNED_STEPS.diagnostic_exam +
+  PLANNED_STEPS.question_bank
+
+const FINISHED_STEP_STATUSES = new Set(["COMPLETED", "SKIPPED"])
+
+/**
+ * The run's plan — how many majors, middles and lessons the curriculum implies.
+ *
+ * The server puts it on every node event once the curriculum exists rather than
+ * announcing it once, so a client that attaches halfway through still gets a
+ * denominator. Read from the newest event backwards because a regenerated
+ * curriculum changes the plan mid-run.
+ */
+export function findRunPlan(events) {
+  for (let i = (events?.length ?? 0) - 1; i >= 0; i -= 1) {
+    const plan = events[i]?.payload?.plan
+    if (plan?.lessons) return plan
+  }
+  return null
+}
+
+/** Total instrumented steps a run against `plan` will execute. */
+export function plannedStepCount(plan) {
+  if (!plan?.lessons) return null
+  return (
+    FIXED_STEPS +
+    PLANNED_STEPS.lesson * (plan.lessons ?? 0) +
+    PLANNED_STEPS.middle * (plan.middles ?? 0) +
+    PLANNED_STEPS.major * (plan.majors ?? 0)
+  )
+}
+
+/**
+ * Steps finished, counted per unit of work rather than per task.
+ *
+ * Only the latest group for a key counts, and each group is capped at the steps
+ * its family plans: regenerating lesson 7 re-runs its three nodes, and counting
+ * those as three more finished steps would let a heavily-reviewed run report
+ * more work done than it ever had to do.
+ */
+function finishedStepCount(groups) {
+  const latest = new Map()
+  ;(groups ?? []).forEach((group) => latest.set(group.key, group))
+
+  let done = 0
+  latest.forEach((group) => {
+    const finished = group.steps.filter(
+      (step) => !step.isReview && FINISHED_STEP_STATUSES.has(step.status),
+    ).length
+    done += Math.min(finished, PLANNED_STEPS[group.family] ?? group.steps.length)
+  })
+  return done
+}
+
+/**
+ * How far through the run is, as a fraction of its planned steps.
+ *
+ * `percent` is null until the curriculum has been planned — before that there is
+ * genuinely no denominator, and a bar guessing at one would be a fiction the
+ * reviewer has no way to check. Draw an indeterminate bar for that stretch.
+ *
+ * Held below 100 while the run is still going, so the bar never sits full while
+ * the transcript is still moving; only a COMPLETED run reads 100%.
+ */
+export function runProgress(tasks, events, status) {
+  const plan = findRunPlan(events)
+  const total = plannedStepCount(plan)
+  const done = finishedStepCount(buildTranscript(tasks))
+
+  if (status === "COMPLETED") return { percent: 100, done: total ?? done, total, plan }
+  if (!total) return { percent: null, done, total: null, plan: null }
+
+  return { percent: Math.min(99, Math.round((done / total) * 100)), done, total, plan }
 }

@@ -107,6 +107,34 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query("SELECT DISTINCT q FROM Question q WHERE q.questionId IN :ids")
     List<Question> findForAttemptByIdIn(@Param("ids") Collection<Long> ids);
 
+    /**
+     * One certification's whole question bank, in one query.
+     *
+     * <p>The question bank page used to read every question on the platform as
+     * entities and narrow them in the browser. Mapping a Question to its DTO
+     * touches five associations that are not loaded with it -- choices,
+     * createdBy (dereferenced for the author's email, so the proxy has to be
+     * resolved), and the three configs that are EAGER whether anyone wants them
+     * or not -- which is five SELECTs per question, for every question that
+     * exists, to draw one certification's library.
+     *
+     * <p>The graph turns all five into joins on this query, the same trick
+     * {@link #findForAttemptByIdIn} uses and for the same reason. choices is
+     * the only collection among them, so there is no cartesian product to pay
+     * for; testCases under programmingQuestionConfig stays lazy and unread.
+     *
+     * <p>Sub-questions are included, as they were in the unfiltered read this
+     * replaces -- the bank lists them.
+     */
+    @EntityGraph(attributePaths = {
+            "choices", "createdBy", "ownerGroup",
+            "diagramQuestionConfig", "programmingQuestionConfig", "textQuestionConfig"})
+    @Query("""
+            SELECT DISTINCT q FROM Question q
+            WHERE q.lesson.middleCategory.majorCategory.certification.certificationId = :certificationId
+            """)
+    List<Question> findBankByCertificationId(@Param("certificationId") Long certificationId);
+
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM Question q WHERE q.questionId = :id")
     void deleteByQuestionId(@Param("id") Long id);

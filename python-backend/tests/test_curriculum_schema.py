@@ -359,6 +359,24 @@ _SIZE_FIELDS = (
 )
 
 
+@pytest.fixture(autouse=True)
+def _knob_driven_sizing(monkeypatch):
+    """Pins the knob-driven path for this module.
+
+    Same reason `shipped_defaults` pins the six size fields: a checkout whose
+    .env turns CURRICULUM_AUTOSIZE on would otherwise flip every floor in this
+    file to 1 and every ceiling off, and the assertions about the derived floor
+    would fail on the machine rather than on the code. Autosize has its own
+    tests below, which opt back in explicitly.
+    """
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setenv("CURRICULUM_AUTOSIZE", "false")
+    yield
+    get_settings.cache_clear()
+
+
 @pytest.fixture
 def shipped_defaults(monkeypatch):
     """Pins the shipped curriculum size for one test.
@@ -446,3 +464,119 @@ def test_lesson_depth_is_independent_of_curriculum_size(tiny_curriculum_settings
     assert f"least {tiny_curriculum_settings.lesson_min_sections} of them" in (
         build_system_prompt()
     )
+
+
+# ---------------------------------------------------------------------------
+# Autosize: the planner sizes the syllabus from the uploaded document.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def autosize_settings(monkeypatch):
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setenv("CURRICULUM_AUTOSIZE", "true")
+    monkeypatch.setenv("CURRICULUM_AUTOSIZE_MAX_LESSONS", "10")
+    yield
+    get_settings.cache_clear()
+
+
+def _plan(majors: int, middles: int, lessons: int) -> list:
+    return [
+        {
+            "title": f"M{i}",
+            "middleCategories": [
+                {"title": f"mid{j}", "lessons": [{"name": f"L{k}"} for k in range(lessons)]}
+                for j in range(middles)
+            ],
+        }
+        for i in range(majors)
+    ]
+
+
+def _shape(plan: list) -> tuple:
+    mids = [m for major in plan for m in major["middleCategories"]]
+    return len(plan), len(mids), sum(len(m["lessons"]) for m in mids)
+
+
+def test_autosize_drops_the_floor_so_a_thin_document_is_not_resampled(autosize_settings):
+    """A short source is *supposed* to yield a short syllabus under autosize.
+
+    Holding it to a floor derived from knobs the planner was never shown would
+    reject a correct answer and resample it forever.
+    """
+    from app.schemas.certification.curriculum_schema import (
+        required_major_categories,
+        required_total_lessons,
+    )
+
+    assert required_major_categories() == 1
+    assert required_total_lessons() == 1
+
+
+def test_autosize_does_not_trim_a_plan_the_planner_chose(autosize_settings):
+    """The whole point: the planner's shape survives.
+
+    Under the knob path this 5x5 plan would be cut to the configured maxima.
+    Autosize leaves it alone because it is under the backstop.
+    """
+    from app.schemas.certification.curriculum_schema import _enforce_ceiling
+
+    plan = _plan(2, 2, 2)  # 8 lessons, below the 10-lesson backstop
+    assert _shape(_enforce_ceiling(plan)) == (2, 4, 8)
+
+
+def test_autosize_still_stops_a_runaway_plan(autosize_settings):
+    """The 2026-08-24 shape: 125 lessons, which drained the account at 77.
+
+    Autosize removes the per-level ceilings but must not remove the circuit
+    breaker, or that failure is reachable again.
+    """
+    from app.schemas.certification.curriculum_schema import _enforce_ceiling
+
+    trimmed = _enforce_ceiling(_plan(5, 5, 5))
+    assert _shape(trimmed)[2] == 10
+    # Structurally valid after trimming -- no empty majors or middles left.
+    for major in trimmed:
+        assert major["middleCategories"]
+        for middle in major["middleCategories"]:
+            assert middle["lessons"]
+
+
+def test_the_backstop_can_be_switched_off(monkeypatch):
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setenv("CURRICULUM_AUTOSIZE", "true")
+    monkeypatch.setenv("CURRICULUM_AUTOSIZE_MAX_LESSONS", "0")
+
+    from app.schemas.certification.curriculum_schema import _enforce_ceiling
+
+    assert _shape(_enforce_ceiling(_plan(5, 5, 5))) == (5, 25, 125)
+    get_settings.cache_clear()
+
+
+def test_autosize_prompt_names_no_counts_and_asks_for_consolidation(autosize_settings):
+    """The Size block must not anchor the model to a number.
+
+    Naming any range -- even a wide one -- pulls the plan toward it regardless
+    of what the document holds, which is exactly what autosize exists to avoid.
+    """
+    from app.agents.certification.curriculum_agent import _size_section
+    from app.core.config import get_settings
+
+    block = _size_section(get_settings())
+
+    assert "SOURCE MATERIAL" in block
+    # Consolidation pressure: lessons are ~90% of the generation bill, so the
+    # planner is pushed to merge rather than enumerate. Each of these carries a
+    # distinct instruction; losing any one of them makes runs more expensive.
+    assert "PRIORITISE, DO NOT ENUMERATE" in block
+    assert "COMBINE AGGRESSIVELY" in block
+    assert "BE DELIBERATELY CONCISE" in block
+    # Categories are consolidated too, not just lessons.
+    assert "Merge near-duplicate categories" in block
+    # No "3 to 6 Major Categories"-style ask survived.
+    assert "to 6" not in block
+    assert "Exactly" not in block

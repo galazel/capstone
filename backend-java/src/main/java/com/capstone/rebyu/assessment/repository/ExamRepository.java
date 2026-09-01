@@ -27,4 +27,18 @@ public interface ExamRepository extends JpaRepository<Exam, Long> {
 
     boolean existsByCertification_CertificationIdAndExamType_ExamTypeText(
             Long certificationId, String examTypeText);
+
+    /**
+     * When this learner was last served an exam of a given type -- the pop-up
+     * knowledge check's cooldown reads this so a learner cannot be interrupted
+     * twice in the same sitting. The minted exam is itself the record that a
+     * check was served, so no separate bookkeeping table is needed.
+     */
+    @Query("""
+            SELECT MAX(e.publishedAt) FROM Exam e
+            WHERE e.learner.learnerId = :learnerId
+              AND e.examType.examTypeText = :examTypeText
+            """)
+    java.time.LocalDateTime findLastServedAt(
+            @Param("learnerId") Long learnerId, @Param("examTypeText") String examTypeText);
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useLocation, useNavigate, useParams } from "react-router-dom"
 import {
   ArrowLeft,
@@ -6,20 +6,28 @@ import {
   BookOpen,
   ChevronDown,
   ChevronRight,
+  ClipboardCheck,
   Layers3,
   ListChecks,
-  Pencil,
+  Trash2,
 } from "@/components/icons"
 
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
 import {
+  addLesson,
+  addMajorCategory,
+  addMiddleCategory,
+  deleteLesson,
+  deleteMajorCategory,
+  deleteMiddleCategory,
   getAllCertifications,
   updateCertification,
 } from "@/services/certificationService.js"
+import { apiMessage } from "@/services/base"
 import { industries } from "@/constants/industries.js"
-import { InlineEditable } from "@/components/certifications/inline-editable.jsx"
+import { InlineAdd, InlineEditable } from "@/components/certifications/inline-editable.jsx"
 import {
   toCertificationUpdatePayload,
   validateCertificationDescription,
@@ -34,10 +42,17 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import CertificationFormDrawer from "@/components/certifications/certification-form-drawer"
-import AssessmentsTab, {
-  prefetchAssessmentData,
-} from "@/components/assessments/admin/assessments-tab.jsx"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { prefetchAssessmentData } from "@/components/assessments/admin/assessments-tab.jsx"
 import CertificationPublishingChecklist from "@/components/assessments/admin/certification-publishing-checklist.jsx"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
@@ -51,6 +66,13 @@ function getCertification(location) {
       location.state?.certification ??
       null
   )
+}
+
+/** Which endpoint removes which kind of node. */
+const DELETERS = {
+  major: deleteMajorCategory,
+  middle: deleteMiddleCategory,
+  lesson: deleteLesson,
 }
 
 function getLessonTitle(lesson) {
@@ -93,17 +115,55 @@ export default function ViewCertificationAdmin() {
      found" before correcting itself.
 
      The override is whatever this page has been handed or has changed locally:
-     router state on arrival, and the edits made here. It wins when present;
-     the fetched copy is what the URL alone can reach. */
+     router state on arrival, and the edits made here. The fetched copy is what
+     the URL alone can reach. */
   const fetchedCertification = certifications.find(
       (item) =>
           String(item.certificationId ?? item.id) === String(routeCertificationId)
   )
 
-  const certification = certificationOverride ?? fetchedCertification ?? null
+  /* Merged, not replaced.
 
-  const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false)
-  const [createAssessmentRequest, setCreateAssessmentRequest] = useState(null)
+     The override used to win outright, which made it responsible for being a
+     whole certification every time anyone wrote to it. It only takes one
+     handler doing `{ ...current, oneField }` where `current` is null -- which
+     is what it is on any arrival without router state -- for the override to
+     become a stub with no title and no majorCategory, and for that stub to
+     beat a perfectly good fetched copy. Publishing did exactly that, and it
+     surfaced as the curriculum disappearing, which points nowhere near state.
+
+     Merging makes a partial override harmless: it can only override the fields
+     it actually carries, and everything it omits still comes from the fetched
+     copy. An override for a *different* certification is dropped rather than
+     mixed in -- the effect below clears those, but it runs after the render
+     that would have blended two certifications into one.
+
+     Memoised so this stays one object across renders; nothing here depends on
+     its identity today, but handing children a fresh object on every keystroke
+     in an inline editor is a cost with no upside. */
+  const overrideId =
+      certificationOverride?.certificationId ?? certificationOverride?.id
+
+  const certification = useMemo(() => {
+    if (
+        certificationOverride &&
+        // No id at all means a partial for the page we are on; only an id that
+        // names a different certification disqualifies the override.
+        (overrideId == null ||
+            String(overrideId) === String(routeCertificationId))
+    ) {
+      return { ...fetchedCertification, ...certificationOverride }
+    }
+
+    return fetchedCertification ?? null
+  }, [certificationOverride, overrideId, fetchedCertification, routeCertificationId])
+
+  /* The node a delete has been asked for, held until it is confirmed.
+     `{ kind, id, name, detail }` -- one dialog for all three levels, because
+     three dialogs saying the same sentence about different nouns is three
+     places for the warning to drift. */
+  const [pendingDelete, setPendingDelete] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   /* The assessments tab's reads, started as soon as the certification opens
      rather than when the tab is clicked.
@@ -112,10 +172,14 @@ export default function ViewCertificationAdmin() {
      could not begin until the click -- which is why opening it always meant
      watching four requests resolve behind skeleton rows. Nothing here depends
      on them, so warming them costs the page nothing and gives the tab its data
-     already in hand. */
+     already in hand.
+
+     The id comes from the route rather than the fetched certification so the
+     exam read can start on the first render, before the certification itself
+     has arrived. */
   useEffect(() => {
-    prefetchAssessmentData(queryClient)
-  }, [queryClient])
+    prefetchAssessmentData(queryClient, routeCertificationId)
+  }, [queryClient, routeCertificationId])
 
   useEffect(() => {
     pageRef.current?.scrollIntoView({
@@ -156,21 +220,6 @@ export default function ViewCertificationAdmin() {
             : null
     )
   }, [location.key, routeCertificationId])
-
-  async function handleCertificationSaved(updatedCertification) {
-    setCertification((currentCertification) => ({
-      ...currentCertification,
-      ...updatedCertification,
-
-      majorCategory:
-          updatedCertification.majorCategory ??
-          currentCertification?.majorCategory ??
-          [],
-    }))
-    await queryClient.invalidateQueries({
-      queryKey: ["admin-certifications"],
-    })
-  }
 
   /**
    * One edit, saved where it was made.
@@ -268,10 +317,96 @@ export default function ViewCertificationAdmin() {
     )
   }
 
+  /**
+   * Re-read the certification from the server and let that copy win.
+   *
+   * Adds and deletes go through the per-node endpoints, which return only the
+   * node they touched -- the ids of anything the server minted, and the shape
+   * of the tree after a branch was removed, are only knowable by asking again.
+   * Patching the local tree instead would work right up until a lesson was
+   * added and immediately renamed, with no id to rename it by.
+   */
+  async function refreshCertification() {
+    await queryClient.invalidateQueries({ queryKey: ["admin-certifications"] })
+    setCertification(null)
+  }
+
+  /* The three adds. Each throws on failure rather than toasting: InlineAdd
+     keeps the field open and shows the message, so a rejected name is still
+     there to correct. */
+  async function addMajor(title) {
+    await addMajorCategory({
+      certificationId: certification.certificationId ?? certification.id,
+      title,
+    })
+    await refreshCertification()
+    toast.success("Major category added")
+  }
+
+  async function addMiddle(majorCategoryId, title) {
+    await addMiddleCategory({ majorCategoryId, title })
+    await refreshCertification()
+    toast.success("Module added")
+  }
+
+  async function addLessonTo(middleCategoryId, name) {
+    await addLesson({ middleCategoryId, name })
+    await refreshCertification()
+    toast.success("Lesson added")
+  }
+
+  /* Deleting is the one thing on this page that is not undoable, so it is the
+     one thing that asks first. Everything else saves the moment it is typed. */
+  function requestDelete(pending) {
+    setPendingDelete(pending)
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete || isDeleting) return
+
+    try {
+      setIsDeleting(true)
+      await DELETERS[pendingDelete.kind](pendingDelete.id)
+      await refreshCertification()
+      setPendingDelete(null)
+      toast.success(`${pendingDelete.name} deleted`)
+    } catch (error) {
+      // The server refuses a node that has graded learner records under it and
+      // names what is in the way; that sentence is the whole point, so it is
+      // shown rather than replaced with "could not delete".
+      toast.error("Could not delete", {
+        description: apiMessage(error, "Something went wrong."),
+      })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  /* Everything the tree can do, in one object. Passed down whole because the
+     alternative is eight props repeated at each of the two levels, where the
+     only thing a reader learns from the repetition is that they were spelled
+     the same both times. */
+  const curriculumActions = {
+    renameMajor: renameMajorCategory,
+    renameMiddle: renameMiddleCategory,
+    renameLesson,
+    addMiddle,
+    addLesson: addLessonTo,
+    requestDelete,
+  }
+
+  /* The checklist's "Create ..." and "Fix ..." buttons, now that the
+     assessments they act on live on their own page. The request rides along in
+     router state and that page opens the dialog on arrival, so the admin still
+     gets one click from a missing requirement to the form that fills it. */
   function handleCreateAssessment(request) {
-    setCreateAssessmentRequest({
-      ...request,
-      requestId: `${Date.now()}-${Math.random()}`,
+    navigate(`/admin/certification/${certification.certificationId}/assessments`, {
+      state: {
+        createAssessment: {
+          ...request,
+          requestId: `${Date.now()}-${Math.random()}`,
+        },
+      },
     })
   }
 
@@ -350,16 +485,18 @@ export default function ViewCertificationAdmin() {
                 field is the same markup it always was until you click the
                 pencil. */}
             <div className="mb-5 flex items-center gap-2">
-              <Badge
-                  variant="secondary"
-                  className="border border-black/10 bg-white/85 px-3 py-1 text-xs font-semibold text-black shadow-sm backdrop-blur-sm hover:bg-white/85"
-              >
-                {certification.industry || "General"}
-              </Badge>
+              {/* The pill IS the control.
+                  It used to be a read-only badge with a separate white circle
+                  beside it whose own value was `sr-only` -- so the thing that
+                  showed the industry could not change it, and the thing that
+                  changed it showed nothing. Two elements for one field, and the
+                  live one looked like a stray button.
 
-              {/* A select, not a text field: the industry has to match the one
-                  vocabulary certifications and challenge arenas are both
-                  filtered by, and a typed one silently matches nothing. */}
+                  A select rather than the pencil the rest of the page uses,
+                  because the industry has to match the one vocabulary
+                  certifications and challenge arenas are both filtered by: a
+                  typed one silently matches nothing. A chevron inside the pill
+                  says "pick from a list", which is what this actually is. */}
               <Select
                   value={certification.industry || ""}
                   onValueChange={(industry) => {
@@ -368,17 +505,18 @@ export default function ViewCertificationAdmin() {
                         "Industry updated"
                     ).catch((error) =>
                         toast.error("Could not update the industry", {
-                          description:
-                              error?.response?.data?.message ?? error?.message,
+                          description: apiMessage(error, "Please try again."),
                         })
                     )
                   }}
               >
                 <SelectTrigger
-                    aria-label="Change industry"
-                    className="h-8 w-8 justify-center border-white/30 bg-white/15 p-0 text-white [&>svg]:opacity-90"
+                    size="sm"
+                    aria-label="Industry"
+                    title="Change industry"
+                    className="gap-1.5 rounded-full border-black/10 bg-white/85 px-3 py-1 text-xs font-semibold text-black shadow-sm backdrop-blur-sm hover:bg-white data-[size=sm]:h-auto"
                 >
-                  <SelectValue aria-hidden="true" className="sr-only" />
+                  <SelectValue placeholder="General" />
                 </SelectTrigger>
 
                 <SelectContent>
@@ -463,13 +601,35 @@ export default function ViewCertificationAdmin() {
                   Course Modules
                 </h2>
 
+                {/* Says the page is editable, because the pencils alone did
+                    not: they are small, they sit beside the text rather than
+                    on it, and an admin who has not noticed one goes looking
+                    for a form instead. */}
                 <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                  Manage the major categories, modules, lessons, and assessment
-                  structure under this certification.
+                  Everything on this page is edited where it is shown: the
+                  pencil beside any name renames it, and each level of the
+                  curriculum adds and removes its own items. There is no
+                  separate edit form to open.
                 </p>
               </div>
 
               <div className="flex flex-wrap gap-3">
+                {/* The two workspaces this certification owns, side by side.
+                    Both are full pages of their own; neither is a tab. */}
+                <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 rounded-xl px-5 font-medium shadow-sm"
+                    onClick={() =>
+                        navigate(
+                            `/admin/certification/${certification.certificationId}/assessments`
+                        )
+                    }
+                >
+                  <ClipboardCheck className="mr-2 h-4 w-4" />
+                  Assessments
+                </Button>
+
                 {/* One button, not two: the bank opens with the builder in
                     it. */}
                 <Button
@@ -485,23 +645,6 @@ export default function ViewCertificationAdmin() {
                   Question Bank
                 </Button>
 
-                <CertificationFormDrawer
-                    mode="edit"
-                    certification={certification}
-                    open={isEditDrawerOpen}
-                    onOpenChange={setIsEditDrawerOpen}
-                    onSaved={handleCertificationSaved}
-                    trigger={
-                      <Button
-                          type="button"
-                          variant="outline"
-                          className="h-11 rounded-xl px-5 font-medium shadow-sm"
-                      >
-                        <Pencil className="mr-2 h-4 w-4" />
-                        Edit Certification
-                      </Button>
-                    }
-                />
               </div>
             </div>
 
@@ -558,6 +701,20 @@ export default function ViewCertificationAdmin() {
                       Add a major category to start building this certification
                       curriculum.
                     </p>
+
+                    {/* The empty state said "add a major category" and gave no
+                        way to add one, which is a dead end wearing an
+                        instruction. */}
+                    <div className="mt-6 flex justify-center">
+                      <InlineAdd
+                          label="Major category"
+                          validate={(value) =>
+                              validateStructureName(value, "Major category title")
+                          }
+                          onAdd={addMajor}
+                          className="w-full max-w-sm"
+                      />
+                    </div>
                   </div>
               ) : (
                   <div className="space-y-10">
@@ -567,11 +724,18 @@ export default function ViewCertificationAdmin() {
                             certification={certification}
                             majorCategory={majorCategory}
                             majorIndex={majorIndex}
-                            onRenameMajor={renameMajorCategory}
-                            onRenameMiddle={renameMiddleCategory}
-                            onRenameLesson={renameLesson}
+                            actions={curriculumActions}
                         />
                     ))}
+
+                    <InlineAdd
+                        label="Major category"
+                        validate={(value) =>
+                            validateStructureName(value, "Major category title")
+                        }
+                        onAdd={addMajor}
+                        className="w-full"
+                    />
                   </div>
               )}
             </section>
@@ -582,22 +746,71 @@ export default function ViewCertificationAdmin() {
                   certificationId={certification?.certificationId}
                   isPublished={certification?.status === "PUBLISHED"}
                   onCreateAssessment={handleCreateAssessment}
+                  /* Based on the certification actually on screen, not on the
+                     override alone.
+
+                     The override is null whenever this page was reached
+                     without router state -- a refresh, a bookmark, the back
+                     arrow off the assessments or question bank page -- and
+                     spreading null left `{ status: "PUBLISHED" }`: no id, no
+                     title, no majorCategory. That stub then beat the fetched
+                     copy in the resolution below it, so publishing blanked the
+                     curriculum it had just published. */
                   onPublished={() =>
                       setCertification((current) => ({
-                        ...current,
+                        ...(current ?? certification),
                         status: "PUBLISHED",
                       }))
                   }
               />
-
-              <AssessmentsTab
-                  certification={certification}
-                  createRequest={createAssessmentRequest}
-                  onCreateRequestHandled={() => setCreateAssessmentRequest(null)}
-              />
             </div>
           </div>
         </main>
+
+        {/* Named, counted, and specific about what else goes with it. A
+            confirmation that says "are you sure?" and nothing else is a
+            keystroke, not a decision -- and deleting a major category takes
+            every module, lesson, quiz and question beneath it. */}
+        <AlertDialog
+            open={Boolean(pendingDelete)}
+            onOpenChange={(open) => {
+              if (!open && !isDeleting) setPendingDelete(null)
+            }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                Delete “{pendingDelete?.name}”?
+              </AlertDialogTitle>
+
+              <AlertDialogDescription>
+                {pendingDelete?.detail
+                    ? `This also deletes the ${pendingDelete.detail} under it, along with their quizzes and questions. `
+                    : "This also deletes its quiz and questions. "}
+                It cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Keep it</AlertDialogCancel>
+
+              <AlertDialogAction
+                  disabled={isDeleting}
+                  onClick={(event) => {
+                    // The dialog closes itself on action; this one has to stay
+                    // open until the request comes back, because the server can
+                    // still refuse -- a node with graded learner records under
+                    // it is not deletable, and that message belongs here.
+                    event.preventDefault()
+                    void confirmDelete()
+                  }}
+                  className="bg-destructive text-white hover:bg-destructive/90"
+              >
+                {isDeleting ? "Deleting…" : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </section>
   )
 }
@@ -606,11 +819,13 @@ function MajorCategorySection({
                                 certification,
                                 majorCategory,
                                 majorIndex,
-                                onRenameMajor,
-                                onRenameMiddle,
-                                onRenameLesson,
+                                actions,
                               }) {
   const middleCategories = majorCategory.middleCategory ?? []
+  const lessonCount = middleCategories.reduce(
+      (total, middle) => total + (middle.lessons?.length ?? 0),
+      0
+  )
 
   return (
       <section className="space-y-4">
@@ -621,7 +836,7 @@ function MajorCategorySection({
               value={majorCategory.title}
               label="Major category title"
               validate={(value) => validateStructureName(value, "Major category title")}
-              onSave={(title) => onRenameMajor(majorIndex, title)}
+              onSave={(title) => actions.renameMajor(majorIndex, title)}
               renderValue={(title) => (
                   <p className="font-heading text-lg font-bold text-foreground">
                     <span className="text-primary">
@@ -640,6 +855,19 @@ function MajorCategorySection({
                 {majorCategory.priority}
               </Badge>
           )}
+
+          <DeleteNodeButton
+              disabled={majorCategory.majorCategoryId == null}
+              label={`Delete major category ${majorCategory.title}`}
+              onClick={() =>
+                  actions.requestDelete({
+                    kind: "major",
+                    id: majorCategory.majorCategoryId,
+                    name: majorCategory.title,
+                    detail: describeSubtree(middleCategories.length, lessonCount),
+                  })
+              }
+          />
         </div>
 
         {middleCategories.length === 0 ? (
@@ -656,14 +884,53 @@ function MajorCategorySection({
                       middleCategory={middleCategory}
                       majorIndex={majorIndex}
                       middleIndex={middleIndex}
-                      onRenameMiddle={onRenameMiddle}
-                      onRenameLesson={onRenameLesson}
+                      actions={actions}
                   />
               ))}
             </div>
         )}
+
+        <InlineAdd
+            label="Module"
+            validate={(value) => validateStructureName(value, "Module title")}
+            onAdd={(title) => actions.addMiddle(majorCategory.majorCategoryId, title)}
+        />
       </section>
   )
+}
+
+/**
+ * The one destructive control on this page, so it looks like one.
+ *
+ * Quiet until hovered -- the same reasoning as the edit pencil, except the
+ * hover state is red rather than neutral, because the two sit inches apart and
+ * the cost of confusing them is not symmetric.
+ */
+function DeleteNodeButton({ onClick, label, disabled = false, className = "" }) {
+  return (
+      <button
+          type="button"
+          onClick={onClick}
+          disabled={disabled}
+          aria-label={label}
+          title={label}
+          className={`inline-flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground opacity-50 transition hover:bg-destructive/10 hover:text-destructive hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-25 ${className}`}
+      >
+        <Trash2 className="size-3.5" />
+      </button>
+  )
+}
+
+/** "2 modules and 5 lessons", or "" when the node is a leaf. */
+function describeSubtree(middleCount, lessonCount) {
+  const parts = []
+  if (middleCount > 0) {
+    parts.push(`${middleCount} ${middleCount === 1 ? "module" : "modules"}`)
+  }
+  if (lessonCount > 0) {
+    parts.push(`${lessonCount} ${lessonCount === 1 ? "lesson" : "lessons"}`)
+  }
+  return parts.join(" and ")
 }
 
 function MiddleCategoryCard({
@@ -672,8 +939,7 @@ function MiddleCategoryCard({
                               middleCategory,
                               majorIndex,
                               middleIndex,
-                              onRenameMiddle,
-                              onRenameLesson,
+                              actions,
                             }) {
   const [isOpen, setIsOpen] = useState(false)
   const navigate = useNavigate()
@@ -708,7 +974,9 @@ function MiddleCategoryCard({
                 value={middleCategory.title}
                 label="Module title"
                 validate={(value) => validateStructureName(value, "Module title")}
-                onSave={(title) => onRenameMiddle(majorIndex, middleIndex, title)}
+                onSave={(title) =>
+                    actions.renameMiddle(majorIndex, middleIndex, title)
+                }
                 renderValue={(title) => (
                     <h3 className="font-heading text-base font-bold text-foreground">
                       {title}
@@ -722,23 +990,38 @@ function MiddleCategoryCard({
             </p>
           </div>
 
-          <button
-              type="button"
-              onClick={() => setIsOpen((current) => !current)}
-              aria-expanded={isOpen}
-              aria-label={`${isOpen ? "Hide" : "Show"} lessons in ${middleCategory.title}`}
-              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
-                  isOpen
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground hover:bg-muted/70"
-              }`}
-          >
-            {isOpen ? (
-                <ChevronDown className="h-4 w-4" />
-            ) : (
-                <ChevronRight className="h-4 w-4" />
-            )}
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <DeleteNodeButton
+                disabled={middleCategory.middleCategoryId == null}
+                label={`Delete module ${middleCategory.title}`}
+                onClick={() =>
+                    actions.requestDelete({
+                      kind: "middle",
+                      id: middleCategory.middleCategoryId,
+                      name: middleCategory.title,
+                      detail: describeSubtree(0, lessons.length),
+                    })
+                }
+            />
+
+            <button
+                type="button"
+                onClick={() => setIsOpen((current) => !current)}
+                aria-expanded={isOpen}
+                aria-label={`${isOpen ? "Hide" : "Show"} lessons in ${middleCategory.title}`}
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
+                    isOpen
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-muted/70"
+                }`}
+            >
+              {isOpen ? (
+                  <ChevronDown className="h-4 w-4" />
+              ) : (
+                  <ChevronRight className="h-4 w-4" />
+              )}
+            </button>
+          </div>
         </div>
 
         {isOpen && (
@@ -767,7 +1050,7 @@ function MiddleCategoryCard({
                                       validateStructureName(value, "Lesson name")
                                   }
                                   onSave={(name) =>
-                                      onRenameLesson(
+                                      actions.renameLesson(
                                           majorIndex,
                                           middleIndex,
                                           lessonIndex,
@@ -787,19 +1070,43 @@ function MiddleCategoryCard({
                             </div>
                           </div>
 
-                          <button
-                              type="button"
-                              onClick={(event) => handleCreateLesson(event, lesson)}
-                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-primary transition hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                              title="Create lesson content"
-                              aria-label={`Create lesson content for ${getLessonTitle(lesson)}`}
-                          >
-                            <ArrowUpRight className="h-4 w-4" />
-                          </button>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <DeleteNodeButton
+                                disabled={lesson.lessonId == null}
+                                label={`Delete lesson ${getLessonTitle(lesson)}`}
+                                onClick={() =>
+                                    actions.requestDelete({
+                                      kind: "lesson",
+                                      id: lesson.lessonId,
+                                      name: getLessonTitle(lesson),
+                                      detail: "",
+                                    })
+                                }
+                            />
+
+                            <button
+                                type="button"
+                                onClick={(event) => handleCreateLesson(event, lesson)}
+                                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-primary transition hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                title="Create lesson content"
+                                aria-label={`Create lesson content for ${getLessonTitle(lesson)}`}
+                            >
+                              <ArrowUpRight className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
                     ))}
                   </div>
               )}
+
+              <InlineAdd
+                  label="Lesson"
+                  className="mt-3"
+                  validate={(value) => validateStructureName(value, "Lesson name")}
+                  onAdd={(name) =>
+                      actions.addLesson(middleCategory.middleCategoryId, name)
+                  }
+              />
             </div>
         )}
       </article>

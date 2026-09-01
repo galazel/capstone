@@ -34,6 +34,7 @@ public class MiddleCategoryService {
     private final MiddleCategoryMapper middleCategoryMapper;
     private final MajorCategoryRepository majorCategoryRepository;
     private final MajorCategoryService majorCategoryService;
+    private final CurriculumSubtreeService curriculumSubtreeService;
 
     public List<MiddleCategoryDto> getAll() {
         log.debug("Fetching all middle categories");
@@ -88,7 +89,11 @@ public class MiddleCategoryService {
         MiddleCategory existing = findEntity(id);
         majorCategoryService.requireCanActOn(
                 existing.getMajorCategory().getOwnerGroup(), isAdmin, callerInstitutionId, callerUserId, callerIsOwner);
-        middleCategoryRepository.delete(existing);
+
+        // The module's own assessment and every lesson quiz beneath it, first:
+        // JPA cascades the lessons but nothing cascades what points at them.
+        curriculumSubtreeService.clearFor(CurriculumSubtreeService.Node.MIDDLE, id);
+        middleCategoryRepository.deleteById(id);
         log.info("MiddleCategory id: {} deleted", id);
     }
 

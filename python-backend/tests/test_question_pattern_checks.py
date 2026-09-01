@@ -200,3 +200,118 @@ def test_the_schema_rejects_a_programming_question_with_one_test_case():
             starter_code="def solve(rows): ...",
             test_cases=[{"input_data": "1", "expected_output": "1"}],
         )
+
+
+# ---------------------------------------------------------------------------
+# The question bank must read like a professional certification paper.
+# ---------------------------------------------------------------------------
+
+
+def test_the_prompt_demands_hard_scenario_questions_not_definitions():
+    """Pins the difficulty brief.
+
+    The default failure mode of generated assessment is a bank of definition
+    lookups: answerable without studying, and useless for a professional
+    certification. Each instruction below is load-bearing, and losing any of
+    them quietly returns the bank to that state -- which is only visible much
+    later, in questions nobody finds hard.
+    """
+    from app.agents.certification.question_agent import SYSTEM_PROMPT
+
+    # Skewed hard, with an explicit mix so the model cannot default to easy.
+    assert "10% EASY, 40% AVERAGE, 50% HARD" in SYSTEM_PROMPT
+    assert "If you are\n  unsure whether a question is AVERAGE or HARD, make it harder." in SYSTEM_PROMPT
+
+    # Scenario-first, technical, judgement over recall.
+    assert "SITUATIONAL and TECHNICAL" in SYSTEM_PROMPT
+    assert "Test judgement, not recall" in SYSTEM_PROMPT
+    assert "working practitioner" in SYSTEM_PROMPT
+
+    # Higher-order Bloom levels rather than REMEMBER/UNDERSTAND.
+    assert "APPLY, ANALYZE or EVALUATE" in SYSTEM_PROMPT
+
+
+def test_hard_never_means_ambiguous():
+    """Difficulty must come from reasoning demanded, not unclear wording.
+
+    A question with two defensible readings is broken, not hard. This rule
+    predates the difficulty push and has to survive it -- pushing for "tricky"
+    questions without it produces guessing games instead of assessment.
+    """
+    from app.agents.certification.question_agent import SYSTEM_PROMPT
+
+    assert "HARD means cognitively demanding, NOT deceptive" in SYSTEM_PROMPT
+    assert "If two readings of\n  the stem lead to different answers, the question is broken" in SYSTEM_PROMPT
+    assert "hard only because it is unclear is a bad\n  question" in SYSTEM_PROMPT
+
+
+def test_a_bank_that_all_opens_with_the_is_flagged():
+    """The pattern the three-word check cannot see.
+
+    "The server fails..." and "The database is..." are different three-word
+    openings, so `_check_stem_variety` passes a bank in which every stem begins
+    with "The". That is precisely the shape reviewers describe as "looks AI
+    generated", so it needs its own check.
+    """
+    from app.domain.validation.questions import _check_opening_word_variety
+
+    issues: list = []
+    _check_opening_word_variety(
+        [{"question": f"The component {i} fails to respond under load."} for i in range(10)],
+        issues,
+    )
+    codes = {issue.code for issue in issues}
+
+    assert "REPETITIVE_OPENING_WORD" in codes
+    assert "ARTICLE_HEAVY_OPENINGS" in codes
+
+
+def test_varied_openings_are_not_flagged():
+    """Guards against the check being so strict it fires on good banks."""
+    from app.domain.validation.questions import _check_opening_word_variety
+
+    issues: list = []
+    _check_opening_word_variety(
+        [
+            {"question": "Given a sudden spike in latency, which change is safest?"},
+            {"question": "Which control best mitigates this risk?"},
+            {"question": "You are asked to review a schema. What fails first?"},
+            {"question": "Under which condition does the cache invalidate early?"},
+            {"question": "A developer reports an intermittent error. Why?"},
+            {"question": "Identify the root cause of the reported timeout."},
+        ],
+        issues,
+    )
+
+    assert issues == []
+
+
+def test_the_prompt_forbids_defaulting_to_article_openings():
+    """The validator only warns after the fact; the prompt is the prevention."""
+    from app.agents.certification.question_agent import SYSTEM_PROMPT
+
+    assert "Vary how each stem OPENS" in SYSTEM_PROMPT
+    assert "most stems should NOT open with an article" in SYSTEM_PROMPT
+    # Concrete alternatives, so "vary it" is actionable rather than a wish.
+    assert "second person" in SYSTEM_PROMPT
+    assert "inverted" in SYSTEM_PROMPT
+    assert "imperative" in SYSTEM_PROMPT
+
+
+def test_performance_items_are_framed_as_real_systems():
+    """PROGRAMMING and DIAGRAM items must read like professional performance tasks.
+
+    In TOPCIT these are the largest weighted component and are explicitly
+    "real life problems ... solved through coding and drawing diagrams". An
+    item that opens on a topic rather than a system is an academic exercise
+    wearing a scenario's clothes, so each of these instructions is pinned.
+    """
+    from app.agents.certification.question_agent import SYSTEM_PROMPT
+
+    assert "PROGRAMMING and DIAGRAM ITEMS ARE PERFORMANCE ITEMS" in SYSTEM_PROMPT
+    assert "OPEN ON A SYSTEM, NOT ON A TOPIC" in SYSTEM_PROMPT
+    assert "THE SCENARIO CARRIES THE DIFFICULTY" in SYSTEM_PROMPT
+    assert "REQUIRE A DESIGN DECISION" in SYSTEM_PROMPT
+    assert "MATCH THE ARTEFACT TO THE PROBLEM" in SYSTEM_PROMPT
+    # The scenario must not pre-solve the model for the learner.
+    assert "Never pre-solve it by" in SYSTEM_PROMPT

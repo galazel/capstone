@@ -32,6 +32,23 @@ services:
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
+    environment:
+      # 24 hours, up from the 30-minute default.
+      #
+      # A certification generation is one message whose handler runs the whole
+      # graph -- document ingestion, curriculum, then a lesson at a time -- and
+      # the message is only acked when that finishes. At the default timeout
+      # RabbitMQ decides a 30-minute-old delivery is a dead consumer, closes
+      # the channel and redelivers it, and the handler starts the run again
+      # FROM THE BEGINNING. That is not theoretical: on 2026-08-31 a run
+      # reached lesson 9, was redelivered at exactly 30 minutes, and re-ran
+      # document ingestion and curriculum planning from scratch as "attempt 2"
+      # -- paying for all of it twice.
+      #
+      # The real fix is to ack on receipt and run the graph as a background
+      # task, so no broker timeout can restart it. Until then this has to
+      # exceed the longest plausible run.
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit consumer_timeout 86400000"
     ports:
       - "5672:5672"
       - "15672:15672"

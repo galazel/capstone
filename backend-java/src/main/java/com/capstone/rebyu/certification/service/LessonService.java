@@ -34,6 +34,7 @@ public class LessonService {
     private final LessonImageService lessonImageService;
     private final LessonVideoService lessonVideoService;
     private final MajorCategoryService majorCategoryService;
+    private final CurriculumSubtreeService curriculumSubtreeService;
 
     public List<LessonDto> getAll() {
         return lessonRepository.findAll()
@@ -100,7 +101,13 @@ public class LessonService {
         majorCategoryService.requireCanActOn(
                 existing.getMiddleCategory().getMajorCategory().getOwnerGroup(),
                 isAdmin, callerInstitutionId, callerUserId, callerIsOwner);
-        lessonRepository.delete(existing);
+
+        // A generated lesson owns a quiz and its questions, and nothing in the
+        // schema cascades those -- so plain repository.delete() died on a
+        // foreign key. Deleting by id afterwards because the purge clears the
+        // persistence context, leaving `existing` detached.
+        curriculumSubtreeService.clearFor(CurriculumSubtreeService.Node.LESSON, id);
+        lessonRepository.deleteById(id);
     }
 
     public void saveLessonComponent(

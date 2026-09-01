@@ -71,15 +71,64 @@ Rules:
   and make them cover the ordinary case AND the edges the constraints
   describe (empty input, boundary values, duplicates, invalid input) rather
   than three variations of the same easy case. Difficulty is normally
-  AVERAGE or DIFFICULT, and estimated_seconds should reflect the real work.
+  AVERAGE or HARD, and estimated_seconds should reflect the real work.
 
 - DIAGRAM is likewise a modelling task, not a labelling exercise. Give a
   scenario with enough detail to model -- the entities involved, how they
   relate, the rules and constraints that hold -- and ask the learner to
   produce a diagram of it. The scenario should require the learner to decide
   the structure, not to copy one stated in the question. Difficulty is
-  normally AVERAGE or DIFFICULT, and estimated_seconds should reflect the
+  normally AVERAGE or HARD, and estimated_seconds should reflect the
   real work.
+
+  PROGRAMMING and DIAGRAM ITEMS TAKE SUB-QUESTIONS. Put 2 to 4 in
+  `sub_questions`. These are the parts asked ABOUT the artifact the learner
+  produces, and they are what makes the item a critical-thinking task rather
+  than a prompt with a big box under it: justify a decision you made, state
+  the trade-off you accepted, say what breaks when a stated constraint
+  changes, explain why the alternative structure is worse. Each is answered in
+  writing, each carries a `rubric_answer` describing what a full-credit answer
+  establishes, and each carries its own `points`. Never restate the main task
+  as a sub-question, and never ask for a second artifact -- the parts are
+  reasoning about the one already produced.
+
+  PROGRAMMING and DIAGRAM ITEMS ARE PERFORMANCE ITEMS. In a professional
+  certification these are the largest and most heavily weighted part of the
+  paper, and they are not academic exercises -- the learner is asked to solve
+  a real problem the way they would at work, by writing code or drawing a
+  model. Write both types to that standard:
+
+    * OPEN ON A SYSTEM, NOT ON A TOPIC. Set the item in a concrete
+      organisation with a concrete system: an order-processing service, a
+      hospital admissions record, a warehouse dispatch workflow, a payment
+      reconciliation batch. Name the actors, the business rules, the volumes
+      or constraints that matter. The learner should be able to tell what the
+      system is for before they read what they must produce.
+
+    * THE SCENARIO CARRIES THE DIFFICULTY. Requirements should be stated the
+      way a stakeholder states them -- in business terms, slightly redundant,
+      occasionally implying a rule rather than stating it. The work is
+      deciding what the requirements MEAN structurally. Never pre-solve it by
+      listing the classes, tables, or steps the answer should contain.
+
+    * REQUIRE A DESIGN DECISION. A good performance item has more than one
+      defensible shape, and the reference answer is the best of them: which
+      entities are separate, where a relationship is many-to-many, whether a
+      step belongs in this component, what the algorithm must do at the
+      boundary. An item with exactly one mechanical answer is a labelling
+      exercise.
+
+    * MATCH THE ARTEFACT TO THE PROBLEM. A data model is an ERD, an
+      interaction over time is a SEQUENCE_DIAGRAM, a process is an
+      ACTIVITY_DIAGRAM or FLOWCHART, a structural decomposition is
+      UML_CLASS or UML_COMPONENT, scope and actors are USE_CASE. Do not
+      default to whichever is easiest to describe.
+
+    * STATE WHAT IS BEING ASSESSED. In `instructions` (diagram) or the
+      constraints and test cases (programming), be explicit about the
+      elements that must be present for the answer to be complete, so the
+      learner is judged on the model or the logic and never on guessing how
+      much detail was wanted.
 
   `diagram_type` must be EXACTLY one of these seven tokens -- the learner's
   canvas is equipped from this value, so anything else hands them the wrong
@@ -103,17 +152,33 @@ Rules:
   (cardinalities and keys for an ERD, message ordering for a sequence
   diagram, actors and boundary for a use case, decision branches for an
   activity diagram or flowchart).
-- Assign difficulty (EASY, AVERAGE, DIFFICULT) based on how central and
-  advanced the tested concept is within the given scope.
+- Assign difficulty (EASY, AVERAGE, HARD) based on how much reasoning the
+  question actually demands, not merely on how advanced the topic sounds. A
+  definition of an advanced concept is still EASY; applying a basic concept to
+  an unfamiliar scenario is not. See the DIFFICULTY section below for the mix
+  this bank is required to hit.
 
 HOW THE QUESTIONS SHOULD READ -- a bank of near-identical stems is the
 tell-tale of machine-written assessment, and it also fails to test anything:
 
-- Vary the sentence structure. Do not open question after question with the
-  same construction -- "A ...", "The ...", "Which of the following ...".
-  Write the way a professional certification paper does: some questions state
-  a situation and then ask, some ask directly, some quote a scenario, some
-  invert ("Under which condition does X fail?").
+- Vary how each stem OPENS. This is the single most visible tell of
+  machine-written assessment: a bank in which every question begins "The ...",
+  "A ...", or "Which of the following ..." reads as generated no matter how
+  good the individual questions are. No more than about a third of a batch may
+  begin with the same word, and most stems should NOT open with an article at
+  all.
+
+  Rotate deliberately between openings such as:
+    * scenario first -- "During a routine audit, three servers report ...";
+    * second person -- "You are asked to ...", "Your team has ...";
+    * inverted -- "Under which condition does X fail?";
+    * direct -- "Why does X occur when Y?";
+    * imperative -- "Identify the fault that ...", "Determine which ...";
+    * conditional -- "If X is configured as Y, what happens when ...";
+    * quoted or given data -- open on the log line, config, or figure itself.
+
+  Before finalising a batch, read the first three words of every stem in order.
+  If they look like a list of near-identical phrases, rewrite them.
 
 - Vary what is being tested. A bank of definition lookups measures recall and
   nothing else. Across a batch, mix:
@@ -124,11 +189,43 @@ tell-tale of machine-written assessment, and it also fails to test anything:
     * certification-style -- the phrasing and framing of the real exam.
   Definition questions may appear, but they are the minority, not the default.
 
-- Make some questions genuinely hard. A hard question demands careful reading
-  and real analysis; it does not depend on a trick of wording, an obscure
-  detail, or ambiguity about what is being asked. If two readings of the stem
-  lead to different answers, the question is broken -- rewrite it. Every
-  question has exactly one best answer, defensible from the reference context.
+DIFFICULTY -- this bank is for a PROFESSIONAL certification, and it must read
+like one. The default failure mode of generated questions is that they are far
+too easy: definition lookups a learner could answer without studying. Do not
+produce that bank.
+
+- Aim for roughly 10% EASY, 40% AVERAGE, 50% HARD. EASY questions exist only
+  to anchor genuinely foundational facts; they are the exception. If you are
+  unsure whether a question is AVERAGE or HARD, make it harder.
+
+- The default question is SITUATIONAL and TECHNICAL: a short professional
+  scenario -- a system behaving a certain way, a requirement to satisfy, a
+  trade-off to resolve, an incident to diagnose -- followed by a decision the
+  learner must reason out. Not "what is X", but "given this situation, what
+  should be done, and why".
+
+- Test judgement, not recall. A strong question requires the learner to apply
+  a concept to unfamiliar specifics, compare options that are all defensible
+  in isolation, infer from given facts, or spot the consequence of a design
+  choice. Where the material allows it, prefer questions that combine two
+  concepts rather than testing one in isolation.
+
+- Write at the level of a working practitioner sitting the real exam, using
+  the real vocabulary of the field. Concrete specifics -- names, values,
+  configurations, error conditions -- make a question technical; vagueness
+  makes it guessable.
+
+- HARD means cognitively demanding, NOT deceptive. A hard question demands
+  careful reading and real analysis; it does not depend on a trick of wording,
+  an obscure detail, or ambiguity about what is being asked. If two readings of
+  the stem lead to different answers, the question is broken -- rewrite it.
+  Every question has exactly one best answer, defensible from the reference
+  context. A question that is hard only because it is unclear is a bad
+  question, not a hard one.
+
+- Set `bloom_level` honestly, and let the spread reflect the above: most
+  questions should sit at APPLY, ANALYZE or EVALUATE. A bank concentrated at
+  REMEMBER and UNDERSTAND has not met this brief.
 
 CHOICES -- for MCQs, how the four options are written decides whether the
 question tests the concept or tests test-taking:

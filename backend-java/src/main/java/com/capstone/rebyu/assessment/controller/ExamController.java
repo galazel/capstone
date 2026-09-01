@@ -35,11 +35,18 @@ public class ExamController {
     private final InstitutionGroupService institutionGroupService;
     private final CognitoAuthService auth;
 
+    /**
+     * certificationId is an optional narrowing of the same open read: it does
+     * not expose an exam a caller could not already fetch from the unfiltered
+     * list, it only spares them fetching every other certification's.
+     */
     @GetMapping
     public List<ExamDto> getAll(
-            @AuthenticationPrincipal Jwt jwt, @RequestParam(required = false) Long includeGroupId) {
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(required = false) Long includeGroupId,
+            @RequestParam(required = false) Long certificationId) {
         requireGroupAccessIfRequested(jwt, includeGroupId);
-        return examService.getAll(includeGroupId);
+        return examService.getAll(includeGroupId, certificationId);
     }
 
     @GetMapping("/{id}")

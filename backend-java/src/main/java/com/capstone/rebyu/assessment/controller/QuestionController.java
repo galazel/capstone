@@ -36,15 +36,24 @@ public class QuestionController {
     private final InstitutionGroupRepository institutionGroupRepository;
     private final CognitoAuthService auth;
 
+    /**
+     * lessonId and certificationId are optional narrowings of the same read,
+     * most specific first. Both return exactly the subset the unfiltered
+     * response already contained -- neither widens what a caller can see.
+     */
     @GetMapping
     public List<QuestionDto> getAll(
             @RequestParam(required = false) Long lessonId,
+            @RequestParam(required = false) Long certificationId,
             @RequestParam(required = false) Long includeGroupId,
             @AuthenticationPrincipal Jwt jwt) {
         CurrentUserDto caller = requireAdminOrInstitution(jwt);
         requireGroupAccessIfRequested(caller, includeGroupId);
         if (lessonId != null) {
             return questionService.getByLessonId(lessonId, includeGroupId);
+        }
+        if (certificationId != null) {
+            return questionService.getByCertificationId(certificationId, includeGroupId);
         }
 
         return questionService.getAll(includeGroupId);

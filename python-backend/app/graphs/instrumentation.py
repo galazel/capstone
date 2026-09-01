@@ -29,6 +29,8 @@ import logging
 import time
 from typing import Any, Callable
 
+from app.graphs.certification.state import curriculum_totals
+
 logger = logging.getLogger(__name__)
 
 
@@ -70,23 +72,48 @@ def _emit(
         logger.debug("Could not emit %s for stage %s", event_type, stage, exc_info=True)
 
 
-def _item_context(state: dict, stage: str) -> dict | None:
-    """Which item of how many, when the node is inside a per-item loop.
+#: Per-item loop stages, mapped to the state cursor and the plan total that
+#: bound them. Anything absent is a once-per-run node with no "of N".
+_LOOP_PHASES = {
+    "MAJOR": ("major_cursor", "majors"),
+    "MIDDLE": ("middle_cursor", "middles"),
+    "LESSON": ("lesson_cursor", "lessons"),
+}
+
+
+def _progress_context(state: dict, stage: str, result: Any = None) -> dict | None:
+    """Where this node sits in the run: which item of how many, out of what plan.
 
     This is what turns "generating lessons" into "lesson 3 of 20" in the
-    timeline, which is the difference between a progress indicator and a
-    spinner with words on it.
-    """
-    cursor_key = {
-        "MAJOR": "major_cursor",
-        "MIDDLE": "middle_cursor",
-        "LESSON": "lesson_cursor",
-    }.get(stage.split("_")[0].upper())
+    timeline, and what gives the client a denominator to draw a progress bar
+    against -- the difference between a progress indicator and a spinner with
+    words on it.
 
-    if cursor_key is None:
-        return None
-    index = state.get(cursor_key) or 0
-    return {"item_index": index, "item_number": index + 1}
+    `plan` rides on every event rather than being announced once, because a
+    client that reconnects mid-run replays from a cursor and may never see the
+    announcement. It is a few integers; the alternative is a bar that is
+    indeterminate for whichever clients joined late.
+
+    `result` is consulted first so the curriculum node's own completion already
+    carries the plan it just produced -- the wrapper only ever sees the state
+    from *before* the node ran, where there is no curriculum yet.
+    """
+    context: dict = {}
+
+    curriculum = result.get("curriculum") if isinstance(result, dict) else None
+    totals = curriculum_totals(curriculum or state.get("curriculum"))
+    if totals["lessons"]:
+        context["plan"] = totals
+
+    phase = _LOOP_PHASES.get(stage.split("_")[0].upper())
+    if phase is not None:
+        cursor_key, total_key = phase
+        index = state.get(cursor_key) or 0
+        context.update({"item_index": index, "item_number": index + 1})
+        if totals[total_key]:
+            context["item_total"] = totals[total_key]
+
+    return context or None
 
 
 def _halt_if_cancelled(thread_id: str | None, stage: str) -> None:
@@ -124,7 +151,7 @@ def instrument(node: Callable, stage: str) -> Callable:
             _halt_if_cancelled(thread_id, stage)
             _emit(
                 thread_id, registry.EVT_NODE_STARTED, stage=stage,
-                task_status=registry.TASK_RUNNING, payload=_item_context(state, stage),
+                task_status=registry.TASK_RUNNING, payload=_progress_context(state, stage),
             )
             started = time.monotonic()
             try:
@@ -141,7 +168,7 @@ def instrument(node: Callable, stage: str) -> Callable:
                 thread_id, registry.EVT_NODE_COMPLETED, stage=stage,
                 task_status=registry.TASK_COMPLETED,
                 duration_ms=int((time.monotonic() - started) * 1000),
-                payload=_item_context(state, stage),
+                payload=_progress_context(state, stage, result),
             )
             return result
 
@@ -153,7 +180,7 @@ def instrument(node: Callable, stage: str) -> Callable:
         _halt_if_cancelled(thread_id, stage)
         _emit(
             thread_id, registry.EVT_NODE_STARTED, stage=stage,
-            task_status=registry.TASK_RUNNING, payload=_item_context(state, stage),
+            task_status=registry.TASK_RUNNING, payload=_progress_context(state, stage),
         )
         started = time.monotonic()
         try:
@@ -170,7 +197,7 @@ def instrument(node: Callable, stage: str) -> Callable:
             thread_id, registry.EVT_NODE_COMPLETED, stage=stage,
             task_status=registry.TASK_COMPLETED,
             duration_ms=int((time.monotonic() - started) * 1000),
-            payload=_item_context(state, stage),
+            payload=_progress_context(state, stage, result),
         )
         return result
 

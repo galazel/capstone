@@ -17,15 +17,6 @@ function createStructureId(prefix) {
   return `${prefix}-${Date.now()}-${structureIdCounter}`
 }
 
-export function getCertificationId(certification) {
-  return (
-      certification?.certificationId ??
-      certification?.id ??
-      certification?.certification?.certificationId ??
-      null
-  )
-}
-
 function getLessonComponentStructure(lesson) {
   if (!lesson?.lessonComponentStructure) {
     return "[]"

@@ -169,6 +169,12 @@ questions = Table(
     # see app/domain/persistence/questions.py.
     Column("lesson_id", BigInteger, nullable=False),
     Column("total_points", Numeric(5, 2), nullable=False),
+    # Set on the parts of a critical-thinking item, pointing at the parent
+    # question they belong to. NULL for every ordinary question. Java reads
+    # the set back by this column and grades it as one; without it declared
+    # here an insert naming it fails as an unknown column rather than writing
+    # a sub-question.
+    Column("parent_question_id", BigInteger),
     Column("created_at", DateTime),
 )
 

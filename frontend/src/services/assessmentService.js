@@ -20,9 +20,16 @@ export async function ensureExamType(examTypeText) {
 // Omit includeGroupId for official exams only (what every existing caller
 // does). Pass a group id to also mix in that group's own exams -- the
 // caller must be able to act on that group, enforced server-side.
-export function getExams(includeGroupId) {
-  const query = includeGroupId != null ? `?includeGroupId=${includeGroupId}` : ""
-  return base(`exams${query}`)
+//
+// certificationId narrows the read to one certification. Omitted, this is the
+// whole-table read every existing caller makes; passed, the server does the
+// filtering the caller would otherwise do over every exam on the platform.
+export function getExams(includeGroupId, certificationId) {
+  const params = new URLSearchParams()
+  if (includeGroupId != null) params.set("includeGroupId", includeGroupId)
+  if (certificationId != null) params.set("certificationId", certificationId)
+  const query = params.toString()
+  return base(`exams${query ? `?${query}` : ""}`)
 }
 
 export function getExamById(examId, includeGroupId) {

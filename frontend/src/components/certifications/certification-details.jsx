@@ -20,10 +20,17 @@ import {
 
 import { industries } from "@/constants/industries.js"
 
-const MIN_TITLE_LENGTH = 3
-const MAX_TITLE_LENGTH = 150
-const MIN_DESCRIPTION_LENGTH = 20
-const MAX_DESCRIPTION_LENGTH = 300
+/* From the shared rulebook, not redeclared here. This file's own copy had
+   drifted to a 300-character description while `validateCertificationDetails`
+   -- the check that actually decides whether the form submits, and the one the
+   certification page edits against -- allowed 2000. The field stopped you
+   typing at 300 for a limit nothing enforced. */
+import {
+  MAX_DESCRIPTION_LENGTH,
+  MAX_TITLE_LENGTH,
+  MIN_DESCRIPTION_LENGTH,
+  MIN_TITLE_LENGTH,
+} from "@/utils/certification-edit"
 
 /**
  * `disabled` locks every control at once.

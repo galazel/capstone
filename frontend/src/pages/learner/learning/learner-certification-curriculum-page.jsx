@@ -1061,6 +1061,30 @@ export default function LearnerCertificationCurriculumPage() {
   const [openUnitIds, setOpenUnitIds] = useState(null)
   const openUnits = openUnitIds ?? new Set(currentUnitId ? [currentUnitId] : [])
 
+  /* One unit on screen: the one they are up to.
+   *
+   * Five units unrolled is five posters to scroll past to find the only one
+   * that is actionable, and the four below the fold are all the same answer --
+   * not yet. So the road shows the current unit and nothing else, and the rest
+   * are behind the toggle below it.
+   *
+   * They are a toggle rather than gone. The order of study is a
+   * recommendation here, not a rule -- a learner who wants to look ahead, or
+   * to go back to a unit they finished, still can. Hiding them by default is
+   * about what the page opens on, not about locking anything.
+   */
+  const [showAllUnits, setShowAllUnits] = useState(false)
+
+  /* No current unit means nothing is in progress -- a finished certification,
+     or a curriculum with no stops yet. There is no one unit to single out, so
+     the page falls back to the full list rather than rendering an empty road. */
+  const visibleSections =
+    showAllUnits || currentUnitId == null
+      ? sections
+      : sections.filter((section) => section.major.id === currentUnitId)
+
+  const hiddenUnitCount = sections.length - visibleSections.length
+
   function toggleUnit(id) {
     setOpenUnitIds(() => {
       const next = new Set(openUnits)
@@ -1358,7 +1382,7 @@ export default function LearnerCertificationCurriculumPage() {
                 route. */}
             <StaggerItem variants={fadeUp}>
               <div className="mx-auto max-w-[820px]">
-                {sections.map((section) => {
+                {visibleSections.map((section) => {
                   const open = diagnosticDone && openUnits.has(section.major.id)
 
                   return (
@@ -1400,6 +1424,34 @@ export default function LearnerCertificationCurriculumPage() {
                     </section>
                   )
                 })}
+
+                {/* The way to the rest of the certification.
+
+                    Counted rather than just named: "show all units" alone does
+                    not say whether it opens one more or nine, and the number is
+                    the only thing that makes it worth pressing. Hidden entirely
+                    when there is nothing behind it -- a certification of one
+                    unit should not offer to show the others. */}
+                {hiddenUnitCount > 0 || showAllUnits ? (
+                  <div className="flex justify-center pb-4">
+                    <TactileButton
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowAllUnits((current) => !current)}
+                      aria-expanded={showAllUnits}
+                    >
+                      {showAllUnits
+                        ? "Show only my current unit"
+                        : `Show all units (${hiddenUnitCount} more)`}
+                      <ChevronDown
+                        className={`size-4 transition-transform duration-200 ${
+                          showAllUnits ? "rotate-180" : ""
+                        }`}
+                        aria-hidden="true"
+                      />
+                    </TactileButton>
+                  </div>
+                ) : null}
 
                 {/* The final, on the road rather than in a card of its own.
                     It is the last stop, and a card after the path read as a

@@ -621,6 +621,20 @@ public class CertificationService {
                 DELETE FROM knowledge_documents
                 WHERE certification_id = :certificationId
                 """, certificationId);
+
+        // Last, because it is the row the AI service keys its whole run on.
+        //
+        // A generation request outlives the certification it was raised for
+        // unless it is removed here: nothing else deletes it, and there is no
+        // FK cascade to do it either. What that leaves is a row still reading
+        // PENDING or PROCESSING, pointing at a certification id that no longer
+        // resolves -- the shape that made two requests look permanently stuck
+        // while nothing was running. `thread_id` is this row's id, so leaving
+        // it behind also keeps a name reserved for state that has been purged.
+        executeDelete("""
+                DELETE FROM generation_requests
+                WHERE certification_id = :certificationId
+                """, certificationId);
     }
 
     private void executeDelete(String sql, Long certificationId) {

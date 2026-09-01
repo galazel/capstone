@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { AlertTriangle, Ban, ChevronDown, FastForward, Loader2 } from "@/components/icons"
 import { toast } from "sonner"
@@ -36,7 +36,7 @@ import { TaskStatusIcon, stageLabel } from "@/components/generation/task-status"
  * and the Python consumer creates the run when it claims the message, so there
  * is a short window with nothing to attach to — polled for here, then streamed.
  */
-export function InlineGenerationMonitor({ certificationId, onClose }) {
+export function InlineGenerationMonitor({ certificationId, onClose, onFinished }) {
   const queryClient = useQueryClient()
   const [runId, setRunId] = useState(null)
   const [waitedTooLong, setWaitedTooLong] = useState(false)
@@ -72,12 +72,26 @@ export function InlineGenerationMonitor({ certificationId, onClose }) {
     tasks,
     attempts,
     currentTask,
+    progress,
     connected,
     isTerminal,
     isWaitingForReview,
     isStalled,
     silentFor,
   } = stream
+
+  /* Reported ONCE, when the run reaches a terminal status.
+     
+     Without this the dialog sat on the last stage it happened to see -- "Mock
+     exam · running" -- for a run that had already finished, so the only way to
+     learn generation was done was to close the dialog and notice the card had
+     changed. The parent decides what to do with it; this only reports. */
+  const finishedRef = useRef(false)
+  useEffect(() => {
+    if (!isTerminal || finishedRef.current || !run?.status) return
+    finishedRef.current = true
+    onFinished?.(run.status)
+  }, [isTerminal, run?.status, onFinished])
 
   const review = useQuery({
     queryKey: ["workflow-review", runId, isWaitingForReview, run?.last_seq],
@@ -306,6 +320,12 @@ export function InlineGenerationMonitor({ certificationId, onClose }) {
         live={Boolean(currentTask) && !isTerminal}
         connected={connected}
         terminal={isTerminal}
+        progress={progress}
+        item={
+          currentTask?.itemNumber
+            ? { number: currentTask.itemNumber, total: currentTask.itemTotal }
+            : null
+        }
         className="px-4 sm:px-6"
       />
     </div>

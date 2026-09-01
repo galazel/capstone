@@ -2,6 +2,7 @@ import { useState } from "react"
 import {
   ActivityIcon,
   AlertTriangle,
+  CheckCircle2,
   Loader2,
   MoreVertical,
   SendIcon,
@@ -22,6 +23,7 @@ import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { generationErrorOf, generationStatusOf } from "@/hooks/use-active-generations"
+import { retryWorkflowRun } from "@/services/aiWorkflowService"
 import CertificationCover from "@/components/certifications/certification-cover.jsx"
 import {
   deleteCertification,
@@ -105,6 +107,10 @@ function CertificationCard({ item, certification, generationRun = null }) {
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [showGeneration, setShowGeneration] = useState(false)
+  /* Set when a watched run reaches a terminal status: the progress dialog
+     closes itself and this takes its place, so finishing is something the admin
+     is told rather than something they have to notice. */
+  const [finishedStatus, setFinishedStatus] = useState(null)
 
   const generationStatus = generationStatusOf(generationRun)
   /* A failed run is a status, not a state of work. `isGenerating` used to be
@@ -113,6 +119,15 @@ function CertificationCard({ item, certification, generationRun = null }) {
      would otherwise disable the card, spin the badge and claim to be building
      something that stopped minutes ago. */
   const isFailed = generationStatus === "FAILED"
+  /* Stopped, not finished and not broken. The checkpoints survive a stop, so
+     the run can be picked up at the step it stopped on -- which the card has
+     to say, because an empty certification with a half-built curriculum
+     sitting in the checkpointer looks exactly like one nobody ever generated. */
+  const isStopped = generationStatus === "STOPPED"
+  /* Requested, but the run does not exist yet -- the message is still on its
+     way to the consumer. Shown as generating (it is), but without a progress
+     view, because there is nothing to open until the run registers. */
+  const isQueued = Boolean(generationRun?.queued)
   const isGenerating = generationStatus === "GENERATING" || generationStatus === "AWAITING_REVIEW"
   const awaitingReview = generationStatus === "AWAITING_REVIEW"
   const generationError = generationErrorOf(generationRun)
@@ -123,6 +138,28 @@ function CertificationCard({ item, certification, generationRun = null }) {
   const generationLabel = awaitingReview
       ? "Needs your review"
       : stageLabel(generationRun?.current_stage) ?? "Generating…"
+
+  /* Retry, not restart. The retry endpoint re-enters the graph at the step the
+     run stopped on and keeps everything before it; restart deletes the
+     checkpoints and begins again, which is the opposite of what a stopped run
+     wants and would re-pay for every lesson already planned. */
+  const resumeGeneration = useMutation({
+    mutationFn: () => retryWorkflowRun(generationRun?.run_id),
+    onSuccess: () => {
+      toast.success("Generation resumed", {
+        description: "It continues from where it stopped. Nothing is regenerated.",
+      })
+      queryClient.invalidateQueries({ queryKey: ["workflow-runs", "active"] })
+      setShowGeneration(true)
+    },
+    onError: (error) =>
+      toast.error("Could not resume generation", {
+        description:
+          error?.response?.data?.detail ??
+          error?.message ??
+          "Please try again.",
+      }),
+  })
 
   const currentCertification = certification ?? item
 
@@ -543,8 +580,12 @@ function CertificationCard({ item, certification, generationRun = null }) {
                   {isGenerating
                       ? generationStatus === "AWAITING_REVIEW"
                           ? "Paused for your review in the generation workspace."
-                          : "Building categories, lessons, and assessments. This can take several minutes."
-                      : certificationDescription}
+                          : isQueued
+                              ? "Queued. It starts in a moment and then builds categories, lessons, and assessments."
+                              : "Building categories, lessons, and assessments. This can take several minutes."
+                      : isStopped
+                          ? "Generation was stopped. What it had planned is kept — resuming continues from where it left off rather than starting again."
+                          : certificationDescription}
                 </p>
             )}
 
@@ -555,12 +596,30 @@ function CertificationCard({ item, certification, generationRun = null }) {
                       size="sm"
                       variant="outline"
                       className="w-full"
+                      disabled={isQueued}
                       onClick={handleOpenGeneration}
                   >
                     <ActivityIcon className="mr-2 h-4 w-4" />
-                    {generationStatus === "AWAITING_REVIEW"
-                        ? "Review now"
-                        : "View progress"}
+                    {isQueued
+                        ? "Starting…"
+                        : generationStatus === "AWAITING_REVIEW"
+                            ? "Review now"
+                            : "View progress"}
+                  </Button>
+              ) : isStopped ? (
+                  <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="w-full"
+                      disabled={resumeGeneration.isPending || !generationRun?.run_id}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        resumeGeneration.mutate()
+                      }}
+                  >
+                    <ActivityIcon className="mr-2 h-4 w-4" />
+                    {resumeGeneration.isPending ? "Resuming…" : "Resume generation"}
                   </Button>
               ) : (
                   <div className="h-1 w-10 shrink-0 rounded-full bg-primary" />
@@ -568,6 +627,55 @@ function CertificationCard({ item, certification, generationRun = null }) {
             </div>
           </div>
         </div>
+
+        {/* Said, not left to be noticed. A run that ends while the dialog is
+            open used to leave it sitting on whatever stage it last saw, so the
+            only signal was the card changing behind it. */}
+        <AlertDialog open={finishedStatus != null} onOpenChange={(open) => !open && setFinishedStatus(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogMedia
+                  className={finishedStatus === "COMPLETED"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-amber-100 text-amber-700"}
+              >
+                {finishedStatus === "COMPLETED"
+                    ? <CheckCircle2 aria-hidden="true" />
+                    : <AlertTriangle aria-hidden="true" />}
+              </AlertDialogMedia>
+
+              <AlertDialogTitle>
+                {finishedStatus === "COMPLETED"
+                    ? "Generation finished"
+                    : finishedStatus === "CANCELLED"
+                        ? "Generation stopped"
+                        : "Generation did not finish"}
+              </AlertDialogTitle>
+
+              <AlertDialogDescription>
+                {finishedStatus === "COMPLETED"
+                    ? `"${certificationTitle}" is built. Its categories, lessons, quizzes and question bank are saved as drafts, ready for you to review and publish.`
+                    : finishedStatus === "CANCELLED"
+                        ? "Everything it had built is kept. You can resume it from where it stopped."
+                        : "What it managed to build is kept as drafts. You can retry it from the step that failed."}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+
+            <AlertDialogFooter>
+              <Button variant="outline" onClick={() => setFinishedStatus(null)}>
+                Close
+              </Button>
+              <Button
+                  onClick={() => {
+                    setFinishedStatus(null)
+                    navigate(`/admin/certification/${certificationId}`)
+                  }}
+              >
+                Open certification
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Progress is watched in place. The monitor owns its own scrolling,
             header rule, and status bar, so it fills the body edge to edge --
@@ -593,6 +701,14 @@ function CertificationCard({ item, certification, generationRun = null }) {
                 <InlineGenerationMonitor
                     certificationId={certificationId}
                     onClose={() => setShowGeneration(false)}
+                    onFinished={(status) => {
+                      setShowGeneration(false)
+                      setFinishedStatus(status)
+                      /* The list still shows this certification as generating,
+                         and its categories and lessons have just appeared. */
+                      queryClient.invalidateQueries({ queryKey: ["admin-certifications"] })
+                      queryClient.invalidateQueries({ queryKey: ["workflow-runs", "active"] })
+                    }}
                 />
             ) : null}
           </DialogContent>

@@ -58,6 +58,18 @@ public abstract class BusinessRuleException extends RuntimeException {
         }
     }
 
+    /**
+     * A curriculum node an admin asked to delete still has graded learner
+     * records under it. Deleting it would take away attempts and results that
+     * a learner -- or the institution that bought the certification -- is
+     * entitled to keep, so the delete is refused and the reason is named.
+     */
+    public static class CurriculumNodeInUseException extends BusinessRuleException {
+        public CurriculumNodeInUseException(String message) {
+            super(message);
+        }
+    }
+
     public static class DiagnosticRequiredException extends BusinessRuleException {
         public DiagnosticRequiredException() {
             super("Complete the diagnostic assessment before studying lessons.");

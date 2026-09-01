@@ -128,3 +128,20 @@ class CertificationState(TypedDict, total=False):
 
     status: str
     error_message: Optional[str]
+
+
+def curriculum_totals(curriculum: Dict | None) -> Dict[str, int]:
+    """How many majors, middle categories and lessons a curriculum implies.
+
+    This is the denominator of a run's progress. The whole per-item walk is
+    driven by these three lists (see `review_loop.LoopPhase.items_of`), so
+    counting them counts the work the run has left -- and until the curriculum
+    exists there is no honest denominator at all, which is why callers have to
+    handle a plan of zero lessons rather than being given a guess.
+    """
+    majors = (curriculum or {}).get("majorCategories") or []
+    middles = [
+        middle for major in majors for middle in (major.get("middleCategories") or [])
+    ]
+    lessons = [lesson for middle in middles for lesson in (middle.get("lessons") or [])]
+    return {"majors": len(majors), "middles": len(middles), "lessons": len(lessons)}

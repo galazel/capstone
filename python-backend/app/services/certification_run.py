@@ -26,6 +26,7 @@ request, and any websocket client stay attached to the same run.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -364,6 +365,63 @@ async def set_review_mode(thread_id: str, mode: str) -> str:
     return mode
 
 
+def checkpoint_progress(certification_id: int | None, values: dict[str, Any]) -> dict[str, Any]:
+    """Writes what a run has generated so far, mid-run.
+
+    Same two calls the end of a run makes, against the in-memory state instead
+    of a finished result. It exists because everything a run produces lives in
+    the LangGraph checkpoint until the end, and a process that dies rather than
+    fails -- a 402 that kills the worker, an OOM, a container restart, someone
+    bringing the stack down -- never reaches the code that would have saved it.
+    `rescue_partial_output` handles the failures Python survives; this handles
+    the ones it does not, by having already written the work down.
+
+    Reads the state it is handed rather than the checkpointer: the checkpoint
+    for the step currently executing has not been committed yet, so a snapshot
+    taken from inside a node is a lesson behind.
+
+    Both writes are name-matched and skip what is already stored, so calling
+    this every N lessons re-walks the same rows cheaply and adds only what is
+    new. That also means the final persist at the end of the run is unchanged
+    -- it fills in the remainder, whatever the last flush did not cover.
+
+    Never raises. A run must not die because its progress save failed; the work
+    is still in the checkpoint, and the next flush or the end of the run will
+    write it.
+    """
+    if certification_id is None:
+        return {"saved": False, "reason": "run has nothing to persist to"}
+
+    curriculum = values.get("curriculum") or {}
+    if not curriculum.get("majorCategories"):
+        return {"saved": False, "reason": "nothing planned yet"}
+
+    try:
+        _persist_curriculum(certification_id, curriculum)
+        with SessionLocal() as session:
+            summary = persist_generated_assessments(session, certification_id, values)
+    except Exception:
+        logger.exception(
+            "Progress checkpoint failed for certification %s; continuing the run",
+            certification_id,
+        )
+        return {"saved": False, "reason": "checkpoint save failed"}
+
+    for warning in summary["warnings"]:
+        logger.warning("Progress checkpoint: %s", warning)
+
+    logger.info(
+        "Checkpointed certification %s: %d lesson bod(y/ies), %d exam(s), %d bank question(s) stored so far",
+        certification_id, summary["lessons_written"], len(summary["exams"]), summary["bank_questions"],
+    )
+    return {
+        "saved": True,
+        "lessons": summary["lessons_written"],
+        "exams": len(summary["exams"]),
+        "bank_questions": summary["bank_questions"],
+    }
+
+
 async def rescue_partial_output(context: RunContext) -> dict[str, Any]:
     """Saves whatever a run had generated when it stopped.
 
@@ -503,6 +561,32 @@ async def advance(context: RunContext, graph_input: Any) -> tuple[dict[str, Any]
         raise RunFailed(
             {"outcome": registry.CANCELLED, "error": str(cancelled), "saved": saved}
         ) from cancelled
+    except asyncio.CancelledError:
+        # NOT covered by `except Exception` -- CancelledError is a
+        # BaseException, so before this clause existed a cancelled task skipped
+        # every rescue below and the run's output died with the task.
+        #
+        # That is not a hypothetical either. The queue consumer runs this
+        # inside the message handler, so when RabbitMQ's consumer timeout
+        # closed the channel out from under a long run, the task was cancelled
+        # and everything it had generated was lost -- three times over on
+        # 2026-08-31, leaving an empty certification each time.
+        #
+        # Rescue first, then re-raise: cancellation must still propagate (the
+        # caller and the event loop both need to see it), but the lessons that
+        # were already written belong in the database, not in a discarded
+        # task's memory.
+        logger.warning(
+            "Certification run %s was cancelled mid-flight; saving what it built",
+            context.thread_id,
+        )
+        try:
+            await rescue_partial_output(context)
+        except Exception:
+            logger.exception(
+                "Could not save partial output for cancelled run %s", context.thread_id
+            )
+        raise
     except Exception as error:
         logger.exception("Certification run %s failed", context.thread_id)
         saved = await rescue_partial_output(context)
@@ -834,6 +918,30 @@ async def _snapshot_values(thread_id: str) -> dict:
     graph = await get_certification_graph()
     snapshot = await graph.aget_state(_thread_config(thread_id))
     return dict(snapshot.values) if snapshot and snapshot.values else {}
+
+
+async def has_progress(thread_id: str) -> bool:
+    """Whether this thread already holds generated state worth resuming into.
+
+    Used by the queue consumer to decide between seeding a fresh run and
+    resuming one, because those are not interchangeable: seeding a thread that
+    already has checkpoints resets `status` and re-enters at the first node,
+    paying again for every document ingestion, curriculum plan and lesson the
+    thread had already produced.
+
+    Conservative on failure. If the checkpointer cannot be read, this reports
+    False and the caller seeds -- which repeats work in the worst case, where
+    reporting True would resume a thread that may hold nothing and leave the
+    run stuck with no way forward.
+    """
+    try:
+        return bool(await _snapshot_values(thread_id))
+    except Exception:
+        logger.warning(
+            "Could not read checkpoints for thread %s; treating it as a fresh run",
+            thread_id,
+        )
+        return False
 
 
 async def prepare_retry(run) -> tuple[RunContext, str | None]:

@@ -2,12 +2,28 @@ import logging
 import re
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 logger = logging.getLogger(__name__)
 
 QuestionType = Literal["MCQ", "SHORT_ANSWER", "DESCRIPTIVE", "PROGRAMMING", "DIAGRAM"]
-Difficulty = Literal["EASY", "AVERAGE", "DIFFICULT"]
+#: Canonical difficulty vocabulary. HARD, not DIFFICULT.
+#:
+#: This used to say DIFFICULT while `mastery.py` said HARD, and the two were
+#: never reconciled -- so generation wrote DIFFICULT into `questions`, and the
+#: Java side (`BktEventFactory.KNOWN_DIFFICULTY`, which knows only EASY/
+#: AVERAGE/HARD) then silently collapsed every one of those to its AVERAGE
+#: fallback. The effect was not a cosmetic duplicate: hard questions were
+#: reported to BKT as average ones, so guess/slip were fitted against the
+#: wrong difficulty class.
+Difficulty = Literal["EASY", "AVERAGE", "HARD"]
+
+#: Accepted spellings that are normalised to a canonical value. DIFFICULT is
+#: kept as an alias rather than rejected because it is what the prompts asked
+#: for until now: existing drafts still carry it, and a model told "HARD" will
+#: still occasionally answer "DIFFICULT". Silently correcting it is better
+#: than failing a whole generation over a synonym.
+DIFFICULTY_ALIASES = {"DIFFICULT": "HARD"}
 
 # Bloom's cognitive levels, lowest to highest. Ordered so coverage analysis
 # can reason about the distribution rather than just counting distinct values.
@@ -209,6 +225,28 @@ class ProgrammingTestCase(BaseModel):
     expected_output: str
 
 
+class SubQuestionDraft(BaseModel):
+    """One part of a critical-thinking question.
+
+    A PROGRAMMING or DIAGRAM item is a scenario a learner works through, and
+    the parts are the questions asked *about* that scenario -- explain the
+    trade-off, justify the cardinality, describe what breaks under load. The
+    product has always modelled them (`subQuestions` in the question editor,
+    `parent_question_id` in the schema, and a grader that marks the whole set
+    in one holistic call) and the generator had no field to put them in, so
+    every generated critical-thinking item arrived as a bare prompt with no
+    parts. That is the whole difference between a workspace task and a
+    question with a big text box.
+
+    Written answers, always: the part is reasoning about the artifact, not a
+    second artifact. `rubric_answer` is what the AI grader marks against.
+    """
+
+    question: str
+    rubric_answer: str = ""
+    points: float = 1.0
+
+
 class QuestionDraft(BaseModel):
     """One generated question.
 
@@ -224,6 +262,15 @@ class QuestionDraft(BaseModel):
     question: str
     difficulty: Difficulty = "AVERAGE"
     explanation: str = ""
+
+    @field_validator("difficulty", mode="before")
+    @classmethod
+    def _normalise_difficulty(cls, value: object) -> object:
+        """Upper-cases and maps known synonyms onto the canonical vocabulary."""
+        if not isinstance(value, str):
+            return value
+        upper = value.strip().upper()
+        return DIFFICULTY_ALIASES.get(upper, upper)
 
     # --- pedagogical metadata (Phase 2b step 10) --------------------------
     # Needed for the validation layer to reason about cognitive balance and
@@ -263,6 +310,11 @@ class QuestionDraft(BaseModel):
     # DIAGRAM
     diagram_type: Optional[str] = None
     instructions: Optional[str] = None
+
+    #: PROGRAMMING / DIAGRAM: the parts asked about the artifact the learner
+    #: produces. Empty for MCQ, short answer and descriptive items, which are
+    #: single questions by definition. See `SubQuestionDraft`.
+    sub_questions: List[SubQuestionDraft] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _reclassify_open_ended_short_answers(self) -> "QuestionDraft":

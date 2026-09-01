@@ -51,6 +51,7 @@ export function taskStatusLabel(status) {
  */
 const STAGE_LABELS = {
   validate_documents: "Validating documents",
+  capture_document_visuals: "Capturing diagrams and images",
   ingest_documents: "Reading and indexing documents",
   plan_curriculum: "Planning curriculum",
   CURRICULUM: "Curriculum review",

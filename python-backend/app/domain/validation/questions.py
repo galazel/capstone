@@ -185,6 +185,22 @@ MAX_LONGEST_CORRECT_SHARE = 0.6
 MAX_SAME_OPENING_SHARE = 0.4
 MIN_QUESTIONS_FOR_OPENING_CHECK = 6
 
+#: How many questions may open with the same single word.
+#:
+#: Separate from the three-word check above, which cannot see this pattern at
+#: all: "The server fails..." and "The database is..." are different three-word
+#: openings, so a whole bank can start with "The" and pass. A first word
+#: repeated across a third of a bank is the plainest tell of machine-written
+#: assessment -- every stem naming a thing before asking about it.
+MAX_SAME_FIRST_WORD_SHARE = 0.3
+
+#: Articles get a tighter budget than other words. "The" and "A" are what a
+#: model reaches for when it is describing rather than asking, and a bank where
+#: most questions open with one is uniformly declarative -- no direct
+#: questions, no inversions, no scenarios in the second person.
+ARTICLE_OPENINGS = ("the", "a", "an")
+MAX_ARTICLE_OPENING_SHARE = 0.45
+
 #: A PROGRAMMING question is a task, not a prompt: fewer test cases than this
 #: cannot cover both the ordinary case and the edges, and a stem this short
 #: cannot have stated input format, output format, and constraints.
@@ -314,6 +330,75 @@ def _check_stem_variety(questions: list[Any], issues: list[ValidationIssue]) -> 
             question_indices=indices,
         )
     )
+
+
+def _check_opening_word_variety(
+    questions: list[Any], issues: list[ValidationIssue]
+) -> None:
+    """Whether the questions all begin with the same word.
+
+    The three-word check above cannot catch this: "The server fails..." and
+    "The database is..." are different openings by that measure, so a bank in
+    which every single stem begins with "The" passes it cleanly. That is the
+    most visible tell of generated assessment, and the one a reviewer notices
+    first -- not because any one question is wrong, but because forty in a row
+    are built the same way.
+
+    Two thresholds. Any repeated first word is flagged past
+    `MAX_SAME_FIRST_WORD_SHARE`; articles get their own, slightly looser
+    combined budget, because a stem opening with "The" or "A" is describing a
+    situation rather than asking a question, and a bank made entirely of those
+    has no direct questions, no inversions, and no second-person scenarios in
+    it at all.
+    """
+    if len(questions) < MIN_QUESTIONS_FOR_OPENING_CHECK:
+        return
+
+    first_words: dict[str, list[int]] = {}
+    for index, question in enumerate(questions):
+        words = _normalize(_get(question, "question", "")).split()
+        if words:
+            first_words.setdefault(words[0], []).append(index)
+    if not first_words:
+        return
+
+    counted = sum(len(indices) for indices in first_words.values())
+
+    word, indices = max(first_words.items(), key=lambda item: len(item[1]))
+    if len(indices) / counted > MAX_SAME_FIRST_WORD_SHARE:
+        issues.append(
+            ValidationIssue(
+                code="REPETITIVE_OPENING_WORD",
+                severity=Severity.WARNING,
+                message=(
+                    f"{len(indices)} of {counted} question(s) begin with "
+                    f"'{word}'. Vary how a stem opens -- ask directly, address "
+                    f"the learner, invert the condition, or open on the "
+                    f"scenario rather than on the subject."
+                ),
+                question_indices=indices,
+            )
+        )
+
+    article_indices = sorted(
+        index
+        for article in ARTICLE_OPENINGS
+        for index in first_words.get(article, [])
+    )
+    if article_indices and len(article_indices) / counted > MAX_ARTICLE_OPENING_SHARE:
+        issues.append(
+            ValidationIssue(
+                code="ARTICLE_HEAVY_OPENINGS",
+                severity=Severity.WARNING,
+                message=(
+                    f"{len(article_indices)} of {counted} question(s) open with "
+                    f"'the', 'a' or 'an'. Stems that all begin by naming a thing "
+                    f"read as machine-written; mix in direct questions and "
+                    f"scenario-first phrasing."
+                ),
+                question_indices=article_indices,
+            )
+        )
 
 
 def _check_task_depth(questions: list[Any], issues: list[ValidationIssue]) -> None:
@@ -563,6 +648,7 @@ def validate_question_batch(
     _check_answer_positions(questions, issues)
     _check_correct_choice_length(questions, issues)
     _check_stem_variety(questions, issues)
+    _check_opening_word_variety(questions, issues)
     _check_task_depth(questions, issues)
     _check_formatting(questions, issues)
     _check_difficulty_balance(questions, issues, stats)

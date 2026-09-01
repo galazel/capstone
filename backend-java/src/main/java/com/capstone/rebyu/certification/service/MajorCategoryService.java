@@ -36,6 +36,7 @@ public class MajorCategoryService {
     private final MajorCategoryMapper majorCategoryMapper;
     private final InstitutionGroupRepository institutionGroupRepository;
     private final InstitutionGroupService institutionGroupService;
+    private final CurriculumSubtreeService curriculumSubtreeService;
 
     public List<MajorCategoryDto> getAll() {
         log.debug("Fetching all major categories");
@@ -93,7 +94,12 @@ public class MajorCategoryService {
         log.info("Deleting major category id: {}", id);
         MajorCategory existing = findEntity(id);
         requireCanActOn(existing.getOwnerGroup(), isAdmin, callerInstitutionId, callerUserId, callerIsOwner);
-        majorCategoryRepository.delete(existing);
+
+        // Everything under the whole branch -- the major's own assessment, each
+        // module's, and every lesson's quiz and questions. JPA cascades the
+        // categories and lessons; none of that content goes with them.
+        curriculumSubtreeService.clearFor(CurriculumSubtreeService.Node.MAJOR, id);
+        majorCategoryRepository.deleteById(id);
         log.info("MajorCategory id: {} deleted", id);
     }
 

@@ -1900,7 +1900,7 @@ function QuestionFileGeneratorDialog({
             return;
         }
         if (difficultyTotal !== generationOptions.total) {
-            setSubmitError("Easy, average, and difficult counts must equal the total number of items.");
+            setSubmitError("Easy, average, and hard counts must equal the total number of items.");
             return;
         }
 
@@ -1987,7 +1987,7 @@ function QuestionFileGeneratorDialog({
                             {[
                                 ["easy", "Easy"],
                                 ["average", "Average"],
-                                ["hard", "Difficult"],
+                                ["hard", "Hard"],
                             ].map(([field, label]) => (
                                 <div key={field} className="space-y-2">
                                     <Label htmlFor={`ai-question-${field}`}>{label}</Label>
@@ -2555,23 +2555,46 @@ function QuestionBank({
 
     const [questionForm, setQuestionForm] = useState(null);
 
+    /* The same key the page framing this bank reads under, so the two share
+       one fetch. They were on different keys for the identical call, which
+       meant every visit here fetched the certification list twice over -- once
+       to title the header, once to fill the pickers -- and the second copy was
+       never the one on screen first. Still under the "admin-certifications"
+       prefix, so the invalidations that follow a certification edit reach it. */
     const {
         data: certifications = [],
         isPending,
         isError,
     } = useQuery({
-        queryKey: ["certifications"],
+        queryKey: ["admin-certifications", "question-bank-page"],
         queryFn: () => getAllCertifications(),
+        staleTime: 5 * 60 * 1000,
     });
 
+    /* Scoped to the certification this bank is locked to, rather than fetched
+       whole and narrowed below.
+
+       The filter further down still discards everything outside this
+       certification's lessons, so the displayed set is unchanged -- what
+       changes is that the discarding no longer happens after every question on
+       the platform has been read, mapped and sent. Unlocked (no certification
+       passed), this is the whole-bank read it always was. */
     const {
         data: allQuestions = [],
         isPending: isQuestionsPending,
         isError: isQuestionsError,
         refetch: refetchQuestions,
     } = useQuery({
-        queryKey: ["questions"],
-        queryFn: () => getQuestions(),
+        /* "certification" is in the key, not just the id: the assessment
+           question picker already caches under ["questions", <groupId>], and a
+           bare id here would collide with a group id that happened to match --
+           two different reads quietly sharing one cache entry. */
+        queryKey: ["questions", "certification", lockedCertificationId || null],
+        queryFn: () =>
+            getQuestions(
+                undefined,
+                lockedCertificationId ? Number(lockedCertificationId) : undefined,
+            ),
     });
 
     const selectedCertification = useMemo(() => {
@@ -3237,7 +3260,7 @@ QUESTION TYPE RULES:
 
 QUANTITY RULES:
 - Generate exactly ${generationOptions.total} high-quality draft questions when the source content can support it.
-- Required difficulty distribution: ${generationOptions.easy} easy, ${generationOptions.average} average, and ${generationOptions.hard} difficult.
+- Required difficulty distribution: ${generationOptions.easy} EASY, ${generationOptions.average} AVERAGE, and ${generationOptions.hard} HARD.
 - Required question type: ${generationOptions.questionType === "AUTO" ? "Choose a suitable mix based on the certification and source." : generationOptions.questionType}.
 - Do not stop after a small sample. Produce a full batch for each backend request.
 - ${generationOptions.questionType === "AUTO" ? "Use varied supported question types when the certification style and source content support them." : `Generate only ${generationOptions.questionType} questions.`}

@@ -48,7 +48,7 @@ const CODESTRIKE_PROMPTS = {
     "Return the length of the longest substring without repeating characters.",
 }
 
-const DIFFICULTIES = ["easy", "easy", "easy", "average", "average", "average", "average", "difficult", "difficult", "difficult"]
+const DIFFICULTIES = ["easy", "easy", "easy", "average", "average", "average", "average", "hard", "hard", "hard"]
 
 export const CODESTRIKE_PROBLEMS = CODESTRIKE_TITLES.map((title, index) => ({
   attemptQuestionId: `cs-${index + 1}`,

@@ -73,6 +73,7 @@ const LearnerTopicPage = lazy(() => import("./pages/learner/learning/learner-top
 const ArenaConfig = lazy(() => import("./pages/admin/arena-config-page.jsx"))
 const ArenaDetail = lazy(() => import("./pages/admin/arena-detail-page.jsx"))
 const CertificationQuestionBank = lazy(() => import("./pages/admin/certification-question-bank-page.jsx"))
+const CertificationAssessments = lazy(() => import("./pages/admin/certification-assessments-page.jsx"))
 const NotificationsPage = lazy(() => import("./pages/notifications-page.jsx"))
 const NotFoundPage = lazy(() => import("./pages/public/not-found-page.jsx"))
 const ForbiddenPage = lazy(() => import("./pages/public/forbidden-page.jsx"))
@@ -211,6 +212,16 @@ export function App() {
                 <Route
                     path="/admin/certification/:id/question-bank"
                     element={<CertificationQuestionBank />}
+                />
+
+                {/* The assessments, out here for the same reason again: a
+                    searchable, filterable table of things you open one at a
+                    time was living below the entire curriculum on a page about
+                    the curriculum. The publishing checklist stays behind --
+                    that one is about whether the certification can go live. */}
+                <Route
+                    path="/admin/certification/:id/assessments"
+                    element={<CertificationAssessments />}
                 />
 
                 {/* The lesson editor. It was already a full-viewport tool --

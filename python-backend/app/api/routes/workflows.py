@@ -328,7 +328,7 @@ def cancel_workflow_run(run_id: str, db: Session = Depends(get_db)) -> dict[str,
 
 
 @router.delete("/certifications/{certification_id}")
-def purge_certification(certification_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
+async def purge_certification(certification_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
     """Stops and erases everything this service holds for a certification.
 
     Called by the Java backend when an admin deletes a certification. Deleting
@@ -337,21 +337,43 @@ def purge_certification(certification_id: int, db: Session = Depends(get_db)) ->
     spending tokens the whole way, and its timeline stayed in the workspace
     pointing at a certification nobody could open.
 
-    Three things have to go, and cancelling has to come first -- a run stopped
+    Four things have to go, and cancelling has to come first -- a run stopped
     only *after* its rows are deleted would keep writing into the gap:
 
     1. the runs themselves, cancelled then deleted with their event log;
-    2. the indexed document vectors, which are scoped per certification
+    2. the LangGraph checkpoints for those runs' threads;
+    3. the indexed document vectors, which are scoped per certification
        (`namespace_for`) and are otherwise orphaned in Qdrant forever;
-    3. nothing else -- the certification's own rows belong to Java, which
+    4. nothing else -- the certification's own rows belong to Java, which
        deletes them itself.
+
+    Step 2 was missing, and its absence was not cosmetic. `thread_id` is
+    `str(generation_request_id)`, so an abandoned thread sits in `checkpoints`
+    under an id a *later* request can be handed. Deleting the registry row
+    while leaving the checkpoint behind is what produced runs whose progress
+    view opened onto a previous certification's work: the row describing which
+    run a thread belonged to was gone, and the thread was not.
 
     Idempotent: purging a certification with no runs is a success, not a 404,
     because the caller cannot know whether generation was ever started.
     """
     from app.rag.store import delete_index, namespace_for
+    from app.utils.helpers import get_checkpointer
 
     summary = registry.purge_certification(db, certification_id)
+
+    # Best-effort, like the vectors below: a leaked checkpoint is a storage
+    # problem, while raising here would abort a delete the admin has already
+    # committed to on the Java side.
+    discarded = 0
+    for thread_id in summary.get("thread_ids") or []:
+        try:
+            checkpointer = await get_checkpointer()
+            await checkpointer.adelete_thread(thread_id)
+            discarded += 1
+        except Exception:
+            logger.exception("Failed to discard checkpoints for thread %s", thread_id)
+    summary["threads_discarded"] = discarded
 
     # Best-effort: losing the vectors is a storage leak, while failing here
     # would abort a deletion the admin has already committed to on the Java

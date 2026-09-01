@@ -152,6 +152,77 @@ def _size_section(settings) -> str:
     small -- telling the model a certification has dozens of lessons and then
     asking it for one is a contradiction it resolves by ignoring one of them.
     """
+    if settings.curriculum_autosize:
+        # No counts at all. Naming a range here would anchor the model to it
+        # regardless of what the document holds, which is the whole thing this
+        # mode exists to avoid.
+        lines = [
+            "A curriculum is the whole certification, not a sample of it.",
+            "",
+            "Decide the structure from the SOURCE MATERIAL. How many Major",
+            "Categories, Middle Categories and Lessons there should be is",
+            "determined by what the document actually covers -- its own",
+            "chapters, sections and topics -- not by any fixed number.",
+            "",
+            "BE DELIBERATELY CONCISE. Produce the SMALLEST structure that",
+            "still teaches the certification completely. Fewer, richer lessons",
+            "-- not more, thinner ones. Every lesson you add is a full lesson",
+            "that must be written in depth, so an unnecessary one costs real",
+            "money and teaches nothing that a merged lesson would not.",
+            "",
+            "PRIORITISE, DO NOT ENUMERATE. The syllabus is not a table of",
+            "contents. Rank what the source covers by how central it is to",
+            "actually passing the certification, and give only that material",
+            "lessons. Anything the document mentions in passing, treats as an",
+            "aside, or covers as background does NOT earn a lesson -- fold it",
+            "into a lesson that needs it, or leave it out.",
+            "",
+            "COMBINE AGGRESSIVELY. Closely related subtopics belong together",
+            "in ONE substantial lesson, not split across several thin ones.",
+            "Before adding any lesson, ask whether an existing lesson could",
+            "absorb it; if it could, merge instead and title the result for",
+            "what it teaches as a whole. A lesson must be worth a full sitting",
+            "of study on its own -- if it would amount to a few paragraphs, it",
+            "is not a lesson, it is a section of one.",
+            "",
+            "The same applies to CATEGORIES. Do not create a Major or Middle",
+            "Category to hold a single thin lesson, and do not split one",
+            "subject across two categories that would need the same",
+            "foundations. Merge near-duplicate categories into one.",
+            "",
+            "A learner is far better served by ten lessons that each teach",
+            "something substantial than by forty that each teach a paragraph.",
+            "Depth per lesson is set elsewhere and is already generous -- your",
+            "job is to decide WHICH lessons deserve to exist, and to keep that",
+            "set tight.",
+            "",
+            "Every Major Category needs at least one Middle Category, and",
+            "every Middle Category at least one Lesson.",
+        ]
+
+        # The qualitative push above is not enough on its own. Measured on a
+        # real run: told to prioritise and merge but given no number, the
+        # planner still produced more than thirty lessons and had its tail
+        # trimmed. Trimming loses material silently; a stated ceiling makes the
+        # model do the consolidating itself, which is the whole point. This is
+        # a LIMIT, not a target -- the wording has to stop it treating the
+        # number as a quota to fill.
+        cap = settings.curriculum_autosize_max_lessons
+        if cap > 0:
+            lines += [
+                "",
+                f"HARD LIMIT: no more than {cap} Lessons IN TOTAL across the",
+                "entire certification -- not per category, per certification.",
+                "This is a ceiling, not a target: if the material genuinely",
+                f"needs fewer than {cap}, produce fewer. If it seems to need",
+                "more, you have not consolidated enough -- merge related",
+                "lessons until it fits, keeping the most central material.",
+                f"A plan longer than {cap} will have its final lessons cut off",
+                "entirely, so anything you leave to the end is lost rather",
+                "than shortened.",
+            ]
+        return "\n".join(f"{_INDENT}{line}".rstrip() for line in lines)
+
     lines = [
         "A curriculum is the whole certification, not a sample of it. Produce:",
         "",

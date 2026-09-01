@@ -73,8 +73,17 @@ export default function GenerationWorkspacePage() {
   const waitedTooLong = useWaitedTooLong(Boolean(awaitingCertificationId) && !runId, 20_000)
 
   const stream = useWorkflowStream(runId)
-  const { run, events, tasks, attempts, currentTask, connected, isTerminal, isWaitingForReview } =
-    stream
+  const {
+    run,
+    events,
+    tasks,
+    attempts,
+    currentTask,
+    progress,
+    connected,
+    isTerminal,
+    isWaitingForReview,
+  } = stream
 
   // The artifact under review lives in the LangGraph interrupt, not the event
   // log, so it is fetched when the run enters (or is found in) review — keyed
@@ -280,6 +289,12 @@ export default function GenerationWorkspacePage() {
                 live={Boolean(currentTask) && !isTerminal}
                 connected={connected}
                 terminal={isTerminal}
+                progress={progress}
+                item={
+                  currentTask?.itemNumber
+                    ? { number: currentTask.itemNumber, total: currentTask.itemTotal }
+                    : null
+                }
                 actions={
                   run && !isTerminal ? (
                     <Button

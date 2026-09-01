@@ -59,6 +59,18 @@ public class QuestionService {
                 .map(questionMapper::toDto).toList();
     }
 
+    /**
+     * One certification's bank. Same visibility rule as {@link #getAll}, but
+     * the narrowing happens in the query rather than in the caller -- see
+     * {@link QuestionRepository#findBankByCertificationId} for what that saves.
+     */
+    public List<QuestionDto> getByCertificationId(Long certificationId, Long includeGroupId) {
+        log.debug("Fetching questions for certification id: {}", certificationId);
+        return questionRepository.findBankByCertificationId(certificationId).stream()
+                .filter(question -> isVisible(question, includeGroupId))
+                .map(questionMapper::toDto).toList();
+    }
+
     public List<QuestionDto> getByLessonId(Long lessonId, Long includeGroupId) {
         log.debug("Fetching questions for lesson id: {}", lessonId);
         return questionRepository.findByLesson_LessonId(lessonId).stream()

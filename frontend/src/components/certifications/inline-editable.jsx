@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 
-import { Check, Pencil, X } from "@/components/icons"
+import { Check, Pencil, Plus, X } from "@/components/icons"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 
@@ -14,9 +14,15 @@ import { Textarea } from "@/components/ui/textarea"
  * edited behind the panel doing the editing.
  *
  * Idle, this renders exactly what the page rendered before: `renderValue` owns
- * the typography, so a heading stays a heading. The pencil appears on hover and
- * on keyboard focus -- always-on pencils beside every title turn a page into a
- * form.
+ * the typography, so a heading stays a heading.
+ *
+ * The pencil is dimmed rather than hidden. It used to be `opacity-0` until
+ * hover, on the argument that always-on pencils turn a page into a form -- and
+ * the result was that the page read as not editable at all, so corrections went
+ * back through the edit drawer the in-place editing exists to replace. An
+ * affordance nobody finds is not a quiet affordance, it is a missing one.
+ * Dimmed keeps the page calm and still says the value can be changed; hover and
+ * keyboard focus bring it to full strength.
  *
  * Editing is explicit at both ends: Escape or Cancel discards, Enter or Save
  * commits (Enter inserts a newline in a multiline field, where Save is the only
@@ -127,7 +133,8 @@ export function InlineEditable({
           type="button"
           onClick={open}
           aria-label={`Edit ${label.toLowerCase()}`}
-          className={`mt-1 inline-flex size-7 shrink-0 items-center justify-center rounded-full opacity-0 transition focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 group-hover/inline:opacity-100 ${
+          title={`Edit ${label.toLowerCase()}`}
+          className={`mt-1 inline-flex size-7 shrink-0 items-center justify-center rounded-full opacity-50 transition focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 group-hover/inline:opacity-100 ${
             onDark
               ? "text-white/80 hover:bg-white/20 hover:text-white focus-visible:outline-white"
               : "text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-ring"
@@ -204,3 +211,128 @@ export function InlineEditable({
 }
 
 export default InlineEditable
+
+
+/**
+ * "Add a lesson" as one field rather than a row that appears already named.
+ *
+ * The alternative -- append something called "New lesson" and let the pencil
+ * fix it -- writes a placeholder to the server the moment the button is
+ * pressed, and every one an admin adds and then abandons stays in the
+ * curriculum under that name. Naming it first means nothing is created until
+ * there is something to call it.
+ *
+ * Deliberately the same shape as {@link InlineEditable}'s open state, down to
+ * the check and cross: adding and renaming are the same gesture on this page
+ * and should not look like two different features.
+ *
+ * @param onAdd async; may throw. The field stays open with the message.
+ */
+export function InlineAdd({ label, placeholder, validate, onAdd, className = "" }) {
+  const [isAdding, setIsAdding] = useState(false)
+  const [draft, setDraft] = useState("")
+  const [error, setError] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
+  const fieldRef = useRef(null)
+
+  useEffect(() => {
+    if (isAdding) fieldRef.current?.focus()
+  }, [isAdding])
+
+  function close() {
+    setIsAdding(false)
+    setDraft("")
+    setError("")
+  }
+
+  async function commit() {
+    if (isSaving) return
+
+    const message = validate ? validate(draft) : ""
+    if (message) {
+      setError(message)
+      return
+    }
+
+    try {
+      setIsSaving(true)
+      await onAdd(draft.trim())
+      close()
+    } catch (addError) {
+      setError(
+        addError?.response?.data?.message ??
+          addError?.message ??
+          `That ${label.toLowerCase()} could not be added.`
+      )
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  if (!isAdding) {
+    return (
+      <button
+        type="button"
+        onClick={() => setIsAdding(true)}
+        className={`inline-flex items-center gap-2 rounded-xl border border-dashed border-border px-4 py-2.5 text-sm font-medium text-muted-foreground transition hover:border-primary hover:bg-primary/5 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${className}`}
+      >
+        <Plus className="size-4" />
+        Add {label.toLowerCase()}
+      </button>
+    )
+  }
+
+  return (
+    <div className={`flex w-full flex-col gap-2 ${className}`}>
+      <div className="flex w-full items-start gap-2">
+        <Input
+          ref={fieldRef}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault()
+              close()
+            }
+            if (event.key === "Enter") {
+              event.preventDefault()
+              void commit()
+            }
+          }}
+          disabled={isSaving}
+          aria-label={`New ${label.toLowerCase()}`}
+          placeholder={placeholder ?? `Name the new ${label.toLowerCase()}`}
+          className="bg-background"
+        />
+
+        <div className="flex shrink-0 gap-1 pt-1">
+          <button
+            type="button"
+            onClick={commit}
+            disabled={isSaving}
+            aria-label={`Add ${label.toLowerCase()}`}
+            className="inline-flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
+          >
+            <Check className="size-4" />
+          </button>
+
+          <button
+            type="button"
+            onClick={close}
+            disabled={isSaving}
+            aria-label={`Cancel adding ${label.toLowerCase()}`}
+            className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-50"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      </div>
+
+      {error ? (
+        <span role="alert" className="text-xs font-medium text-destructive">
+          {error}
+        </span>
+      ) : null}
+    </div>
+  )
+}

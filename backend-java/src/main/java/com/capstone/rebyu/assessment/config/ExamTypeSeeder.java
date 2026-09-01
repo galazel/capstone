@@ -67,7 +67,12 @@ public class ExamTypeSeeder implements ApplicationRunner {
             // An IT Olympics arena's problem set. One exam per arena, which is
             // what lets a challenge run be graded by the ordinary attempt
             // engine instead of a second scoring path.
-            "CHALLENGE");
+            "CHALLENGE",
+            // The pop-up knowledge check served while a learner is reading a
+            // lesson, assembled from lessons they have already finished. A real
+            // exam for the same reason RECALL is one: it is the only way the
+            // attempt engine will grade five questions of mixed type.
+            "KNOWLEDGE_CHECK");
 
     private final ExamTypeRepository examTypeRepository;
 

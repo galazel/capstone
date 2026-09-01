@@ -121,6 +121,34 @@ public class AssessmentAttemptService {
     private static final int ASSESSMENT_PASSED_TOPUP_XP = 70;
     private static final int ASSESSMENT_PERFECT_TOPUP_XP = 100;
 
+    /**
+     * The pop-up knowledge check pays the same three tiers at a quarter of the
+     * size, topping up to 50 rather than 200.
+     *
+     * <p>It has to be scaled separately because it is the only exam a learner
+     * does not choose to sit. Every other type is opened deliberately and is
+     * minted once; a check fires by itself, mints a NEW exam each time, and the
+     * awards are keyed by exam id -- so at the full tiers, acing five questions
+     * would pay 200 XP, twice what finishing an entire lesson pays, and pay it
+     * again after every cooldown. That is not a reward for learning, it is a
+     * reason to sit and wait for pop-ups.
+     *
+     * <p>50 keeps a perfect check comfortably below the 100 a lesson pays,
+     * which is the ordering the economy needs: the check is a nudge to
+     * remember something, not a way to progress.
+     */
+    private static final int CHECK_ATTEMPTED_XP = 10;
+    private static final int CHECK_PASSED_TOPUP_XP = 15;
+    private static final int CHECK_PERFECT_TOPUP_XP = 25;
+
+    /**
+     * Mirrors {@code LessonKnowledgeCheckService.KNOWLEDGE_CHECK_EXAM_TYPE}.
+     * Duplicated as a literal rather than imported so the assessment engine
+     * keeps no compile-time dependency on the knowledge-check package, which
+     * depends on it.
+     */
+    private static final String KNOWLEDGE_CHECK_EXAM_TYPE = "KNOWLEDGE_CHECK";
+
     /** Percentage is stored 0-100 (scale 2), so a perfect score is 100.00. */
     private static final BigDecimal PERFECT_PERCENTAGE = new BigDecimal("100");
 
@@ -448,10 +476,34 @@ public class AssessmentAttemptService {
             answersByQuestion.put(answer.getAttemptQuestion().getAttemptQuestionId(), answer);
         }
 
+        /* Every source question this paper grades against, in one query.
+
+           Both passes below used to call questionRepository.findById() per
+           item, and a Question drags its three config one-to-ones with it
+           whether or not anyone reads them -- they are mapped without a fetch
+           type, so they are EAGER. Add the lazy choices collection each MCQ
+           then asks for, and one 40-question paper spent roughly two hundred
+           round trips deciding what it was looking at. Against a database in
+           another region at ~75ms a trip, that was most of the half-minute a
+           learner waited to see their score.
+
+           findForAttemptByIdIn is the loader startAttempt already uses for
+           exactly this, entity graph and all -- see its note. Grading a paper
+           is the same "a paper's worth of ids" it was written for. */
+        Map<Long, Question> sourceQuestions = questionRepository
+                .findForAttemptByIdIn(questions.stream()
+                        .map(AssessmentAttemptQuestion::getSourceQuestionId)
+                        .filter(Objects::nonNull)
+                        .distinct()
+                        .toList())
+                .stream()
+                .collect(Collectors.toMap(Question::getQuestionId, q -> q, (a, b) -> a));
+
         /* Every expensive grader for this paper, run per family and
            concurrently within each, before a single answer is scored. The loop
            below then reads the results instead of making the calls itself. */
-        GradingBatch gradingBatch = prepareGradingBatch(questions, answersByQuestion);
+        GradingBatch gradingBatch =
+                prepareGradingBatch(questions, answersByQuestion, sourceQuestions);
 
         BigDecimal totalPoints = BigDecimal.ZERO;
         BigDecimal earnedPoints = BigDecimal.ZERO;
@@ -467,7 +519,7 @@ public class AssessmentAttemptService {
             if (answer == null) {
                 continue;
             }
-            scoreAnswer(attemptQuestion, answer, points, gradingBatch);
+            scoreAnswer(attemptQuestion, answer, points, gradingBatch, sourceQuestions);
             attemptAnswerRepository.save(answer);
             // Partial credit (AI-graded descriptive/critical-thinking, future
             // diagram grading) sets earnedPoints without isCorrect=TRUE, so
@@ -532,20 +584,27 @@ public class AssessmentAttemptService {
         Long learnerId = attempt.getLearnerId();
         Long examId = attempt.getExam().getExamId();
 
+        boolean isCheck = KNOWLEDGE_CHECK_EXAM_TYPE.equals(
+                attempt.getExam().getExamType().getExamTypeText());
+
+        int attemptedXp = isCheck ? CHECK_ATTEMPTED_XP : ASSESSMENT_ATTEMPTED_XP;
+        int passedXp = isCheck ? CHECK_PASSED_TOPUP_XP : ASSESSMENT_PASSED_TOPUP_XP;
+        int perfectXp = isCheck ? CHECK_PERFECT_TOPUP_XP : ASSESSMENT_PERFECT_TOPUP_XP;
+
         // Existing key and reason, so learners already paid the previous flat
         // award are not paid again for simply finishing this exam.
-        rewardService.awardXp(learnerId, ASSESSMENT_ATTEMPTED_XP, "ASSESSMENT_COMPLETED",
+        rewardService.awardXp(learnerId, attemptedXp, "ASSESSMENT_COMPLETED",
                 "assessment-completed:" + examId);
 
         if (!Boolean.TRUE.equals(attempt.getPassed())) {
             return;
         }
-        rewardService.awardXp(learnerId, ASSESSMENT_PASSED_TOPUP_XP, "ASSESSMENT_PASSED",
+        rewardService.awardXp(learnerId, passedXp, "ASSESSMENT_PASSED",
                 "assessment-passed:" + examId);
 
         if (attempt.getPercentage() != null
                 && attempt.getPercentage().compareTo(PERFECT_PERCENTAGE) >= 0) {
-            rewardService.awardXp(learnerId, ASSESSMENT_PERFECT_TOPUP_XP, "ASSESSMENT_PERFECT",
+            rewardService.awardXp(learnerId, perfectXp, "ASSESSMENT_PERFECT",
                     "assessment-perfect:" + examId);
         }
     }
@@ -1053,11 +1112,11 @@ public class AssessmentAttemptService {
             AssessmentAttemptQuestion attemptQuestion,
             AssessmentAttemptAnswer answer,
             BigDecimal points,
-            GradingBatch batch) {
+            GradingBatch batch,
+            Map<Long, Question> sourceQuestions) {
 
         String type = attemptQuestion.getQuestionType();
-        Question source = questionRepository
-                .findById(attemptQuestion.getSourceQuestionId()).orElse(null);
+        Question source = sourceQuestions.get(attemptQuestion.getSourceQuestionId());
 
         if (isMultipleChoice(type) && source != null) {
             boolean correct = answer.getSelectedChoiceId() != null
@@ -1072,8 +1131,10 @@ public class AssessmentAttemptService {
         }
 
         if ("SHORT_ANSWER".equals(type) && source != null) {
-            Optional<TextQuestionConfig> config = textQuestionConfigRepository
-                    .findByQuestion_QuestionId(source.getQuestionId());
+            // Off the entity the batch loader already fetched it with, rather
+            // than a fresh query for a row that is sitting right here.
+            Optional<TextQuestionConfig> config =
+                    Optional.ofNullable(source.getTextQuestionConfig());
             if (config.isPresent()
                     && "EXACT_MATCH".equalsIgnoreCase(config.get().getCheckingMethod())
                     && answer.getLearnerAnswer() != null) {
@@ -1110,7 +1171,7 @@ public class AssessmentAttemptService {
         // programming nor a diagram config are plain analytical sub-question
         // sets — grade every sub-question in one holistic call.
         if (isWorkspaceType(type) && source != null) {
-            String criticalThinkingType = resolveCriticalThinkingType(source.getQuestionId());
+            String criticalThinkingType = resolveCriticalThinkingType(source);
 
             if (criticalThinkingType == null
                     && gradeCriticalThinkingAnswer(attemptQuestion, source, answer, points, batch)) {
@@ -1210,7 +1271,8 @@ public class AssessmentAttemptService {
      */
     private GradingBatch prepareGradingBatch(
             List<AssessmentAttemptQuestion> questions,
-            Map<Long, AssessmentAttemptAnswer> answersByQuestion) {
+            Map<Long, AssessmentAttemptAnswer> answersByQuestion,
+            Map<Long, Question> sourceQuestions) {
 
         AttemptGradingBatchService.Workload workload = new AttemptGradingBatchService.Workload();
 
@@ -1223,8 +1285,7 @@ public class AssessmentAttemptService {
 
             Long key = attemptQuestion.getAttemptQuestionId();
             String type = attemptQuestion.getQuestionType();
-            Question source = questionRepository
-                    .findById(attemptQuestion.getSourceQuestionId()).orElse(null);
+            Question source = sourceQuestions.get(attemptQuestion.getSourceQuestionId());
             if (source == null) {
                 continue;
             }
@@ -1239,7 +1300,7 @@ public class AssessmentAttemptService {
             }
 
             if (isWorkspaceType(type)) {
-                String criticalThinkingType = resolveCriticalThinkingType(source.getQuestionId());
+                String criticalThinkingType = resolveCriticalThinkingType(source);
 
                 if (criticalThinkingType == null) {
                     AnswerGradingRequestDto request =
@@ -1298,8 +1359,9 @@ public class AssessmentAttemptService {
     }
 
     private boolean isAiSemanticShortAnswer(String type, Question source) {
+        // Same already-loaded config the scorer reads; see resolveCriticalThinkingType.
         return "SHORT_ANSWER".equals(type)
-                && textQuestionConfigRepository.findByQuestion_QuestionId(source.getQuestionId())
+                && Optional.ofNullable(source.getTextQuestionConfig())
                         .map(config -> "AI_SEMANTIC".equalsIgnoreCase(config.getCheckingMethod()))
                         .orElse(false);
     }
@@ -1512,11 +1574,18 @@ public class AssessmentAttemptService {
     private static final String TYPE_PROGRAMMING_ITEM = "PROGRAMMING";
     private static final String TYPE_DIAGRAM_ITEM = "DIAGRAM";
 
-    private String resolveCriticalThinkingType(Long parentQuestionId) {
-        if (programmingQuestionConfigRepository.findByQuestion_QuestionId(parentQuestionId).isPresent()) {
+    /**
+     * Which workspace grader a question needs, read off the question itself.
+     *
+     * <p>Both configs are already on the entity -- they are EAGER one-to-ones,
+     * so they were loaded whether or not this method existed, and asking their
+     * repositories for them was two more round trips for rows already in hand.
+     */
+    private String resolveCriticalThinkingType(Question source) {
+        if (source.getProgrammingQuestionConfig() != null) {
             return "PROGRAMMING";
         }
-        if (diagramQuestionConfigRepository.findByQuestion_QuestionId(parentQuestionId).isPresent()) {
+        if (source.getDiagramQuestionConfig() != null) {
             return "DIAGRAM";
         }
         return null;

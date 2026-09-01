@@ -9,6 +9,7 @@ import {
   findCurrentTask,
   maxSeq,
   mergeEvents,
+  runProgress,
   terminalStatus,
 } from "./workflow-timeline-model"
 
@@ -152,6 +153,14 @@ export function useWorkflowStream(runId) {
 
   const isTerminal = TERMINAL_STATUSES.has(state.run?.status)
 
+  // Derived from the same attempt-scoped events as the timeline, so the bar and
+  // the transcript can never disagree about how much has been done. Percent is
+  // null until the curriculum gives the run a denominator.
+  const progress = useMemo(
+    () => runProgress(tasks, attemptEvents, state.run?.status),
+    [tasks, attemptEvents, state.run?.status],
+  )
+
   // Silence has to be re-evaluated on a timer, because nothing arrives to
   // trigger a render — being told nothing is exactly the condition.
   const [, tick] = useState(0)
@@ -170,6 +179,7 @@ export function useWorkflowStream(runId) {
     ...state,
     tasks,
     currentTask,
+    progress,
     attempts,
     silentFor,
     // RUNNING, connected, and yet nothing has happened for a long time:

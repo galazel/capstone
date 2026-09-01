@@ -215,6 +215,54 @@ class Settings(BaseSettings):
     curriculum_min_lessons: int = 3
     curriculum_max_lessons: int = 5
 
+    #: Let the planner size the curriculum from the source document instead of
+    #: from the six knobs above.
+    #:
+    #: A syllabus is a property of the material: a 300-page IT Passport guide
+    #: and a two-page handout do not both want 3-6 majors. When this is on, the
+    #: Size block asks the planner to derive the structure from what the
+    #: document actually covers, the per-level ceilings are not applied, and the
+    #: breadth floor drops to "at least one lesson" so a genuinely small source
+    #: is not resampled forever.
+    curriculum_autosize: bool = False
+
+    #: Total-lesson backstop that still applies under `curriculum_autosize`.
+    #: Set to 0 to remove it entirely.
+    #:
+    #: This is NOT a second size knob -- it sits far above any real syllabus and
+    #: exists only to stop a runaway plan. On 2026-08-24 an unbounded run
+    #: planned 125 lessons, reached lesson 77, and died on a 402 with the
+    #: account drained and NOTHING persisted (see `_enforce_ceiling` in
+    #: `app.schemas.certification.curriculum_schema`). Per-lesson cost also
+    #: rises as a run goes on -- roughly $0.015 early, ~$0.66 past lesson 60 --
+    #: so an unbounded plan is not a linearly-priced one. Trimming is free;
+    #: losing a whole run to an exhausted balance is not.
+    #:
+    #: What that incident actually cost was the *losing*, not the length: the
+    #: run had 77 written lessons in the checkpoint and persisted none of them,
+    #: because output only reached the database at the end. With
+    #: `lesson_checkpoint_every` writing progress down as it goes, an
+    #: interrupted long run keeps what it wrote and the retry continues from
+    #: there -- which is what makes 0 (no cap) a reasonable setting rather than
+    #: a gamble on the balance holding out.
+    curriculum_autosize_max_lessons: int = 60
+
+    #: Flush generated output to the database every N lessons.
+    #:
+    #: A run holds everything in the LangGraph checkpoint and used to write it
+    #: to Java's tables only at the very end, so anything that stopped the
+    #: process -- a 402, an OOM, a container restart, someone stopping the
+    #: stack -- threw away every lesson already authored, and the retry paid to
+    #: write them all again. `rescue_partial_output` covers the failures the
+    #: process survives long enough to handle; this covers the ones it does
+    #: not, because the work is already in the database before they happen.
+    #:
+    #: Persistence is name-matched and skips what is already stored
+    #: (`_persist_curriculum`, `persist_generated_assessments`), so flushing
+    #: repeatedly adds what is missing rather than duplicating what is there.
+    #: Set to 0 to disable and go back to end-of-run persistence only.
+    lesson_checkpoint_every: int = 10
+
     #: Content blocks the lesson agent is asked to write. Deliberately
     #: independent of curriculum size: a cheap test run wants *few* lessons,
     #: not thin ones, so shrinking the syllabus must not shrink the lesson.
@@ -245,6 +293,22 @@ class Settings(BaseSettings):
     #: sit, and self-grading.
     mock_exam_questions: int = 50
     question_bank_questions: int = 100
+
+    #: Bank questions to author PER LESSON. When > 0 this replaces the flat
+    #: `question_bank_questions` total and the bank scales with the syllabus.
+    #:
+    #: The bank was deliberately flat -- one pool for the certification, a fixed
+    #: cost that did not multiply -- which is the right call on a budget and the
+    #: wrong one for everything that reads the bank per lesson. The pop-up
+    #: knowledge check draws 5 questions from a single finished lesson, and BKT
+    #: fits guess/slip per lesson: both starve when a 100-question bank is
+    #: spread thin across a 30-lesson syllabus. Sizing per lesson guarantees
+    #: every lesson has its own pool.
+    #:
+    #: This MULTIPLIES: 10 here across 30 lessons is 300 bank questions. Under
+    #: `curriculum_autosize` the lesson count is not known until the planner
+    #: has run, so the bank total is not knowable in advance either.
+    question_bank_questions_per_lesson: int = 0
 
     #: Questions asked for in a single LLM call. Anything larger is split
     #: across several calls and merged (`app.ai.invocation`). One MCQ costs

@@ -61,13 +61,43 @@ public class ExamService {
      * official exams only, byte-for-byte identical to before ownerGroup
      * existed. Passed, it additionally mixes in that group's own exams --
      * the controller has already checked the caller can act on that group.
+     *
+     * <p>certificationId narrows the read to one certification's exams. Omitted,
+     * the response is every exam on the platform, as before -- callers that
+     * fetch the whole table and filter it client-side still work unchanged.
      */
-    public List<ExamDto> getAll(Long includeGroupId) {
-        log.debug("Fetching all exams (includeGroupId={})", includeGroupId);
-        return examRepository.findAll().stream()
+    public List<ExamDto> getAll(Long includeGroupId, Long certificationId) {
+        log.debug("Fetching exams (includeGroupId={}, certificationId={})", includeGroupId, certificationId);
+        List<Exam> exams = (certificationId == null
+                ? examRepository.findAll()
+                : examRepository.findByCertification_CertificationId(certificationId))
+                .stream()
                 .filter(exam -> exam.getOwnerGroup() == null
                         || exam.getOwnerGroup().getInstitutionGroupId().equals(includeGroupId))
-                .map(this::toDtoWithQuestions).toList();
+                .toList();
+        Map<Long, List<Long>> questionIdsByExamId = questionIdsByExamId(exams);
+        return exams.stream()
+                .map(exam -> {
+                    ExamDto dto = examMapper.toDto(exam);
+                    dto.setQuestionIds(
+                            questionIdsByExamId.getOrDefault(exam.getExamId(), List.of()));
+                    return dto;
+                })
+                .toList();
+    }
+
+    /** One query for the whole page's question ids -- see the repository method's note. */
+    private Map<Long, List<Long>> questionIdsByExamId(List<Exam> exams) {
+        if (exams.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> examIds = exams.stream().map(Exam::getExamId).toList();
+        return examQuestionRepository.findQuestionIdsByExamIds(examIds).stream()
+                .collect(Collectors.groupingBy(
+                        ExamQuestionRepository.ExamQuestionIdView::getExamId,
+                        Collectors.mapping(
+                                ExamQuestionRepository.ExamQuestionIdView::getQuestionId,
+                                Collectors.toList())));
     }
 
     /** Same includeGroupId contract as {@link #getAll}, applied to a single exam. */

@@ -337,7 +337,15 @@ def insert_question(
     difficulty: str,
     question_text: str,
     total_points: float = 1.0,
+    parent_question_id: int | None = None,
 ) -> int:
+    """Writes one question row.
+
+    `parent_question_id` makes this a sub-question of a critical-thinking
+    item. The grader reads them back with
+    `findByParentQuestion_QuestionIdOrderByQuestionIdAsc` and marks the set in
+    one holistic call, so insertion order is the order the learner sees.
+    """
     result = session.execute(
         insert(questions).values(
             lesson_id=lesson_id,
@@ -345,6 +353,7 @@ def insert_question(
             difficulty_level=difficulty,
             question_text=question_text,
             total_points=total_points,
+            parent_question_id=parent_question_id,
             created_at=datetime.now(timezone.utc),
         )
     )

@@ -93,6 +93,28 @@ def _persist_one_question(session: Session, question: dict[str, Any]) -> int:
             question.get("instructions"),
         )
 
+    # The parts of a critical-thinking item, as child rows under it. Each is a
+    # written answer graded against its own rubric; the Java grader reads the
+    # set back by parent id and marks it in one holistic call. Insertion order
+    # is the order the learner is asked them in -- the reader orders by
+    # question_id -- so this must stay a plain in-order loop.
+    for sub in question.get("sub_questions") or []:
+        sub_id = repo.insert_question(
+            session,
+            lesson_id=question["_lesson_id"],
+            question_type="DESCRIPTIVE",
+            difficulty=question.get("difficulty", "AVERAGE"),
+            question_text=sub.get("question", ""),
+            total_points=float(sub.get("points") or 1.0),
+            parent_question_id=question_id,
+        )
+        # A rubric, so the AI grader has something to mark against. Without a
+        # text config the sub-answer falls through to "no evaluator applies"
+        # and scores zero however good it is.
+        repo.insert_text_config(
+            session, sub_id, sub.get("rubric_answer") or "", "AI_SEMANTIC"
+        )
+
     return question_id
 
 
@@ -315,9 +337,34 @@ def persist_generated_assessments(
 
     for quiz in result.get("lesson_quizzes") or []:
         lesson_name = quiz.get("lesson", "")
-        resolved = lesson_index.get(
-            " ".join(lesson_name.lower().split()), default_lesson_id
-        )
+        # `normalize_lesson_name`, not a local whitespace collapse.
+        #
+        # `lesson_index` is keyed with `normalize_lesson_name`, which strips
+        # punctuation (a word-character regex); this lookup used
+        # `" ".join(name.lower().split())`, which keeps it. So any lesson whose
+        # name contains a hyphen, ampersand, slash or apostrophe could never
+        # match its own index entry: "E-Business and Electronic Commerce" is
+        # stored as "e business ..." and was looked up as "e-business ...".
+        #
+        # The miss was silent, and the fallback is `lessons[0]`, so the quiz
+        # was filed against the FIRST lesson of the certification -- leaving
+        # that lesson with two quizzes and its real lesson with none, which
+        # only surfaces later as a publishing requirement that cannot be met.
+        key = normalize_lesson_name(lesson_name)
+        resolved = lesson_index.get(key)
+        if resolved is None:
+            resolved = default_lesson_id
+            # Never silent again: a quiz landing on the wrong lesson is a data
+            # error the run should report, not something to discover at publish
+            # time.
+            warnings.append(
+                f"Lesson quiz '{lesson_name}' matched no curriculum lesson; "
+                f"filed against lesson {default_lesson_id}."
+            )
+            logger.warning(
+                "Lesson quiz '%s' (key '%s') matched no lesson; falling back to lesson %s",
+                lesson_name, key, default_lesson_id,
+            )
         _store_exam(
             scope="LESSON", title=f"{lesson_name} Quiz",
             questions=quiz.get("questions") or [],
