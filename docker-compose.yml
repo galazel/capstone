@@ -93,6 +93,30 @@ services:
       RABBITMQ_PASSWORD: guest
       AI_SERVICE_URL: http://python-api:8000/api/v1/ai
       BKT_SERVICE_URL: http://python-api:8000/api/v1/bkt
+      # Cap the JVM. Left alone it sizes its heap from what the Docker VM
+      # reports -- 2.81 GB here -- and settles around 1 GB resident, which on
+      # this host is a third of everything Docker has for eight containers.
+      #
+      # 2026-09-02: that is what made generation unsurvivable. python-api loads
+      # a sentence-transformers model for embeddings, and the two together went
+      # over the VM's ceiling: not a container OOM-kill but Docker Desktop's own
+      # engine dying, which returns 500 on every API call and takes the run with
+      # it. It happened twice in one session.
+      #
+      # SerialGC rather than G1 because G1 keeps region bookkeeping that is pure
+      # overhead at this heap size, and this service is not throughput-bound --
+      # it hands work to python-api and waits.
+      JAVA_TOOL_OPTIONS: >-
+        -Xms128m
+        -Xmx384m
+        -XX:MaxMetaspaceSize=192m
+        -XX:+UseSerialGC
+        -XX:MaxRAMPercentage=50
+    # A ceiling the container hits BEFORE the Docker VM does. Without it an
+    # overrun takes down the whole engine; with it the kernel kills this one
+    # container and Compose restarts it, which is a recoverable failure instead
+    # of a dead run and a dead Docker.
+    mem_limit: 768m
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/api/user-types"]
       interval: 10s
@@ -102,6 +126,23 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+    # Same public forwarders the python services already use, and for the same
+    # reason -- this service was simply missed when they were fixed.
+    #
+    # 2026-09-02: TOPCIT would not start. Two of five uploads died on
+    # `UnknownHostException` resolving the S3 endpoint, and because the ingest
+    # runs inside the request transaction, catching them in
+    # `CurriculumGenerationService.ingestFiles` did not save the request: the
+    # transaction was already marked rollback-only, so the commit threw
+    # UnexpectedRollbackException and the certification row went with it. The
+    # admin saw only "An unexpected error occurred".
+    #
+    # S3 is the difference between this service and the python ones: they talk
+    # to Neon and OpenRouter, this one also resolves an AWS bucket endpoint on
+    # every document upload, so it hits the flaky forwarder more often.
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     networks:
       - rebyu-net
     develop:
@@ -133,6 +174,17 @@ services:
     volumes:
       - ./python-backend:/app
       - python_artifacts:/app/artifacts
+    # Come back after a kill. On a 5.9 GB host this process is the biggest
+    # thing running, so it is what the kernel reaches for first when memory
+    # runs out -- 2026-09-02 it took SIGKILL (exit 137) mid-run and, with no
+    # policy here, simply stayed dead: the generation stopped and every UI poll
+    # 500'd for minutes with nothing saying why.
+    #
+    # This does not make the run survive; the graph state lives in the
+    # checkpointer and the run has to be restarted. It makes the SERVICE
+    # survive, so the workspace keeps answering and the failure is visible
+    # instead of silent.
+    restart: unless-stopped
     depends_on:
       redis:
         condition: service_healthy
