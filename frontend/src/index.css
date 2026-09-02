@@ -285,6 +285,25 @@ body.netacad-overlay-theme {
     border-color: color-mix(in srgb, var(--border) 75%, transparent);
 }
 
+/* Indeterminate progress: a bar that says "running" without claiming to know
+   how far along it is.
+
+   For work whose length cannot be measured from the browser -- a server
+   reading uploaded PDFs and pulling their figures out, inside one request that
+   reports nothing until it ends. A full static bar reads as finished-but-hung,
+   and a bar creeping toward 90% would be inventing a number. This just moves.
+
+   The reduced-motion block below stops it; the label beside it carries an
+   elapsed clock, so the "still alive" signal survives without the animation. */
+@keyframes loading-sweep {
+    from {
+        transform: translateX(-100%);
+    }
+    to {
+        transform: translateX(300%);
+    }
+}
+
 /* Route entrance. Applied to the wrapper around every page, keyed on pathname
    so it replays on navigation. Kept in CSS rather than JS on purpose — see
    RouteTransition in App.jsx. The reduced-motion block below neuters it. */

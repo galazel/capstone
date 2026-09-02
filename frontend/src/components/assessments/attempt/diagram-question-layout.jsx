@@ -1,25 +1,23 @@
 import { useEffect, useState } from "react"
-import { CheckCheckIcon, Loader2Icon } from "@/components/icons"
-import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { getFileViewUrl } from "@/services/fileService.js"
-import { checkAttemptDiagram } from "@/services/assessmentService.js"
 import DiagramArea from "@/components/challenges/diagram-area.jsx"
 import { getDiagramTypeLabel } from "@/components/questions/question-editors.jsx"
 import RubricPanel from "./rubric-panel.jsx"
 import SubQuestionTabs from "./sub-question-tabs.jsx"
 
 // Three-column diagram environment: problem | diagram editor | navigation +
-// rubric. Check Diagram hits a real endpoint; evaluation is stubbed server-side
-// (returns the rubric as pending), so nothing is fake-scored here.
+// rubric. There is no in-attempt Check: diagram grading compares against
+// `reference_diagram_xml`, which generation never fills (it writes
+// `reference_diagram_json`), so a Check could only report failure.
 //
-// `checker` swaps where Check Diagram goes, for the same reason the programming
-// layout takes a `runner`: an arena run has no attempt to check against, but
-// should be the same canvas the learner meets in an exam.
+// `checker`, `attemptId`, `attemptQuestionId` and `learnerId` are kept on the
+// signature though nothing reads them now: they are exactly what a restored
+// Check would need, callers already pass them, and dropping them would make
+// bringing it back a change across several files rather than one.
 export default function DiagramQuestionLayout({
   question,
   index,
@@ -34,7 +32,6 @@ export default function DiagramQuestionLayout({
 }) {
   const [rubric, setRubric] = useState(question.rubric ?? [])
   const [notice, setNotice] = useState(null)
-  const [checking, setChecking] = useState(false)
 
   const diagramType = question.diagramType ?? "ERD"
   const subQuestions = question.subQuestions ?? []
@@ -45,32 +42,7 @@ export default function DiagramQuestionLayout({
   useEffect(() => {
     setRubric(question.rubric ?? [])
     setNotice(null)
-    setChecking(false)
   }, [question.attemptQuestionId, question.rubric])
-
-  const handleCheck = async () => {
-    setChecking(true)
-    try {
-      const submission = answer?.diagramSubmissionData ?? ""
-      const result = checker
-        ? await checker(submission, diagramType)
-        : await checkAttemptDiagram(
-            attemptId,
-            attemptQuestionId,
-            learnerId,
-            submission,
-            diagramType
-          )
-      setRubric(result.rubric ?? [])
-      setNotice(result.message ?? null)
-    } catch (error) {
-      toast.error(
-        error?.response?.data?.message ?? "Unable to check your diagram right now."
-      )
-    } finally {
-      setChecking(false)
-    }
-  }
 
   return (
     <div className="grid h-full min-h-0 gap-4 lg:grid-cols-[minmax(240px,1fr)_minmax(0,1.5fr)_300px]">
@@ -152,20 +124,17 @@ export default function DiagramQuestionLayout({
 
       {/* Center — diagram editor */}
       <div className="flex min-h-0 flex-col gap-2">
+        {/* Check Diagram removed deliberately.
+            It offered a verdict the server cannot currently produce: diagram
+            grading compares the learner's drawing against
+            `reference_diagram_xml`, and generation writes the reference to
+            `reference_diagram_json` instead, leaving that column blank on
+            every generated question. So Check could only ever report failure
+            or nothing, which is worse than not offering it -- a learner who
+            presses it concludes their diagram is wrong.
+
+            Restore it once the grader reads a reference that exists. */}
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            onClick={handleCheck}
-            disabled={checking || editingLocked}
-          >
-            {checking ? (
-              <Loader2Icon className="animate-spin" aria-hidden="true" />
-            ) : (
-              <CheckCheckIcon aria-hidden="true" />
-            )}
-            Check Diagram
-          </Button>
           <span className="text-xs text-muted-foreground">
             Your diagram is saved automatically with your attempt.
           </span>

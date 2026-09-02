@@ -48,7 +48,7 @@ import {
    The graph was written review-first: it pauses after the curriculum, after
    every category, after every lesson, and again for each exam and the question
    bank. That is right when someone intends to shape the material as it is
-   written, and wrong the rest of the time â€” an unattended run stops at the
+   written, and wrong the rest of the time — an unattended run stops at the
    first checkpoint and waits, so "start it and check back later" produced a
    certification that had generated one thing and then sat still.
 
@@ -58,7 +58,7 @@ const REVIEW_MODES = [
         value: "auto",
         title: "Generate everything",
         description:
-            "Builds the whole certification without stopping â€” curriculum, lessons, quizzes, exams, and the question bank. Everything is saved as drafts for you to edit afterwards.",
+            "Builds the whole certification without stopping — curriculum, lessons, quizzes, exams, and the question bank. Everything is saved as drafts for you to edit afterwards.",
     },
     {
         value: "guided",
@@ -118,6 +118,13 @@ function ReviewModeChoice({ value, onChange, disabled }) {
     )
 }
 
+/** Elapsed time as m:ss -- a clock, because that is what it is. */
+function formatElapsed(totalSeconds) {
+    const minutes = Math.floor(totalSeconds / 60)
+    const seconds = totalSeconds % 60
+    return `${minutes}:${String(seconds).padStart(2, "0")}`
+}
+
 function getEmptyDetails() {
     return {
         title: "",
@@ -153,6 +160,10 @@ export default function CertificationFormDrawer({
 
     const [sourceDocuments, setSourceDocuments] = useState([])
     const [uploadPercent, setUploadPercent] = useState(0)
+    /* Seconds since the upload finished and the server started reading the
+       documents. The only thing this screen can honestly report about that
+       stretch, and the only thing that distinguishes it from a dead request. */
+    const [processingSeconds, setProcessingSeconds] = useState(0)
     /* Unattended by default: it is what an admin wants nearly every time, and
        the supervised alternative is one click away and clearly labelled. */
     const [reviewMode, setReviewMode] = useState("auto")
@@ -176,6 +187,22 @@ export default function CertificationFormDrawer({
                 chosenTypes
             ),
     })
+
+    /* Ticks only while the server is reading the documents, and resets between
+       attempts so a second upload never shows the first one's clock. */
+    const isProcessing = isBusy && uploadPercent >= 100
+    useEffect(() => {
+        if (!isProcessing) {
+            setProcessingSeconds(0)
+            return
+        }
+        const startedAt = Date.now()
+        const timer = setInterval(
+            () => setProcessingSeconds(Math.floor((Date.now() - startedAt) / 1000)),
+            1000
+        )
+        return () => clearInterval(timer)
+    }, [isProcessing])
 
     function resetForm() {
         setCertificationDetails(getEmptyDetails())
@@ -226,7 +253,7 @@ export default function CertificationFormDrawer({
      * There is no manual alternative. A certification is a curriculum plus
      * twenty-odd lessons and their assessments; typing that structure by hand
      * produced empty shells that then had to be generated anyway, so the form
-     * asks for the two things generation actually needs â€” what the
+     * asks for the two things generation actually needs — what the
      * certification is, and the documents to read.
      */
     async function handleGenerate() {
@@ -433,23 +460,56 @@ export default function CertificationFormDrawer({
                         </Alert>
                     )}
 
-                    {/* Real byte progress while the documents upload: ten 10 MB
-                        PDFs is a slow request, and a button stuck on
-                        "Startingâ€¦" cannot say whether anything is moving. */}
+                    {/* Two phases, and only the first has a percentage.
+                        Uploading reports real bytes. What follows -- the server
+                        reading each PDF, pulling its figures out and storing
+                        them -- reports nothing, because it all happens inside
+                        the one request and nothing comes back until it ends.
+
+                        That silence is the whole problem: the bar sat full and
+                        the button said "Starting…" for minutes, which is what a
+                        crashed request looks like too, so the honest reading
+                        was that it had died.
+
+                        So the second phase shows elapsed time instead of a
+                        percentage. A number that keeps moving is proof the
+                        request is alive, and no percentage is invented for work
+                        that cannot be measured from here -- a bar creeping to
+                        90% and stopping would be a lie that looks worse the
+                        longer it holds. */}
                     {isBusy && (
                         <div className="space-y-1.5">
                             <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                                 <span>
                                     {uploadPercent < 100
-                                        ? `Uploading ${sourceDocuments.length} document${sourceDocuments.length === 1 ? "" : "s"}â€¦`
-                                        : "Queuing generationâ€¦"}
+                                        ? `Uploading ${sourceDocuments.length} document${sourceDocuments.length === 1 ? "" : "s"}…`
+                                        : `Reading ${sourceDocuments.length} document${sourceDocuments.length === 1 ? "" : "s"} and extracting figures…`}
                                 </span>
                                 <span className="font-mono tabular-nums">
-                                    {uploadPercent}%
+                                    {uploadPercent < 100
+                                        ? `${uploadPercent}%`
+                                        : formatElapsed(processingSeconds)}
                                 </span>
                             </div>
 
-                            <Progress value={uploadPercent} className="h-1.5" />
+                            {uploadPercent < 100 ? (
+                                <Progress value={uploadPercent} className="h-1.5" />
+                            ) : (
+                                /* Indeterminate: the work has no knowable
+                                   fraction, so the bar says "running" rather
+                                   than claiming a position in it. */
+                                <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+                                    <div className="h-full w-1/3 animate-[loading-sweep_1.4s_ease-in-out_infinite] rounded-full bg-primary" />
+                                </div>
+                            )}
+
+                            {uploadPercent >= 100 && (
+                                <p className="text-xs leading-5 text-muted-foreground">
+                                    Large PDFs take a few minutes — every page is
+                                    read and its diagrams pulled out. This keeps
+                                    going even if you close this.
+                                </p>
+                            )}
                         </div>
                     )}
 

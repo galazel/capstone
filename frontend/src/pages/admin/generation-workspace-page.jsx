@@ -49,7 +49,7 @@ import { TaskStatusIcon, stageLabel } from "@/components/generation/task-status"
  *
  * A generation run is a long conversation with a model that a human steers, not
  * a request that either succeeds or fails. So this shows the work as one
- * transcript â€” every step, its duration, what it produced â€” with the review
+ * transcript — every step, its duration, what it produced — with the review
  * decision appearing inline at the point where the run is waiting. There is
  * deliberately no full-page loading state after the first connect: the
  * transcript *is* the progress indicator.
@@ -77,7 +77,7 @@ export default function GenerationWorkspacePage() {
   })
 
   // A queued build normally shows up within a second or two. Past that, the
-  // most likely cause is that nothing is consuming the queue â€” so say so rather
+  // most likely cause is that nothing is consuming the queue — so say so rather
   // than spinning indefinitely, which reads as "working" when it is actually
   // "nobody is listening". Polling continues; only the message changes.
   const waitedTooLong = useWaitedTooLong(Boolean(awaitingCertificationId) && !runId, 20_000)
@@ -96,7 +96,7 @@ export default function GenerationWorkspacePage() {
   } = stream
 
   // The artifact under review lives in the LangGraph interrupt, not the event
-  // log, so it is fetched when the run enters (or is found in) review â€” keyed
+  // log, so it is fetched when the run enters (or is found in) review — keyed
   // by lastSeq so approving one item pulls the next one automatically.
   const review = useQuery({
     queryKey: ["workflow-review", runId, isWaitingForReview, run?.last_seq],
@@ -317,7 +317,7 @@ export default function GenerationWorkspacePage() {
                     ) : (
                       <p className="flex items-center gap-2 px-2.5 py-2 text-sm text-muted-foreground">
                         <Loader2 className="size-4 animate-spin" />
-                        Loading the item waiting for reviewâ€¦
+                        Loading the item waiting for review…
                       </p>
                     )
                   ) : null}
@@ -382,7 +382,7 @@ function EmptyState({ awaiting, waitedTooLong, loading }) {
         <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
           The build was queued but no worker has claimed it. Usually that means the Python
           generation service is not running, or it cannot reach RabbitMQ or the database. Still
-          watching â€” it will appear here the moment a worker starts.
+          watching — it will appear here the moment a worker starts.
         </p>
       </div>
     )
@@ -392,9 +392,9 @@ function EmptyState({ awaiting, waitedTooLong, loading }) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 py-16 text-center">
         <Loader2 className="size-5 animate-spin text-muted-foreground" />
-        <p className="text-sm font-medium text-foreground">Queuing the buildâ€¦</p>
+        <p className="text-sm font-medium text-foreground">Queuing the build…</p>
         <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
-          Waiting for a worker to pick this up. The transcript starts as soon as it does â€” you can
+          Waiting for a worker to pick this up. The transcript starts as soon as it does — you can
           leave this page and come back to it.
         </p>
       </div>
@@ -404,7 +404,7 @@ function EmptyState({ awaiting, waitedTooLong, loading }) {
   return (
     <div className="flex flex-1 items-center justify-center px-6 py-16">
       <p className="text-sm text-muted-foreground">
-        {loading ? "Loading runsâ€¦" : "No generation runs yet."}
+        {loading ? "Loading runs…" : "No generation runs yet."}
       </p>
     </div>
   )
@@ -453,7 +453,7 @@ function RunList({ runs, activeRunId, onSelect }) {
   const [showPast, setShowPast] = useState(false)
 
   // The list showed every run ever started, so finishing one generation left
-  // its wreckage sitting above the next one â€” three "Certification #N" entries
+  // its wreckage sitting above the next one — three "Certification #N" entries
   // when only one was live. Past runs are still reachable, just not by default;
   // the open run always shows regardless, since a failed run is exactly what
   // the recovery panel is for.

@@ -89,7 +89,7 @@ export default function GenerateMoreDialog({ open, onOpenChange, certification }
         <DialogHeader>
           <DialogTitle>Add to this certification</DialogTitle>
           <DialogDescription>
-            Upload the material for what is missing â€” another domain, a new
+            Upload the material for what is missing — another domain, a new
             module, further lessons. The planner is given the curriculum that
             already exists and asked only for what these documents add.
           </DialogDescription>

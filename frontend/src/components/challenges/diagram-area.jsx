@@ -176,25 +176,73 @@ export default function DiagramArea({
         >
             {isLoading && (
                 <div
-                    className="absolute inset-0 z-10 flex bg-card"
+                    className="absolute inset-0 z-10 flex flex-col bg-card"
                     aria-live="polite"
                 >
-                    {/* A skeleton of the editor's own furniture — sidebar,
-                        toolbar, format panel — so the wait reads as "this is
-                        arriving" instead of "nothing is here". */}
-                    <div className="hidden w-40 shrink-0 flex-col gap-2 border-r border-rb-swan bg-rb-polar p-3 sm:flex">
-                        {Array.from({ length: 7 }).map((_, item) => (
+                    {/* Traces the editor's real furniture, so the swap when it
+                        loads is a fill-in rather than a re-layout: a toolbar
+                        across the top, the shape library down the left with
+                        its search field and collapsed groups, and the grid
+                        canvas filling the rest.
+
+                        The previous skeleton drew a right-hand panel the
+                        editor does not have and a plain white canvas, so the
+                        page visibly rearranged itself at the moment the
+                        editor appeared. */}
+                    <div className="flex h-11 shrink-0 items-center gap-2 border-b border-rb-swan bg-rb-polar px-3">
+                        {/* Left cluster: panel, page, then the undo/redo/delete group. */}
+                        <div className="h-5 w-5 rounded bg-rb-swan motion-safe:animate-pulse" />
+                        <div className="h-5 w-5 rounded bg-rb-swan motion-safe:animate-pulse" />
+                        <div className="mx-1 h-5 w-px bg-rb-swan" />
+                        {Array.from({ length: 3 }).map((_, item) => (
                             <div
                                 key={item}
-                                className="h-8 rounded-lg bg-rb-swan motion-safe:animate-pulse"
+                                className="h-5 w-5 rounded bg-rb-swan motion-safe:animate-pulse"
                             />
                         ))}
+                        <div className="flex-1" />
+                        {/* Right cluster: comment and zoom, then the two
+                            trailing icons. */}
+                        <div className="h-5 w-5 rounded bg-rb-swan motion-safe:animate-pulse" />
+                        <div className="h-5 w-5 rounded bg-rb-swan motion-safe:animate-pulse" />
                     </div>
 
-                    <div className="flex min-w-0 flex-1 flex-col">
-                        <div className="h-10 shrink-0 border-b border-rb-swan bg-rb-polar" />
+                    <div className="flex min-h-0 flex-1">
+                        <div className="hidden w-56 shrink-0 flex-col gap-3 border-r border-rb-swan bg-rb-polar p-3 sm:flex">
+                            {/* Search field. */}
+                            <div className="h-8 rounded-lg border border-rb-swan bg-card" />
 
-                        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+                            {/* Scratchpad: a titled group with a dashed drop
+                                area, which is the tallest thing in the panel
+                                and the one whose absence was most obvious. */}
+                            <div className="space-y-2">
+                                <div className="h-3 w-24 rounded bg-rb-swan motion-safe:animate-pulse" />
+                                <div className="h-11 rounded-lg border border-dashed border-rb-swan" />
+                            </div>
+
+                            {/* The collapsed shape groups. */}
+                            {Array.from({ length: 2 }).map((_, item) => (
+                                <div
+                                    key={item}
+                                    className="h-3 w-20 rounded bg-rb-swan motion-safe:animate-pulse"
+                                />
+                            ))}
+
+                            <div className="mx-auto mt-1 h-8 w-32 rounded-full bg-rb-swan motion-safe:animate-pulse" />
+                        </div>
+
+                        {/* Canvas. The grid is drawn rather than left blank so
+                            the drawing area reads as a drawing area while it
+                            is still empty. */}
+                        <div
+                            className="relative flex min-w-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center"
+                            style={{
+                                backgroundImage:
+                                    "linear-gradient(to right, var(--color-rb-swan) 1px, transparent 1px)," +
+                                    "linear-gradient(to bottom, var(--color-rb-swan) 1px, transparent 1px)",
+                                backgroundSize: "24px 24px",
+                            }}
+                        >
                             <div className="h-10 w-10 rounded-full border-4 border-rb-swan border-t-rb-feather motion-safe:animate-spin" />
 
                             <p className="text-sm font-bold text-rb-eel">
@@ -205,10 +253,6 @@ export default function DiagramArea({
                                 Preparing your diagram workspace...
                             </p>
                         </div>
-                    </div>
-
-                    <div className="hidden w-48 shrink-0 border-l border-rb-swan bg-rb-polar p-3 lg:block">
-                        <div className="h-6 w-24 rounded bg-rb-swan motion-safe:animate-pulse" />
                     </div>
                 </div>
             )}
