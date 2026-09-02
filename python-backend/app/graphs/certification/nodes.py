@@ -313,7 +313,74 @@ async def curriculum_planning_agent_node(state: CertificationState):
         raise RuntimeError("Curriculum generation failed.") from e
 
 
-def _await_review(state: CertificationState, stage: str, payload) -> dict:
+def _stage_questions(payload) -> list:
+    """The question list inside a whole-artifact payload.
+
+    The bank is a bare list; the mock and diagnostic wrap theirs in
+    `{"questions": [...]}`.
+    """
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict):
+        items = payload.get("questions")
+        if isinstance(items, list):
+            return items
+    return []
+
+
+def _stage_quality_retry(state: CertificationState, stage: str, payload, expected):
+    """The per-item loop's quality gate, for the whole-artifact stages.
+
+    These three had no validate node at all: the mock exam, the diagnostic and
+    the question bank generated straight into an auto-approval, so the bank --
+    the largest single batch of questions a run produces, and the pool every
+    adaptive feature later draws on -- was the least checked artifact in the
+    build. Scoring it here costs nothing (the checks are pure functions over
+    the batch) and gives the same one-shot regeneration the lesson and category
+    quizzes get.
+
+    Once per stage, and only on an unattended run. Regenerating the bank is ~25
+    model calls, so a second failing score is accepted rather than paid for
+    twice.
+    """
+    threshold = get_settings().auto_review_min_quality_score
+    if threshold <= 0:
+        return None
+
+    key = f"{stage}:0"
+    if key in (state.get("quality_retried") or []):
+        return None
+
+    questions = _stage_questions(payload)
+    if not questions:
+        return None
+
+    report = validate_question_batch(questions, expected_count=expected)
+    if report.score >= threshold:
+        return None
+
+    logger.info(
+        "%s scored %d, below the %d quality gate -- regenerating once with "
+        "the validator's findings",
+        stage, report.score, threshold,
+    )
+    return {
+        "review_decision": "regenerate",
+        "status": f"{stage}_AUTO_IMPROVING",
+        "validation_report": report.model_dump(mode="json"),
+        "review_instructions": (
+            f"The previous version scored {report.score}/100 on automated "
+            "quality checks. Fix exactly these problems and keep everything "
+            "else that was already correct:\n"
+            + _quality_feedback([report.model_dump(mode="json")])
+        ),
+        "quality_retried": [*(state.get("quality_retried") or []), key],
+    }
+
+
+def _await_review(
+    state: CertificationState, stage: str, payload, *, expected: int | None = None
+) -> dict:
     """One whole-artifact HITL checkpoint.
 
     An unattended run (`review_mode == "AUTO"`) approves without pausing: the
@@ -327,6 +394,9 @@ def _await_review(state: CertificationState, stage: str, payload) -> dict:
     stages: the comparison was dict-against-string and silently approved.
     """
     if auto_approving(state):
+        retry = _stage_quality_retry(state, stage, payload, expected)
+        if retry is not None:
+            return retry
         logger.info("Auto-approving %s: run is unattended", stage)
         return {"review_decision": "approve", "status": f"{stage}_AUTO_APPROVED"}
 
@@ -405,15 +475,19 @@ async def generate_diagnostic_exam_node(state: CertificationState):
 
     batch = await invoke_question_agent(
         scope, context,
-        f"Generate exactly {DIAGNOSTIC_EXAM_ITEMS} questions covering every lesson "
-        "in the certification, to gauge a new learner's starting knowledge before they "
-        "begin studying. Use the same question types and layout as the real exam "
-        f"described above: {researched_question_types(state, UNKNOWN_EXAM_QUESTION_TYPES)}."
-        f"{performance_quota(researched_question_types(state, UNKNOWN_EXAM_QUESTION_TYPES), DIAGNOSTIC_EXAM_ITEMS)}"
-        f"{SUB_QUESTION_RULE} "
-        "Favor EASY and AVERAGE difficulty -- this is sat before any teaching has "
-        "happened. Set lesson_ref on each question to the lesson it tests.",
+        _with_improvement(
+            state,
+            f"Generate exactly {DIAGNOSTIC_EXAM_ITEMS} questions covering every lesson "
+            "in the certification, to gauge a new learner's starting knowledge before they "
+            "begin studying. Use the same question types and layout as the real exam "
+            f"described above: {researched_question_types(state, UNKNOWN_EXAM_QUESTION_TYPES)}."
+            f"{performance_quota(researched_question_types(state, UNKNOWN_EXAM_QUESTION_TYPES), DIAGNOSTIC_EXAM_ITEMS)}"
+            f"{SUB_QUESTION_RULE} "
+            "Favor EASY and AVERAGE difficulty -- this is sat before any teaching has "
+            "happened. Set lesson_ref on each question to the lesson it tests.",
+        ),
         count=DIAGNOSTIC_EXAM_ITEMS,
+        existing_stems=written_stems(state),
     )
     return {
         "diagnostic_exam": {"questions": questions_as_dicts(batch)},
@@ -422,7 +496,10 @@ async def generate_diagnostic_exam_node(state: CertificationState):
 
 
 def await_diagnostic_exam_review_node(state: CertificationState):
-    return _await_review(state, "DIAGNOSTIC_EXAM", state.get("diagnostic_exam", {}))
+    return _await_review(
+        state, "DIAGNOSTIC_EXAM", state.get("diagnostic_exam", {}),
+        expected=DIAGNOSTIC_EXAM_ITEMS,
+    )
 
 
 def _exam_structure(state: CertificationState) -> dict:
@@ -602,12 +679,16 @@ async def generate_mock_exam_node(state: CertificationState):
 
     batch = await invoke_question_agent(
         scope, context,
-        f"Generate exactly {count} questions {coverage}, drawn from the lesson content "
-        f"above{difficulty}. This exam uses these question types ONLY: {types}. "
-        f"Do not use a type that is not listed.{performance_quota(types, count)}"
-        f"{SUB_QUESTION_RULE} "
-        "Set lesson_ref on each question to the lesson it tests.",
+        _with_improvement(
+            state,
+            f"Generate exactly {count} questions {coverage}, drawn from the lesson content "
+            f"above{difficulty}. This exam uses these question types ONLY: {types}. "
+            f"Do not use a type that is not listed.{performance_quota(types, count)}"
+            f"{SUB_QUESTION_RULE} "
+            "Set lesson_ref on each question to the lesson it tests.",
+        ),
         count=count,
+        existing_stems=written_stems(state),
     )
     return {
         "mock_exam": {"questions": questions_as_dicts(batch)},
@@ -616,7 +697,9 @@ async def generate_mock_exam_node(state: CertificationState):
 
 
 def await_mock_exam_review_node(state: CertificationState):
-    return _await_review(state, "MOCK_EXAM", state.get("mock_exam", {}))
+    return _await_review(
+        state, "MOCK_EXAM", state.get("mock_exam", {}), expected=mock_exam_count()
+    )
 
 
 #: Share of a paper that must be performance items when the exam uses them.
@@ -766,13 +849,17 @@ async def generate_question_bank_node(state: CertificationState):
 
     batch = await invoke_question_agent(
         scope, context,
-        spread
-        + f"Use these question types: {bank_types}, spanning EASY, AVERAGE, and HARD."
-        + performance_quota(bank_types, total)
-        + " This bank is the primary source for "
-        "future adaptive assessments, remediation, and practice, so cover the curriculum "
-        "broadly rather than deeply on any one topic.",
+        _with_improvement(
+            state,
+            spread
+            + f"Use these question types: {bank_types}, spanning EASY, AVERAGE, and HARD."
+            + performance_quota(bank_types, total)
+            + " This bank is the primary source for "
+            "future adaptive assessments, remediation, and practice, so cover the curriculum "
+            "broadly rather than deeply on any one topic.",
+        ),
         count=total,
+        existing_stems=written_stems(state),
     )
     return {
         "question_bank": questions_as_dicts(batch),
@@ -781,6 +868,12 @@ async def generate_question_bank_node(state: CertificationState):
 
 
 def await_question_bank_review_node(state: CertificationState):
+    # No `expected` for the bank on purpose. Its total is dedupe-limited by
+    # design -- each batch only sees the last 40 stems already written, so a
+    # 500-question ask lands somewhat under -- and a COUNT_MISMATCH warning on
+    # every single run would be noise the gate has to discount rather than
+    # signal. The exams are the opposite: a mock exam of the wrong length is
+    # not the exam it imitates.
     return _await_review(state, "QUESTION_BANK", state.get("question_bank", []))
 
 
@@ -794,6 +887,7 @@ def await_question_bank_review_node(state: CertificationState):
 
 from app.domain.validation import validate_lesson, validate_question_batch  # noqa: E402
 from app.graphs.certification.review_loop import (  # noqa: E402
+    _quality_feedback,
     LoopPhase,
     current_index,
     current_item,
@@ -1041,6 +1135,7 @@ async def major_generate_node(state: CertificationState):
             "Set lesson_ref on each question to the lesson it tests.",
         ),
         count=major_quiz_count(),
+        existing_stems=written_stems(state),
     )
     return {
         "major_quizzes": [
@@ -1074,6 +1169,7 @@ async def middle_generate_node(state: CertificationState):
             "Set lesson_ref on each question to the lesson it tests.",
         ),
         count=middle_quiz_count(),
+        existing_stems=written_stems(state),
     )
     return {
         "middle_quizzes": [
@@ -1145,6 +1241,7 @@ async def _quiz_for(state: CertificationState, lesson: dict) -> dict:
             + f"Set lesson_ref to '{name}'.",
         ),
         count=lesson_quiz_count(),
+        existing_stems=written_stems(state),
     )
     return {"lesson": name, "questions": questions_as_dicts(batch)}
 
@@ -1284,6 +1381,44 @@ async def lesson_quiz_generate_node(state: CertificationState):
         }
 
     return {"lesson_quizzes": [await _quiz_for(state, {**lesson, "name": name})]}
+
+
+def written_stems(state: CertificationState) -> list[str]:
+    """Every question stem this run has produced so far.
+
+    Each assessment is a separate call to the question agent, and until these
+    were passed along nothing connected them: a lesson's quiz, the middle exam
+    covering that lesson and the major exam above it are three independent
+    requests over the same material, so a model asked three times what matters
+    most about a lesson answers roughly the same thing three times. All three
+    were stored, and the bank ended up with repeats that no single call could
+    have detected.
+
+    Deliberately the whole run rather than only the current scope: a question
+    repeated between a lesson quiz and its major exam is the case this exists
+    to catch, and those live in different parts of the state.
+    """
+    stems: list[str] = []
+
+    def collect(entries):
+        for entry in entries or []:
+            if not isinstance(entry, dict):
+                continue
+            for question in entry.get("questions") or []:
+                if isinstance(question, dict):
+                    stem = question.get("question")
+                    if stem:
+                        stems.append(stem)
+
+    collect(state.get("lesson_quizzes"))
+    collect(state.get("middle_quizzes"))
+    collect(state.get("major_quizzes"))
+    for key in ("mock_exam", "diagnostic_exam"):
+        collect([state.get(key)] if isinstance(state.get(key), dict) else None)
+    for question in state.get("question_bank") or []:
+        if isinstance(question, dict) and question.get("question"):
+            stems.append(question["question"])
+    return stems
 
 
 def _with_improvement(state: CertificationState, instructions: str) -> str:

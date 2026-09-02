@@ -31,10 +31,24 @@ def _get(lesson: Any, field: str, default=None):
     return getattr(lesson, field, default)
 
 
+def _block_type(block: Any) -> str:
+    """A block's ``type`` as a string, or "" when it is anything else.
+
+    The model occasionally emits an object here instead of a name; without
+    this an unhashable value reaches a set membership test and raises.
+    """
+    if not isinstance(block, dict):
+        return ""
+    value = block.get("type")
+    return value if isinstance(value, str) else ""
+
+
 def _block_text_length(sections: list[dict]) -> int:
     total = 0
     for block in sections or []:
         data = block.get("data", {}) if isinstance(block, dict) else {}
+        if not isinstance(data, dict):
+            continue
         for value in data.values():
             if isinstance(value, str):
                 total += len(value)
@@ -117,9 +131,7 @@ def validate_lesson(lesson: Any, *, expect_visuals: bool = False) -> ValidationR
             )
         )
 
-    has_visual = any(
-        isinstance(b, dict) and b.get("type") in _VISUAL_BLOCK_TYPES for b in sections
-    )
+    has_visual = any(_block_type(b) in _VISUAL_BLOCK_TYPES for b in sections)
     stats["has_visual"] = has_visual
     if expect_visuals and not has_visual:
         issues.append(

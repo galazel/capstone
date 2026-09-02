@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import math
+from collections.abc import Iterable
 from typing import Any
 
 from langchain_core.messages import HumanMessage
@@ -201,8 +202,44 @@ async def invoke_json_agent(
     )
 
 
+#: How many previously-written stems to show the model. Enough to steer it off
+#: the obvious repeats without spending the completion budget on the list
+#: itself -- at ~15 tokens a stem, 40 costs about 600 tokens per batch.
+_PRIOR_STEMS_SHOWN = 40
+
+
+def _avoid_clause(stems: list[str]) -> str:
+    """The 'do not repeat these' block appended to a batch's instructions."""
+    if not stems:
+        return ""
+    shown = "\n".join(f"- {s}" for s in stems[-_PRIOR_STEMS_SHOWN:])
+    return (
+        "\n\nQuestions already written for this lesson, in this or another "
+        "assessment. Do not repeat or rephrase any of them, and do not ask the "
+        f"same fact from a different angle:\n{shown}"
+    )
+
+
+def _take_new(result_questions, seen: set[str], into: list) -> int:
+    """Appends the questions whose stems are not already in `seen`."""
+    fresh = 0
+    for question in result_questions:
+        key = _stem_key(question.question)
+        if key in seen:
+            continue
+        seen.add(key)
+        into.append(question)
+        fresh += 1
+    return fresh
+
+
 async def invoke_question_agent(
-    scope: str, context: str, instructions: str, *, count: int | None = None
+    scope: str,
+    context: str,
+    instructions: str,
+    *,
+    count: int | None = None,
+    existing_stems: Iterable[str] | None = None,
 ) -> QuestionBatch:
     """Generates a question batch, splitting a large ask across several calls.
 
@@ -216,21 +253,43 @@ async def invoke_question_agent(
 
     Batching also bounds the damage of a bad sample: one failed batch of 15 is
     resampled, rather than all 50 questions.
-    """
-    if count is None or count <= 0:
-        return await invoke_agent(
-            get_question_generation_agent, build_question_batch_prompt(scope, context, instructions)
-        )
 
+    `existing_stems` are questions already written for this lesson ELSEWHERE --
+    its quiz, its middle exam, its major exam. Each of those is a separate call
+    to this function, and until they were passed here nothing connected them:
+    asked three times what matters most about a lesson, a model answers roughly
+    the same thing three times, and all three were stored. They seed the
+    duplicate check and are shown to the model, so a repeat is both discouraged
+    and, if it comes back anyway, dropped.
+
+    De-duplication now applies to EVERY path. It used to run only when a
+    request exceeded `question_batch_size`, so a 10-question lesson quiz -- the
+    most common call in a run -- was returned exactly as the model wrote it,
+    internal repeats included.
+    """
+    prior: set[str] = {_stem_key(s) for s in (existing_stems or []) if s}
+    prior_list: list[str] = [s for s in (existing_stems or []) if s]
     size = get_settings().question_batch_size
-    if count <= size:
-        return await invoke_agent(
-            get_question_generation_agent, build_question_batch_prompt(scope, context, instructions)
+
+    # Single-call paths: one request, but still checked against what exists.
+    if count is None or count <= 0 or count <= size:
+        result = await invoke_agent(
+            get_question_generation_agent,
+            build_question_batch_prompt(scope, context, instructions + _avoid_clause(prior_list)),
         )
+        seen = set(prior)
+        kept: list = []
+        dropped = len(result.questions) - _take_new(result.questions, seen, kept)
+        if dropped:
+            logger.info(
+                "%.40s: dropped %d duplicate question(s) of %d written",
+                scope, dropped, len(result.questions),
+            )
+        return QuestionBatch(scope=scope, questions=kept if count is None else kept[:count])
 
     batches = math.ceil(count / size)
     questions: list = []
-    seen: set[str] = set()
+    seen: set[str] = set(prior)
     # Extra rounds to replace duplicates. A later batch cannot see the earlier
     # ones except through the "already written" list below, and the model still
     # repeats itself -- a live 30-question exam came back with 20 distinct
@@ -250,25 +309,17 @@ async def invoke_question_agent(
             f"question count mentioned below -- {wanted} is the count for this batch.\n\n"
             f"{instructions}"
         )
-        if questions:
-            already = "\n".join(f"- {q.question}" for q in questions[-40:])
-            batched += (
-                "\n\nThese questions were already written for this same assessment. "
-                f"Do not repeat or rephrase any of them:\n{already}"
-            )
+        # What to steer away from: this assessment's own earlier batches AND
+        # anything already written for the lesson elsewhere. Batch stems come
+        # last so the most recent are the ones that survive the window.
+        avoid = prior_list + [q.question for q in questions]
+        batched += _avoid_clause(avoid)
 
         result = await invoke_agent(
             get_question_generation_agent, build_question_batch_prompt(scope, context, batched)
         )
 
-        fresh = 0
-        for question in result.questions:
-            key = _stem_key(question.question)
-            if key in seen:
-                continue
-            seen.add(key)
-            questions.append(question)
-            fresh += 1
+        fresh = _take_new(result.questions, seen, questions)
 
         logger.info(
             "Question batch %d for %.40s: %d question(s), %d new, %d/%d total",

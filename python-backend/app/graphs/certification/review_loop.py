@@ -22,6 +22,7 @@ from typing import Any, Callable
 from langgraph.graph import END
 from langgraph.types import interrupt
 
+from app.core.config import get_settings
 from app.graphs.cancellation import is_cancel_requested
 from app.graphs.certification.review_mode import auto_approving
 from app.graphs.certification.state import CertificationState
@@ -153,6 +154,84 @@ def make_gate_router(phase: LoopPhase):
     return route
 
 
+def _sub_reports(report: Any) -> list[dict]:
+    """The scored report(s) inside a phase's `validation_report`.
+
+    Categories store one question-batch report; the lesson phase nests two
+    under "lesson" and "quiz", because a lesson is judged on its prose and on
+    the quiz written from it separately.
+    """
+    if not isinstance(report, dict):
+        return []
+    if "quiz" in report or "lesson" in report:
+        return [r for r in (report.get("lesson"), report.get("quiz")) if isinstance(r, dict)]
+    return [report] if "score" in report else []
+
+
+def _worst_score(reports: list[dict]) -> int | None:
+    scores = [r.get("score") for r in reports if isinstance(r.get("score"), (int, float))]
+    return min(scores) if scores else None
+
+
+def _quality_feedback(reports: list[dict]) -> str:
+    """The validator's findings, worst first, as instructions a generator can act on."""
+    issues = [
+        issue
+        for report in reports
+        for issue in (report.get("issues") or [])
+        if isinstance(issue, dict) and issue.get("message")
+    ]
+    rank = {"ERROR": 0, "WARNING": 1, "INFO": 2}
+    issues.sort(key=lambda i: rank.get(str(i.get("severity")).upper(), 3))
+    # Enough to act on without burying the instruction that matters most.
+    return "\n".join(f"- {i.get('code')}: {i.get('message')}" for i in issues[:8])
+
+
+def _auto_quality_retry(state: CertificationState, phase: LoopPhase, index: int, label: str):
+    """One automatic regeneration for an item the validators scored badly.
+
+    Unattended runs approved whatever came back: the deterministic checks ran,
+    produced a score, stored it for the workspace, and nothing consulted it.
+    The reviewer's own "Improve with AI" path already knew how to regenerate an
+    item with written feedback, so this points that machinery at the validator's
+    findings for runs where there is no reviewer to read them.
+
+    Once per item, deliberately. A second failing score means the defects are
+    not the kind another sample fixes, and re-rolling costs real money for the
+    same dice. INFO-only reports never trigger it -- they carry no penalty and
+    so cannot drop a score below the threshold in the first place.
+    """
+    threshold = get_settings().auto_review_min_quality_score
+    if threshold <= 0:
+        return None
+
+    key = f"{phase.scope}:{index}"
+    if key in (state.get("quality_retried") or []):
+        return None
+
+    reports = _sub_reports(state.get("validation_report"))
+    score = _worst_score(reports)
+    if score is None or score >= threshold:
+        return None
+
+    logger.info(
+        "%s '%s' scored %s, below the %d quality gate -- regenerating once "
+        "with the validator's findings",
+        phase.scope, label, score, threshold,
+    )
+    return {
+        "review_decision": IMPROVE,
+        "status": f"{phase.scope}_AUTO_IMPROVING",
+        "review_instructions": (
+            "The previous version scored "
+            f"{score}/100 on automated quality checks. Fix exactly these "
+            f"problems and keep everything else that was already correct:\n"
+            f"{_quality_feedback(reports)}"
+        ),
+        "quality_retried": [*(state.get("quality_retried") or []), key],
+    }
+
+
 def make_review_node(phase: LoopPhase):
     """Pauses for this one item -- unless the run is unattended, or the
     reviewer already chose "Approve Remaining" for this scope, in which case
@@ -164,6 +243,10 @@ def make_review_node(phase: LoopPhase):
         index = current_index(state, phase)
 
         if auto_approving(state, phase.scope):
+            # No reviewer to read the quality report, so the gate reads it.
+            retry = _auto_quality_retry(state, phase, index, label)
+            if retry is not None:
+                return retry
             logger.info("Auto-approving %s '%s' (no review pending)", phase.scope, label)
             return {"review_decision": APPROVE, "status": f"{phase.scope}_AUTO_APPROVED"}
 

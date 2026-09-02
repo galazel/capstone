@@ -39,6 +39,7 @@ nothing downstream lost information it was actually using.
 
 import logging
 import math
+from itertools import zip_longest
 from typing import Annotated, Any, List
 
 from pydantic import BaseModel, BeforeValidator, WithJsonSchema, model_validator
@@ -269,6 +270,61 @@ def required_total_lessons() -> int:
     return max(1, math.ceil(smallest_ask * _LESSON_FLOOR_RATIO))
 
 
+def _allocate_lessons(asked: dict, cap: int) -> dict:
+    """Share `cap` lessons out across the middle categories in `asked`.
+
+    A floor of one lesson each so no category disappears, then the surplus in
+    proportion to what the planner actually asked for, largest-remainder so the
+    parts sum to the cap exactly rather than drifting under it.
+    """
+    keys = list(asked)
+
+    # More middle categories than the cap has lessons for. One each for as many
+    # as fit, taken a major at a time, so what survives still spans the
+    # certification instead of stopping partway through the first domain.
+    if len(keys) > cap:
+        by_major: dict = {}
+        for key in keys:
+            by_major.setdefault(key[0], []).append(key)
+        ordered = [
+            key
+            for row in zip_longest(*by_major.values())
+            for key in row
+            if key is not None
+        ]
+        return {key: 1 for key in ordered[:cap]}
+
+    keep = {key: 1 for key in keys}
+    budget = cap - len(keys)
+    surplus = sum(len(asked[key]) - 1 for key in keys)
+    if budget <= 0 or surplus <= 0:
+        return keep
+
+    remainders = []
+    for key in keys:
+        exact = (len(asked[key]) - 1) * budget / surplus
+        whole = int(exact)
+        keep[key] += whole
+        remainders.append((exact - whole, key))
+
+    # Hand the rounding leftovers to whoever was shortchanged most, and break
+    # ties across the majors rather than along them. Ordering ties by raw key
+    # walks the plan front to back, so every leftover lands in the first major
+    # or two and the last domain is reliably the shallowest -- an artefact of
+    # the arithmetic, not a judgement about the material. Ranking by position
+    # WITHIN a major first interleaves them instead.
+    def _fair_order(entry):
+        remainder, (major_index, middle_index) = entry
+        return (-remainder, middle_index, major_index)
+
+    for _, key in sorted(remainders, key=_fair_order):
+        if sum(keep.values()) >= cap:
+            break
+        if keep[key] < len(asked[key]):
+            keep[key] += 1
+    return keep
+
+
 def _enforce_total_lesson_backstop(majors: List[Any]) -> List[Any]:
     """Caps the TOTAL lesson count under `curriculum_autosize`.
 
@@ -279,45 +335,68 @@ def _enforce_total_lesson_backstop(majors: List[Any]) -> List[Any]:
     as a run goes on, so the tail of a very long plan is also its most
     expensive part.
 
-    Trims whole lessons off the end, in plan order, so what survives is the
-    planner's own leading material -- which it writes most-fundamental-first.
+    Trims PROPORTIONALLY, not off the end. Filling the budget in plan order and
+    stopping bounded the cost correctly but cut on the wrong axis: it amputated
+    whole Major Categories rather than shortening anything. The first TOPCIT
+    plan was 5 majors / 73 lessons, so against a cap of 60 the last domain
+    would have gone entirely and the certification would have shipped covering
+    four of five -- looking complete the whole time. Shortening every branch
+    instead spends the trim on depth, which a lesson can absorb by carrying
+    more key_topics, rather than on breadth, which nothing downstream can
+    recover.
+
     Set `curriculum_autosize_max_lessons` to 0 to remove the cap.
     """
     cap = get_settings().curriculum_autosize_max_lessons
     if cap <= 0:
         return majors
 
-    total = 0
+    # (major index, middle index) -> the lessons the planner put there.
+    asked: dict = {}
+    for major_index, major in enumerate(majors):
+        if not isinstance(major, dict):
+            continue
+        for middle_index, mid in enumerate(major.get("middleCategories") or []):
+            if isinstance(mid, dict) and (mid.get("lessons") or []):
+                asked[(major_index, middle_index)] = mid["lessons"]
+
+    total = sum(len(lessons) for lessons in asked.values())
+    if not asked or total <= cap:
+        return majors
+
+    keep = _allocate_lessons(asked, cap)
+
     trimmed: List[Any] = []
-    for major in majors:
+    for major_index, major in enumerate(majors):
         if not isinstance(major, dict):
             trimmed.append(major)
             continue
         middles: List[Any] = []
-        for mid in (major.get("middleCategories") or []):
+        for middle_index, mid in enumerate(major.get("middleCategories") or []):
             if not isinstance(mid, dict):
                 middles.append(mid)
                 continue
-            room = cap - total
-            if room <= 0:
-                break
-            lessons = (mid.get("lessons") or [])[:room]
-            if not lessons:
+            key = (major_index, middle_index)
+            if key not in asked:
                 continue
-            total += len(lessons)
-            middles.append({**mid, "lessons": lessons})
+            allowed = keep.get(key, 0)
+            if allowed > 0:
+                middles.append({**mid, "lessons": asked[key][:allowed]})
         # A major whose middles were all cut carries no lessons; dropping it
         # keeps the plan structurally valid rather than leaving an empty shell.
         if middles:
             trimmed.append({**major, "middleCategories": middles})
 
-    if total >= cap:
-        logger.warning(
-            "Autosized curriculum hit the %d-lesson backstop and was trimmed. "
-            "The planner wanted more; raise curriculum_autosize_max_lessons "
-            "(or set it to 0) if that is intended.",
-            cap,
-        )
+    logger.warning(
+        "Autosized curriculum exceeded the %d-lesson backstop -- the planner "
+        "asked for %d across %d middle categories -- and was trimmed "
+        "proportionally. Every category is still represented but each is "
+        "shallower than planned, so reshape the plan (or raise "
+        "curriculum_autosize_max_lessons) rather than assuming it is intact.",
+        cap,
+        total,
+        len(asked),
+    )
     return trimmed
 
 

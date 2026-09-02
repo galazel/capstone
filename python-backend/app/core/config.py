@@ -347,6 +347,22 @@ class Settings(BaseSettings):
     #: raised to fit a bigger batch.
     question_batch_size: int = 20
 
+    #: Score below which an UNATTENDED run regenerates an item once before
+    #: accepting it. 0 disables the gate.
+    #:
+    #: `validate_question_batch` and `validate_lesson` already scored every
+    #: artifact out of 100 -- filler distractors, duplicate stems, the correct
+    #: answer always being the longest option, recall-only Bloom coverage --
+    #: and on an unattended run nothing read the number. The report was stored
+    #: for the workspace and the item was approved regardless, so a batch
+    #: scoring 20 shipped exactly like one scoring 100.
+    #:
+    #: 70 is calibrated against the penalties in `domain.validation.report`:
+    #: an ERROR costs 25 and a WARNING 8, so this catches one hard defect or a
+    #: pile of soft ones while letting a merely imperfect artifact through.
+    #: Raising it much past 85 makes cosmetic warnings trigger real spend.
+    auto_review_min_quality_score: int = 70
+
     #: Ceiling on the mock exam regardless of what the planner researched.
     #: The mock exam's item count normally comes from the real certification's
     #: exam structure -- TOPCIT's 100 items, say -- because a mock exam that

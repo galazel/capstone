@@ -401,6 +401,23 @@ def _check_opening_word_variety(
         )
 
 
+def _depth_severity(affected: int, total: int) -> Severity:
+    """ERROR once a defect is the batch's habit rather than one slip.
+
+    The task-depth checks report ONE issue however many questions they matched,
+    so at a flat WARNING a batch whose every PROGRAMMING item is a one-liner
+    scored the same 8-point penalty as a batch with a single thin one: 92/100
+    either way, which no quality gate would ever act on. Putting the proportion
+    into the severity is what makes "most of them are stubs" reach the score --
+    at ERROR that batch lands near 67 and `auto_review_min_quality_score`
+    regenerates it with this issue's own message as the instruction.
+
+    Half is the line because these types come a few to a batch: at three
+    PROGRAMMING questions, two being stubs is the pattern, not an outlier.
+    """
+    return Severity.ERROR if total and affected * 2 >= total else Severity.WARNING
+
+
 def _check_task_depth(questions: list[Any], issues: list[ValidationIssue]) -> None:
     """Whether PROGRAMMING and DIAGRAM questions are actually tasks.
 
@@ -412,18 +429,24 @@ def _check_task_depth(questions: list[Any], issues: list[ValidationIssue]) -> No
     thin_programming: list[int] = []
     few_tests: list[int] = []
     thin_diagram: list[int] = []
+    # Denominators for the severity: a defect matters in proportion to how much
+    # of its own type it accounts for, not to the size of the whole batch.
+    programming_total = 0
+    diagram_total = 0
 
     for index, question in enumerate(questions):
         question_type = _get(question, "question_type")
         text = (_get(question, "question", "") or "").strip()
 
         if question_type == "PROGRAMMING":
+            programming_total += 1
             if len(text) < MIN_PROGRAMMING_QUESTION_CHARS:
                 thin_programming.append(index)
             if len(_get(question, "test_cases", []) or []) < MIN_PROGRAMMING_TEST_CASES:
                 few_tests.append(index)
 
         elif question_type == "DIAGRAM":
+            diagram_total += 1
             instructions = (_get(question, "instructions", "") or "").strip()
             if (
                 len(text) < MIN_DIAGRAM_QUESTION_CHARS
@@ -435,7 +458,7 @@ def _check_task_depth(questions: list[Any], issues: list[ValidationIssue]) -> No
         issues.append(
             ValidationIssue(
                 code="THIN_PROGRAMMING_TASK",
-                severity=Severity.WARNING,
+                severity=_depth_severity(len(thin_programming), programming_total),
                 message=(
                     f"{len(thin_programming)} PROGRAMMING question(s) are too short to "
                     f"state a problem, its input and output format, and its constraints."
@@ -447,7 +470,7 @@ def _check_task_depth(questions: list[Any], issues: list[ValidationIssue]) -> No
         issues.append(
             ValidationIssue(
                 code="TOO_FEW_TEST_CASES",
-                severity=Severity.WARNING,
+                severity=_depth_severity(len(few_tests), programming_total),
                 message=(
                     f"{len(few_tests)} PROGRAMMING question(s) have fewer than "
                     f"{MIN_PROGRAMMING_TEST_CASES} test cases, so the edge cases go "
@@ -460,7 +483,7 @@ def _check_task_depth(questions: list[Any], issues: list[ValidationIssue]) -> No
         issues.append(
             ValidationIssue(
                 code="THIN_DIAGRAM_TASK",
-                severity=Severity.WARNING,
+                severity=_depth_severity(len(thin_diagram), diagram_total),
                 message=(
                     f"{len(thin_diagram)} DIAGRAM question(s) give too little to model "
                     f"-- a scenario needs entities, relationships and rules, plus a "

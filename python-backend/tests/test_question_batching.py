@@ -213,7 +213,9 @@ async def test_the_fallback_mock_exam_asks_for_mcq_over_every_lesson(monkeypatch
 
     sent = {}
 
-    async def fake(scope, context, instructions, *, count=None):
+    # **kwargs so the double keeps working as the real signature grows -- it
+    # gained `existing_stems` when cross-assessment de-duplication was added.
+    async def fake(scope, context, instructions, *, count=None, **kwargs):
         sent["instructions"] = instructions
         sent["count"] = count
         return QuestionBatch(scope=scope, questions=[])
@@ -234,7 +236,7 @@ async def test_a_researched_mock_exam_keeps_its_own_types(monkeypatch):
     monkeypatch.setattr(get_settings(), "mock_exam_max_questions", 0, raising=False)
     sent = {}
 
-    async def fake(scope, context, instructions, *, count=None):
+    async def fake(scope, context, instructions, *, count=None, **kwargs):
         sent["instructions"] = instructions
         return QuestionBatch(scope=scope, questions=[])
 

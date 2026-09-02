@@ -140,6 +140,12 @@ class CertificationState(TypedDict, total=False):
     # approve every lesson.
     auto_approve_scopes: List[str]
 
+    # "SCOPE:index" for every item that has already spent its one automatic
+    # quality regeneration. Not cleared when the cursor advances -- the whole
+    # point is that it outlives the item, so a second bad score is accepted
+    # rather than re-rolled forever.
+    quality_retried: List[str]
+
     # Items the reviewer rejected, kept so the run can report what was
     # dropped rather than silently omitting it.
     rejected_items: List[Dict]
