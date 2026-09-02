@@ -322,7 +322,12 @@ export function validateQuestionData(typeId, data) {
     }
   }
 
-  if (typeId === "SHORT_ANSWER" && isBlank(data.correctAnswer)) {
+  /* A fill-in-the-blank carries its answers on its blanks, so the parent has
+     no single correct answer to require -- demanding one would make a valid
+     item unsaveable. Its blanks are validated instead. */
+  if (typeId === "SHORT_ANSWER" && (data.subQuestions ?? []).length > 0) {
+    validateSubQuestions(data, errors)
+  } else if (typeId === "SHORT_ANSWER" && isBlank(data.correctAnswer)) {
     errors.correctAnswer = "Correct answer is required."
   }
 
@@ -1249,6 +1254,34 @@ export async function saveAuthoredQuestion(
           ? question.data.acceptedVariations
           : null,
       })
+
+      /* The blanks of a fill-in-the-blank, saved as children of the passage.
+         Empty for an ordinary short answer, which is every one that has a
+         single expected answer instead of parts.
+
+         EXACT_MATCH, not the AI_SEMANTIC used for a programming item's parts:
+         a blank has one right term and the stem's candidate list settles which
+         -- asking a model whether "Usability" means "Usability" would be a
+         paid call, per blank, that can disagree with itself. */
+      for (const blank of question.data.subQuestions ?? []) {
+        const savedBlank = await saveQuestion(
+          {
+            parentQuestionId: savedShortAnswer.questionId,
+            questionType: "SHORT_ANSWER",
+            difficultyLevel: question.data.difficulty,
+            questionText: blank.question,
+            lessonId: Number(lessonId),
+            certificationId,
+            totalPoints: Number(blank.points) || 1,
+          },
+          ownerGroupId
+        )
+        await saveTextQuestion({
+          questionId: savedBlank.questionId,
+          correctAnswer: blank.correctAnswer,
+          checkingMethod: "EXACT_MATCH",
+        })
+      }
       return savedShortAnswer
     }
     case "DESCRIPTIVE": {

@@ -37,11 +37,18 @@ def create_multiple_choice_question(
 
 @tool(
     "create_short_answer_question",
-    description="Creates a Short Answer question with the expected answer."
+    description=(
+        "Creates a Short Answer question with the expected answer. For a "
+        "fill-in-the-blank, put the passage and its candidate list in "
+        "`question`, leave `correct_answer` empty, and give one entry in "
+        "`sub_questions` per blank: {question: '(A)', expectedAnswer: 'Term', "
+        "points: 5}."
+    )
 )
 def create_short_answer_question(
     question: str,
-    correct_answer: str,
+    correct_answer: str = "",
+    sub_questions: Optional[list[dict]] = None,
     difficulty: str = "average",
     image_key: str = ""
 ):
@@ -51,6 +58,9 @@ def create_short_answer_question(
         "imageKey": image_key,
         "correctAnswer": correct_answer,
         "checkingMethod": "EXACT_MATCH",
+        # The blanks of a fill-in-the-blank. Empty for an ordinary short
+        # answer, which has one expected answer and no parts.
+        "subQuestions": sub_questions or [],
         "difficulty": difficulty
     }
 

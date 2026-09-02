@@ -364,6 +364,31 @@ def persist_generated_assessments(
             created.append(exam_id)
         warnings.extend(exam_warnings)
 
+    # What the planner researched about the real paper: how long it runs, how
+    # many questions it holds, and the mark that passes it. Every exam this
+    # run creates is set against it, so a learner sitting any of them works
+    # under the clock and the standard the certification actually applies.
+    exam_structure = (result.get("curriculum") or {}).get("exam_structure") or {}
+    real_duration = int(exam_structure.get("duration_minutes") or 0) or None
+    real_total_items = int(exam_structure.get("total_items") or 0) or None
+    real_passing = float(exam_structure.get("passing_score") or 0) or None
+
+    def _timed(question_count: int) -> int | None:
+        """Minutes for an exam of this size, at the real paper's pace.
+
+        A twenty-question unit exam is not a two-hour paper, so the real
+        duration is scaled by size rather than copied: the pace is what
+        transfers, not the total. Untimed when the planner could not find the
+        real figures -- a made-up clock is worse than none, because a learner
+        pacing themselves against it is being told something false.
+        """
+        if not real_duration or not real_total_items or question_count <= 0:
+            return None
+        per_question = real_duration / real_total_items
+        # Never under five minutes: a ten-question quiz on a fast paper can
+        # scale to two, which is a clock nobody can sit.
+        return max(5, round(question_count * per_question))
+
     def _store_exam(*, scope: str, title: str, **kwargs) -> None:
         """Persists one exam unless an exam of that scope and title is
         already stored for this certification."""
@@ -409,10 +434,13 @@ def persist_generated_assessments(
                 "Lesson quiz '%s' (key '%s') matched no lesson; falling back to lesson %s",
                 lesson_name, key, default_lesson_id,
             )
+        lesson_questions = quiz.get("questions") or []
         _store_exam(
             scope="LESSON", title=f"{lesson_name} Quiz",
-            questions=quiz.get("questions") or [],
+            questions=lesson_questions,
             lesson_index=lesson_index, fallback_lesson_id=resolved, lesson_id=resolved,
+            duration_minutes=_timed(len(lesson_questions)),
+            passing_score=real_passing,
         )
 
     for quiz in result.get("middle_quizzes") or []:
@@ -423,11 +451,14 @@ def persist_generated_assessments(
                 f"Middle exam '{middle_name}' matched no middle category; it will not "
                 f"satisfy that category's publishing requirement."
             )
+        middle_questions = quiz.get("questions") or []
         _store_exam(
             scope="MIDDLE", title=f"{middle_name} Exam",
-            questions=quiz.get("questions") or [],
+            questions=middle_questions,
             lesson_index=lesson_index, fallback_lesson_id=default_lesson_id,
             middle_category_id=middle_category_id,
+            duration_minutes=_timed(len(middle_questions)),
+            passing_score=real_passing,
         )
 
     for quiz in result.get("major_quizzes") or []:
@@ -438,19 +469,15 @@ def persist_generated_assessments(
                 f"Major exam '{major_name}' matched no major category; it will not "
                 f"satisfy that category's publishing requirement."
             )
+        major_questions = quiz.get("questions") or []
         _store_exam(
             scope="MAJOR", title=f"{major_name} Exam",
-            questions=quiz.get("questions") or [],
+            questions=major_questions,
             lesson_index=lesson_index, fallback_lesson_id=default_lesson_id,
             major_category_id=major_category_id,
+            duration_minutes=_timed(len(major_questions)),
+            passing_score=real_passing,
         )
-
-    # What the planner researched about the real paper. The mock is stored
-    # under the real exam's clock and pass mark so sitting it tells a learner
-    # something about their readiness rather than about an invented 70%.
-    exam_structure = (result.get("curriculum") or {}).get("exam_structure") or {}
-    real_duration = int(exam_structure.get("duration_minutes") or 0) or None
-    real_passing = float(exam_structure.get("passing_score") or 0) or None
 
     diagnostic = result.get("diagnostic_exam") or {}
     if diagnostic.get("questions"):
