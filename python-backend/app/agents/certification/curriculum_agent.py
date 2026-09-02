@@ -72,29 +72,112 @@ _PROMPT_TEMPLATE = """
                     each phrase to a few words; do not write sentences,
                     explanations, or lesson content here.
 
+                    KEY_TOPICS IS WHERE COVERAGE IS PROVED. Every substantive
+                    topic in the source documents must appear in some lesson's
+                    key_topics. That -- not the number of lessons -- is how
+                    this curriculum demonstrates it covers the whole domain,
+                    and it is checked against the documents. A topic you leave
+                    out of every key_topics list is a topic the certification
+                    does not teach, whatever the lesson titles suggest.
+
+                    The lesson author is given this list and must teach every
+                    entry on it, so a lesson carrying six topics teaches six
+                    topics -- it does not mention them and move on.
+
 
                     Exam structure:
 
                     Alongside "majorCategories", return ONE "exam_structure"
                     object describing the REAL certification exam -- not the
-                    curriculum. The mock exam is built from it, so it decides
-                    how many questions that exam has and what kinds:
+                    curriculum. EVERY assessment this run produces is built
+                    from it: the diagnostic, the mock exam and the question
+                    bank all read it, so research it properly rather than
+                    filling in defaults.
 
                     {
                      "total_items": 0,
                      "question_types": ["MCQ"],
+                     "duration_minutes": 0,
+                     "passing_score": 0,
+                     "coverage": "",
                      "notes": ""
                     }
 
                     - total_items: how many questions the real exam has. Use
                       the official number when you know it (search for it if
                       unsure). Use 0 only when you genuinely do not know.
-                    - question_types: the formats the real exam uses. Some
-                      certifications are MCQ only; TOPCIT, for example, also
-                      uses SHORT_ANSWER, DESCRIPTIVE, PROGRAMMING and DIAGRAM.
-                      Use only these five names.
-                    - notes: sections, weighting, sub-questions, time limit --
-                      anything else that shapes the paper. A few sentences.
+                    - question_types: DECIDE which formats this particular
+                      certification actually examines. Use only these five
+                      names: MCQ, SHORT_ANSWER, DESCRIPTIVE, PROGRAMMING,
+                      DIAGRAM.
+
+                      This is a judgement to make, not a field to default.
+                      Work from the official paper when you can find it. When
+                      you cannot, decide from what the certification is FOR --
+                      what it certifies someone is able to do:
+
+                        * PROGRAMMING when passing it means you can write
+                          code -- software engineering, development, most
+                          data-engineering credentials.
+                        * DIAGRAM when it means you can model a system --
+                          anything examining database design, UML, software
+                          architecture, network topology, process modelling.
+                        * DESCRIPTIVE when it means you can justify a
+                          decision -- architecture, security, management,
+                          audit, anything where the reasoning is the skill.
+                        * SHORT_ANSWER for exact recall of terms, values and
+                          notation.
+                        * MCQ is in nearly every paper, but a list containing
+                          ONLY MCQ is a real claim: it says this certification
+                          never asks the candidate to produce anything. That
+                          is true of some foundational papers and false of
+                          most professional ones, so do not put it there by
+                          default.
+
+                      Every listed type is generated at every level -- lesson
+                      quizzes, unit exams, the diagnostic, the mock and the
+                      bank -- so list what the certification genuinely
+                      examines, not everything imaginable.
+                    - duration_minutes: how long the real paper allows. The
+                      mock exam is stored with this as its time limit, so a
+                      learner sits it under the same clock. 0 if unknown.
+                    - passing_score: the official pass mark as a percentage
+                      (e.g. 60, 70, 80). 0 if unknown.
+                    - coverage: the official domains the exam examines and
+                      their weightings, as the certification body states them
+                      -- "Software Development 40%, Database 25%, ...". This is
+                      what gets EXAMINED, which is not always weighted like the
+                      syllabus that gets taught. A few lines.
+                    - notes: sections, ordering, sub-question structure,
+                      permitted materials -- anything else that shapes the
+                      paper. A few sentences.
+
+
+                    Work in this order:
+
+                    1. FIND OUT WHAT THE CERTIFICATION COVERS, BEFORE deciding
+                       any lesson. Establish exam_structure.coverage first --
+                       the official domains and their weightings -- by
+                       searching for the certification body's own syllabus and
+                       reading what the uploaded documents are organised into.
+                       You cannot judge whether a curriculum covers a
+                       certification until you know what the certification
+                       examines.
+
+                    2. List the topics inside each of those domains, from the
+                       documents. This inventory is what goes into the
+                       lessons' key_topics.
+
+                    3. ONLY THEN build majorCategories, grouping that
+                       inventory into lessons.
+
+                    The result must line up with step 1: every domain in
+                    coverage has major categories teaching it, and its share of
+                    the curriculum roughly matches its weighting in the exam.
+                    A domain the certification examines and this curriculum
+                    skips is the one failure that matters most -- a learner who
+                    studies it all and is then examined on something never
+                    taught was failed by the plan, not by their studying.
 
 
                     Size:
@@ -164,37 +247,41 @@ def _size_section(settings) -> str:
             "determined by what the document actually covers -- its own",
             "chapters, sections and topics -- not by any fixed number.",
             "",
-            "BE DELIBERATELY CONCISE. Produce the SMALLEST structure that",
-            "still teaches the certification completely. Fewer, richer lessons",
-            "-- not more, thinner ones. Every lesson you add is a full lesson",
-            "that must be written in depth, so an unnecessary one costs real",
-            "money and teaches nothing that a merged lesson would not.",
+            "COVER EVERYTHING THE DOCUMENTS TEACH. The source material is the",
+            "syllabus. Every substantive topic in it earns a place in the",
+            "curriculum -- walk the documents through and account for all of",
+            "it. A learner who studies this certification end to end should",
+            "not meet anything in the real exam that these documents covered",
+            "and the curriculum skipped.",
             "",
-            "PRIORITISE, DO NOT ENUMERATE. The syllabus is not a table of",
-            "contents. Rank what the source covers by how central it is to",
-            "actually passing the certification, and give only that material",
-            "lessons. Anything the document mentions in passing, treats as an",
-            "aside, or covers as background does NOT earn a lesson -- fold it",
-            "into a lesson that needs it, or leave it out.",
+            "COVERAGE LIVES IN key_topics, NOT IN THE LESSON COUNT. Every",
+            "substantive topic the documents teach must appear in some",
+            "lesson's key_topics list. Do NOT give each topic its own lesson",
+            "to prove you covered it -- a lesson carries 3 to 6 related topics",
+            "and teaches all of them, so grouping loses nothing. Splitting",
+            "instead of grouping produces a syllabus so long it cannot be",
+            "written, which covers less than a shorter one that names",
+            "everything.",
             "",
-            "COMBINE AGGRESSIVELY. Closely related subtopics belong together",
-            "in ONE substantial lesson, not split across several thin ones.",
-            "Before adding any lesson, ask whether an existing lesson could",
-            "absorb it; if it could, merge instead and title the result for",
-            "what it teaches as a whole. A lesson must be worth a full sitting",
-            "of study on its own -- if it would amount to a few paragraphs, it",
-            "is not a lesson, it is a section of one.",
+            "So: enumerate the domain exhaustively in key_topics, and keep the",
+            "LESSONS at a workable number by grouping related topics together.",
+            "A hundred topics is roughly twenty lessons, not a hundred.",
             "",
-            "The same applies to CATEGORIES. Do not create a Major or Middle",
-            "Category to hold a single thin lesson, and do not split one",
-            "subject across two categories that would need the same",
-            "foundations. Merge near-duplicate categories into one.",
+            "GROUP WHAT IS TAUGHT TOGETHER. Topics a learner would study in",
+            "one sitting -- the same technique from several angles, a concept",
+            "and its variations, a process and its steps -- belong in ONE",
+            "lesson, listed as separate key_topics. Split only when a single",
+            "topic genuinely needs a full sitting of its own, such as a long",
+            "worked procedure the learner must follow end to end.",
             "",
-            "A learner is far better served by ten lessons that each teach",
-            "something substantial than by forty that each teach a paragraph.",
-            "Depth per lesson is set elsewhere and is already generous -- your",
-            "job is to decide WHICH lessons deserve to exist, and to keep that",
-            "set tight.",
+            "A lesson must still be a whole unit of study, not a definition",
+            "with a heading on it. If something would amount to a couple of",
+            "sentences, it is a key_topic inside a lesson, never a lesson.",
+            "",
+            "CATEGORIES follow the documents too. Use the domains, parts or",
+            "chapters the material itself is organised into rather than",
+            "inventing a tidier scheme, and let a Major Category hold as many",
+            "Middle Categories as its material needs.",
             "",
             "Every Major Category needs at least one Middle Category, and",
             "every Middle Category at least one Lesson.",

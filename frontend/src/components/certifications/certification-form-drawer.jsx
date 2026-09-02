@@ -10,6 +10,7 @@ import { formatLocalDateTime, validateCertificationDetails } from "@/utils/certi
 
 import CertificationDetails from "@/components/certifications/certification-details"
 import { DocumentUploadStep } from "@/components/certifications/document-upload-step.jsx"
+import { QuestionTypeChoice } from "@/components/certifications/question-type-choice.jsx"
 
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -47,7 +48,7 @@ import {
    The graph was written review-first: it pauses after the curriculum, after
    every category, after every lesson, and again for each exam and the question
    bank. That is right when someone intends to shape the material as it is
-   written, and wrong the rest of the time — an unattended run stops at the
+   written, and wrong the rest of the time â€” an unattended run stops at the
    first checkpoint and waits, so "start it and check back later" produced a
    certification that had generated one thing and then sat still.
 
@@ -57,7 +58,7 @@ const REVIEW_MODES = [
         value: "auto",
         title: "Generate everything",
         description:
-            "Builds the whole certification without stopping — curriculum, lessons, quizzes, exams, and the question bank. Everything is saved as drafts for you to edit afterwards.",
+            "Builds the whole certification without stopping â€” curriculum, lessons, quizzes, exams, and the question bank. Everything is saved as drafts for you to edit afterwards.",
     },
     {
         value: "guided",
@@ -155,12 +156,13 @@ export default function CertificationFormDrawer({
     /* Unattended by default: it is what an admin wants nearly every time, and
        the supervised alternative is one click away and clearly labelled. */
     const [reviewMode, setReviewMode] = useState("auto")
+    const [questionTypes, setQuestionTypes] = useState([])
 
     const {
         mutateAsync: createWithAi,
         isPending: isBusy,
     } = useMutation({
-        mutationFn: ({ payload, documents, mode }) =>
+        mutationFn: ({ payload, documents, mode, questionTypes: chosenTypes }) =>
             addCertificationWithAi(
                 payload,
                 documents,
@@ -170,7 +172,8 @@ export default function CertificationFormDrawer({
                             ? Math.round((event.loaded / event.total) * 100)
                             : 0
                     ),
-                mode
+                mode,
+                chosenTypes
             ),
     })
 
@@ -223,7 +226,7 @@ export default function CertificationFormDrawer({
      * There is no manual alternative. A certification is a curriculum plus
      * twenty-odd lessons and their assessments; typing that structure by hand
      * produced empty shells that then had to be generated anyway, so the form
-     * asks for the two things generation actually needs — what the
+     * asks for the two things generation actually needs â€” what the
      * certification is, and the documents to read.
      */
     async function handleGenerate() {
@@ -256,6 +259,7 @@ export default function CertificationFormDrawer({
                 payload,
                 documents: sourceDocuments,
                 mode: reviewMode,
+                questionTypes,
             })
 
             await onSaved?.(savedCertification)
@@ -384,6 +388,16 @@ export default function CertificationFormDrawer({
                             />
                         </div>
 
+                        {/* Before the review-mode choice: this decides what
+                            gets built, that decides whether you watch it. */}
+                        <div className="border-t border-border pt-8">
+                            <QuestionTypeChoice
+                                value={questionTypes}
+                                onChange={setQuestionTypes}
+                                disabled={isBusy}
+                            />
+                        </div>
+
                         <div className="border-t border-border pt-8">
                             <ReviewModeChoice
                                 value={reviewMode}
@@ -421,14 +435,14 @@ export default function CertificationFormDrawer({
 
                     {/* Real byte progress while the documents upload: ten 10 MB
                         PDFs is a slow request, and a button stuck on
-                        "Starting…" cannot say whether anything is moving. */}
+                        "Startingâ€¦" cannot say whether anything is moving. */}
                     {isBusy && (
                         <div className="space-y-1.5">
                             <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                                 <span>
                                     {uploadPercent < 100
-                                        ? `Uploading ${sourceDocuments.length} document${sourceDocuments.length === 1 ? "" : "s"}…`
-                                        : "Queuing generation…"}
+                                        ? `Uploading ${sourceDocuments.length} document${sourceDocuments.length === 1 ? "" : "s"}â€¦`
+                                        : "Queuing generationâ€¦"}
                                 </span>
                                 <span className="font-mono tabular-nums">
                                     {uploadPercent}%

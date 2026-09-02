@@ -140,6 +140,29 @@ def retrieve_balanced(
     for document in ranked:
         by_source.setdefault(_source_of(document), []).append(document)
 
+    # Documents that put nothing in the candidate pool at all.
+    #
+    # Round-robin can only share out what ranking already surfaced, and a short
+    # document can miss the pool entirely -- so this asks each absent document
+    # directly for its own best chunks. That is what makes "every uploaded file
+    # is represented" a guarantee rather than a likelihood: a domain covered by
+    # one small file still reaches the planner.
+    #
+    # A file that is genuinely empty contributes its near-empty chunk and is
+    # then visible as such, which is the honest outcome -- better than being
+    # silently absent and looking like a domain that was never uploaded.
+    try:
+        for source in index.source_files():
+            if source not in by_source:
+                extra = index.similarity_search_in_source(query, source, k=2)
+                if extra:
+                    by_source[source] = extra
+    except Exception:
+        # Never fail a run over the top-up: the ranked pool is still a valid
+        # (if narrower) context, and losing generation to a retrieval nicety
+        # would be a worse trade than under-covering one document.
+        logger.exception("Per-source top-up failed; using ranked candidates only")
+
     if len(by_source) <= 1:
         return ranked[:top_k]
 

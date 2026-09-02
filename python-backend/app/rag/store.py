@@ -81,6 +81,67 @@ class QdrantIndex:
             for hit in hits
         ]
 
+    def source_files(self) -> list[str]:
+        """Every distinct document indexed under this collection.
+
+        Read by scrolling payloads rather than kept in a side table: the
+        collection is the only record of what was actually ingested, and a
+        second copy would be one more thing to be wrong.
+        """
+        seen: list[str] = []
+        offset = None
+        while True:
+            points, offset = self._client.scroll(
+                collection_name=self._collection,
+                limit=512,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            if not points:
+                break
+            for point in points:
+                meta = (point.payload or {}).get(METADATA_KEY) or {}
+                source = meta.get("source_file")
+                if source and source not in seen:
+                    seen.append(source)
+            if offset is None:
+                break
+        return seen
+
+    def similarity_search_in_source(
+        self, query: str, source_file: str, k: int = 2
+    ) -> list[Document]:
+        """The best `k` chunks for `query` from one document only.
+
+        Used to guarantee a document is represented at all. Ranking across the
+        whole corpus is winner-take-all, so a short document loses every slot
+        to a long one even when it is the only source for a whole domain --
+        and the planner then designs a curriculum without it.
+        """
+        hits = self._client.query_points(
+            collection_name=self._collection,
+            query=self._embeddings.embed_query(query),
+            limit=k,
+            with_payload=True,
+            query_filter=qdrant_models.Filter(
+                must=[
+                    qdrant_models.FieldCondition(
+                        key=f"{METADATA_KEY}.source_file",
+                        match=qdrant_models.MatchValue(value=source_file),
+                    )
+                ]
+            ),
+        ).points
+
+        return [
+            Document(
+                page_content=(hit.payload or {}).get(CONTENT_KEY, ""),
+                metadata=(hit.payload or {}).get(METADATA_KEY) or {},
+            )
+            for hit in hits
+        ]
+
 
 class VectorStoreUnavailable(RuntimeError):
     """Qdrant could not be reached.

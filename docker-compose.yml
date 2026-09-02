@@ -140,6 +140,22 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_started
+    # Resolve DNS through public servers instead of the Docker Desktop host
+    # resolver.
+    #
+    # On a user-defined network the container still uses Docker's embedded
+    # resolver (127.0.0.11), so service names -- redis, rabbitmq, qdrant --
+    # keep resolving; this only changes what that resolver forwards to.
+    #
+    # The default forwarder dropped lookups intermittently: the Neon host
+    # resolved about three times in five under load, and a miss surfaces as
+    # psycopg PoolTimeout rather than as a DNS error, which killed a
+    # certification run 9 minutes into curriculum planning. The pooled Neon
+    # endpoint is NOT an alternative -- see app/db/session.py for why this
+    # service needs the direct one.
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     networks:
       - rebyu-net
 
@@ -166,6 +182,22 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    # Resolve DNS through public servers instead of the Docker Desktop host
+    # resolver.
+    #
+    # On a user-defined network the container still uses Docker's embedded
+    # resolver (127.0.0.11), so service names -- redis, rabbitmq, qdrant --
+    # keep resolving; this only changes what that resolver forwards to.
+    #
+    # The default forwarder dropped lookups intermittently: the Neon host
+    # resolved about three times in five under load, and a miss surfaces as
+    # psycopg PoolTimeout rather than as a DNS error, which killed a
+    # certification run 9 minutes into curriculum planning. The pooled Neon
+    # endpoint is NOT an alternative -- see app/db/session.py for why this
+    # service needs the direct one.
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     networks:
       - rebyu-net
     develop:
@@ -197,6 +229,22 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    # Resolve DNS through public servers instead of the Docker Desktop host
+    # resolver.
+    #
+    # On a user-defined network the container still uses Docker's embedded
+    # resolver (127.0.0.11), so service names -- redis, rabbitmq, qdrant --
+    # keep resolving; this only changes what that resolver forwards to.
+    #
+    # The default forwarder dropped lookups intermittently: the Neon host
+    # resolved about three times in five under load, and a miss surfaces as
+    # psycopg PoolTimeout rather than as a DNS error, which killed a
+    # certification run 9 minutes into curriculum planning. The pooled Neon
+    # endpoint is NOT an alternative -- see app/db/session.py for why this
+    # service needs the direct one.
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     networks:
       - rebyu-net
     develop:

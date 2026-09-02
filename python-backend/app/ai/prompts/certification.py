@@ -75,6 +75,12 @@ Learning Objective:
 
 Key Topics to cover:
 {_key_topics(lesson)}
+
+Every topic listed above MUST be taught in this lesson -- explained, worked
+through and exemplified, not named in passing. This list is the curriculum's
+guarantee that the certification covers its whole domain: a topic assigned
+here and skipped is a topic the learner is never taught anywhere, because no
+other lesson is responsible for it. Give each one its own section or sections.
 """.strip()
 
     # Carried as its own field rather than appended to the topic list, so

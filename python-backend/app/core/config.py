@@ -274,6 +274,28 @@ class Settings(BaseSettings):
     #: so depth here is a content decision rather than a budget one.
     lesson_min_sections: int = 22
 
+    #: How many lessons are authored at once on an UNATTENDED run.
+    #:
+    #: Writing a lesson is the slowest thing a run does -- a few minutes each,
+    #: and a curriculum has scores of them -- while nothing about it is
+    #: ordered: lesson twelve never reads lesson eleven. Authored one at a
+    #: time, a seventy-five lesson certification spends six hours almost
+    #: entirely waiting on responses that could have overlapped.
+    #:
+    #: The graph still WALKS lessons one at a time: it reviews, checkpoints and
+    #: advances exactly as before, and simply finds most lessons already
+    #: written when it arrives. See `lesson_content_node`.
+    #:
+    #: 1 restores the old strictly-serial behaviour. Raising it does not reduce
+    #: cost -- the same lessons are written either way -- and it does raise the
+    #: in-flight spend OpenRouter reserves at once, which is what a thin
+    #: balance runs out of first (402 in_flight_budget_exhausted). On a small
+    #: balance, prefer 1 or 2.
+    #:
+    #: Ignored on guided runs, where a reviewer can edit or regenerate a lesson
+    #: and anything written ahead of them could be stale.
+    lesson_concurrency: int = 4
+
     # --- Assessment size ------------------------------------------------------
     # Questions per assessment. Generation and validation read the same value,
     # so lowering one lowers the ask and the expected count together.

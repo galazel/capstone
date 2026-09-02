@@ -126,7 +126,8 @@ export async function addCertificationWithAi(
     data,
     files,
     onUploadProgress,
-    reviewMode = "guided"
+    reviewMode = "guided",
+    questionTypes = []
 ) {
     const formData = new FormData()
 
@@ -139,12 +140,59 @@ export async function addCertificationWithAi(
         formData.append("files", file)
     })
 
-    return await base(`certifications/generate?reviewMode=${encodeURIComponent(reviewMode)}`, {
+    const params = new URLSearchParams({ reviewMode })
+    // Repeated key so Spring binds it as List<String>; see the append call.
+    ;(questionTypes ?? []).forEach((type) => params.append("questionTypes", type))
+
+    return await base(`certifications/generate?${params.toString()}`, {
         method: "POST",
         data: formData,
-        // Ten 10 MB documents is a slow upload on a bad connection. Reporting
+        // Ten 50 MB documents is a slow upload on a bad connection. Reporting
         // real byte progress beats a spinner that cannot say whether anything
         // is moving.
         onUploadProgress,
     })
+}
+
+/**
+ * Queues an AI run that ADDS to an existing certification.
+ *
+ * Distinct from `addCertificationWithAi` and from the replace path: nothing is
+ * deleted, and the planner is given the current curriculum and asked only for
+ * what these documents add. A major category whose name already exists is
+ * matched rather than duplicated, so new lessons can be attached under it.
+ *
+ * Use when a domain was missed -- a handbook that failed to upload, a syllabus
+ * that grew -- rather than rebuilding a certification whose lessons, questions
+ * and assessments are already correct.
+ */
+export async function appendToCertificationWithAi(
+    certificationId,
+    files,
+    {
+        additionalInstructions = "",
+        reviewMode = "guided",
+        questionTypes = [],
+        onUploadProgress,
+    } = {}
+) {
+    const formData = new FormData()
+
+    ;(files ?? []).forEach((file) => {
+        formData.append("files", file)
+    })
+
+    const params = new URLSearchParams({ reviewMode })
+    if (additionalInstructions.trim()) {
+        params.set("additionalInstructions", additionalInstructions.trim())
+    }
+    // Repeated key, not a comma-joined string: Spring binds List<String> from
+    // repeated params, and a joined one would arrive as a single malformed
+    // entry that the consumer then discards as unrecognised.
+    questionTypes.forEach((type) => params.append("questionTypes", type))
+
+    return await base(
+        `certifications/${certificationId}/generate/append?${params.toString()}`,
+        { method: "POST", data: formData, onUploadProgress }
+    )
 }

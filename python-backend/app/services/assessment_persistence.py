@@ -36,13 +36,37 @@ def _title_key(value: Any) -> str:
     return " ".join(str(value or "").lower().split())
 
 
+#: Generated types that are stored as CRITICAL_THINKING.
+#:
+#: The generator names the work (PROGRAMMING, DIAGRAM); the product calls both
+#: of them critical thinking and identifies which kind from the config row
+#: attached to the question -- that is exactly what the manual question builder
+#: writes (`questionType: "CRITICAL_THINKING"`, `criticalThinkingType:
+#: "PROGRAMMING"`) and what Java's grader reads back through
+#: `resolveCriticalThinkingType`.
+#:
+#: Stored verbatim, the two paths disagreed: an AI-written programming task
+#: landed as question_type='PROGRAMMING' and so never appeared under Critical
+#: Thinking anywhere in the app, while a hand-written one did. Same question,
+#: two categories, depending on who typed it.
+_WORKSPACE_TYPES = {"PROGRAMMING", "DIAGRAM"}
+
+
 def _persist_one_question(session: Session, question: dict[str, Any]) -> int:
     """Writes a question plus whatever type-specific config it needs."""
     question_type = question.get("question_type", "MCQ")
+
+    # What the branches below switch on -- the generator's name for the work.
+    # The stored type is CRITICAL_THINKING for the two workspace kinds; which
+    # kind it is comes from the config row, not from this column.
+    stored_type = (
+        "CRITICAL_THINKING" if question_type in _WORKSPACE_TYPES else question_type
+    )
+
     question_id = repo.insert_question(
         session,
         lesson_id=question["_lesson_id"],
-        question_type=question_type,
+        question_type=stored_type,
         difficulty=question.get("difficulty", "AVERAGE"),
         question_text=question.get("question", ""),
     )
@@ -98,21 +122,35 @@ def _persist_one_question(session: Session, question: dict[str, Any]) -> int:
     # set back by parent id and marks it in one holistic call. Insertion order
     # is the order the learner is asked them in -- the reader orders by
     # question_id -- so this must stay a plain in-order loop.
+    # Parts of a SHORT_ANSWER parent are the blanks of a fill-in-the-blank
+    # item, and each has ONE right word -- the candidate list in the stem makes
+    # sure of it. They are stored as SHORT_ANSWER and marked by exact match,
+    # like any other short answer.
+    #
+    # Marked semantically instead, "Usability" would be graded by asking a
+    # model whether it means the same as "Usability" -- a paid call, a slower
+    # attempt, and a chance of disagreeing with itself, to check a string
+    # equality. Parts of every other parent stay written answers.
+    sub_type = "SHORT_ANSWER" if question_type == "SHORT_ANSWER" else "DESCRIPTIVE"
+
     for sub in question.get("sub_questions") or []:
         sub_id = repo.insert_question(
             session,
             lesson_id=question["_lesson_id"],
-            question_type="DESCRIPTIVE",
+            question_type=sub_type,
             difficulty=question.get("difficulty", "AVERAGE"),
             question_text=sub.get("question", ""),
             total_points=float(sub.get("points") or 1.0),
             parent_question_id=question_id,
         )
-        # A rubric, so the AI grader has something to mark against. Without a
-        # text config the sub-answer falls through to "no evaluator applies"
-        # and scores zero however good it is.
+        # The expected answer, so the grader has something to mark against.
+        # Without a text config the sub-answer falls through to "no evaluator
+        # applies" and scores zero however good it is.
         repo.insert_text_config(
-            session, sub_id, sub.get("rubric_answer") or "", "AI_SEMANTIC"
+            session,
+            sub_id,
+            sub.get("rubric_answer") or "",
+            checking_method_for(sub_type),
         )
 
     return question_id
@@ -152,6 +190,8 @@ def persist_exam(
     lesson_id: int | None = None,
     middle_category_id: int | None = None,
     major_category_id: int | None = None,
+    duration_minutes: int | None = None,
+    passing_score: float | None = None,
 ) -> tuple[int | None, list[str]]:
     """Persists one exam and the questions it contains.
 
@@ -183,6 +223,10 @@ def persist_exam(
         lesson_id=lesson_id,
         middle_category_id=middle_category_id,
         major_category_id=major_category_id,
+        duration_minutes=duration_minutes,
+        # Only when researched; otherwise insert_exam's own 70 stands, so a
+        # certification whose real pass mark is unknown behaves as before.
+        **({"passing_score": passing_score} if passing_score else {}),
     )
     for order, question_id in enumerate(question_ids, start=1):
         repo.insert_exam_question(session, exam_id, question_id, order)
@@ -401,12 +445,24 @@ def persist_generated_assessments(
             major_category_id=major_category_id,
         )
 
+    # What the planner researched about the real paper. The mock is stored
+    # under the real exam's clock and pass mark so sitting it tells a learner
+    # something about their readiness rather than about an invented 70%.
+    exam_structure = (result.get("curriculum") or {}).get("exam_structure") or {}
+    real_duration = int(exam_structure.get("duration_minutes") or 0) or None
+    real_passing = float(exam_structure.get("passing_score") or 0) or None
+
     diagnostic = result.get("diagnostic_exam") or {}
     if diagnostic.get("questions"):
         _store_exam(
             scope="DIAGNOSTIC", title="Diagnostic Exam",
             questions=diagnostic["questions"],
             lesson_index=lesson_index, fallback_lesson_id=default_lesson_id,
+            # Timed like the real paper, but never pass/failed against it: the
+            # diagnostic is a placement measure sat before any teaching, and
+            # reporting "failed" to someone who has not studied yet is both
+            # wrong and discouraging.
+            duration_minutes=real_duration,
         )
 
     mock = result.get("mock_exam") or {}
@@ -415,6 +471,8 @@ def persist_generated_assessments(
             scope="MOCK", title="Mock Exam",
             questions=mock["questions"],
             lesson_index=lesson_index, fallback_lesson_id=default_lesson_id,
+            duration_minutes=real_duration,
+            passing_score=real_passing,
         )
 
     # The bank is a pool for adaptive selection/practice, not a sittable

@@ -12,6 +12,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.security import require_service_key
@@ -385,5 +386,66 @@ async def purge_certification(certification_id: int, db: Session = Depends(get_d
         logger.exception("Failed to delete vector index '%s'", namespace)
         summary["vectors_deleted"] = False
 
+    # Best-effort for the same reason as the two above.
+    try:
+        summary["bkt_rows_deleted"] = _purge_bkt_state(db, certification_id)
+    except Exception:
+        logger.exception("Failed to purge BKT state for certification %s", certification_id)
+        summary["bkt_rows_deleted"] = None
+
     logger.info("Purged certification %s: %s", certification_id, summary)
     return {"certification_id": certification_id, **summary}
+
+
+def _purge_bkt_state(db: Session, certification_id: int) -> dict[str, int]:
+    """Erases what BKT learned about a certification's lessons.
+
+    This service's own schema, so Java cannot reach it -- and it was the one
+    thing a delete left behind. Mastery, priorities and the event history stayed
+    keyed to lesson ids that were about to be removed, and lesson ids are
+    reused: regenerating a certification hands the same ids to entirely
+    different lessons, and the stale mastery then reads as though the learner
+    had already studied them. A learner would open a freshly generated
+    certification and find topics already marked mastered.
+
+    Ordered by foreign key: the rows referencing `bkt_mastery_events.event_id`
+    go before the events themselves.
+
+    `bkt_mastery_events` is the one table with no certification_id -- it is
+    keyed by lesson -- so it resolves through `public.lessons`. That works
+    because Java purges BEFORE deleting its own rows; called after, the join
+    would match nothing and the events would survive.
+    """
+    lessons_of_certification = """
+        SELECT l.lesson_id
+        FROM public.lessons l
+        JOIN public.middle_categories mc ON mc.middle_category_id = l.middle_category_id
+        JOIN public.major_categories maj ON maj.major_category_id = mc.major_category_id
+        WHERE maj.certification_id = :certification_id
+    """
+
+    statements = [
+        ("learner_lesson_mastery_history",
+         "DELETE FROM bkt.learner_lesson_mastery_history WHERE certification_id = :certification_id"),
+        ("learner_category_priority_history",
+         "DELETE FROM bkt.learner_category_priority_history WHERE certification_id = :certification_id"),
+        ("learner_category_priorities",
+         "DELETE FROM bkt.learner_category_priorities WHERE certification_id = :certification_id"),
+        ("bkt_processed_events",
+         "DELETE FROM bkt.bkt_processed_events WHERE certification_id = :certification_id"),
+        ("learner_lesson_mastery",
+         "DELETE FROM bkt.learner_lesson_mastery WHERE certification_id = :certification_id"),
+        ("bkt_mastery_events",
+         f"DELETE FROM bkt.bkt_mastery_events WHERE lesson_id IN ({lessons_of_certification})"),
+    ]
+
+    deleted: dict[str, int] = {}
+    for table, sql in statements:
+        result = db.execute(text(sql), {"certification_id": certification_id})
+        deleted[table] = result.rowcount or 0
+    db.commit()
+
+    total = sum(deleted.values())
+    if total:
+        logger.info("Purged %d BKT row(s) for certification %s: %s", total, certification_id, deleted)
+    return deleted

@@ -54,6 +54,22 @@ def _emit(
             run = registry.get_run_by_thread(session, thread_id)
             if run is None:
                 return
+
+            # Keep the run row pointing at the node actually executing.
+            #
+            # Events carried the stage and the row did not, so `current_stage`
+            # held whatever last set it explicitly -- a review submission, or a
+            # retry, which sets it to the step being retried. A run retried at
+            # plan_curriculum therefore reported "Planning the curriculum" for
+            # the rest of its life, and the certification card says exactly
+            # that while the live view shows lesson 8 of 28.
+            #
+            # Only on node start: the completion event fires as the node ends,
+            # and taking the stage from that would leave the row naming a step
+            # that has already finished.
+            if event_type == registry.EVT_NODE_STARTED and run.current_stage != stage:
+                run.current_stage = stage
+
             event = registry.record_event(
                 session,
                 run,

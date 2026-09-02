@@ -2,6 +2,16 @@ import { useEffect, useRef, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { AlertTriangle, Ban, ChevronDown, FastForward, Loader2 } from "@/components/icons"
 import { toast } from "sonner"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -40,6 +50,7 @@ export function InlineGenerationMonitor({ certificationId, onClose, onFinished }
   const queryClient = useQueryClient()
   const [runId, setRunId] = useState(null)
   const [waitedTooLong, setWaitedTooLong] = useState(false)
+  const [isConfirmingStop, setIsConfirmingStop] = useState(false)
 
   const runs = useQuery({
     queryKey: ["workflow-runs", "for-cert", certificationId],
@@ -230,12 +241,16 @@ export function InlineGenerationMonitor({ certificationId, onClose, onFinished }
             </Button>
           ) : null}
 
+          {/* Asked for, not just clicked. This sits inches from "Finish
+              without review", it is the only red control on screen, and it
+              ends a run that has been authoring for half an hour -- one
+              mis-aimed click and that work is gone with nothing to undo it. */}
           {!isTerminal ? (
             <Button
               size="sm"
               variant="destructive"
               disabled={cancel.isPending}
-              onClick={() => cancel.mutate()}
+              onClick={() => setIsConfirmingStop(true)}
             >
               <Ban className="mr-2 size-4" />
               Stop generating
@@ -247,6 +262,50 @@ export function InlineGenerationMonitor({ certificationId, onClose, onFinished }
           )}
         </span>
       </header>
+
+      {/* Names what is being thrown away, in the numbers the admin is already
+          watching. "Are you sure?" on its own is a keystroke; "you are 15
+          lessons into 28" is a decision. */}
+      <AlertDialog open={isConfirmingStop} onOpenChange={setIsConfirmingStop}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Stop this generation?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  {currentTask?.itemNumber && currentTask?.itemTotal
+                    ? `This run is on ${currentTask.itemNumber} of ${currentTask.itemTotal} — ${stageLabel(currentTask.stage).toLowerCase()}.`
+                    : "This run is still building."}{" "}
+                  Stopping it ends the build — it does not pause, and it cannot
+                  be resumed from here.
+                </p>
+                <p>
+                  Everything already written is kept as drafts, so nothing
+                  finished is lost. Anything still to come is not generated, and
+                  starting again re-does the remaining work from scratch.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancel.isPending}>
+              Keep generating
+            </AlertDialogCancel>
+            <AlertDialogAction
+                onClick={(event) => {
+                  event.preventDefault()
+                  cancel.mutate(undefined, {
+                    onSettled: () => setIsConfirmingStop(false),
+                  })
+                }}
+                disabled={cancel.isPending}
+                className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {cancel.isPending ? "Stopping..." : "Stop generating"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Stalled takes precedence over the reassurance below: "closing this
           leaves it running" is exactly the wrong thing to say about a run

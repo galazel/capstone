@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 from urllib.parse import urlparse
 
@@ -128,6 +129,48 @@ def _search_video(query: str) -> dict:
 _SEARCHERS = {"imageQuery": _search_image, "videoQuery": _search_video}
 
 
+#: How many media lookups run at once for one lesson.
+#:
+#: A lesson asks for five to seven pictures and each search is a round trip of
+#: a second or two, so resolving them one at a time spent ten to fifteen
+#: seconds per lesson waiting -- minutes across a curriculum, for work that has
+#: no order to it. Kept modest because the search provider rate-limits, and
+#: because a burst that trips the limit costs illustrations rather than saving
+#: time.
+_MEDIA_WORKERS = 5
+
+
+def _resolve_one(request_key: str, query: str) -> dict:
+    """One media lookup, never raising.
+
+    A failed search is a lesson without a picture, which an admin can fill in.
+    A raised exception would be a lesson lost after it was already paid for.
+    """
+    try:
+        return _SEARCHERS[request_key](query)
+    except Exception as error:  # network, quota, malformed response
+        logger.warning("Media search for %r failed: %s", query, error)
+        return dict(_EMPTY_RESULT)
+
+
+def _collect_requests(sections: list[dict]) -> set[tuple[str, str]]:
+    """Every distinct (kind, query) the lesson asks for, before any run.
+
+    Deduplicating up front is what makes the searches parallelisable: the
+    serial version deduplicated as it walked, which meant it could not know
+    what to dispatch until it had already dispatched most of it.
+    """
+    wanted: set[tuple[str, str]] = set()
+    for block in sections:
+        if not isinstance(block, dict) or not isinstance(block.get("data"), dict):
+            continue
+        for request_key in MEDIA_REQUESTS:
+            query = block["data"].get(request_key)
+            if isinstance(query, str) and query.strip():
+                wanted.add((request_key, query))
+    return wanted
+
+
 def resolve_media(sections: list[dict]) -> list[dict]:
     """Replaces each block's media *request* with a real URL, plus who it
     came from.
@@ -136,10 +179,30 @@ def resolve_media(sections: list[dict]) -> list[dict]:
     key blank, which renders as a block without media and is exactly what an
     admin can fill in later. Losing an illustration must not lose the lesson.
 
-    Results are cached across the lesson, so a diagram requested by three
-    blocks costs one search rather than three.
+    Searches run concurrently and are deduplicated first, so a diagram
+    requested by three blocks costs one search rather than three, and a lesson
+    wanting six pictures waits for the slowest rather than the sum.
     """
+    wanted = _collect_requests(sections)
     resolved: dict[tuple[str, str], dict] = {}
+
+    if wanted:
+        with ThreadPoolExecutor(max_workers=min(_MEDIA_WORKERS, len(wanted))) as pool:
+            futures = {
+                pool.submit(_resolve_one, request_key, query): (request_key, query)
+                for request_key, query in wanted
+            }
+            for future in as_completed(futures):
+                # _resolve_one swallows its own failures, so this cannot raise
+                # -- but a pool that died would, and that must not lose the
+                # lesson either.
+                try:
+                    resolved[futures[future]] = future.result()
+                except Exception as error:
+                    logger.warning("Media lookup pool failed for %r: %s",
+                                   futures[future], error)
+                    resolved[futures[future]] = dict(_EMPTY_RESULT)
+
     out = []
 
     for block in sections:
@@ -153,15 +216,7 @@ def resolve_media(sections: list[dict]) -> list[dict]:
             if not isinstance(query, str) or not query.strip():
                 continue
 
-            cache_key = (request_key, query)
-            if cache_key not in resolved:
-                try:
-                    resolved[cache_key] = _SEARCHERS[request_key](query)
-                except Exception as error:  # network, quota, malformed response
-                    logger.warning("Media search for %r failed: %s", query, error)
-                    resolved[cache_key] = dict(_EMPTY_RESULT)
-
-            result = resolved[cache_key]
+            result = resolved.get((request_key, query)) or dict(_EMPTY_RESULT)
             data[url_key] = result["url"] or data.get(url_key, "")
             if result["url"]:
                 data[source_url_key] = result["sourceUrl"]

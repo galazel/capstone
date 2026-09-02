@@ -1130,6 +1130,11 @@ public class AssessmentAttemptService {
             return;
         }
 
+        if ("SHORT_ANSWER".equals(type) && source != null
+                && gradeFillInTheBlank(source, answer, points)) {
+            return;
+        }
+
         if ("SHORT_ANSWER".equals(type) && source != null) {
             // Off the entity the batch loader already fetched it with, rather
             // than a fresh query for a row that is sitting right here.
@@ -1690,6 +1695,79 @@ public class AssessmentAttemptService {
     }
 
     /**
+     * Marks a fill-in-the-blank item: several blanks in one passage, each with
+     * one right term, each worth its share of the item.
+     *
+     * <p>Returns false when this short answer is an ordinary one -- no
+     * sub-questions -- so the caller falls through to its single-answer path.
+     *
+     * <p>Marked here rather than by the AI grader because a blank has exactly
+     * one right term and the stem's candidate list makes sure of it. Sending it
+     * to a model would be a paid call, and a slower attempt, to ask whether
+     * "Usability" means the same as "Usability" -- with a chance of it saying
+     * no. Partial credit is the point: three blanks right out of four scores
+     * three quarters, not zero.
+     */
+    private boolean gradeFillInTheBlank(
+            Question source, AssessmentAttemptAnswer answer, BigDecimal points) {
+        List<Question> blanks = questionRepository
+                .findByParentQuestion_QuestionIdOrderByQuestionIdAsc(source.getQuestionId());
+        if (blanks.isEmpty()) {
+            return false;
+        }
+
+        Map<Long, BigDecimal> pointSplit = splitPointsAcrossSubQuestions(blanks, points);
+        Map<Long, String> submitted = parseSubAnswerText(answer.getLearnerAnswer());
+
+        BigDecimal earned = BigDecimal.ZERO;
+        int correctBlanks = 0;
+        // Per-blank rows, so the results screen can show each blank with what
+        // the learner typed and whether it scored. Without these the review
+        // has the blanks but no marks against them.
+        List<Map<String, Object>> rows = new ArrayList<>();
+
+        for (Question blank : blanks) {
+            TextQuestionConfig config = blank.getTextQuestionConfig();
+            String typed = submitted.get(blank.getQuestionId());
+            BigDecimal max = pointSplit.getOrDefault(blank.getQuestionId(), BigDecimal.ZERO);
+
+            boolean correct = config != null
+                    && typed != null && !typed.isBlank()
+                    && matchesTextAnswer(typed, config);
+            if (correct) {
+                correctBlanks++;
+                earned = earned.add(max);
+            }
+
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("subQuestionId", blank.getQuestionId());
+            row.put("questionText", blank.getQuestionText());
+            row.put("learnerAnswer", typed);
+            row.put("earnedPoints", correct ? max : BigDecimal.ZERO);
+            row.put("maxPoints", max);
+            // The expected term is the answer key, and whether a learner may
+            // see it is the exam's release-answers decision, made elsewhere.
+            // Saying only whether this blank scored keeps that decision intact.
+            row.put("feedback", correct ? "Correct" : "Not the expected term");
+            rows.add(row);
+        }
+
+        answer.setEarnedPoints(earned);
+        // "Correct" means every blank, so the item reads as right or wrong in
+        // the attempt summary while the score still reflects partial credit.
+        answer.setIsCorrect(correctBlanks == blanks.size());
+        answer.setPendingManualEvaluation(false);
+        try {
+            answer.setSubAnswerScores(objectMapper.writeValueAsString(rows));
+        } catch (Exception e) {
+            // The marks are already on the answer; only the per-blank
+            // breakdown is lost, and a review without it still shows the score.
+            log.warn("Could not serialize fill-in-the-blank sub-answer scores");
+        }
+        return true;
+    }
+
+    /**
      * The grading request for an analytical critical-thinking item, or null
      * when it has no sub-questions and therefore nothing to grade.
      */
@@ -1892,10 +1970,16 @@ public class AssessmentAttemptService {
      */
     private List<SubQuestionAnswerReviewDto> buildSubQuestionAnswerReviews(
             Question source, AssessmentAttemptAnswer answer) {
-        // Directly typed programming items carry sub-questions too -- the
-        // bank writes them with a parent id exactly as it does for a
-        // critical-thinking parent -- so their reviews must be built as well.
-        if (source == null || !isWorkspaceType(source.getQuestionType())) {
+        // Any parent with parts, not just workspace ones.
+        //
+        // Gated on isWorkspaceType, a fill-in-the-blank came back with an
+        // empty list: the learner saw partial marks on the question and no
+        // blanks at all -- not what they typed, not what was right, on the
+        // screen whose whole purpose is to tell them.
+        //
+        // A question with no parts still returns an empty list, and the one
+        // extra query only happens for a question that has some.
+        if (source == null) {
             return List.of();
         }
         List<Question> subQuestions = questionRepository
@@ -2091,16 +2175,26 @@ public class AssessmentAttemptService {
                         // reference diagram XML/JSON is the answer key — excluded
                     });
 
-            List<Map<String, Object>> subQuestions = new ArrayList<>();
-            for (Question sub : questionRepository
-                    .findByParentQuestion_QuestionIdOrderByQuestionIdAsc(question.getQuestionId())) {
-                Map<String, Object> safe = new LinkedHashMap<>();
-                safe.put("subQuestionId", sub.getQuestionId());
-                safe.put("questionText", sub.getQuestionText());
-                subQuestions.add(safe);
-            }
-            data.put("subQuestions", subQuestions);
         }
+
+        // Snapshotted for ANY question that has parts, not just workspace ones.
+        //
+        // Inside the workspace branch this only ran for critical-thinking
+        // items, so a fill-in-the-blank -- a SHORT_ANSWER whose parts are its
+        // blanks -- reached the learner with an empty list. The page then had
+        // no blanks to draw and fell back to one answer box, and since each
+        // blank is marked separately every one of them was marked wrong.
+        //
+        // A question with no parts still gets an empty list, exactly as before.
+        List<Map<String, Object>> subQuestions = new ArrayList<>();
+        for (Question sub : questionRepository
+                .findByParentQuestion_QuestionIdOrderByQuestionIdAsc(question.getQuestionId())) {
+            Map<String, Object> safe = new LinkedHashMap<>();
+            safe.put("subQuestionId", sub.getQuestionId());
+            safe.put("questionText", sub.getQuestionText());
+            subQuestions.add(safe);
+        }
+        data.put("subQuestions", subQuestions);
 
         // Backend-driven rubric (diagram/descriptive): learner-safe name + max
         // points only. Awarded points are never snapshotted.

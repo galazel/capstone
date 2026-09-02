@@ -33,6 +33,25 @@ class CertificationState(TypedDict, total=False):
     certification_description: str
     industry: str
 
+    # The question formats the admin ticked on the create form, if they made a
+    # choice: MCQ, SHORT_ANSWER, DESCRIPTIVE, CRITICAL_THINKING. Empty list
+    # means "you decide", and the planner's research is used instead.
+    #
+    # Read through `researched_question_types`, which every generating stage
+    # already calls -- so one answer at the start governs lesson quizzes, unit
+    # exams, the diagnostic, the mock and the bank without each of them needing
+    # to know where it came from.
+    requested_question_types: List[str]
+
+    # An outline of what the certification already holds, set only when this
+    # run is adding to it. Empty string for an ordinary build.
+    #
+    # The planner is shown it and asked for only what the new documents add, so
+    # the curriculum this run produces contains just the new nodes -- which is
+    # what keeps every stage after it (lessons, quizzes, exams) from redoing
+    # work that already exists.
+    existing_curriculum: str
+
     # Preferred source: small `{s3_key, filename, content_type}` pointers.
     # LangGraph serializes the entire state into Postgres on every superstep,
     # so carrying raw file bytes here meant a 10 MB PDF was re-persisted on
@@ -60,6 +79,34 @@ class CertificationState(TypedDict, total=False):
     major: Dict
     middle: Dict
     lesson: Dict
+
+    # Lessons authored ahead of the walk, keyed by their index in the
+    # curriculum, waiting for the walk to reach them.
+    #
+    # The graph visits lessons one at a time -- gate, content, quiz, validate,
+    # review, advance -- and that ordering is what the review loop and the
+    # every-N checkpoint are built on. Authoring is the slow part and has no
+    # ordering to it, so it runs ahead in batches and parks the results here;
+    # the walk still arrives at each lesson in turn and finds it already
+    # written. See `lesson_content_node`.
+    #
+    # Only ever populated on unattended runs: a supervised reviewer can edit or
+    # regenerate a lesson, and content authored before they did so would be
+    # stale in ways nothing here would notice.
+    lesson_content_ahead: Dict
+
+    # The quiz and the alignment audit for those same read-ahead lessons.
+    #
+    # Authoring a lesson is not the only AI call it costs: its quiz and its
+    # audit are two more, and both were serial. Parallelising authoring alone
+    # just moved the wait into them. All three run together in one task per
+    # lesson -- the quiz and audit read the content the same task has just
+    # written -- and each node collects its own part when the walk arrives.
+    #
+    # Separate keys rather than one bundle, so each node owns what it consumes
+    # and no node depends on another having run first.
+    lesson_quiz_ahead: Dict
+    lesson_audit_ahead: Dict
 
     lessons: Annotated[List[Dict], _merge_lessons]
     major_quizzes: Annotated[List[Dict], _merge_major_quizzes]

@@ -24,6 +24,8 @@ from __future__ import annotations
 import json
 import logging
 
+from sqlalchemy import text
+
 from app.db.session import SessionLocal
 from app.repositories import java_backend as repo
 from app.services import certification_run
@@ -52,6 +54,90 @@ def _load_context(generation_request_id: int, certification_id: int):
         documents = repo.list_knowledge_documents(session, certification_id, "LESSON")
         repo.mark_generation_request_processing(session, generation_request_id)
     return generation_request, certification, documents
+
+
+#: The four boxes the create form offers. Anything else is ignored rather than
+#: passed through -- an unrecognised value reaching the prompt would ask the
+#: generator for a format that does not exist.
+_ALLOWED_QUESTION_TYPE_CHOICES = {
+    "MCQ", "SHORT_ANSWER", "DESCRIPTIVE", "CRITICAL_THINKING",
+}
+
+
+def _requested_question_types(params: dict) -> list[str]:
+    """The admin's ticked question formats, cleaned.
+
+    Java writes them as a list on the request row. Returns [] when the admin
+    ticked nothing, which means "let the planner decide" -- the behaviour every
+    run had before the choice existed.
+    """
+    raw = params.get("questionTypes") or []
+    if isinstance(raw, str):
+        raw = [part.strip() for part in raw.split(",")]
+
+    chosen = [
+        value for value in (str(item).strip().upper() for item in raw)
+        if value in _ALLOWED_QUESTION_TYPE_CHOICES
+    ]
+    if chosen:
+        logger.info("Admin chose question formats: %s", ", ".join(chosen))
+    return chosen
+
+
+def _existing_curriculum(certification_id: int, params: dict) -> str:
+    """The certification's current shape, as an outline, for an append run.
+
+    Returns "" for a normal run, which is what makes this inert unless the
+    admin explicitly asked to add to a certification (Java records
+    `mode: "append"` on the request row; see CurriculumGenerationService).
+
+    Names only -- majors, their middle categories, their lessons. The planner
+    needs to know what is already covered so it does not propose it again;
+    it does not need the lesson bodies, which would be an enormous prompt for
+    no extra decision.
+    """
+    if (params.get("mode") or "").lower() != "append":
+        return ""
+
+    with SessionLocal() as session:
+        rows = session.execute(
+            text(
+                """
+                SELECT ma.title AS major, mc.title AS middle, l.name AS lesson
+                FROM public.major_categories ma
+                LEFT JOIN public.middle_categories mc
+                       ON mc.major_category_id = ma.major_category_id
+                LEFT JOIN public.lessons l
+                       ON l.middle_category_id = mc.middle_category_id
+                WHERE ma.certification_id = :certification_id
+                ORDER BY ma.major_category_id, mc.middle_category_id, l.lesson_id
+                """
+            ),
+            {"certification_id": certification_id},
+        ).all()
+
+    if not rows:
+        # An append against an empty certification is just a normal build.
+        logger.info("Append requested for certification %s, which is empty; building normally",
+                    certification_id)
+        return ""
+
+    lines: list[str] = []
+    seen_major: str | None = None
+    seen_middle: str | None = None
+    for major, middle, lesson in rows:
+        if major != seen_major:
+            lines.append(f"- {major}")
+            seen_major, seen_middle = major, None
+        if middle and middle != seen_middle:
+            lines.append(f"  - {middle}")
+            seen_middle = middle
+        if lesson:
+            lines.append(f"    - {lesson}")
+
+    logger.info("Append run for certification %s: %d existing node(s) in the outline",
+                certification_id, len(lines))
+    return "\n".join(lines)
 
 
 async def handle_certification_generation_requested(payload: dict) -> None:
@@ -122,6 +208,19 @@ async def handle_certification_generation_requested(payload: dict) -> None:
         # unattended run never raises a review interrupt, so it reaches
         # the end without anyone having to sit with it.
         "review_mode": certification_run.review_mode_from(params),
+        # The admin's own answer to "what does this exam contain", ticked on
+        # the create form. Empty when they left it to the planner.
+        "requested_question_types": _requested_question_types(params),
+        # What the certification already contains, when this run is adding to
+        # it rather than building it. Empty for an ordinary run.
+        #
+        # The planner is shown this and asked for only what the new documents
+        # add, so the curriculum it returns holds just the new nodes -- and
+        # every stage after it then operates on those alone. That is what keeps
+        # an append from re-authoring lessons that already exist: the lesson
+        # loop walks the curriculum in state, and the curriculum in state is
+        # the addition, not the whole.
+        "existing_curriculum": _existing_curriculum(certification_id, params),
         "status": "STARTED",
     }
 

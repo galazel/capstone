@@ -78,12 +78,44 @@ public class CertificationController {
             @RequestParam(value = "additionalInstructions", required = false) String additionalInstructions,
             /* "guided" (default) pauses for admin review at every checkpoint;
                "auto" generates the whole certification without stopping. */
-            @RequestParam(value = "reviewMode", required = false) String reviewMode
+            @RequestParam(value = "reviewMode", required = false) String reviewMode,
+            /* Which formats this certification examines: MCQ, SHORT_ANSWER,
+               DESCRIPTIVE, CRITICAL_THINKING. Omitted, the planner researches
+               them -- which is the behaviour every run had before the create
+               form offered the choice. */
+            @RequestParam(value = "questionTypes", required = false) List<String> questionTypes
     ) throws IOException {
         CurrentUserDto user = requireAdmin(jwt);
-        log.info("AI certification creation requested for '{}' (reviewMode={})", dto.getTitle(), reviewMode);
+        log.info("AI certification creation requested for '{}' (reviewMode={}, questionTypes={})",
+                dto.getTitle(), reviewMode, questionTypes);
         return curriculumGenerationService.generateForNewCertification(
-                dto, files, additionalInstructions, user.userId(), reviewMode
+                dto, files, additionalInstructions, user.userId(), reviewMode, questionTypes
+        );
+    }
+
+    /**
+     * Adds to a certification's curriculum rather than rebuilding it.
+     *
+     * <p>Distinct endpoint rather than a flag on the replace path, because the
+     * two differ by whether the existing structure is deleted first -- and a
+     * caller that got the flag wrong would silently destroy a curriculum. The
+     * destructive one has to be asked for by name.
+     */
+    @PostMapping(value = "/{id}/generate/append", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public CertificationDto appendWithAi(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long id,
+            @RequestPart(value = "files", required = false) List<MultipartFile> files,
+            @RequestParam(value = "additionalInstructions", required = false) String additionalInstructions,
+            @RequestParam(value = "reviewMode", required = false) String reviewMode,
+            @RequestParam(value = "questionTypes", required = false) List<String> questionTypes
+    ) throws IOException {
+        CurrentUserDto user = requireAdmin(jwt);
+        log.info("AI append requested for certification {} (reviewMode={}, questionTypes={})",
+                id, reviewMode, questionTypes);
+        return curriculumGenerationService.appendToExistingCertification(
+                id, files, additionalInstructions, user.userId(), reviewMode, questionTypes
         );
     }
 

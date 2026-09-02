@@ -194,6 +194,14 @@ function isAnswered(question, answer) {
         Object.values(answer.subAnswers ?? {}).some((text) => text?.trim())
     )
   }
+  /* Any question whose answer lives in its parts, not one box.
+     A fill-in-the-blank is a SHORT_ANSWER whose blanks are sub-questions, so
+     checking `learnerAnswer` alone reported a fully answered one as empty --
+     greyed out in the navigator, and counted in the "you have unanswered
+     questions" warning on the way to submitting it. */
+  if ((question.subQuestions ?? []).length > 0) {
+    return Object.values(answer.subAnswers ?? {}).some((text) => text?.trim())
+  }
   return Boolean(answer.learnerAnswer?.trim())
 }
 
@@ -293,6 +301,44 @@ function NormalQuestionPanel({ question, index, answer, onAnswer }) {
                   </label>
               ))}
             </RadioGroup>
+        ) : question.questionType === "SHORT_ANSWER" &&
+            (question.subQuestions ?? []).length > 0 ? (
+            /* Fill in the blank: the stem is a passage with (A), (B), (C)
+               blanked and a candidate list under it, and each blank is a
+               sub-question with its own answer.
+
+               Rendered here rather than in the workspace panel because that
+               one is the three-column critical-thinking layout with a diagram
+               canvas -- vastly too much for typing three words. Without this
+               branch a fill-in-the-blank fell through to ONE answer box, so
+               the blanks were invisible and every one of them was marked
+               wrong: sub-question rendering was gated on CRITICAL_THINKING,
+               which this is not. */
+            <div className="space-y-3">
+              <Label>Your answers</Label>
+              {question.subQuestions.map((sub) => (
+                  <div
+                      key={sub.subQuestionId}
+                      className="flex items-center gap-3"
+                  >
+                    <span className="w-10 shrink-0 text-sm font-medium text-muted-foreground">
+                      {sub.questionText}
+                    </span>
+                    <Input
+                        value={answer?.subAnswers?.[sub.subQuestionId] ?? ""}
+                        onChange={(event) =>
+                            onAnswer({
+                              subAnswers: {
+                                ...(answer?.subAnswers ?? {}),
+                                [sub.subQuestionId]: event.target.value,
+                              },
+                            })
+                        }
+                        placeholder="Type the term"
+                    />
+                  </div>
+              ))}
+            </div>
         ) : question.questionType === "SHORT_ANSWER" ? (
             <div className="space-y-2">
               <Label htmlFor="short-answer">Your answer</Label>

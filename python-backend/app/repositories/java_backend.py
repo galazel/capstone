@@ -435,6 +435,7 @@ def insert_exam(
     middle_category_id: int | None = None,
     major_category_id: int | None = None,
     passing_score: float = 70.0,
+    duration_minutes: int | None = None,
 ) -> int:
     result = session.execute(
         insert(exams).values(
@@ -457,6 +458,11 @@ def insert_exam(
             status="DRAFT",
             total_questions=total_questions,
             passing_score=passing_score,
+            # NULL means untimed, which is what every generated exam was.
+            # Carried through for the mock and the diagnostic so a learner
+            # sits them under the real paper's clock -- time pressure is half
+            # of what makes a mock worth sitting.
+            duration_minutes=duration_minutes,
             target_scope=target_scope,
             lesson_id=lesson_id,
             middle_category_id=middle_category_id,

@@ -33,7 +33,24 @@ BLOOM_ORDER: tuple[str, ...] = (
     "REMEMBER", "UNDERSTAND", "APPLY", "ANALYZE", "EVALUATE", "CREATE",
 )
 
+#: The normal MCQ shape, and what the prompt asks for by default.
 MCQ_CHOICE_COUNT = 4
+
+#: The range actually accepted.
+#:
+#: Four was a hard requirement, which made one whole class of professional exam
+#: item impossible to express: the combination question, where a shared artifact
+#: carries several labelled blanks and each option is a full set of values for
+#: them. The FE paper's afternoon subject is built on it -- a pseudocode
+#: procedure with blanks A, B and C, and an answer group running a) to i) where
+#: every option fixes all three at once. The learner cannot guess a blank
+#: independently; they have to trace the algorithm.
+#:
+#: Every renderer maps over `choices`, and the editors already allow a variable
+#: count, so a longer group displays and grades correctly. Nine is the ceiling
+#: because past that a combination table stops being readable on one screen.
+MCQ_MIN_CHOICES = 3
+MCQ_MAX_CHOICES = 9
 
 #: Shared with `app.domain.validation.questions`, which reports the same floor
 #: as an advisory issue for questions that came from somewhere other than a
@@ -311,9 +328,11 @@ class QuestionDraft(BaseModel):
     diagram_type: Optional[str] = None
     instructions: Optional[str] = None
 
-    #: PROGRAMMING / DIAGRAM: the parts asked about the artifact the learner
-    #: produces. Empty for MCQ, short answer and descriptive items, which are
-    #: single questions by definition. See `SubQuestionDraft`.
+    #: The parts of a multi-part item: the questions asked about a shared
+    #: scenario or artifact. Set on PROGRAMMING and DIAGRAM (about the thing the
+    #: learner builds) and on DESCRIPTIVE (about a case the stem presents).
+    #: Empty for MCQ and short answer, which are single questions by
+    #: definition. See `SubQuestionDraft`.
     sub_questions: List[SubQuestionDraft] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -384,17 +403,18 @@ class QuestionDraft(BaseModel):
             raise ValueError("question text must not be empty")
 
         if self.question_type == "MCQ":
-            if len(self.choices) != MCQ_CHOICE_COUNT:
+            if not MCQ_MIN_CHOICES <= len(self.choices) <= MCQ_MAX_CHOICES:
                 raise ValueError(
-                    f"MCQ must have exactly {MCQ_CHOICE_COUNT} choices, got {len(self.choices)}"
+                    f"MCQ must have between {MCQ_MIN_CHOICES} and {MCQ_MAX_CHOICES} "
+                    f"choices, got {len(self.choices)}"
                 )
             if self.correct_choice_index is None:
                 raise ValueError("MCQ must set correct_choice_index")
-            if not 0 <= self.correct_choice_index < MCQ_CHOICE_COUNT:
+            if not 0 <= self.correct_choice_index < len(self.choices):
                 raise ValueError(
                     f"correct_choice_index {self.correct_choice_index} is out of range"
                 )
-            if len({choice.strip().lower() for choice in self.choices}) != MCQ_CHOICE_COUNT:
+            if len({choice.strip().lower() for choice in self.choices}) != len(self.choices):
                 raise ValueError("MCQ choices must be distinct")
 
         elif self.question_type == "SHORT_ANSWER":

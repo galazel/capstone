@@ -90,7 +90,8 @@ public class CurriculumGenerationService {
             List<MultipartFile> files,
             String additionalInstructions,
             Long triggeredByUserId,
-            String reviewMode
+            String reviewMode,
+            List<String> questionTypes
     ) throws IOException {
         aiUploadValidator.validate(files);
 
@@ -102,7 +103,7 @@ public class CurriculumGenerationService {
 
         GenerationRequest request = recordGenerationRequest(
                 certificationId, GenerationRequest.RequestType.CERTIFICATION, additionalInstructions,
-                triggeredByUserId, reviewMode);
+                triggeredByUserId, reviewMode, MODE_REPLACE, questionTypes);
         publishAfterCommit(request.getGenerationRequestId(), certificationId);
 
         // Ingest the source so the async consumer (and later, per-lesson
@@ -145,12 +146,56 @@ public class CurriculumGenerationService {
     }
 
     /**
+     * Adds to a certification instead of rebuilding it.
+     *
+     * <p>The difference from {@link #generateForExistingCertification} is the
+     * one thing that method does first: it clears the structure. That is right
+     * when an admin wants the curriculum rebuilt, and destructive when they
+     * want another domain added -- and until now those were the same button,
+     * so extending a certification meant re-authoring every lesson already
+     * paid for and losing every question and assessment attached to them.
+     *
+     * <p>Nothing is deleted here. The new documents are ingested alongside the
+     * existing ones, and the consumer is told to plan only what they add; the
+     * persistence layer already matches on name, so anything the planner does
+     * repeat is skipped rather than duplicated.
+     *
+     * <p>No {@code assertStructureReplaceable} check either: that guard exists
+     * to stop an admin destroying a published certification's structure, and
+     * an append destroys nothing.
+     */
+    @Transactional
+    public CertificationDto appendToExistingCertification(
+            Long certificationId,
+            List<MultipartFile> files,
+            String additionalInstructions,
+            Long triggeredByUserId,
+            String reviewMode,
+            List<String> questionTypes
+    ) throws IOException {
+        aiUploadValidator.validate(files);
+
+        String documentContent = extractText(files);
+        aiUploadValidator.requireReadableText(documentContent);
+
+        GenerationRequest request = recordGenerationRequest(
+                certificationId, GenerationRequest.RequestType.CERTIFICATION, additionalInstructions,
+                triggeredByUserId, reviewMode, MODE_APPEND, questionTypes);
+        publishAfterCommit(request.getGenerationRequestId(), certificationId);
+
+        ingestFiles(files, certificationId);
+
+        log.info("Append generation queued for certification {}", certificationId);
+        return self.fetchCertificationDto(certificationId);
+    }
+
+    /**
      * Queues the generation request, but only once the surrounding transaction
      * has actually committed.
      *
      * Publishing inline was a dual-write race, and a reliably losing one. These
      * methods are {@code @Transactional}, and the publish sat before
-     * {@code ingestFiles(...)} — which uploads to S3 and extracts images, so it
+     * {@code ingestFiles(...)} â€” which uploads to S3 and extracts images, so it
      * can run for many seconds. The consumer received the message immediately,
      * looked up the generation request, and found nothing, because the inserting
      * transaction had not committed yet:
@@ -163,7 +208,7 @@ public class CurriculumGenerationService {
      *
      * Registering on {@code afterCommit} means the message is published exactly
      * when the data it refers to becomes visible to other connections. If the
-     * transaction rolls back, no message is sent at all — previously a rollback
+     * transaction rolls back, no message is sent at all â€” previously a rollback
      * still left a message pointing at a row that never existed.
      */
     private void publishAfterCommit(Long generationRequestId, Long certificationId) {
@@ -277,6 +322,44 @@ public class CurriculumGenerationService {
     private GenerationRequest recordGenerationRequest(
             Long certificationId, GenerationRequest.RequestType type, String additionalInstructions,
             Long triggeredByUserId, String reviewMode) {
+        return recordGenerationRequest(
+                certificationId, type, additionalInstructions, triggeredByUserId, reviewMode,
+                MODE_REPLACE, null);
+    }
+
+    private GenerationRequest recordGenerationRequest(
+            Long certificationId, GenerationRequest.RequestType type, String additionalInstructions,
+            Long triggeredByUserId, String reviewMode, String mode) {
+        return recordGenerationRequest(
+                certificationId, type, additionalInstructions, triggeredByUserId, reviewMode, mode, null);
+    }
+
+    /** Build the whole curriculum from scratch. */
+    static final String MODE_REPLACE = "replace";
+
+    /**
+     * Add to what is already there.
+     *
+     * <p>Read by the Python consumer, which plans against the existing
+     * curriculum and asks only for what the new documents add -- so the lesson
+     * agent never re-authors a lesson that exists. Recorded on the request row
+     * rather than the queue message, for the same reason reviewMode is: a
+     * retry re-reads this row, and a retry that quietly turned an append into
+     * a replace would delete the certification it was meant to extend.
+     */
+    static final String MODE_APPEND = "append";
+
+    /**
+     * @param questionTypes the formats the admin ticked (MCQ, SHORT_ANSWER,
+     *        DESCRIPTIVE, CRITICAL_THINKING), or null/empty to let the planner
+     *        research them. Recorded on the request row rather than the queue
+     *        message so a retry keeps the admin's answer -- a retry that lost
+     *        it would silently rebuild the certification with different
+     *        question formats than the one being repaired.
+     */
+    private GenerationRequest recordGenerationRequest(
+            Long certificationId, GenerationRequest.RequestType type, String additionalInstructions,
+            Long triggeredByUserId, String reviewMode, String mode, List<String> questionTypes) {
         String paramsJson;
         try {
             paramsJson = objectMapper.writeValueAsString(Map.of(
@@ -286,7 +369,11 @@ public class CurriculumGenerationService {
                     // straight through. Recorded on the request rather than
                     // sent on the queue message so a retry or restart -- which
                     // re-reads this row -- keeps the admin's choice.
-                    "reviewMode", normalizeReviewMode(reviewMode)));
+                    "reviewMode", normalizeReviewMode(reviewMode),
+                    "mode", mode,
+                    // Empty list = "the planner decides", which is what every
+                    // run did before this was offered.
+                    "questionTypes", questionTypes == null ? List.of() : questionTypes));
         } catch (Exception e) {
             paramsJson = null;
         }

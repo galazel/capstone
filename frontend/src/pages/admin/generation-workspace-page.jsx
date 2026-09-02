@@ -12,6 +12,16 @@ import {
   WifiOff,
 } from "lucide-react"
 import { toast } from "sonner"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -39,7 +49,7 @@ import { TaskStatusIcon, stageLabel } from "@/components/generation/task-status"
  *
  * A generation run is a long conversation with a model that a human steers, not
  * a request that either succeeds or fails. So this shows the work as one
- * transcript — every step, its duration, what it produced — with the review
+ * transcript â€” every step, its duration, what it produced â€” with the review
  * decision appearing inline at the point where the run is waiting. There is
  * deliberately no full-page loading state after the first connect: the
  * transcript *is* the progress indicator.
@@ -67,7 +77,7 @@ export default function GenerationWorkspacePage() {
   })
 
   // A queued build normally shows up within a second or two. Past that, the
-  // most likely cause is that nothing is consuming the queue — so say so rather
+  // most likely cause is that nothing is consuming the queue â€” so say so rather
   // than spinning indefinitely, which reads as "working" when it is actually
   // "nobody is listening". Polling continues; only the message changes.
   const waitedTooLong = useWaitedTooLong(Boolean(awaitingCertificationId) && !runId, 20_000)
@@ -86,7 +96,7 @@ export default function GenerationWorkspacePage() {
   } = stream
 
   // The artifact under review lives in the LangGraph interrupt, not the event
-  // log, so it is fetched when the run enters (or is found in) review — keyed
+  // log, so it is fetched when the run enters (or is found in) review â€” keyed
   // by lastSeq so approving one item pulls the next one automatically.
   const review = useQuery({
     queryKey: ["workflow-review", runId, isWaitingForReview, run?.last_seq],
@@ -143,6 +153,11 @@ export default function GenerationWorkspacePage() {
     onError: () => toast.error("Could not cancel this run."),
   })
 
+  /* Both stop controls on this page route through one confirmation. A run is
+     half an hour of authoring and stopping it cannot be undone, so it is asked
+     for rather than clicked -- the same guard the inline monitor uses. */
+  const [isConfirmingStop, setIsConfirmingStop] = useState(false)
+
   const restore = (version) =>
     submitReview.mutate({
       action: "edit",
@@ -175,6 +190,47 @@ export default function GenerationWorkspacePage() {
        nav, so the height subtracts both rather than adding a second gutter and
        overflowing the viewport by exactly that much. */
     <div className="flex h-[calc(100dvh-7rem)] min-h-[32rem] flex-col gap-4 sm:h-[calc(100dvh-8rem)]">
+      <AlertDialog open={isConfirmingStop} onOpenChange={setIsConfirmingStop}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Stop this generation?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  {currentTask?.itemNumber && currentTask?.itemTotal
+                    ? `This run is on ${currentTask.itemNumber} of ${currentTask.itemTotal} — ${stageLabel(currentTask.stage).toLowerCase()}.`
+                    : "This run is still building."}{" "}
+                  Stopping it ends the build — it does not pause, and it cannot
+                  be resumed from here.
+                </p>
+                <p>
+                  Everything already written is kept as drafts, so nothing
+                  finished is lost. Anything still to come is not generated, and
+                  starting again re-does the remaining work from scratch.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancel.isPending}>
+              Keep generating
+            </AlertDialogCancel>
+            <AlertDialogAction
+                onClick={(event) => {
+                  event.preventDefault()
+                  cancel.mutate(undefined, {
+                    onSettled: () => setIsConfirmingStop(false),
+                  })
+                }}
+                disabled={cancel.isPending}
+                className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {cancel.isPending ? "Stopping..." : "Stop generating"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
           <h1 className="flex items-center gap-2 font-heading text-2xl font-semibold tracking-tight">
@@ -199,7 +255,7 @@ export default function GenerationWorkspacePage() {
               variant="outline"
               size="sm"
               disabled={cancel.isPending}
-              onClick={() => cancel.mutate()}
+              onClick={() => setIsConfirmingStop(true)}
             >
               <Ban className="mr-2 size-4" />
               Cancel run
@@ -261,7 +317,7 @@ export default function GenerationWorkspacePage() {
                     ) : (
                       <p className="flex items-center gap-2 px-2.5 py-2 text-sm text-muted-foreground">
                         <Loader2 className="size-4 animate-spin" />
-                        Loading the item waiting for review…
+                        Loading the item waiting for reviewâ€¦
                       </p>
                     )
                   ) : null}
@@ -301,7 +357,7 @@ export default function GenerationWorkspacePage() {
                       size="sm"
                       variant="ghost"
                       disabled={cancel.isPending}
-                      onClick={() => cancel.mutate()}
+                      onClick={() => setIsConfirmingStop(true)}
                     >
                       <Ban className="mr-2 size-4" />
                       Stop
@@ -326,7 +382,7 @@ function EmptyState({ awaiting, waitedTooLong, loading }) {
         <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
           The build was queued but no worker has claimed it. Usually that means the Python
           generation service is not running, or it cannot reach RabbitMQ or the database. Still
-          watching — it will appear here the moment a worker starts.
+          watching â€” it will appear here the moment a worker starts.
         </p>
       </div>
     )
@@ -336,9 +392,9 @@ function EmptyState({ awaiting, waitedTooLong, loading }) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 py-16 text-center">
         <Loader2 className="size-5 animate-spin text-muted-foreground" />
-        <p className="text-sm font-medium text-foreground">Queuing the build…</p>
+        <p className="text-sm font-medium text-foreground">Queuing the buildâ€¦</p>
         <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
-          Waiting for a worker to pick this up. The transcript starts as soon as it does — you can
+          Waiting for a worker to pick this up. The transcript starts as soon as it does â€” you can
           leave this page and come back to it.
         </p>
       </div>
@@ -348,7 +404,7 @@ function EmptyState({ awaiting, waitedTooLong, loading }) {
   return (
     <div className="flex flex-1 items-center justify-center px-6 py-16">
       <p className="text-sm text-muted-foreground">
-        {loading ? "Loading runs…" : "No generation runs yet."}
+        {loading ? "Loading runsâ€¦" : "No generation runs yet."}
       </p>
     </div>
   )
@@ -397,7 +453,7 @@ function RunList({ runs, activeRunId, onSelect }) {
   const [showPast, setShowPast] = useState(false)
 
   // The list showed every run ever started, so finishing one generation left
-  // its wreckage sitting above the next one — three "Certification #N" entries
+  // its wreckage sitting above the next one â€” three "Certification #N" entries
   // when only one was live. Past runs are still reachable, just not by default;
   // the open run always shows regardless, since a failed run is exactly what
   // the recovery panel is for.

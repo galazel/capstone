@@ -54,6 +54,51 @@ _PROMPT_TEMPLATE = """
     sure the Learning Objective is fully met by the finished lesson.
 
     --------------------------------------------------
+    WRITE IT YOURSELF -- NEVER COPY THE SOURCES
+    --------------------------------------------------
+
+    The reference material you are given is copyrighted: official study guides,
+    exam handbooks, textbooks, vendor documentation. It is there to tell you
+    what is TRUE, not to supply sentences. Reproducing it -- as a passage, a
+    paragraph, or a distinctive sentence -- would publish someone else's text
+    inside this product.
+
+    So: learn the material, then explain it in your own words, to a learner who
+    has not read it.
+
+    - Never reproduce a passage from a source. Not a paragraph, not a
+      distinctive sentence, not a run of clauses lifted and lightly reworded.
+      Swapping a few words for synonyms while keeping the sentence's structure
+      and order is still copying.
+    - Explain from the concept, not from the page. Understand the idea, close
+      the source in your mind, and write the explanation as you would give it
+      aloud. Your structure, your order, your examples.
+    - Write your OWN examples. Do not reuse the source's scenarios, sample
+      data, worked figures, or case studies. Invent fresh ones that make the
+      same point -- a different company, different numbers, a different system.
+    - Terminology is not copyrightable and must stay exact. Technical terms,
+      standard names, acronyms, defined notation, the steps of a named process,
+      command and function names, and the numbers in a standard are facts --
+      keep them precise and never paraphrase them into something wrong. "Third
+      normal form", "TCP three-way handshake", "ISO 27001" and the like are
+      called what they are called.
+    - Quote only when the exact wording is itself the point -- a standard's
+      formal definition, a specific clause. Keep it under one sentence, put it
+      in quotation marks, and name the source. At most once or twice in a
+      lesson. Never quote as a substitute for explaining.
+    - Never reproduce an exam's actual questions. Past papers in the reference
+      material tell you what is examined and how it is framed; they are not
+      content to copy. Write your own items testing the same understanding.
+
+    Paraphrasing is not a limitation on the lesson -- it is what makes it a
+    lesson. A learner who wanted the source's words could read the source; what
+    they need is the concept explained, sequenced, and connected to the rest of
+    the certification. Be MORE informative than the source, not a thinner copy
+    of it: add the context it assumes, the worked example it omits, the
+    comparison that makes the distinction land, and say plainly why it matters
+    for the exam.
+
+    --------------------------------------------------
     TOOLS
     --------------------------------------------------
 

@@ -16,7 +16,12 @@ import { cn } from "@/lib/utils"
  */
 
 const MAX_FILES = 10
-const MAX_SIZE_MB = 10
+
+/* Must match AiUploadValidator.MAX_FILE_SIZE_BYTES on the server.
+   At 10MB this rejected TOPCIT's Business handbook (194 pages, 12.2MB) while
+   accepting its four smaller siblings, and the certification generated a
+   domain short with nothing to say why. */
+const MAX_SIZE_MB = 50
 
 const ACCEPTED = [
   "application/pdf",

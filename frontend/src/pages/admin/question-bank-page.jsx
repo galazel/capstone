@@ -123,7 +123,36 @@ const questionTypeLabels = {
     SHORT_ANSWER: "Short Answer",
     DESCRIPTIVE: "Descriptive",
     CRITICAL_THINKING: "Critical Thinking",
+    // Written by AI generation, which stores the workspace type directly
+    // rather than as CRITICAL_THINKING + criticalThinkingType the way the
+    // manual builder does. Unlabelled, the Type column showed the raw enum.
+    PROGRAMMING: "Programming",
+    DIAGRAM: "Diagram",
 };
+
+/**
+ * The stored types each filter option should match.
+ *
+ * Two paths write these and they disagree: the manual builder saves a
+ * programming task as CRITICAL_THINKING with criticalThinkingType=PROGRAMMING,
+ * while AI generation saves it as PROGRAMMING. Java treats all three as
+ * workspace items when grading (`isWorkspaceType`), so the difference is a
+ * storage detail -- but the filter compared the stored value to the option
+ * verbatim, so "Critical Thinking" matched none of the generated ones and
+ * there was no option that did. A TOPCIT bank holding 13 programming tasks and
+ * a diagram reported "No questions found".
+ */
+const QUESTION_TYPE_FILTER_MATCHES = {
+    CRITICAL_THINKING: ["CRITICAL_THINKING", "PROGRAMMING", "DIAGRAM"],
+    PROGRAMMING: ["PROGRAMMING"],
+    DIAGRAM: ["DIAGRAM"],
+};
+
+function matchesQuestionTypeFilter(questionType, filterValue) {
+    if (filterValue === ALL_FILTER_VALUE) return true;
+    const accepted = QUESTION_TYPE_FILTER_MATCHES[filterValue] ?? [filterValue];
+    return accepted.includes(questionType);
+}
 
 const difficultyLabels = {
     easy: "Easy",
@@ -1819,7 +1848,11 @@ function QuestionFileGeneratorDialog({
                                          isGenerating = false,
                                      }) {
     const maxFiles = 10;
-    const maxSizeMB = 10;
+    // Matches AiUploadValidator.MAX_FILE_SIZE_BYTES and the certification
+    // uploader. A real handbook runs past 10MB -- TOPCIT's Business guide is
+    // 12.2MB -- and a stricter client cap just refuses a file the server
+    // would have taken.
+    const maxSizeMB = 50;
     const maxSize = maxSizeMB * 1024 * 1024;
 
     const [submitError, setSubmitError] = useState("");
@@ -2661,8 +2694,7 @@ function QuestionBank({
             }
 
             if (
-                filterQuestionType !== ALL_FILTER_VALUE &&
-                question.questionType !== filterQuestionType
+                !matchesQuestionTypeFilter(question.questionType, filterQuestionType)
             ) {
                 return false;
             }
@@ -3647,11 +3679,23 @@ OUTPUT RULES:
                                                     Descriptive
                                                 </SelectItem>
 
+                                                {/* Matches all three workspace
+                                                    types, however they were
+                                                    stored -- see
+                                                    QUESTION_TYPE_FILTER_MATCHES. */}
                                                 <SelectItem
                                                     value="CRITICAL_THINKING"
                                                     className="min-h-10"
                                                 >
-                                                    Critical Thinking
+                                                    Critical Thinking (all)
+                                                </SelectItem>
+
+                                                <SelectItem value="PROGRAMMING" className="min-h-10">
+                                                    Programming
+                                                </SelectItem>
+
+                                                <SelectItem value="DIAGRAM" className="min-h-10">
+                                                    Diagram
                                                 </SelectItem>
                                             </SelectContent>
                                         </Select>

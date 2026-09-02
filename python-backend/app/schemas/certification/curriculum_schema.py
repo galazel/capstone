@@ -94,8 +94,31 @@ class ExamStructure(BaseModel):
     total_items: int = 0
     #: e.g. ["MCQ", "SHORT_ANSWER", "DESCRIPTIVE", "PROGRAMMING", "DIAGRAM"].
     question_types: StrList = []
-    #: Anything else that shapes the paper: sections, weighting, sub-questions,
-    #: time limit.
+
+    #: How long the real paper allows, in minutes. 0 means unknown.
+    #:
+    #: Promoted out of `notes` because it is used, not just displayed: the mock
+    #: exam is stored with this as its duration, so a learner sitting one is
+    #: under the same clock as the real thing. Time pressure is part of what a
+    #: mock is for -- 100 items in 100 minutes is a different exam from 100
+    #: items untimed.
+    duration_minutes: int = 0
+
+    #: The pass mark as a percentage. 0 means unknown; the exam default (70)
+    #: is used instead. A certification that passes at 60 or 80 gives a learner
+    #: a false read on their readiness if the mock keeps saying 70.
+    passing_score: float = 0.0
+
+    #: What the paper covers and in what proportion -- the official domains and
+    #: their weightings, as stated by the certification body. Separate from the
+    #: curriculum's own shape: the syllabus is what gets taught, this is what
+    #: gets *examined*, and the two are not always weighted alike. Read when
+    #: building the diagnostic, the mock and the question bank so all three
+    #: sample the exam's emphasis rather than the syllabus's.
+    coverage: str = ""
+
+    #: Anything else that shapes the paper: sections, ordering, sub-question
+    #: structure, permitted materials.
     notes: str = ""
 
 

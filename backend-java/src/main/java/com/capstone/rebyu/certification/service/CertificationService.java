@@ -275,6 +275,100 @@ public class CertificationService {
     }
 
     private void deleteRelatedCertificationData(Long certificationId) {
+        /* What a learner accumulated while studying this certification.
+         *
+         * These went first because they are leaves -- nothing references them,
+         * and they reference the lessons and exams removed further down. They
+         * were not deleted at all: the enrollment row went (learner_
+         * certifications, below), so the certification vanished from the
+         * learner's list, while their notes, saved items, review queue,
+         * practice history and study plan stayed behind pointing at lesson ids
+         * that no longer resolve. Re-generating a certification then reused
+         * those ids for entirely different lessons, so the leftovers attached
+         * themselves to whatever now held the id.
+         *
+         * `study_plan` and `learner_notes` are keyed on the certification
+         * directly; the rest reach it through their lesson.
+         */
+        executeDelete("""
+                DELETE FROM learner_read_sections
+                WHERE lesson_id IN (
+                    SELECT l.lesson_id
+                    FROM lessons l
+                    JOIN middle_categories mc ON mc.middle_category_id = l.middle_category_id
+                    JOIN major_categories maj ON maj.major_category_id = mc.major_category_id
+                    WHERE maj.certification_id = :certificationId
+                )
+                """, certificationId);
+
+        executeDelete("""
+                DELETE FROM learner_review_items
+                WHERE certification_id = :certificationId
+                   OR lesson_id IN (
+                    SELECT l.lesson_id
+                    FROM lessons l
+                    JOIN middle_categories mc ON mc.middle_category_id = l.middle_category_id
+                    JOIN major_categories maj ON maj.major_category_id = mc.major_category_id
+                    WHERE maj.certification_id = :certificationId
+                )
+                """, certificationId);
+
+        executeDelete("""
+                DELETE FROM learner_library_items
+                WHERE certification_id = :certificationId
+                   OR lesson_id IN (
+                    SELECT l.lesson_id
+                    FROM lessons l
+                    JOIN middle_categories mc ON mc.middle_category_id = l.middle_category_id
+                    JOIN major_categories maj ON maj.major_category_id = mc.major_category_id
+                    WHERE maj.certification_id = :certificationId
+                )
+                """, certificationId);
+
+        executeDelete("""
+                DELETE FROM learner_practice_attempts
+                WHERE certification_id = :certificationId
+                   OR lesson_id IN (
+                    SELECT l.lesson_id
+                    FROM lessons l
+                    JOIN middle_categories mc ON mc.middle_category_id = l.middle_category_id
+                    JOIN major_categories maj ON maj.major_category_id = mc.major_category_id
+                    WHERE maj.certification_id = :certificationId
+                )
+                """, certificationId);
+
+        executeDelete("""
+                DELETE FROM generated_study_sets
+                WHERE certification_id = :certificationId
+                   OR lesson_id IN (
+                    SELECT l.lesson_id
+                    FROM lessons l
+                    JOIN middle_categories mc ON mc.middle_category_id = l.middle_category_id
+                    JOIN major_categories maj ON maj.major_category_id = mc.major_category_id
+                    WHERE maj.certification_id = :certificationId
+                )
+                """, certificationId);
+
+        executeDelete("DELETE FROM learner_notes WHERE certification_id = :certificationId",
+                certificationId);
+
+        executeDelete("DELETE FROM study_plan WHERE certification_id = :certificationId",
+                certificationId);
+
+        /* Queued BKT evidence for exams that are about to stop existing.
+         *
+         * The outbox is drained by a scheduled dispatcher, so a row left here
+         * is not inert -- it is work that will be posted to the BKT service
+         * after the delete, teaching mastery about a lesson nobody can open.
+         */
+        executeDelete("""
+                DELETE FROM bkt_event_outbox
+                WHERE certification_id = :certificationId
+                   OR exam_id IN (
+                    SELECT exam_id FROM exams WHERE certification_id = :certificationId
+                )
+                """, certificationId);
+
         // Executions reference both attempt_questions and attempts, so they must
         // be removed before either of those tables.
         executeDelete("""

@@ -15,7 +15,25 @@ import java.util.Set;
 public class AiUploadValidator {
 
     public static final int MAX_FILES = 10;
-    public static final long MAX_FILE_SIZE_BYTES = 10L * 1024 * 1024;
+
+    /**
+     * Per-file ceiling for a source document.
+     *
+     * <p>Was 10MB, which is under the size of a real certification handbook and
+     * silently cost a whole domain: TOPCIT's five official study guides are
+     * 2-4MB each except Business, which is 194 pages and 12.2MB. That one was
+     * rejected at upload while the other four went through, so the generated
+     * curriculum came out with four majors instead of five -- and nothing
+     * downstream could tell the difference between "the admin did not upload
+     * Business" and "Business was refused".
+     *
+     * <p>50MB leaves real headroom for a scanned or image-heavy handbook, and
+     * still fits {@link #MAX_FILES} of them inside the 500MB multipart request
+     * ceiling in application.yaml. Keep this in step with MAX_SIZE_MB in
+     * frontend/src/components/certifications/document-upload-step.jsx, which
+     * rejects the file before it is ever sent.
+     */
+    public static final long MAX_FILE_SIZE_BYTES = 50L * 1024 * 1024;
 
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("pdf", "doc", "docx", "csv");
 

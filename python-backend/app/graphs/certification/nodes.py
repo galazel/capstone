@@ -62,8 +62,28 @@ def major_quiz_count() -> int:
     return get_settings().major_quiz_questions
 
 
+#: The diagnostic is 40 items for every certification, deliberately fixed.
+#:
+#: It is not imitating the real paper -- the mock does that, at whatever length
+#: the paper actually is. The diagnostic exists to place a learner across the
+#: whole syllabus before they start, and that job wants the SAME length every
+#: time: it is the baseline every later score is read against, and a baseline
+#: whose length moves with the certification is not comparable between them.
+#: Forty is long enough to touch every lesson of a real curriculum and short
+#: enough to sit before studying anything.
+#:
+#: Layout still follows the real exam (see generate_diagnostic_exam_node) --
+#: same question types, fixed count.
+DIAGNOSTIC_EXAM_ITEMS = 40
+
+
 def diagnostic_exam_count() -> int:
-    return get_settings().diagnostic_exam_questions
+    """Deprecated: the diagnostic is fixed at DIAGNOSTIC_EXAM_ITEMS.
+
+    Kept so `diagnostic_exam_questions` in config/.env stops silently changing
+    a length that is meant to be constant across certifications.
+    """
+    return DIAGNOSTIC_EXAM_ITEMS
 
 
 def mock_exam_count() -> int:
@@ -81,10 +101,21 @@ def question_bank_count(curriculum: dict | None = None) -> int:
     """
     settings = get_settings()
     per_lesson = settings.question_bank_questions_per_lesson
-    if per_lesson <= 0:
-        return settings.question_bank_questions
-
     lessons = len(_flatten_lessons(curriculum or {}))
+
+    if per_lesson <= 0:
+        # The flat total, but never fewer questions than there are lessons.
+        #
+        # The bank is what adaptive learning draws on, and mastery is tracked
+        # PER LESSON: a lesson with no bank question of its own can never be
+        # practised, retaken or measured, so the learner's mastery of it stays
+        # unknown forever. A flat 100 across 75 lessons is fine; the same 100
+        # across 140 would leave 40 lessons permanently invisible to BKT.
+        #
+        # Raising the floor keeps that impossible without anyone having to
+        # notice the curriculum grew.
+        return max(settings.question_bank_questions, lessons)
+
     if lessons <= 0:
         return settings.question_bank_questions
 
@@ -209,6 +240,29 @@ async def _invoke_curriculum_agent(state: CertificationState, context: str) -> C
     # JSON so a sample that stops before its closing brackets is repaired here
     # rather than rejected upstream as `tool_use_failed`. See
     # `app.agents.certification.curriculum_agent`.
+    # Adding to a certification rather than building one. Stated as part of the
+    # context so it needs no second prompt template: the planner is told what
+    # exists and asked for the difference, and everything downstream then works
+    # on that difference alone.
+    existing = (state.get("existing_curriculum") or "").strip()
+    if existing:
+        context = (
+            "THIS CERTIFICATION ALREADY EXISTS AND YOU ARE ADDING TO IT.\n\n"
+            "Already covered -- do NOT plan any of these again, and do not "
+            "restate them in your answer:\n"
+            f"{existing}\n\n"
+            "Return ONLY the major categories, middle categories and lessons "
+            "that the source material below adds to what is listed above. If a "
+            "new lesson belongs under an existing major category, repeat that "
+            "major category's name EXACTLY as written above and put only the "
+            "new middle categories or lessons inside it -- matching is by name, "
+            "so an exact repeat attaches to the existing one instead of "
+            "creating a duplicate. If the material adds nothing genuinely new, "
+            "return an empty majorCategories list rather than inventing "
+            "material to fill it.\n\n"
+            f"{context}"
+        )
+
     return await invoke_json_agent(
         get_curriculum_agent,
         build_curriculum_prompt(
@@ -344,14 +398,22 @@ async def generate_diagnostic_exam_node(state: CertificationState):
     context = _content_for_lessons(state, _flatten_lessons(curriculum)) or _curriculum_outline(
         curriculum
     )
+    # The real paper's shape, same source the mock reads. The diagnostic is the
+    # mock's layout at a fixed length: a learner should meet the exam's formats
+    # here, before studying, rather than for the first time at the end.
+    context = _with_exam_structure(context, state)
+
     batch = await invoke_question_agent(
         scope, context,
-        f"Generate exactly {diagnostic_exam_count()} MCQ questions covering every lesson "
+        f"Generate exactly {DIAGNOSTIC_EXAM_ITEMS} questions covering every lesson "
         "in the certification, to gauge a new learner's starting knowledge before they "
-        "begin studying. Use MCQ only -- this exam is auto-scored before any teaching has "
-        "happened. Favor EASY and AVERAGE difficulty. Set lesson_ref on each question to "
-        "the lesson it tests.",
-        count=diagnostic_exam_count(),
+        "begin studying. Use the same question types and layout as the real exam "
+        f"described above: {researched_question_types(state, UNKNOWN_EXAM_QUESTION_TYPES)}."
+        f"{performance_quota(researched_question_types(state, UNKNOWN_EXAM_QUESTION_TYPES), DIAGNOSTIC_EXAM_ITEMS)}"
+        f"{SUB_QUESTION_RULE} "
+        "Favor EASY and AVERAGE difficulty -- this is sat before any teaching has "
+        "happened. Set lesson_ref on each question to the lesson it tests.",
+        count=DIAGNOSTIC_EXAM_ITEMS,
     )
     return {
         "diagnostic_exam": {"questions": questions_as_dicts(batch)},
@@ -382,6 +444,70 @@ def exam_structure_is_known(state: CertificationState) -> bool:
     return bool(structure.get("total_items") or structure.get("question_types"))
 
 
+def _with_exam_structure(context: str, state: CertificationState) -> str:
+    """Prefixes the generation context with what the real exam looks like.
+
+    The diagnostic, the mock and the question bank are all meant to reflect one
+    paper, and each used to be written knowing only the syllabus. Coverage in
+    particular matters and was not consulted anywhere: the weightings the
+    certification body examines against are not always the weightings the
+    curriculum teaches to, and a bank sampled from the syllabus alone
+    over-tests whatever happened to have the most lessons.
+
+    Returns the context unchanged when nothing was researched, so a
+    certification whose paper could not be found is generated exactly as
+    before rather than against an empty heading.
+    """
+    structure = _exam_structure(state)
+    lines = []
+    if structure.get("total_items"):
+        lines.append(f"- Items in the real exam: {structure['total_items']}")
+    if structure.get("question_types"):
+        lines.append(f"- Question types: {', '.join(structure['question_types'])}")
+    if structure.get("duration_minutes"):
+        lines.append(f"- Time allowed: {structure['duration_minutes']} minutes")
+    if structure.get("passing_score"):
+        lines.append(f"- Pass mark: {structure['passing_score']}%")
+    if structure.get("coverage"):
+        lines.append(f"- Examined coverage and weighting:\n{structure['coverage']}")
+    if structure.get("notes"):
+        lines.append(f"- Other structure: {structure['notes']}")
+
+    if not lines:
+        return context
+
+    return "Real exam structure:\n" + "\n".join(lines) + "\n\n" + context
+
+
+#: What each checkbox in the create form means in generator terms.
+#:
+#: "Critical thinking" is one choice to an admin and two types to the
+#: generator: a programming task and a diagramming task are both
+#: CRITICAL_THINKING once stored (see `_WORKSPACE_TYPES` in
+#: assessment_persistence), so the box that turns them on turns on both.
+QUESTION_TYPE_CHOICES = {
+    "MCQ": ["MCQ"],
+    "SHORT_ANSWER": ["SHORT_ANSWER"],
+    "DESCRIPTIVE": ["DESCRIPTIVE"],
+    "CRITICAL_THINKING": ["PROGRAMMING", "DIAGRAM"],
+}
+
+
+def requested_question_types(state: CertificationState) -> str:
+    """The admin's own choice of formats, when they made one.
+
+    Expanded from the checkboxes on the create form. Empty when they left the
+    question to the planner, which is the default.
+    """
+    chosen = state.get("requested_question_types") or []
+    expanded: list[str] = []
+    for choice in chosen:
+        for question_type in QUESTION_TYPE_CHOICES.get(str(choice).upper(), []):
+            if question_type not in expanded:
+                expanded.append(question_type)
+    return ", ".join(expanded)
+
+
 def researched_question_types(state: CertificationState, default: str) -> str:
     """The certification's own question types, for any stage that generates items.
 
@@ -401,7 +527,17 @@ def researched_question_types(state: CertificationState, default: str) -> str:
     determine the paper's shape. Unchanged behaviour for a certification whose
     structure is unknown; see UNKNOWN_EXAM_QUESTION_TYPES for why guessing is
     worse than defaulting.
+
+    Precedence: the ADMIN'S choice, then the planner's research, then the
+    stage's default. An admin who ticked the boxes has told us what this
+    certification examines, and research that disagrees with them is research
+    about a different exam than the one they are building -- so their answer
+    wins outright rather than being merged with it.
     """
+    chosen = requested_question_types(state)
+    if chosen:
+        return chosen
+
     types = _exam_structure(state).get("question_types") or []
     return ", ".join(types) if types else default
 
@@ -435,13 +571,15 @@ async def generate_mock_exam_node(state: CertificationState):
     known = exam_structure_is_known(state)
 
     types = ", ".join(structure.get("question_types") or []) or UNKNOWN_EXAM_QUESTION_TYPES
-    notes = structure.get("notes") or ""
 
     context = _content_for_lessons(state, _flatten_lessons(curriculum)) or _curriculum_outline(
         curriculum
     )
-    if notes:
-        context = f"Real exam structure:\n{notes}\n\n{context}"
+    # The whole researched shape, not just the free-text notes: count, types,
+    # time, pass mark and examined weighting. Coverage especially -- a mock
+    # sampled from the syllabus rather than the paper's own weighting tests the
+    # wrong proportions however good the individual items are.
+    context = _with_exam_structure(context, state)
 
     if not known:
         logger.info(
@@ -466,8 +604,9 @@ async def generate_mock_exam_node(state: CertificationState):
         scope, context,
         f"Generate exactly {count} questions {coverage}, drawn from the lesson content "
         f"above{difficulty}. This exam uses these question types ONLY: {types}. "
-        "Do not use a type that is not listed. Set lesson_ref on each question to the "
-        "lesson it tests.",
+        f"Do not use a type that is not listed.{performance_quota(types, count)}"
+        f"{SUB_QUESTION_RULE} "
+        "Set lesson_ref on each question to the lesson it tests.",
         count=count,
     )
     return {
@@ -480,10 +619,104 @@ def await_mock_exam_review_node(state: CertificationState):
     return _await_review(state, "MOCK_EXAM", state.get("mock_exam", {}))
 
 
+#: Share of a paper that must be performance items when the exam uses them.
+#:
+#: Naming the permitted types is not enough and never was. "This exam uses
+#: these question types ONLY: MCQ, SHORT_ANSWER, DESCRIPTIVE, PROGRAMMING" is
+#: permission, and a model handed permission writes the cheap types: TOPCIT's
+#: mock came back 24 MCQ, 21 descriptive, 20 short answer and ZERO programming,
+#: from a list that allowed programming. The bank did the same -- 3 programming
+#: and 1 diagram out of 72.
+#:
+#: A performance item is several paragraphs of scenario plus starter code or a
+#: reference model, so left to its own judgement the model always has a reason
+#: to write one fewer. The only thing that changes the outcome is a required
+#: count, stated per type.
+PERFORMANCE_ITEM_SHARE = 0.20
+
+#: Types that need the quota above; the rest are cheap enough to write freely.
+PERFORMANCE_TYPES = ("PROGRAMMING", "DIAGRAM")
+
+
+def performance_quota(types: str, total: int) -> str:
+    """A per-type minimum for the performance formats this exam uses.
+
+    Returns "" when the exam uses none of them, so an MCQ-only certification
+    is asked for nothing it does not examine.
+    """
+    wanted = [t for t in PERFORMANCE_TYPES if t in (types or "").upper()]
+    if not wanted or total <= 0:
+        return ""
+
+    # At least one each -- a share that rounds to zero on a short paper would
+    # reintroduce exactly the problem this exists to fix.
+    each = max(1, round(total * PERFORMANCE_ITEM_SHARE / len(wanted)))
+    parts = ", ".join(f"at least {each} {t}" for t in wanted)
+    return (
+        f" REQUIRED MINIMUMS, not suggestions: {parts}. These are the items the "
+        "certification is actually testing for, and a paper without them does "
+        "not resemble the real one. Write them first, before the multiple "
+        "choice, so they are not what runs out of room at the end."
+    )
+
+
+#: Multi-part items on the two whole-certification papers.
+#:
+#: The agent's system prompt already says performance items take sub-questions,
+#: but neither the mock nor the diagnostic ever asked for them, and a general
+#: rule competes with a specific instruction that does not mention it. These
+#: are also the two papers where parts matter most: they imitate a real
+#: examination, and a real examination's performance section is a scenario
+#: followed by questions about it, not a lone prompt with a box.
+SUB_QUESTION_RULE = (
+    " Every PROGRAMMING and DIAGRAM item, and any DESCRIPTIVE item built on a "
+    "scenario, MUST carry 2 to 4 entries in sub_questions -- the parts asked "
+    "about the artifact or case, each with its own rubric_answer and points. "
+    "That is how the real paper is structured and how these items are marked: "
+    "an item with no parts is graded as one all-or-nothing answer."
+)
+
+
+def _lesson_performance_rule(state: CertificationState) -> str:
+    """Requires a performance item when the LESSON itself teaches one.
+
+    A fixed quota is right for a whole paper and wrong for a single lesson: a
+    ten-question quiz on project governance should not be forced to contain a
+    coding task. So this is conditional on the material rather than counted --
+    the model has just written the lesson and knows whether it taught something
+    you would assess by writing code or drawing a model.
+
+    What it replaces is a quiz that tested a lesson on ER modelling with three
+    multiple-choice questions about ER modelling. If the lesson taught the
+    learner to DO something, the quiz has to ask them to do it.
+
+    Empty when the certification does not examine these formats at all -- see
+    `researched_question_types`.
+    """
+    available = researched_question_types(state, "MCQ, SHORT_ANSWER").upper()
+    wanted = [t for t in PERFORMANCE_TYPES if t in available]
+    if not wanted:
+        return ""
+
+    names = " or ".join(t for t in wanted)
+    return (
+        f"If this lesson teaches something a learner is meant to DO -- writing "
+        f"code, or building a model, diagram or schema -- then at least one "
+        f"question MUST be {names}, testing that skill by having them produce "
+        f"it. A lesson that teaches a practical skill and is assessed only by "
+        f"multiple choice has not been assessed. If the lesson is purely "
+        f"conceptual, do not force one. "
+    )
+
+
 async def generate_question_bank_node(state: CertificationState):
     scope = f"Adaptive learning question bank for {state['certification_name']}"
     curriculum = state.get("curriculum", {}) or {}
-    context = _curriculum_outline(curriculum)
+    # The bank feeds practice, remediation and adaptive retakes, so what it
+    # over- and under-samples is what a learner ends up drilling. Sampling the
+    # syllabus alone drills whatever has the most lessons; the exam's own
+    # weighting is the thing worth rehearsing against.
+    context = _with_exam_structure(_curriculum_outline(curriculum), state)
 
     settings = get_settings()
     total = question_bank_count(curriculum)
@@ -523,11 +756,20 @@ async def generate_question_bank_node(state: CertificationState):
             "tests. "
         )
 
+    # The bank practises what the exam examines, so it uses the certification's
+    # own formats -- and is held to the same minimums as the mock. Left as "use
+    # all supported types" it produced 3 programming items and 1 diagram out of
+    # 72, which is not a bank a learner can practise those formats from.
+    bank_types = researched_question_types(
+        state, "MCQ, SHORT_ANSWER, DESCRIPTIVE, PROGRAMMING, DIAGRAM"
+    )
+
     batch = await invoke_question_agent(
         scope, context,
         spread
-        + "Use all supported types (MCQ, SHORT_ANSWER, DESCRIPTIVE, PROGRAMMING, "
-        "DIAGRAM), spanning EASY, AVERAGE, and HARD. This bank is the primary source for "
+        + f"Use these question types: {bank_types}, spanning EASY, AVERAGE, and HARD."
+        + performance_quota(bank_types, total)
+        + " This bank is the primary source for "
         "future adaptive assessments, remediation, and practice, so cover the curriculum "
         "broadly rather than deeply on any one topic.",
         count=total,
@@ -739,6 +981,31 @@ def _lesson_parents(curriculum: dict, index: int) -> tuple[dict, dict]:
     return {}, {}
 
 
+def _lesson_at(curriculum: dict, index: int) -> dict | None:
+    """The lesson at a flat index, or None past the end."""
+    lessons = _flatten_lessons(curriculum)
+    return lessons[index] if 0 <= index < len(lessons) else None
+
+
+def _lessons_left_in_parent(curriculum: dict, index: int) -> int:
+    """How many lessons remain in the middle category holding `index`,
+    counting that one.
+
+    Read-ahead stops at this boundary. The walk leaves the lesson phase at the
+    end of each middle category to write that category's exam, and what comes
+    after is decided there -- so authoring past it would be writing lessons the
+    run has not yet committed to reaching in that order.
+    """
+    position = 0
+    for major in _flatten_majors(curriculum):
+        for middle in major.get("middleCategories") or []:
+            lessons = middle.get("lessons") or []
+            if position <= index < position + len(lessons):
+                return position + len(lessons) - index
+            position += len(lessons)
+    return 1
+
+
 LESSON_PHASE = LoopPhase(
     scope="LESSON",
     cursor_key="lesson_cursor",
@@ -769,7 +1036,8 @@ async def major_generate_node(state: CertificationState):
             "content above, covering every middle category under this major category "
             "proportionally. Test only material the lessons actually teach. Use these "
             f"question types: "
-            f"{researched_question_types(state, 'MCQ, SHORT_ANSWER, DESCRIPTIVE')}. "
+            f"{researched_question_types(state, 'MCQ, SHORT_ANSWER, DESCRIPTIVE')}."
+            f"{performance_quota(researched_question_types(state, 'MCQ, SHORT_ANSWER, DESCRIPTIVE'), major_quiz_count())} "
             "Set lesson_ref on each question to the lesson it tests.",
         ),
         count=major_quiz_count(),
@@ -801,7 +1069,8 @@ async def middle_generate_node(state: CertificationState):
             f"Generate exactly {middle_quiz_count()} questions drawn from the lesson "
             "content above, covering every lesson under this middle category. Test only "
             "material the lessons actually teach. Use these question types: "
-            f"{researched_question_types(state, 'MCQ, SHORT_ANSWER, DESCRIPTIVE')}. "
+            f"{researched_question_types(state, 'MCQ, SHORT_ANSWER, DESCRIPTIVE')}."
+            f"{performance_quota(researched_question_types(state, 'MCQ, SHORT_ANSWER, DESCRIPTIVE'), middle_quiz_count())} "
             "Set lesson_ref on each question to the lesson it tests.",
         ),
         count=middle_quiz_count(),
@@ -817,21 +1086,27 @@ async def middle_generate_node(state: CertificationState):
     }
 
 
-async def lesson_content_node(state: CertificationState):
-    """Authors the current lesson. Unlike categories, lessons carry the
-    instructional content, so this runs before the quiz."""
-    curriculum = state.get("curriculum", {}) or {}
-    index = current_index(state, LESSON_PHASE)
-    lesson = current_item(state, LESSON_PHASE) or {}
+async def _author_lesson(
+    state: CertificationState,
+    curriculum: dict,
+    index: int,
+    feedback: str = "",
+) -> dict:
+    """Writes ONE lesson and returns the record the walk stores.
+
+    Split out of `lesson_content_node` so several can run at once; on its own
+    it is exactly what that node always did for the current index.
+    """
+    lesson = _lesson_at(curriculum, index) or {}
     major, middle = _lesson_parents(curriculum, index)
 
-    scoped = {**state, "major": major, "middle": middle, "lesson": lesson}
-    feedback = state.get("review_instructions")
     if feedback:
         # `build_lesson_prompt` renders this as its own section; it used to be
         # concatenated onto the lesson's generation instructions, which put
         # reviewer prose inside a field describing the lesson's own content.
-        scoped = {**scoped, "lesson": {**lesson, "review_feedback": feedback}}
+        lesson = {**lesson, "review_feedback": feedback}
+
+    scoped = {**state, "major": major, "middle": middle, "lesson": lesson}
     result = await _invoke_lesson_agent(scoped)
 
     # The model states what each picture should show; the searches run here,
@@ -840,30 +1115,23 @@ async def lesson_content_node(state: CertificationState):
     result.sections = await asyncio.to_thread(resolve_media, result.sections)
 
     return {
-        "lessons": [
-            {
-                "name": lesson.get("name"),
-                "majorCategory": major.get("name"),
-                "middleCategory": middle.get("name"),
-                "title": result.title,
-                "introduction": result.introduction,
-                "learning_objectives": result.learning_objectives,
-                "estimated_minutes": result.estimated_minutes,
-                "sections": result.sections,
-                "key_terms": [term.model_dump() for term in result.key_terms],
-                "summary": result.summary,
-                "blocks": lesson_to_blocks(result),
-            }
-        ]
+        "name": lesson.get("name"),
+        "majorCategory": major.get("name"),
+        "middleCategory": middle.get("name"),
+        "title": result.title,
+        "introduction": result.introduction,
+        "learning_objectives": result.learning_objectives,
+        "estimated_minutes": result.estimated_minutes,
+        "sections": result.sections,
+        "key_terms": [term.model_dump() for term in result.key_terms],
+        "summary": result.summary,
+        "blocks": lesson_to_blocks(result),
     }
 
 
-async def lesson_quiz_generate_node(state: CertificationState):
-    index = current_index(state, LESSON_PHASE)
-    generated = (state.get("lessons") or [])
-    lesson = generated[index] if index < len(generated) else {}
-    name = lesson.get("name") or (current_item(state, LESSON_PHASE) or {}).get("name", "")
-
+async def _quiz_for(state: CertificationState, lesson: dict) -> dict:
+    """The lesson's own quiz, built from the content just written for it."""
+    name = lesson.get("name") or ""
     context = "\n".join(str(section) for section in (lesson.get("sections") or []))[:8000]
     batch = await invoke_question_agent(
         f"Lesson quiz for '{name}' within {state['certification_name']}",
@@ -873,11 +1141,149 @@ async def lesson_quiz_generate_node(state: CertificationState):
             f"Generate exactly {lesson_quiz_count()} questions that test this lesson's "
             f"content directly, using these question types: "
             f"{researched_question_types(state, 'MCQ, SHORT_ANSWER')}. "
-            f"Set lesson_ref to '{name}'.",
+            + _lesson_performance_rule(state)
+            + f"Set lesson_ref to '{name}'.",
         ),
         count=lesson_quiz_count(),
     )
-    return {"lesson_quizzes": [{"lesson": name, "questions": questions_as_dicts(batch)}]}
+    return {"lesson": name, "questions": questions_as_dicts(batch)}
+
+
+async def _produce_lesson(state: CertificationState, curriculum: dict, index: int) -> dict:
+    """Everything one lesson costs: its content, its quiz, and its audit.
+
+    Run as a single task so several lessons can be in flight at once. The three
+    calls are chained rather than concurrent because each needs the one before
+    -- the quiz is written from the content, the audit judges it -- and there
+    is nothing to gain from splitting them: the parallelism that matters is
+    across lessons, not within one.
+    """
+    lesson = await _author_lesson(state, curriculum, index)
+    quiz = await _quiz_for(state, lesson)
+
+    audit = await _invoke_lesson_auditor({**state, "lessons": [lesson]})
+    if not audit.passed:
+        logger.warning(
+            "Lesson '%s' failed curriculum alignment: %s",
+            lesson.get("name"), audit.summary,
+        )
+
+    return {"lesson": lesson, "quiz": quiz, "audit": audit.model_dump()}
+
+
+def _read_ahead_width(state: CertificationState) -> int:
+    """How many lessons to author at once, or 1 to keep the old behaviour.
+
+    Batching only on unattended runs, because a supervised reviewer can edit a
+    lesson or send it back to be rewritten, and anything authored before they
+    did that would be stale -- silently, since the walk cannot tell content it
+    wrote ten minutes ago from content it wrote just now.
+    """
+    if not auto_approving(state):
+        return 1
+    return max(1, get_settings().lesson_concurrency)
+
+
+async def lesson_content_node(state: CertificationState):
+    """Authors the current lesson. Unlike categories, lessons carry the
+    instructional content, so this runs before the quiz.
+
+    Authoring is the slowest thing this graph does and nothing about it is
+    ordered: lesson twelve does not read lesson eleven. So on an unattended run
+    this writes the next few lessons at the same time and parks the extras in
+    `lesson_content_ahead`, where later visits collect them without an AI call.
+    The walk itself is unchanged -- it still arrives at one lesson at a time,
+    and still reviews, checkpoints and advances exactly as before. It just
+    finds most of them already written.
+    """
+    curriculum = state.get("curriculum", {}) or {}
+    index = current_index(state, LESSON_PHASE)
+
+    # Written on an earlier pass. Hand it over and drop it, so the state does
+    # not carry finished lessons twice.
+    content_ahead = dict(state.get("lesson_content_ahead") or {})
+    if str(index) in content_ahead:
+        logger.info("Lesson %s was written ahead; using it", index + 1)
+        return {
+            "lessons": [content_ahead.pop(str(index))],
+            "lesson_content_ahead": content_ahead,
+        }
+
+    feedback = state.get("review_instructions")
+    width = 1 if feedback else _read_ahead_width(state)
+
+    # Never past the end of the phase, and never past the current parent: the
+    # walk hands over to a middle category's exam at its boundary, and lessons
+    # beyond it may be reviewed, edited or never reached.
+    remaining = _lessons_left_in_parent(curriculum, index)
+    width = max(1, min(width, remaining))
+
+    if width == 1:
+        return {"lessons": [await _author_lesson(state, curriculum, index, feedback)]}
+
+    logger.info(
+        "Producing lessons %s-%s concurrently (content, quiz and audit)",
+        index + 1, index + width,
+    )
+    results = await asyncio.gather(
+        *(_produce_lesson(state, curriculum, index + offset) for offset in range(width)),
+        return_exceptions=True,
+    )
+
+    # The current lesson is the one the walk is waiting on, so a failure there
+    # is raised and handled the way a single-lesson failure always was. A
+    # failure further ahead is dropped instead: nothing is parked for it, and
+    # the walk produces it normally when it arrives.
+    if isinstance(results[0], BaseException):
+        raise results[0]
+
+    quiz_ahead = dict(state.get("lesson_quiz_ahead") or {})
+    audit_ahead = dict(state.get("lesson_audit_ahead") or {})
+
+    for offset, result in enumerate(results[1:], start=1):
+        if isinstance(result, BaseException):
+            logger.warning(
+                "Read-ahead for lesson %s failed (%s); it will be written when reached",
+                index + offset + 1, result,
+            )
+            continue
+        key = str(index + offset)
+        content_ahead[key] = result["lesson"]
+        quiz_ahead[key] = result["quiz"]
+        audit_ahead[key] = result["audit"]
+
+    # This lesson's own quiz and audit are parked under its index too: the walk
+    # is between nodes, and the quiz node runs next and collects it.
+    quiz_ahead[str(index)] = results[0]["quiz"]
+    audit_ahead[str(index)] = results[0]["audit"]
+
+    return {
+        "lessons": [results[0]["lesson"]],
+        "lesson_content_ahead": content_ahead,
+        "lesson_quiz_ahead": quiz_ahead,
+        "lesson_audit_ahead": audit_ahead,
+    }
+
+
+async def lesson_quiz_generate_node(state: CertificationState):
+    index = current_index(state, LESSON_PHASE)
+    generated = (state.get("lessons") or [])
+    lesson = generated[index] if index < len(generated) else {}
+    name = lesson.get("name") or (current_item(state, LESSON_PHASE) or {}).get("name", "")
+
+    # Built alongside the lesson, in the same read-ahead task. Collect it and
+    # drop it rather than paying for it a second time.
+    #
+    # Skipped when the reviewer sent this lesson back: the parked quiz was
+    # written against the content they rejected.
+    quiz_ahead = dict(state.get("lesson_quiz_ahead") or {})
+    if str(index) in quiz_ahead and not state.get("review_instructions"):
+        return {
+            "lesson_quizzes": [quiz_ahead.pop(str(index))],
+            "lesson_quiz_ahead": quiz_ahead,
+        }
+
+    return {"lesson_quizzes": [await _quiz_for(state, {**lesson, "name": name})]}
 
 
 def _with_improvement(state: CertificationState, instructions: str) -> str:
@@ -987,8 +1393,18 @@ async def lesson_validate_node(state: CertificationState):
 
     # Scoped to this one lesson: auditing the whole set on every iteration
     # would re-judge already-approved lessons and grow cost quadratically.
+    #
+    # Run alongside the lesson in the read-ahead task where there is one, and
+    # collected here. A rejected lesson is re-audited: the parked verdict
+    # judged the content the reviewer sent back.
+    audit_ahead = dict(state.get("lesson_audit_ahead") or {})
     alignment = None
-    if lesson is not None:
+    consumed_audit = False
+
+    if str(index) in audit_ahead and not state.get("review_instructions"):
+        alignment = audit_ahead.pop(str(index))
+        consumed_audit = True
+    elif lesson is not None:
         audit = await _invoke_lesson_auditor({**state, "lessons": [lesson]})
         alignment = audit.model_dump()
         if not audit.passed:
@@ -999,7 +1415,7 @@ async def lesson_validate_node(state: CertificationState):
 
     _checkpoint_every_n_lessons(state)
 
-    return {
+    update = {
         "validation_report": {
             "lesson": lesson_report.model_dump(mode="json") if lesson_report else None,
             "quiz": quiz_report,
@@ -1013,6 +1429,11 @@ async def lesson_validate_node(state: CertificationState):
         ),
         "status": "LESSON_VALIDATED",
     }
+    if consumed_audit:
+        # Written back only when one was taken, so an ordinary run does not
+        # rewrite this map into every checkpoint for no reason.
+        update["lesson_audit_ahead"] = audit_ahead
+    return update
 
 
 def _nth_entry(items: list | None, index: int):

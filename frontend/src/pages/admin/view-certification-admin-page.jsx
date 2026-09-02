@@ -7,6 +7,8 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardCheck,
+  Loader2,
+  Sparkles,
   Layers3,
   ListChecks,
   Trash2,
@@ -15,6 +17,7 @@ import {
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   addLesson,
   addMajorCategory,
@@ -54,6 +57,15 @@ import {
 } from "@/components/ui/alert-dialog"
 import { prefetchAssessmentData } from "@/components/assessments/admin/assessments-tab.jsx"
 import CertificationPublishingChecklist from "@/components/assessments/admin/certification-publishing-checklist.jsx"
+import GenerateMoreDialog from "@/components/certifications/generate-more-dialog.jsx"
+import { InlineGenerationMonitor } from "@/components/certifications/inline-generation-monitor.jsx"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   generationErrorOf,
@@ -157,6 +169,9 @@ export default function ViewCertificationAdmin() {
 
     return fetchedCertification ?? null
   }, [certificationOverride, overrideId, fetchedCertification, routeCertificationId])
+
+  const [isGenerateMoreOpen, setIsGenerateMoreOpen] = useState(false)
+  const [isWatchingGeneration, setIsWatchingGeneration] = useState(false)
 
   /* The node a delete has been asked for, held until it is confirmed.
      `{ kind, id, name, detail }` -- one dialog for all three levels, because
@@ -410,10 +425,70 @@ export default function ViewCertificationAdmin() {
     })
   }
 
+  /* The page's own shape, greyed out -- not a sentence in the middle of an
+     empty screen.
+
+     This wait is not short: the certification comes from a list read that
+     crosses to a database in another region, and a centred "Loading
+     certification..." on a blank page gives an admin nothing to look at and no
+     idea whether it is nearly done or broken. Drawing the header band, the
+     action row and a few curriculum rows means the layout does not jump when
+     the data lands, and the page reads as loading rather than as empty.
+
+     The blue band is the real one (`bg-rb-feather`, same as the header below),
+     so the first thing on screen is already correct rather than a grey box
+     that is replaced a second later. */
   if (!certification && isLoadingCertifications) {
     return (
-        <section className="flex min-h-full items-center justify-center bg-muted/40 p-6">
-          <p className="text-sm text-muted-foreground">Loading certification...</p>
+        <section
+            className="min-h-full overflow-y-auto bg-muted/30 font-sans"
+            aria-busy="true"
+            aria-live="polite"
+        >
+          <span className="sr-only">Loading certification</span>
+
+          <header className="relative isolate overflow-hidden border-b border-border bg-rb-feather px-6 py-12 sm:px-10 lg:px-20 lg:py-16">
+            <div className="relative z-10 mx-auto max-w-6xl">
+              <Skeleton className="mb-5 h-7 w-64 rounded-full bg-white/25" />
+              <Skeleton className="h-10 w-[min(28rem,80%)] rounded-xl bg-white/30" />
+              <div className="mt-5 space-y-2">
+                <Skeleton className="h-4 w-[min(46rem,95%)] rounded bg-white/20" />
+                <Skeleton className="h-4 w-[min(34rem,75%)] rounded bg-white/20" />
+              </div>
+              <div className="mt-7 flex flex-wrap gap-3">
+                <Skeleton className="h-9 w-40 rounded-full bg-white/20" />
+                <Skeleton className="h-9 w-48 rounded-full bg-white/20" />
+              </div>
+            </div>
+          </header>
+
+          <main className="mx-auto max-w-6xl px-6 py-10 sm:px-10 lg:px-20">
+            <div className="mb-10 flex flex-wrap items-end justify-between gap-4">
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-40 rounded" />
+                <Skeleton className="h-8 w-56 rounded-lg" />
+                <Skeleton className="h-4 w-[min(30rem,90%)] rounded" />
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Skeleton className="h-11 w-36 rounded-xl" />
+                <Skeleton className="h-11 w-36 rounded-xl" />
+                <Skeleton className="h-11 w-40 rounded-xl" />
+              </div>
+            </div>
+
+            <Skeleton className="mb-5 h-6 w-32 rounded" />
+            <div className="space-y-6">
+              {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="space-y-3">
+                    <Skeleton className="h-5 w-[min(24rem,70%)] rounded" />
+                    <div className="rounded-3xl border border-border bg-card p-5 shadow-sm">
+                      <Skeleton className="h-5 w-64 rounded" />
+                      <Skeleton className="mt-2 h-4 w-40 rounded" />
+                    </div>
+                  </div>
+              ))}
+            </div>
+          </main>
         </section>
     )
   }
@@ -452,7 +527,18 @@ export default function ViewCertificationAdmin() {
   const certificationKey = String(
       certification.certificationId ?? certification.id ?? ""
   )
-  const generationError = generationErrorOf(generationRuns.get(certificationKey))
+  const generationRun = generationRuns.get(certificationKey)
+  const generationError = generationErrorOf(generationRun)
+
+  /* A run against THIS certification, still going.
+
+     The list page has always been able to watch a build; this page could not,
+     which is backwards -- this is where an admin lands to see what a
+     certification contains, and during a build it is the page whose content is
+     changing under them. They had to go back to the list to watch it. */
+  const isGenerating =
+      Boolean(generationRun) &&
+      !["COMPLETED", "FAILED", "CANCELLED"].includes(generationRun.status)
 
   const totalMiddleCategories = majorCategories.reduce(
       (total, majorCategory) =>
@@ -614,6 +700,42 @@ export default function ViewCertificationAdmin() {
               </div>
 
               <div className="flex flex-wrap gap-3">
+                {/* One slot, two states.
+                    While a build is running this REPLACES "Add with AI" rather
+                    than sitting beside it: adding more to a certification that
+                    is already generating queues a second run against the same
+                    curriculum, and the thing an admin actually wants at that
+                    moment is to see what the current one is doing. Offering
+                    both invites the wrong one. */}
+                {isGenerating ? (
+                    <Button
+                        type="button"
+                        className="h-11 rounded-xl px-5 font-medium shadow-sm"
+                        onClick={() => setIsWatchingGeneration(true)}
+                    >
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      View progress
+                    </Button>
+                ) : (
+                    /* Adds to the curriculum rather than rebuilding it: another
+                       domain, another module, further lessons and the questions
+                       and assessments that go with them.
+
+                       Worded "Add with AI" rather than "Generate", because the
+                       generate control on the certification list REPLACES a
+                       curriculum. Two buttons a page apart both saying
+                       generate, one of which deletes everything, is a trap. */
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="h-11 rounded-xl px-5 font-medium shadow-sm"
+                        onClick={() => setIsGenerateMoreOpen(true)}
+                    >
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      Add with AI
+                    </Button>
+                )}
+
                 {/* The two workspaces this certification owns, side by side.
                     Both are full pages of their own; neither is a tab. */}
                 <Button
@@ -766,6 +888,40 @@ export default function ViewCertificationAdmin() {
             </div>
           </div>
         </main>
+
+        <GenerateMoreDialog
+            open={isGenerateMoreOpen}
+            onOpenChange={setIsGenerateMoreOpen}
+            certification={certification}
+        />
+
+        {/* The same monitor the certification list opens, mounted here so a
+            build can be watched from the page it is building. Same component,
+            not a second implementation, so the two cannot drift. */}
+        <Dialog open={isWatchingGeneration} onOpenChange={setIsWatchingGeneration}>
+          <DialogContent className="flex max-h-[calc(100dvh-4rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
+            <DialogHeader className="px-4 pt-4 pb-3 sm:px-6">
+              <DialogTitle>Generating {certification.title}</DialogTitle>
+              <DialogDescription className="sr-only">
+                Live progress for this certification's generation.
+              </DialogDescription>
+            </DialogHeader>
+
+            {isWatchingGeneration ? (
+                <InlineGenerationMonitor
+                    certificationId={certification.certificationId ?? certification.id}
+                    onClose={() => setIsWatchingGeneration(false)}
+                    onFinished={() => {
+                      setIsWatchingGeneration(false)
+                      /* The curriculum on the page behind this just changed --
+                         new majors, lessons and assessments have landed. */
+                      queryClient.invalidateQueries({ queryKey: ["admin-certifications"] })
+                      queryClient.invalidateQueries({ queryKey: ["workflow-runs", "active"] })
+                    }}
+                />
+            ) : null}
+          </DialogContent>
+        </Dialog>
 
         {/* Named, counted, and specific about what else goes with it. A
             confirmation that says "are you sure?" and nothing else is a
