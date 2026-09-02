@@ -113,7 +113,18 @@ TUTOR = "tutor"
 LESSON_AUDIT = "lesson_audit"
 DOCUMENT_AUDIT = "document_audit"
 
-TASKS = (LESSON, CURRICULUM, QUESTION, TUTOR, LESSON_AUDIT, DOCUMENT_AUDIT)
+#: The model answer for a DIAGRAM question, as draw.io/mxGraph XML.
+#:
+#: Its own task because writing valid mxGraph is a different skill from writing
+#: a question, and the models are not equally good at it: the question model
+#: produces the stem, the choices and the rubric, while this one produces a
+#: structured artifact that has to parse and that the grader compares labels
+#: against. Splitting them also means the diagram reference can use a model the
+#: question task cannot -- see `ai_question_model`, which is deliberately off
+#: Anthropic because of how the question agent builds its tool history.
+DIAGRAM = "diagram"
+
+TASKS = (LESSON, CURRICULUM, QUESTION, TUTOR, LESSON_AUDIT, DOCUMENT_AUDIT, DIAGRAM)
 
 #: Older call sites (and any caller that only knows the coarse distinction)
 #: pass the two names this module replaced. They resolve to the task that most

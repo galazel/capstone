@@ -407,17 +407,36 @@ def insert_programming_config(
 
 
 def insert_diagram_config(
-    session: Session, question_id: int, diagram_type: str, instructions: str | None
+    session: Session,
+    question_id: int,
+    diagram_type: str,
+    instructions: str | None,
+    reference_diagram_xml: str | None = None,
 ) -> None:
-    """reference_diagram_xml/json are NOT NULL in Java's schema but the
-    generator produces neither, so they are written empty. Such a question is
-    answerable and human-gradable but cannot be auto-graded."""
+    """Stores a diagram question's configuration, model answer included.
+
+    `reference_diagram_xml` is what Java's grader compares a learner's drawing
+    against. It used to be written empty here, with the generator never asked
+    for a model answer -- so `diagramGradingRequest` found nothing to compare,
+    produced no verdict, and every diagram item closed out at zero with "could
+    not be marked automatically", whatever the learner drew. The generator is
+    now required to supply it (see `question_schema.QuestionDraft`).
+
+    Still defaults to empty rather than raising: a question authored before
+    that rule, or one arriving from another path, should persist and be
+    human-graded rather than fail the whole batch. The column is NOT NULL in
+    Java's schema, so empty -- not None -- is the fallback.
+
+    `reference_diagram_json` stays {}: nothing reads it. The learner's canvas
+    emits mxGraph XML and the grader consumes mxGraph XML, so a second
+    representation would be a copy to keep in step for no reader.
+    """
     session.execute(
         insert(diagram_question_configs).values(
             question_id=question_id,
             diagram_type=diagram_type,
             instructions=instructions,
-            reference_diagram_xml="",
+            reference_diagram_xml=(reference_diagram_xml or "").strip(),
             reference_diagram_json={},
         )
     )

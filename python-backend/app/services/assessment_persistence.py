@@ -115,6 +115,7 @@ def _persist_one_question(session: Session, question: dict[str, Any]) -> int:
         repo.insert_diagram_config(
             session, question_id, question.get("diagram_type") or "FLOWCHART",
             question.get("instructions"),
+            question.get("reference_diagram_xml"),
         )
 
     # The parts of a critical-thinking item, as child rows under it. Each is a

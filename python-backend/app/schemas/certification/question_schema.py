@@ -4,6 +4,8 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.domain.diagrams.validation import check_reference
+
 logger = logging.getLogger(__name__)
 
 QuestionType = Literal["MCQ", "SHORT_ANSWER", "DESCRIPTIVE", "PROGRAMMING", "DIAGRAM"]
@@ -328,6 +330,22 @@ class QuestionDraft(BaseModel):
     diagram_type: Optional[str] = None
     instructions: Optional[str] = None
 
+    #: The model answer, as draw.io / mxGraph XML.
+    #:
+    #: Without it a diagram question cannot be graded at all. Java's
+    #: `AssessmentAttemptService.diagramGradingRequest` looks up
+    #: `reference_diagram_xml`, finds it blank, produces no verdict, and the
+    #: item closes out at zero with "could not be marked automatically" -- so
+    #: every diagram a learner drew scored nothing regardless of quality. The
+    #: column was written as "" because the generator was never asked for the
+    #: answer, only for the question.
+    #:
+    #: draw.io XML rather than a node/edge structure of our own because it is
+    #: what the learner's submission already is: the editor autosaves mxGraph
+    #: XML, so reference and submission are the same shape and comparable
+    #: without a translation layer.
+    reference_diagram_xml: Optional[str] = None
+
     #: The parts of a multi-part item: the questions asked about a shared
     #: scenario or artifact. Set on PROGRAMMING and DIAGRAM (about the thing the
     #: learner builds) and on DESCRIPTIVE (about a case the stem presents).
@@ -452,6 +470,30 @@ class QuestionDraft(BaseModel):
             self.diagram_type = canonical
             if not (self.instructions or "").strip():
                 raise ValueError("DIAGRAM must set instructions")
+
+            # A reference that is present must be usable; an absent one is
+            # filled afterwards rather than raised on.
+            #
+            # Raising would resample the whole batch for a field a dedicated
+            # model fills better anyway -- `app.ai.invocation` sends every
+            # DIAGRAM item without a reference to the diagram task (see
+            # `tasks.DIAGRAM`) before the batch is returned. Rejecting here
+            # would spend the question model's budget re-rolling stems that
+            # were fine.
+            #
+            # Anything that arrives is checked, though: a model that answers
+            # with prose or a JSON blob produces a reference that silently
+            # matches nothing, and dropping it sends the item down the
+            # fill path instead of storing a reference that cannot grade.
+            # Checked structurally rather than by looking for a substring: a
+            # document can contain "<mxCell" and still be ungradeable, because
+            # it does not parse, its edges point at cells that were never
+            # written, or it is two boxes where the brief asked for eight.
+            # Dropping it sends the item down the fill path, which renders a
+            # reference from a described model instead.
+            reference = (self.reference_diagram_xml or "").strip()
+            if reference and not check_reference(reference).ok:
+                self.reference_diagram_xml = None
 
         if self.estimated_seconds <= 0:
             raise ValueError("estimated_seconds must be positive")

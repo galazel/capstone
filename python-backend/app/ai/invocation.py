@@ -21,13 +21,20 @@ from collections.abc import Iterable
 from typing import Any
 
 from langchain_core.messages import HumanMessage
+from pydantic import BaseModel
 
+from app.agents.certification.diagram_reference_agent import (
+    build_reference_prompt,
+    get_diagram_reference_agent,
+)
 from app.agents.certification.question_agent import get_question_generation_agent
-from app.ai import guardrails
+from app.ai import guardrails, tasks
 from app.ai.json_output import extract_json_object, final_message_text
 from app.ai.prompts.question import build_question_batch_prompt
 from app.ai.router import ainvoke_with_fallback
 from app.core.config import get_settings
+from app.domain.diagrams.spec import DiagramSpec
+from app.domain.diagrams.validation import check_reference
 from app.domain.choice_order import shuffle_batch
 from app.schemas.certification.question_schema import QuestionBatch
 
@@ -202,6 +209,115 @@ async def invoke_json_agent(
     )
 
 
+def _needs_reference(question) -> bool:
+    if getattr(question, "question_type", None) != "DIAGRAM":
+        return False
+    existing = (getattr(question, "reference_diagram_xml", None) or "").strip()
+    return not existing
+
+
+async def fill_diagram_references(questions: list) -> int:
+    """Writes the model answer for any DIAGRAM question that arrived without one.
+
+    A diagram question with no reference cannot be graded: Java's
+    `diagramGradingRequest` looks up `reference_diagram_xml`, finds it blank,
+    produces no verdict, and the item closes out at zero however good the
+    learner's drawing was. Every diagram generated before this ran was in that
+    state -- 106 of them on the first TOPCIT certification.
+
+    Done here, at the generation boundary, so all six question call sites get
+    it without repeating themselves, and on its own task (`tasks.DIAGRAM`) so
+    the reference can use a model chosen for this work rather than the one
+    chosen for writing stems.
+
+    The model describes the diagram; `DiagramSpec.render` draws it. Asking for
+    mxGraph directly is what produced a hundred references that did not parse
+    and notation that was backwards, and neither failure is visible until a
+    learner is shown the wrong answer as correct.
+
+    A failure is logged and left empty rather than raised: an ungradable
+    diagram question is worth more than a failed batch, and the item is still
+    answerable and reviewable by a human.
+    """
+    targets = [q for q in questions if _needs_reference(q)]
+    if not targets:
+        return 0
+
+    filled = 0
+    for question in targets:
+        diagram_type = getattr(question, "diagram_type", None) or "FLOWCHART"
+        prompt = build_reference_prompt(
+            question.question,
+            diagram_type,
+            getattr(question, "instructions", None),
+        )
+        xml = await _reference_xml(question, prompt, diagram_type)
+        if xml is None:
+            continue
+        question.reference_diagram_xml = xml
+        filled += 1
+
+    logger.info("Diagram references: filled %d of %d", filled, len(targets))
+    return filled
+
+
+#: One retry. A reference that comes back thin is usually thin because the
+#: model economised, and saying so once fixes it; a second retry mostly buys
+#: the same answer again at twice the price.
+_REFERENCE_ATTEMPTS = 2
+
+
+async def _reference_xml(question, prompt: str, diagram_type: str) -> str | None:
+    """Ask for a spec, render it, and accept it only if it checks out."""
+    attempt_prompt = prompt
+    for attempt in range(1, _REFERENCE_ATTEMPTS + 1):
+        try:
+            spec = await invoke_json_agent(
+                get_diagram_reference_agent, attempt_prompt, DiagramSpec,
+                task=tasks.DIAGRAM,
+            )
+        except Exception:
+            logger.warning(
+                "Diagram reference generation failed for %.60s; the question is stored "
+                "without one and cannot be auto-graded",
+                question.question, exc_info=True,
+            )
+            return None
+
+        try:
+            xml = spec.render(diagram_type)
+        except Exception:
+            logger.warning(
+                "Diagram reference for %.60s could not be rendered", question.question,
+                exc_info=True,
+            )
+            return None
+
+        check = check_reference(xml)
+        if check.ok:
+            return xml
+
+        logger.info(
+            "Diagram reference attempt %d for %.60s rejected: %s",
+            attempt, question.question, check.summary,
+        )
+        # Tell it what was wrong rather than resampling the same prompt: the
+        # failures are specific and stated plainly enough to act on.
+        attempt_prompt = (
+            f"{prompt}\n\nYour previous answer was rejected: {check.summary}. "
+            "Produce a complete model answer at professional scale -- six to "
+            "ten nodes for a real scenario, every relationship declared "
+            "between keys you have defined."
+        )
+
+    logger.warning(
+        "Diagram reference for %.60s failed %d attempts; storing the question "
+        "without one rather than storing a reference that grades nothing",
+        question.question, _REFERENCE_ATTEMPTS,
+    )
+    return None
+
+
 #: How many previously-written stems to show the model. Enough to steer it off
 #: the obvious repeats without spending the completion budget on the list
 #: itself -- at ~15 tokens a stem, 40 costs about 600 tokens per batch.
@@ -285,7 +401,9 @@ async def invoke_question_agent(
                 "%.40s: dropped %d duplicate question(s) of %d written",
                 scope, dropped, len(result.questions),
             )
-        return QuestionBatch(scope=scope, questions=kept if count is None else kept[:count])
+        final = kept if count is None else kept[:count]
+        await fill_diagram_references(final)
+        return QuestionBatch(scope=scope, questions=final)
 
     batches = math.ceil(count / size)
     questions: list = []
@@ -340,7 +458,9 @@ async def invoke_question_agent(
             scope, len(questions), count,
         )
 
-    return QuestionBatch(scope=scope, questions=questions[:count])
+    final = questions[:count]
+    await fill_diagram_references(final)
+    return QuestionBatch(scope=scope, questions=final)
 
 
 def questions_as_dicts(batch: QuestionBatch) -> list[dict]:

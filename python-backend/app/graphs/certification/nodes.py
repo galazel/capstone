@@ -740,6 +740,44 @@ def performance_quota(types: str, total: int) -> str:
         "certification is actually testing for, and a paper without them does "
         "not resemble the real one. Write them first, before the multiple "
         "choice, so they are not what runs out of room at the end."
+        + mcq_format_quota(types, total)
+    )
+
+
+#: Share of an exam's MCQs that must WORK something out rather than recall it.
+MCQ_WORK_ITEM_SHARE = 0.25
+
+
+def mcq_format_quota(types: str, total: int) -> str:
+    """A minimum for the MCQ formats that require reasoning, not recall.
+
+    The system prompt already describes COMBINATION (a pseudocode procedure
+    with labelled blanks, each option fixing all of them at once) and TRACE AND
+    COMPUTE items in full, with a worked example -- and `MCQ_MAX_CHOICES` was
+    raised from four to nine specifically to make the combination format
+    expressible.
+
+    None were ever written. Across a whole generated certification every one of
+    434 MCQs had exactly four choices, which is only possible if not a single
+    combination item was attempted. The description was there and the model
+    passed over it, the same way it passed over the curriculum's consolidation
+    guidance until that was given a number.
+
+    So this states a count. `performance_quota` above proved the pattern: a
+    qualitative push is ignored, a required minimum is met.
+    """
+    if "MCQ" not in (types or "").upper() or total <= 0:
+        return ""
+    wanted = max(1, round(total * MCQ_WORK_ITEM_SHARE))
+    return (
+        f" Of the MCQs, at least {wanted} must be COMBINATION or TRACE AND "
+        "COMPUTE items -- an artifact in the stem (pseudocode, a query, a "
+        "config, a state table) that the learner has to run in their head, "
+        "with distractors that are the results of specific plausible mistakes. "
+        "A combination item uses more than four choices, one per full set of "
+        "blank values. These carry the reasoning the paper is supposed to "
+        "measure; a bank where every MCQ has four options and asks 'which of "
+        "the following is X' is a vocabulary test."
     )
 
 

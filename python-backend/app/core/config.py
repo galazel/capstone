@@ -157,6 +157,31 @@ class Settings(BaseSettings):
     #: agent combined. On the free tier the scarce resource is the account-wide
     #: daily REQUEST cap, not money, so this is what exhausts a run, and the
     #: first thing to look at when generation stops partway through.
+    #: The diagram-reference task: the model answer for a DIAGRAM question,
+    #: written as draw.io/mxGraph XML.
+    #:
+    #: Anthropic by default, and deliberately not the question model. Writing
+    #: mxGraph is a structured-artifact job -- the output has to parse, carry a
+    #: label on every node, and cover everything the instructions asked for --
+    #: and Claude is markedly better at it than the model writing the stems.
+    #:
+    #: It can be Anthropic here where `ai_question_model` cannot, because this
+    #: is a plain single-turn JSON call: the tool_use/tool_result history that
+    #: made the question agent fail on Anthropic never exists on this path.
+    #:
+    #: Temperature is low: a reference answer wants the conventional modelling
+    #: of the scenario, not an inventive one.
+    ai_diagram_provider: str = "openrouter"
+    ai_diagram_model: str = "anthropic/claude-sonnet-4.5"
+    ai_diagram_fallbacks: str = "openai/gpt-4.1,google/gemini-2.5-flash"
+    #: Room for a real model answer. A ten-class UML diagram with three
+    #: compartments each, typed attributes, operation signatures and labelled
+    #: relationships is several thousand tokens of XML on its own; 4000 cut
+    #: those off mid-diagram, and a truncated mxGraph document does not parse,
+    #: so the whole reference was discarded.
+    ai_diagram_max_tokens: int = 10000
+    ai_diagram_temperature: float = 0.2
+
     ai_question_provider: str = "openrouter"
     ai_question_model: str = "google/gemini-2.5-flash"
     ai_question_fallbacks: str = "openai/gpt-4.1-mini,anthropic/claude-haiku-4.5"

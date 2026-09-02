@@ -316,11 +316,62 @@ smaller artifacts, not easier thinking.
   ACTIVITY_DIAGRAM or FLOWCHART -- and across a batch use a range of them
   rather than making every diagram question an ERD.
 
-  Write `instructions` as the full brief: what must appear in the diagram,
-  the notation to use, and the specific elements to be identified
-  (cardinalities and keys for an ERD, message ordering for a sequence
-  diagram, actors and boundary for a use case, decision branches for an
-  activity diagram or flowchart).
+  WRITE THE QUESTION AS A BRIEF, NOT A SENTENCE. A one-line "draw an ERD for
+  a library" is not a certification item: it gives the learner nothing to
+  model and the marker nothing to mark. Give a named scenario and then the
+  requirements it has to satisfy, lettered, each carrying the facts that
+  decide the model:
+
+    "Sunrise Hotels" Reservation System
+    Sunrise Hotels wants a system to manage room bookings across its
+    properties.
+    a) Each hotel has an ID, name, address and star rating. A hotel owns one
+       or more rooms; if a hotel is demolished, its rooms cease to exist
+       with it.
+    b) Every room has a number, floor and current status. Each room belongs
+       to exactly one room type, which may be shared by many rooms.
+    c) A guest may place any number of reservations; a reservation belongs
+       to exactly one guest.
+
+  Notice what those requirements do: each one states the multiplicity and the
+  lifetime dependency in words, so the learner has to CHOOSE between
+  composition, aggregation and plain association rather than guess. Write them
+  that way. Facts the diagram must express belong in the requirements, never
+  left implicit.
+
+  Write `instructions` as the numbered tasks, so what is being assessed is
+  unambiguous:
+
+    1. Identify the classes and their attributes, with data types and
+       visibility.
+    2. Add at least two operations per class.
+    3. Draw the relationships with multiplicities at BOTH ends, choosing
+       correctly between association, aggregation, composition and
+       generalisation.
+    4. Justify in one sentence each why X-Y is composition but X-Z is only
+       aggregation.
+    5. Which class is abstract, and why should it never be instantiated?
+
+  Adapt the tasks to the diagram type -- cardinalities and keys for an ERD,
+  message ordering and activation for a sequence diagram, actors and system
+  boundary for a use case, decision guards and concurrent paths for an
+  activity diagram -- but keep the shape: enumerate what must appear, and name
+  the judgement calls the learner has to make and defend.
+
+  Scale it to a real system: six to ten classes or entities for a class
+  diagram or ERD, not three. A scenario a professional would recognise.
+
+  Do NOT write `reference_diagram_xml`. The model answer is drawn by a
+  dedicated step after you, which describes the diagram structurally and
+  renders it, so the notation is correct by construction. Anything you write
+  into that field is discarded.
+
+  What that step has to work from is your brief, so the brief has to be
+  answerable. Every fact the model answer must express -- a multiplicity, a
+  lifetime dependency, which class is abstract -- has to be stated in a
+  lettered requirement. If it is not in the requirements, it cannot appear in
+  the answer, and the learner is marked against something the question never
+  asked.
 - Assign difficulty (EASY, AVERAGE, HARD) based on how much reasoning the
   question actually demands, not merely on how advanced the topic sounds. A
   definition of an advanced concept is still EASY; applying a basic concept to
