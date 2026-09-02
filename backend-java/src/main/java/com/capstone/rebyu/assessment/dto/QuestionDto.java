@@ -57,4 +57,21 @@ public class QuestionDto {
     private BigDecimal totalPoints;
 
     private List<ChoiceDto> choices;
+
+    /**
+     * Which kind of workspace task a CRITICAL_THINKING question actually is:
+     * {@code PROGRAMMING}, {@code DIAGRAM}, or null for everything else.
+     *
+     * <p>Read-only and derived, never stored: {@code question_type} records only
+     * that the item is a workspace task, and which one it is lives in the
+     * {@code programming_question_configs} / {@code diagram_question_configs}
+     * side of the one-to-one. Without this the question bank could not tell the
+     * two apart -- its Programming and Diagram filters compared against
+     * {@code questionType} and matched nothing, because AI generation writes
+     * every one of them as CRITICAL_THINKING. On a TOPCIT bank that is 74
+     * programming tasks and 106 diagram tasks that no filter could reach.
+     *
+     * <p>Ignored on write; the configs are managed through their own endpoints.
+     */
+    private String criticalThinkingType;
 }

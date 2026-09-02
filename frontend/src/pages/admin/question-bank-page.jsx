@@ -148,8 +148,32 @@ const QUESTION_TYPE_FILTER_MATCHES = {
     DIAGRAM: ["DIAGRAM"],
 };
 
-function matchesQuestionTypeFilter(questionType, filterValue) {
+/**
+ * Which workspace task a question is, as the server reports it.
+ *
+ * `questionType` alone cannot answer this: AI generation stores every
+ * programming task AND every diagram task as CRITICAL_THINKING, with the
+ * difference held in the one-to-one config. `criticalThinkingType` is derived
+ * server-side from that config (see QuestionMapper). Falling back to
+ * `questionType` keeps the manual builder working, which does write
+ * PROGRAMMING/DIAGRAM directly.
+ */
+function workspaceKindOf(question) {
+    return question?.criticalThinkingType ?? question?.questionType ?? null;
+}
+
+function matchesQuestionTypeFilter(question, filterValue) {
     if (filterValue === ALL_FILTER_VALUE) return true;
+    const questionType = typeof question === "string" ? question : question?.questionType;
+
+    // Programming and Diagram are subsets of CRITICAL_THINKING rather than
+    // stored types of their own, so they are matched on the derived kind. The
+    // earlier version compared them against questionType and matched nothing.
+    if (filterValue === "PROGRAMMING" || filterValue === "DIAGRAM") {
+        return workspaceKindOf(typeof question === "string" ? null : question) === filterValue
+            || questionType === filterValue;
+    }
+
     const accepted = QUESTION_TYPE_FILTER_MATCHES[filterValue] ?? [filterValue];
     return accepted.includes(questionType);
 }
@@ -2693,9 +2717,10 @@ function QuestionBank({
                 return false;
             }
 
-            if (
-                !matchesQuestionTypeFilter(question.questionType, filterQuestionType)
-            ) {
+            // The whole question, not just its type: Programming and Diagram
+            // are told apart by `criticalThinkingType`, which the type string
+            // alone does not carry.
+            if (!matchesQuestionTypeFilter(question, filterQuestionType)) {
                 return false;
             }
 
