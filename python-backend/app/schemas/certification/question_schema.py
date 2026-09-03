@@ -160,7 +160,12 @@ MIN_CHOICE_EXPLANATION_CHARS = 15
 #: problem domain?" as SHORT_ANSWER/EASY/UNDERSTAND. That question is fine --
 #: it is just a DESCRIPTIVE one, which is the type that carries a rubric and
 #: is graded on meaning rather than characters.
-_OPEN_ENDED_STEMS = (
+#: There are two shapes of open-endedness here and they cannot be matched the
+#: same way, which is what this list used to get wrong.
+#:
+#: A phrase is safe to look for anywhere in the stem: "the importance of" asks
+#: for an argument wherever it turns up in the sentence.
+_OPEN_ENDED_PHRASES = (
     "importance of",
     "significance of",
     "benefits of",
@@ -168,6 +173,29 @@ _OPEN_ENDED_STEMS = (
     "why is",
     "why are",
     "why do",
+    "in your own words",
+    "what do you think",
+    "how would you",
+    "what are the implications",
+)
+
+#: A directive is not. These sat in the list above and were matched as bare
+#: substrings, so every question that merely *contained* one was reclassified:
+#:
+#:     "Which term describes the process of conducting business transactions
+#:      over computer networks, such as the internet?"
+#:
+#: is a one-word answer ("E-commerce") that shipped as an essay question,
+#: because "describes" contains "describe". The learner then meets a textarea
+#: where a text box belongs, and the recall sessions that reuse these questions
+#: inherit the mistake.
+#:
+#: "Describe" only asks for prose when it is addressed *to the learner*, so it
+#: is matched as a whole word in imperative position -- opening the stem, or
+#: opening a clause inside it ("For the schema above, explain why the join
+#: fails"). A verb in the middle of a noun phrase ("which term describes",
+#: "what does UML describe") is describing the subject, not instructing anyone.
+_OPEN_ENDED_DIRECTIVES = (
     "discuss",
     "explain",
     "describe",
@@ -175,10 +203,13 @@ _OPEN_ENDED_STEMS = (
     "justify",
     "compare",
     "contrast",
-    "in your own words",
-    "what do you think",
-    "how would you",
-    "what are the implications",
+)
+
+_OPEN_ENDED_DIRECTIVE_PATTERN = re.compile(
+    # Imperative position: the start of the stem, the start of a clause after
+    # punctuation, or after the words that habitually precede an instruction.
+    r"(?:^|[.;:,?!]\s*|\b(?:and|then|also|now|briefly|please)\s+)"
+    r"(" + "|".join(_OPEN_ENDED_DIRECTIVES) + r")\b"
 )
 
 #: The other shape that cannot be exact-matched: a question asking for a *set*
@@ -371,7 +402,10 @@ class QuestionDraft(BaseModel):
             return self
 
         stem = self.question.strip().lower()
-        matched = next((phrase for phrase in _OPEN_ENDED_STEMS if phrase in stem), None)
+        matched = next((phrase for phrase in _OPEN_ENDED_PHRASES if phrase in stem), None)
+        if matched is None:
+            directive = _OPEN_ENDED_DIRECTIVE_PATTERN.search(stem)
+            matched = directive.group(1) if directive else None
         enumeration = next(
             (phrase for phrase in _ENUMERATION_STEMS if phrase in stem), None
         )

@@ -181,6 +181,57 @@ def test_the_prompt_states_the_rule_the_schema_enforces():
     assert "importance of" in SYSTEM_PROMPT
 
 
+@pytest.mark.parametrize(
+    ("question", "answer"),
+    [
+        # The live regression. "describes" contains "describe", and the stem
+        # list was matched as bare substrings, so this one-term answer shipped
+        # as an essay question and turned up in an Active Recall session with a
+        # textarea under it.
+        (
+            "Which term describes the process of conducting business transactions "
+            "over computer networks, such as the internet?",
+            "E-commerce",
+        ),
+        # The same trap for each of the other directives.
+        ("Which model describes network layers as a stack?", "OSI model"),
+        ("What does the CAP theorem describe?", "Consistency, availability, partitions"),
+        ("Which document explains the system's intended behaviour?", "Specification"),
+        ("Which principle explains why premature optimization is avoided?", "YAGNI"),
+        ("Which operator compares strings for identity in JavaScript?", "==="),
+        ("Which colour contrasts most strongly with white?", "Black"),
+        ("Which ceremony discusses the sprint's outcome?", "Sprint review"),
+        ("Which field justifies the estimate in a change request?", "Rationale"),
+    ],
+)
+def test_a_directive_verb_inside_a_noun_phrase_is_not_an_instruction(question, answer):
+    """"Describe" only asks for prose when it is addressed to the learner.
+
+    A verb sitting inside the subject -- "which term *describes*", "what does
+    the CAP theorem *describe*" -- is describing something, not instructing
+    anybody, and the answer is still one term that exact matching can grade.
+    """
+    draft = _short(question, answer)
+    assert draft.question_type == "SHORT_ANSWER", question
+    assert draft.correct_answer == answer
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        # Still an instruction when it opens a clause rather than the stem.
+        "For the schema above, explain why the join fails.",
+        "Given the diagram, describe the cardinality at both ends.",
+        "Read the case study; discuss the trade-off it presents.",
+        "Briefly explain the difference between a thread and a process.",
+        "Consider the two models and compare their delivery cadence.",
+    ],
+)
+def test_a_directive_opening_a_clause_is_still_an_instruction(question):
+    draft = _short(question)
+    assert draft.question_type == "DESCRIPTIVE", question
+
+
 # --- explanations ----------------------------------------------------------
 #
 # What a learner sees after getting an item wrong. The `choices` table has
