@@ -33,6 +33,11 @@ import {
 
 import { BrandLogo } from "@/components/brand-logo";
 import { Chip, ProgressBar, RebyuCard, TactileButton } from "@/components/rebyu/rebyu-ui.jsx";
+/* The board's own mark and its own band boundaries, imported rather than
+   restated. A landing page that draws its own seal or picks its own red is a
+   landing page that drifts away from the product it is advertising. */
+import { PrioritySeal } from "@/components/learner/priority-tag.jsx";
+import { MASTERY_BANDS } from "@/components/charts/rebyu-charts.jsx";
 import {
   AnimatePresence,
   EASE,
@@ -48,23 +53,38 @@ import {
   useScrollSteps,
 } from "@/components/motion/rebyu-motion.jsx";
 import {
-  DomainMasteryChart,
   MasteryChart,
+  RetakeScoreChart,
   RetentionChart,
 } from "./landing-charts.jsx";
 
-/* Community is built but not part of the public story yet. Flip this back to
-   true to bring the section, its nav item and its footer link back at once. */
-const SHOW_COMMUNITY = false;
+/* Community is part of the public story again, now that the learner portal
+   and admin moderation are both re-registered.
+
+   The flag governs the section alone. It used to carry a nav item and a footer
+   link with it, and both are gone: the community is one of the things inside
+   the feature run rather than a destination of its own, so the bar and the
+   footer each carry a single "features" link that covers it. Flip this to
+   false to withdraw the section. */
+const SHOW_COMMUNITY = true;
 
 const NAV_ITEMS = [
   { label: "about", href: "#about" },
   { label: "the problem", href: "#problem" },
   { label: "how it works", href: "#how-it-works" },
   { label: "certifications", href: "#certifications" },
-  { label: "arenas", href: "#roadmap" },
-  { label: "ai tutor", href: "#ai-tutor" },
-  ...(SHOW_COMMUNITY ? [{ label: "community", href: "#community" }] : []),
+  /* One entry for the whole feature run. It points at the run's own header
+     rather than at its first section: #ai-tutor landed the visitor on an
+     eyebrow reading "ai tutor", so the bar promised a category and the page
+     answered with one implementation. #features is the band that names all of
+     them. The inner sections keep their ids, so any link already pointing at
+     #ai-tutor or #community still resolves.
+
+     The community and the arenas are deliberately not in the bar. They are
+     things you do inside the product, not places to go on this page, and
+     naming each one turned a five-item bar into a table of contents for a page
+     the visitor is going to scroll anyway. */
+  { label: "features", href: "#features" },
 ];
 
 const HOW_IT_WORKS = [
@@ -214,13 +234,6 @@ function olympicsOffset(index, activeIndex) {
    heavily the exam weights that domain. Shared by the roadmap path and the
    module list so one concept never wears two different looks. Labels stay plain
    words — a learner should never have to decode a badge. */
-const PRIORITY = {
-  high: { label: "high priority", chip: "bg-rb-cardinal-wash text-rb-cardinal-lip", bar: "cardinal" },
-  medium: { label: "worth a look", chip: "bg-rb-fox-wash text-rb-fox-lip", bar: "fox" },
-  low: { label: "low priority", chip: "bg-rb-polar text-rb-wolf", bar: "mask" },
-  done: { label: "mastered", chip: "bg-rb-feather-wash text-rb-feather-ink", bar: "feather" },
-};
-
 const LEARNER_POINTS = [
   "Browse certifications and study every lesson free",
   "Unlock analytics, weakness reports, and study plans",
@@ -1584,9 +1597,35 @@ function TutorConversation() {
   )
 }
 
+/**
+ * The ground the feature run stands on.
+ *
+ * One background across the run, not one per section. The tutor was
+ * beetle-wash and the community macaw-wash, and two saturated bands stacked
+ * directly on each other read as two unrelated pages rather than as two parts
+ * of one answer. The sections keep their own ids, headings and padding; only
+ * the colour moved out here, so the run is a single block that the plain
+ * section after it closes.
+ *
+ * It carries no header of its own. One was tried -- a "features" eyebrow over
+ * a heading naming the three -- and it restated in a paragraph what the three
+ * sections beneath it each say better with a working demo beside them. The
+ * band is the grouping; it does not also need to be announced.
+ */
+function FeaturesBand({ children }) {
+  /* The id lives here rather than on a header of its own, so the nav's
+     "features" link still lands at the top of the run with nothing between the
+     bar and the first section. */
+  return (
+    <div id="features" className="scroll-mt-24 bg-rb-beetle-wash">
+      {children}
+    </div>
+  );
+}
+
 function AiTutorSection() {
   return (
-    <section id="ai-tutor" className="scroll-mt-24 bg-rb-beetle-wash px-5 py-20 lg:px-8 lg:py-28">
+    <section id="ai-tutor" className="scroll-mt-24 px-5 py-20 lg:px-8 lg:py-28">
       <div className="mx-auto grid max-w-[1280px] items-center gap-12 lg:grid-cols-2 lg:gap-16">
         <div data-landing-reveal>
           <p className="rb-eyebrow">ai tutor</p>
@@ -1635,35 +1674,29 @@ function AiTutorSection() {
    confidence in that estimate driven by how much evidence sits behind it. Both
    are shown — 40% mastery from three answers means something different from 40%
    from forty, and hiding that would overstate what the system knows. */
+/* Shaped like the rows the dashboard's own "mastery by topic" tile renders:
+   a title, the category it sits under, the mastery estimate, how many answers
+   are behind that estimate, and the BKT priority tag the seal is drawn from.
+   The tags are the real vocabulary (`SEAL_CONFIG` in components/learner/
+   priority-tag.jsx), not a marketing paraphrase of it -- NOT_ENOUGH_DATA on
+   Cryptography basics is exactly what seven answers earns you, and it is the
+   tag a learner would actually see there. */
 const TOPICS = [
-  { name: "Normalization", domain: "Databases", mastery: 31, confidence: "high", answers: 42, priority: "high" },
-  { name: "Subnetting", domain: "Networks", mastery: 38, confidence: "high", answers: 36, priority: "high" },
-  { name: "Deadlock handling", domain: "Operating systems", mastery: 44, confidence: "medium", answers: 18, priority: "high" },
-  { name: "Process scheduling", domain: "Operating systems", mastery: 57, confidence: "high", answers: 51, priority: "medium" },
-  { name: "Cryptography basics", domain: "Security", mastery: 62, confidence: "low", answers: 7, priority: "medium" },
-  { name: "Sorting algorithms", domain: "Programming", mastery: 79, confidence: "high", answers: 64, priority: "low" },
+  { name: "Normalization", domain: "Databases", mastery: 31, answers: 42, priorityTag: "CRITICAL_PRIORITY" },
+  { name: "Subnetting", domain: "Networks", mastery: 38, answers: 36, priorityTag: "HIGH_PRIORITY" },
+  { name: "Deadlock handling", domain: "Operating systems", mastery: 44, answers: 18, priorityTag: "HIGH_PRIORITY" },
+  { name: "Process scheduling", domain: "Operating systems", mastery: 57, answers: 51, priorityTag: "MEDIUM_PRIORITY" },
+  { name: "Cryptography basics", domain: "Security", mastery: 62, answers: 7, priorityTag: "NOT_ENOUGH_DATA" },
+  { name: "Sorting algorithms", domain: "Programming", mastery: 79, answers: 64, priorityTag: "STRONG" },
 ];
 
-const CONFIDENCE_META = {
-  high: { label: "high", bars: 3 },
-  medium: { label: "medium", bars: 2 },
-  low: { label: "low", bars: 1 },
-};
-
-/** Three-bar meter — how much evidence is behind the mastery estimate. */
-function ConfidenceMeter({ level }) {
-  const meta = CONFIDENCE_META[level];
-  return (
-    <span className="inline-flex items-end gap-0.5" aria-hidden="true">
-      {[1, 2, 3].map((step) => (
-        <span
-          key={step}
-          className={`w-1 rounded-sm ${step <= meta.bars ? "bg-rb-eel" : "bg-rb-swan"}`}
-          style={{ height: `${4 + step * 3}px` }}
-        />
-      ))}
-    </span>
-  );
+/* The dashboard's own three mastery bands, so a bar on the landing page is the
+   colour the same number would be inside the product. `MASTERY_BANDS` is
+   weak < 25, developing < 50, strong above -- red, orange, green. */
+function masteryTone(value) {
+  if (value < MASTERY_BANDS.weak) return "cardinal";
+  if (value < MASTERY_BANDS.developing) return "fox";
+  return "feather";
 }
 
 function WeaknessSection() {
@@ -1679,39 +1712,49 @@ function WeaknessSection() {
             text="it knows which topics you are weak at."
           />
           <p className="rb-body-lg mt-4">
-            Every answer updates a mastery level for the topic behind it, plus a confidence in that
-            estimate. Low mastery with high confidence is the combination worth your next hour —
-            those are the gaps the system is actually sure about.
+            Every answer updates a mastery level for the topic behind it, and the number of answers
+            behind that level is shown next to it — an estimate from seven answers is not the same
+            claim as one from fifty. Weakest first, so your next hour is already decided.
           </p>
         </div>
 
         <div className="mt-12 grid gap-5 lg:grid-cols-[1.35fr_1fr]">
           {/* the ranked module list — the core of the feature */}
           <RebyuCard raised data-landing-reveal className="!p-0">
-            <div className="flex items-center justify-between gap-3 border-b-2 border-rb-swan px-5 py-4">
+            {/* The tile's own chrome, down to the hint line and the
+                not-yet-assessed count. That pill is not decoration: topics
+                with no answers behind them carry no estimate and are left out
+                of the list, and the dashboard says so rather than letting the
+                learner assume the list is everything. */}
+            <div className="flex items-start justify-between gap-3 border-b-2 border-rb-swan px-5 py-4">
               <div>
-                <div className="rb-eyebrow">Mastery by topic</div>
-                <div className="mt-1 font-rb-display text-lg font-extrabold lowercase text-rb-eel">
-                  weakest first
+                <div className="font-rb-display text-lg font-extrabold lowercase text-rb-eel">
+                  mastery by topic
                 </div>
+                <p className="mt-1 max-w-sm text-xs font-semibold text-rb-wolf">
+                  Weakest first — every topic with enough answers behind it to score.
+                </p>
               </div>
-              <Chip tone="macaw">
-                <BarChart3 className="size-4" />
-                auto-ranked
-              </Chip>
+              <span className="shrink-0 rounded-full bg-rb-polar px-2.5 py-1 text-[11px] font-bold text-rb-wolf">
+                4 not yet assessed
+              </span>
             </div>
 
             <ul className="divide-y-2 divide-rb-swan">
-              {TOPICS.map((topic) => {
-                const meta = PRIORITY[topic.priority];
-                const conf = CONFIDENCE_META[topic.confidence];
-                return (
-                  <li key={topic.name} className="px-5 py-4">
+              {/* One row per topic, laid out the way `MasteryRow` lays it out
+                  on the dashboard: the priority seal on the left, the title and
+                  its category beside it, the estimate on the right, and the
+                  evidence count under the bar. The seal replaced a coloured
+                  text pill -- the pill was this page's own invention, and a
+                  stack of them reads as chatter rather than as an order to
+                  study in. */}
+              {TOPICS.map((topic) => (
+                <li key={topic.name} className="flex items-start gap-3 px-5 py-4">
+                  <PrioritySeal tag={topic.priorityTag} size={36} />
+
+                  <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-bold text-rb-eel">{topic.name}</span>
-                      <span className={`rb-chip !px-2.5 !py-1 !text-[0.6875rem] ${meta.chip}`}>
-                        {meta.label}
-                      </span>
                       <span className="rb-numeric ml-auto text-sm text-rb-eel">
                         {topic.mastery}%
                       </span>
@@ -1719,79 +1762,76 @@ function WeaknessSection() {
 
                     <ProgressBar
                       value={topic.mastery}
-                      tone={meta.bar}
+                      tone={masteryTone(topic.mastery)}
                       label={`${topic.name} mastery`}
-                      className="mt-2.5"
+                      className="mt-2"
                     />
 
-                    <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-rb-wolf">
+                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-semibold text-rb-wolf">
                       <span>{topic.domain}</span>
                       <span className="text-rb-hare" aria-hidden="true">·</span>
-                      <span className="flex items-center gap-1.5">
-                        <ConfidenceMeter level={topic.confidence} />
-                        {conf.label} confidence
-                      </span>
-                      <span className="text-rb-hare" aria-hidden="true">·</span>
-                      <span>{topic.answers} answers seen</span>
+                      <span>{topic.answers} answers</span>
                     </div>
-                  </li>
-                );
-              })}
+                  </div>
+                </li>
+              ))}
             </ul>
           </RebyuCard>
 
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
-            {/* the weak list, stated plainly */}
-            <RebyuCard raised data-landing-reveal>
-              <div className="flex items-center gap-4">
-                <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-rb-cardinal-wash text-rb-cardinal-lip">
-                  <Target className="size-6" aria-hidden="true" />
-                </span>
-                <div className="min-w-0">
-                  <div className="rb-numeric text-2xl leading-none">
-                    {TOPICS.filter((t) => t.priority === "high").length} topics
-                  </div>
-                  <div className="mt-1 text-sm font-semibold text-rb-wolf">Currently weak</div>
-                </div>
+            {/* The dashboard's focus tile. It names one topic rather than
+                counting several, and the copy is the board's own: the label
+                changes with the mastery band, and under it sits the topic you
+                would open next. A "3 topics currently weak" tally stood here
+                before -- a figure the board does not carry, answering a
+                question ("how bad is it overall") the board deliberately
+                refuses in favour of "start here". */}
+            <RebyuCard raised data-landing-reveal className="!bg-rb-cardinal-wash">
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-sm font-bold text-rb-cardinal-lip">Study this first</p>
+                <PrioritySeal tag={TOPICS[0].priorityTag} size={36} />
               </div>
-              <ul className="mt-5 space-y-2">
-                {TOPICS.filter((t) => t.priority === "high").map((topic) => (
-                  <li
-                    key={topic.name}
-                    className="flex items-center gap-2 rounded-xl bg-rb-cardinal-wash px-3 py-2 text-sm font-bold text-rb-cardinal-lip"
-                  >
-                    <span className="min-w-0 flex-1 truncate">{topic.name}</span>
-                    <span className="rb-numeric text-sm text-rb-cardinal-lip">{topic.mastery}%</span>
-                  </li>
-                ))}
-              </ul>
+
+              <p className="mt-4 font-rb-display text-4xl font-extrabold leading-[0.9] tracking-tight tabular-nums text-rb-cardinal-lip sm:text-5xl">
+                {TOPICS[0].mastery}%
+              </p>
+              <p className="mt-2 font-bold text-rb-eel">{TOPICS[0].name}</p>
+              <p className="mt-1 text-sm font-semibold text-rb-wolf">
+                Your weakest topic — start here.
+              </p>
             </RebyuCard>
 
-            {/* confidence in the estimates themselves, not exam readiness */}
+            {/* Also on the board, and the one figure a learner opens it for. */}
             <RebyuCard raised data-landing-reveal>
               <div className="flex items-center gap-4">
                 <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-rb-feather-wash text-rb-feather-ink">
                   <Gauge className="size-6" aria-hidden="true" />
                 </span>
                 <div className="min-w-0">
-                  <div className="rb-numeric text-2xl leading-none">High</div>
-                  <div className="mt-1 text-sm font-semibold text-rb-wolf">Overall confidence</div>
+                  <div className="rb-numeric text-2xl leading-none">68%</div>
+                  <div className="mt-1 text-sm font-semibold text-rb-wolf">Exam readiness</div>
                 </div>
               </div>
               <p className="rb-body mt-4 text-sm">
-                Four of six topics have enough answers behind them for the estimate to be reliable.
-                Cryptography basics needs more practice before its number means much.
+                Your estimated chance of passing, from mastery across every domain the paper
+                weights — not from how much of the course you have clicked through.
               </p>
             </RebyuCard>
 
+            {/* The third of the board's headline tiles. Mastery says where you
+                are, readiness says whether that is enough, and this says
+                whether it is moving -- which is the only one of the three a
+                single sitting can show you. */}
             <RebyuCard raised data-landing-reveal className="sm:col-span-2 lg:col-span-1">
-              <div className="rb-eyebrow">Mastery by domain</div>
-              <div className="mt-3">
-                <DomainMasteryChart />
+              <div className="font-rb-display text-lg font-extrabold lowercase text-rb-eel">
+                score across retakes
               </div>
-              <p className="mt-3 text-sm text-rb-wolf">
-                Two domains sit below the mastery target — those are what the plan works on first.
+              <p className="mt-1 text-xs font-semibold text-rb-wolf">
+                Each assessment's attempts in order — a rising line is a score you moved.
               </p>
+              <div className="mt-3">
+                <RetakeScoreChart />
+              </div>
             </RebyuCard>
           </div>
         </div>
@@ -1804,7 +1844,7 @@ function WeaknessSection() {
 
 function CommunitySection() {
   return (
-    <section id="community" className="scroll-mt-24 bg-rb-macaw-wash px-5 py-20 lg:px-8 lg:py-28">
+    <section id="community" className="scroll-mt-24 px-5 py-20 lg:px-8 lg:py-28">
       <div className="mx-auto grid max-w-[1280px] items-center gap-12 lg:grid-cols-2 lg:gap-16">
         {/* A feed, not a chat: posts carry real attachments — practice sets,
             notes, files — which is what the community is actually for. */}
@@ -2001,8 +2041,11 @@ function Footer() {
       title: "platform",
       links: [
         ["Certifications", "#certifications"],
-        ["Roadmap", "#roadmap"],
-        ["AI tutor", "#ai-tutor"],
+        /* One link for the feature run, the same way the navbar carries one.
+           The arenas and the community are inside it -- naming them here as
+           separate destinations is the table of contents the bar already
+           stopped being. */
+        ["Features", "#features"],
       ],
     },
     {
@@ -2017,7 +2060,6 @@ function Footer() {
       title: "discover",
       links: [
         ["How it works", "#how-it-works"],
-        ...(SHOW_COMMUNITY ? [["Community", "#community"]] : []),
       ],
     },
     {
@@ -2166,10 +2208,18 @@ export default function LandingPage() {
         <SolutionSection />
         <HowItWorksSection />
         <CertificationSection />
+        {/* The feature run, grouped under the section the nav calls
+            "features". Each is a thing a learner does in the product rather
+            than a claim about it: the tutor answers you alone, the community
+            answers you with other learners, the arenas set you against them.
+            WeaknessSection follows the run because it is about what the
+            platform measures, not about what you do in it. */}
+        <FeaturesBand>
+          <AiTutorSection />
+          {SHOW_COMMUNITY ? <CommunitySection /> : null}
+        </FeaturesBand>
         <OlympicsSection />
-        <AiTutorSection />
         <WeaknessSection />
-        {SHOW_COMMUNITY ? <CommunitySection /> : null}
         <AccessSection />
       </main>
       <Footer />

@@ -301,3 +301,85 @@ export function DomainMasteryChart() {
     </figure>
   )
 }
+
+/* -------------------------------------------------- score across retakes */
+
+/**
+ * The dashboard's "score across retakes" tile, on the landing page.
+ *
+ * One line per assessment, plotted against attempt number rather than against
+ * a date: the question a retake answers is "did the score move", and calendar
+ * spacing turns that into a chart about when somebody studied instead. The
+ * dashboard plots it the same way, and its hint says so -- "a rising line is a
+ * score you moved."
+ *
+ * The pass mark is drawn rather than described. A score chart with no pass mark
+ * makes the reader do the comparison the chart exists to make for them.
+ */
+const RETAKES = [
+  { attempt: "1st", databases: 41, networks: 52 },
+  { attempt: "2nd", databases: 58, networks: 61 },
+  { attempt: "3rd", databases: 72, networks: 68 },
+  { attempt: "4th", databases: 84, networks: 79 },
+]
+
+const RETAKE_SERIES = [
+  { key: "databases", name: "Databases mock", color: SERIES.macaw },
+  { key: "networks", name: "Networks mock", color: SERIES.fox },
+]
+
+export function RetakeScoreChart() {
+  return (
+    <figure className="w-full">
+      <figcaption className="sr-only">
+        Assessment scores across successive attempts. The Databases mock rises from 41% to 84%
+        and the Networks mock from 52% to 79%, both finishing above the 70% pass mark.
+      </figcaption>
+
+      <div className="h-56 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={RETAKES} margin={{ top: 16, right: 12, bottom: 4, left: -22 }}>
+            <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
+            <XAxis dataKey="attempt" {...axisProps} />
+            <YAxis domain={[0, 100]} ticks={[0, 50, 100]} unit="%" {...axisProps} />
+            <Tooltip content={<ChartTooltip />} cursor={{ stroke: GRID, strokeWidth: 1 }} />
+
+            <ReferenceLine
+              y={70}
+              stroke={INK.muted}
+              strokeDasharray="4 4"
+              label={{
+                value: "pass 70%",
+                position: "insideTopRight",
+                fill: INK.secondary,
+                fontSize: 11,
+                fontWeight: 700,
+              }}
+            />
+
+            {RETAKE_SERIES.map((series) => (
+              <Line
+                key={series.key}
+                type="monotone"
+                dataKey={series.key}
+                name={series.name}
+                stroke={series.color}
+                strokeWidth={2}
+                dot={{ r: 3, fill: SURFACE, stroke: series.color, strokeWidth: 2 }}
+                activeDot={{ r: 5 }}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      <ValueKey
+        items={RETAKE_SERIES.map((series) => ({
+          name: series.name,
+          color: series.color,
+          value: `${RETAKES[RETAKES.length - 1][series.key]}%`,
+        }))}
+      />
+    </figure>
+  )
+}
