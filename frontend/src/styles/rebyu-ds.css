@@ -1198,6 +1198,49 @@
     animation: rb-flicker 1.8s ease-in-out infinite;
 }
 
+/* Countdown urgency -- the final minute of a timed attempt only.
+
+   The clock spends the rest of the attempt reporting quietly (Wolf -> Fox ->
+   Cardinal, no motion): a screen this stressful should not nag. The last
+   minute is the one moment where a learner who is heads-down in an editor or a
+   canvas genuinely needs the clock to reach them, so it gets a slow breath and
+   a ring expanding out of the pill. The numerals never move -- the ring is a
+   pseudo-element outside the box -- so the time stays readable while it runs,
+   and prefers-reduced-motion at the foot of this file stills both. */
+@keyframes rb-timer-pulse {
+    0%,
+    100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.045);
+    }
+}
+@keyframes rb-timer-ring {
+    0% {
+        opacity: 0.6;
+        transform: scale(1);
+    }
+    70%,
+    100% {
+        opacity: 0;
+        transform: scale(1.32);
+    }
+}
+.rebyu-ds .rb-timer-urgent {
+    position: relative;
+    animation: rb-timer-pulse 1s ease-in-out infinite;
+}
+.rebyu-ds .rb-timer-urgent::after {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border: 2px solid var(--color-rb-cardinal);
+    border-radius: inherit;
+    animation: rb-timer-ring 1s ease-out infinite;
+    pointer-events: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .rebyu-ds *,
     .rebyu-ds *::before,

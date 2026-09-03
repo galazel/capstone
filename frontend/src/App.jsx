@@ -35,6 +35,7 @@ const LearnerCertificationDetailPage = lazy(() => import("./pages/learner/learni
 const LearnerCertificationsPage = lazy(() => import("./pages/learner/learning/learner-certifications-page.jsx"))
 const LearnerChallengesPage = lazy(() => import("./pages/learner/learning/learner-challenges-page.jsx"))
 const LearnerFilesPage = lazy(() => import("./pages/learner/files/learner-files-page.jsx"))
+const LearnerMistakeBankPage = lazy(() => import("./pages/learner/mistakes/learner-mistake-bank-page.jsx"))
 const LearnerCommunityPage = lazy(() => import("./pages/learner/community/learner-community-qa.jsx"))
 const LearnerAccountPage = lazy(() => import("./pages/learner/dashboard/learner-account-page.jsx"))
 const LearnerAssessmentAttemptPage = lazy(() => import("./pages/learner/assessments/learner-assessment-attempt-page.jsx"))
@@ -314,6 +315,7 @@ export function App() {
                     <Route path="challenges" element={<LearnerChallengesPage />} />
                     <Route path="subscription" element={<LearnerSubscriptionPage />} />
                     <Route path="library" element={<LearnerFilesPage />} />
+                    <Route path="mistakes" element={<LearnerMistakeBankPage />} />
                     <Route path="community" element={<LearnerCommunityPage />} />
                     <Route path="account" element={<LearnerAccountPage />} />
                 </Route>

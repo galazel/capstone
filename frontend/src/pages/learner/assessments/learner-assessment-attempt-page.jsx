@@ -937,7 +937,8 @@ export default function LearnerAssessmentAttemptPage() {
   return (
       <div className="rebyu-ds flex h-dvh flex-col overflow-hidden bg-rb-polar">
         {/* Window chrome, matching the workspace shown on the landing hero. */}
-        <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b-2 border-rb-swan bg-rb-snow px-3 sm:px-4">
+        <header className="shrink-0 border-b-2 border-rb-swan bg-rb-snow">
+          <div className="flex h-16 items-center justify-between gap-2 px-3 sm:px-4">
           <div className="flex min-w-0 items-center gap-3">
             <Button
                 variant="ghost"
@@ -964,9 +965,18 @@ export default function LearnerAssessmentAttemptPage() {
 
           <div className="flex items-center gap-3">
             <SaveStatusIndicator status={saveStatus} />
-            {/* The timer escalates Wolf -> Fox -> Cardinal and never pulses or
-                shakes: this is the most stressful screen in the product, so the
-                clock reports rather than nags. */}
+            {/* The timer escalates Wolf -> Fox -> Cardinal, and stays still
+                for all but the last minute of it: this is the most stressful
+                screen in the product, so for 99% of the attempt the clock
+                reports rather than nags.
+
+                The final minute is the exception. A learner heads-down in a
+                code editor or a diagram canvas is not looking at the top-right
+                corner, and by then the difference between noticing and not is
+                the difference between submitting and being submitted for. The
+                pill breathes and a ring expands out of it -- motion in the
+                periphery, while the numerals themselves stay put and readable.
+                `prefers-reduced-motion` stills both (see rebyu-ds.css). */}
             {remainingSeconds != null ? (
                 <span
                     className={cn(
@@ -975,7 +985,10 @@ export default function LearnerAssessmentAttemptPage() {
                             ? "border-rb-cardinal bg-rb-cardinal-wash text-rb-cardinal-lip"
                             : remainingSeconds <= 600
                                 ? "border-rb-fox bg-rb-fox-wash text-rb-fox-lip"
-                                : "border-rb-swan bg-rb-polar text-rb-eel"
+                                : "border-rb-swan bg-rb-polar text-rb-eel",
+                        remainingSeconds > 0 &&
+                        remainingSeconds <= 60 &&
+                        "rb-timer-urgent"
                     )}
                     role="timer"
                     aria-label="Time remaining"
@@ -1012,6 +1025,40 @@ export default function LearnerAssessmentAttemptPage() {
             >
               Finish Attempt
             </Button>
+          </div>
+          </div>
+
+          {/* Attempt progress, sat on the header's own bottom edge.
+
+              It counts answered items rather than the item you happen to be
+              looking at: skipping ahead is normal on an exam, and a rail that
+              filled with the cursor would report progress the learner has not
+              made. The pair reads together -- "Question 4 of 10" above says
+              where you are, the rail says how much is done. */}
+          <div
+              className="h-1.5 w-full bg-rb-swan"
+              role="progressbar"
+              aria-valuenow={answeredIds.size}
+              aria-valuemin={0}
+              aria-valuemax={questions.length}
+              aria-valuetext={`${answeredIds.size} of ${questions.length} questions answered`}
+              aria-label="Attempt progress"
+          >
+            <div
+                className={cn(
+                    "h-full bg-rb-feather transition-[width] duration-500 ease-out",
+                    answeredIds.size > 0 &&
+                    answeredIds.size < questions.length &&
+                    "rounded-r-full"
+                )}
+                style={{
+                  width: `${
+                      questions.length
+                          ? (answeredIds.size / questions.length) * 100
+                          : 0
+                  }%`,
+                }}
+            />
           </div>
         </header>
 
@@ -1125,12 +1172,21 @@ export default function LearnerAssessmentAttemptPage() {
 
           <div className="flex items-center gap-3">
             {currentQuestion ? (
+                /* Labels collapse to their icons on a narrow screen. Three
+                   labelled controls plus Previous overflowed a 375px footer by
+                   65px, and what ran off the right edge was Finish Attempt --
+                   the only one there is at this width. */
                 <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => toggleFlag(currentQuestion.attemptQuestionId)}
                     disabled={editingLocked}
                     aria-pressed={flagged.has(currentQuestion.attemptQuestionId)}
+                    aria-label={
+                      flagged.has(currentQuestion.attemptQuestionId)
+                          ? "Flagged for review"
+                          : "Flag for review"
+                    }
                 >
                   <FlagIcon
                       className={cn(
@@ -1139,9 +1195,11 @@ export default function LearnerAssessmentAttemptPage() {
                       )}
                       aria-hidden="true"
                   />
-                  {flagged.has(currentQuestion.attemptQuestionId)
-                      ? "Flagged"
-                      : "Flag for review"}
+                  <span className="hidden sm:inline">
+                    {flagged.has(currentQuestion.attemptQuestionId)
+                        ? "Flagged"
+                        : "Flag for review"}
+                  </span>
                 </Button>
             ) : null}
             {currentQuestion &&
@@ -1152,9 +1210,10 @@ export default function LearnerAssessmentAttemptPage() {
                     size="sm"
                     onClick={skipCurrent}
                     disabled={editingLocked}
+                    aria-label="Skip this question"
                 >
                   <SkipForwardIcon aria-hidden="true" />
-                  Skip
+                  <span className="hidden sm:inline">Skip</span>
                 </Button>
             ) : null}
             <span className="hidden text-sm text-muted-foreground sm:block">
@@ -1162,26 +1221,39 @@ export default function LearnerAssessmentAttemptPage() {
           </span>
           </div>
 
-          {currentIndex === questions.length - 1 ? (
-              <Button
-                  onClick={() => setFinishOpen(true)}
-                  disabled={submitMutation.isPending}
-              >
-                Finish Attempt
-              </Button>
-          ) : (
-              <Button
-                  variant="outline"
-                  onClick={() =>
-                      setCurrentIndex((index) =>
-                          Math.min(questions.length - 1, index + 1)
-                      )
-                  }
-              >
-                Next
-                <ChevronRightIcon aria-hidden="true" />
-              </Button>
-          )}
+          {/* One Finish Attempt on screen, whatever the width.
+
+              The header carries the real one -- it is on every question, so an
+              attempt can be finished early rather than only from the last item
+              -- but it is `lg:inline-flex`, so below lg there is none. This one
+              fills that gap and hides itself again at lg, where showing it put
+              two identical primary buttons on the same screen.
+
+              The slot keeps its width either way, so the footer does not
+              re-centre itself on the last question. */}
+          <div className="flex min-w-32 justify-end">
+            {currentIndex === questions.length - 1 ? (
+                <Button
+                    className="lg:hidden"
+                    onClick={() => setFinishOpen(true)}
+                    disabled={submitMutation.isPending}
+                >
+                  Finish Attempt
+                </Button>
+            ) : (
+                <Button
+                    variant="outline"
+                    onClick={() =>
+                        setCurrentIndex((index) =>
+                            Math.min(questions.length - 1, index + 1)
+                        )
+                    }
+                >
+                  Next
+                  <ChevronRightIcon aria-hidden="true" />
+                </Button>
+            )}
+          </div>
         </footer>
 
         {/* `rebyu-ds` is repeated on every dialog surface below: Radix portals

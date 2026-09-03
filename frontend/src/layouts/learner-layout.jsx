@@ -6,6 +6,7 @@ import {
   LogOutIcon,
   FilesIcon,
   SettingsIcon,
+  Target,
   UserIcon,
 } from "@/components/icons"
 
@@ -300,6 +301,13 @@ export default function LearnerLayout() {
                 <DropdownMenuItem onClick={() => navigate("/learner/library")}>
                   <FilesIcon />
                   Library
+                </DropdownMenuItem>
+                {/* Next to the library because it is the other thing the
+                    learner accumulates rather than a setting: everything they
+                    have got wrong, kept. */}
+                <DropdownMenuItem onClick={() => navigate("/learner/mistakes")}>
+                  <Target />
+                  Mistake bank
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate("/learner/subscription")}>
                   <SettingsIcon />

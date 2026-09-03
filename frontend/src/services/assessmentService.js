@@ -269,9 +269,30 @@ export const INSTITUTION_ASSESSMENT_TYPES = ASSESSMENT_TYPES.filter(
   (type) => type.value !== "DIAGNOSTIC"
 )
 
+/* The exam types the backend actually stores, from `ExamTypeSeeder`.
+   `ASSESSMENT_TYPES` above is the authoring menu -- what a person may pick when
+   creating an assessment -- and it names only a few of these. Everything else
+   was falling through to the raw enum, so a learner sitting a lesson quiz saw
+   "LESSON_QUIZ" in the attempt header and again on their result. Kept separate
+   from the authoring list on purpose: these are labels to read, not options to
+   offer. */
+const RUNTIME_TYPE_LABELS = {
+  DIAGNOSTIC: "Diagnostic",
+  LESSON_QUIZ: "Lesson Quiz",
+  MIDDLE_EXAM: "Module Exam",
+  MAJOR_EXAM: "Major Exam",
+  MOCK_EXAM: "Mock Exam",
+  GENERATED_QUIZ: "AI Quiz",
+  GENERATED_FLASHCARD: "AI Flashcards",
+  RECALL: "Active Recall",
+  CHALLENGE: "Challenge",
+  KNOWLEDGE_CHECK: "Knowledge Check",
+}
+
 export function getAssessmentTypeLabel(examTypeText) {
   return (
     ASSESSMENT_TYPES.find((type) => type.value === examTypeText)?.label ??
+    RUNTIME_TYPE_LABELS[examTypeText] ??
     examTypeText ??
     "Assessment"
   )

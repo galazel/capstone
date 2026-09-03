@@ -110,6 +110,9 @@ export function Chip({ tone = "neutral", className, children, ...props }) {
     fox: "bg-rb-fox-wash text-rb-fox-lip",
     beetle: "bg-rb-beetle-wash text-rb-beetle-lip",
     cardinal: "bg-rb-cardinal-wash text-rb-cardinal-lip",
+    // The green accent, so "passed" is the same colour on a chip as it is on a
+    // score dial or a correct answer.
+    leaf: "bg-rb-leaf-wash text-rb-leaf",
   };
 
   return (
@@ -143,6 +146,11 @@ export function ProgressBar({ value, label, tone = "mask", className }) {
     fox: "bg-rb-fox",
     bee: "bg-rb-bee",
     beetle: "bg-rb-beetle",
+    // Verdict tones. A bar is not always progress toward something -- on a
+    // result breakdown it reports how a lesson went, and that reading needs a
+    // "cleared it" and a "nowhere near" that the accent hues above do not carry.
+    leaf: "bg-rb-leaf",
+    cardinal: "bg-rb-cardinal",
   };
 
   return (

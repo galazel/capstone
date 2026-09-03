@@ -1,11 +1,8 @@
 import { useMemo } from "react"
 import { useLocation, useNavigate, useOutletContext, useParams } from "react-router-dom"
 import {
-    ArrowLeft,
     ArrowRight,
     BookOpen,
-    CheckCircle2,
-    ClipboardCheck,
     Clock3,
     FileQuestion,
     LockKeyhole,
@@ -13,10 +10,8 @@ import {
 } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
-import {
-    LearnerEmptyState,
-    ProgressBar,
-} from "@/components/learner/learner-ui.jsx"
+import { LearnerEmptyState } from "@/components/learner/learner-ui.jsx"
+import { BackButton, RebyuCard, TactileButton } from "@/components/rebyu/rebyu-ui.jsx"
 
 function getCertificationId(certification) {
     return String(
@@ -148,17 +143,25 @@ function getDurationText(assessment) {
 
 function DiagnosticStep({ number, title, description }) {
     return (
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-            <div className="flex items-start gap-3">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                    {number}
-                </div>
+        <RebyuCard className="h-full">
+            <span className="rb-numeric grid size-9 place-items-center rounded-rb-tile bg-rb-macaw-wash text-sm text-rb-macaw-lip">
+                {number}
+            </span>
+            <p className="rb-display rb-display-sm mt-3">{title}</p>
+            <p className="rb-caption mt-1.5">{description}</p>
+        </RebyuCard>
+    )
+}
 
-                <div className="min-w-0">
-                    <p className="text-sm font-semibold text-foreground">{title}</p>
-                    <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
-                </div>
-            </div>
+/** One fact about the paper: items, time, whether it is required. */
+function DiagnosticFact({ icon: Icon, label, value }) {
+    return (
+        <div className="rounded-rb-tile border-2 border-rb-swan bg-rb-polar px-4 py-3">
+            <p className="flex items-center gap-1.5 text-xs font-bold text-rb-wolf">
+                <Icon className="size-3.5 text-rb-macaw-lip" aria-hidden="true" />
+                {label}
+            </p>
+            <p className="mt-1 text-sm font-bold text-rb-eel">{value}</p>
         </div>
     )
 }
@@ -237,195 +240,117 @@ export default function LearnerDiagnosticGatePage() {
     }
 
     return (
-        <main className="min-h-[calc(100dvh-8rem)] rounded-xl border border-border bg-card px-5 py-10 shadow-sm sm:px-8 sm:py-12 xl:px-14">
-            <article className="mx-auto w-full max-w-6xl">
-                <Button
-                    type="button"
-                    variant="ghost"
-                    className="mb-6 -ml-3 gap-2 text-muted-foreground hover:text-foreground"
+        <main className="rebyu-ds min-h-[calc(100dvh-8rem)] rounded-rb-card border-2 border-rb-swan bg-rb-snow px-5 py-8 sm:px-8 sm:py-10 xl:px-12">
+            <article className="mx-auto w-full max-w-5xl">
+                <BackButton
+                    size="sm"
+                    label="Back to My Learning"
                     onClick={() => navigate("/learner/learning")}
-                >
-                    <ArrowLeft className="size-4" />
-                    Back to My Learning
-                </Button>
+                />
 
-                <section className="overflow-hidden rounded-3xl border border-primary/20 bg-primary/5">
-                    <div className="relative p-6 sm:p-8 lg:p-10">
-                        <div className="absolute right-0 top-0 hidden h-40 w-40 translate-x-12 -translate-y-12 rounded-full bg-primary/10 blur-2xl sm:block" />
+                {/* The gate, said once. It used to be said three times -- a hero,
+                    a dashed "lesson content is locked" panel, and a closing card
+                    that repeated the hero -- around two blocks of copy written
+                    to the developer rather than the learner ("this wide section
+                    can later be replaced with the diagnostic exam content"),
+                    which shipped to learners as if it were guidance. */}
+                <section className="mt-6 overflow-hidden rounded-rb-card border-2 border-rb-macaw/40 bg-rb-macaw-wash p-6 sm:p-8">
+                    <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+                        <span className="grid size-14 shrink-0 place-items-center rounded-rb-card bg-rb-macaw text-white">
+                            <LockKeyhole className="size-7" aria-hidden="true" />
+                        </span>
 
-                        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-start">
-                            <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
-                                <LockKeyhole className="size-7" />
-                            </div>
-
-                            <div className="min-w-0 flex-1">
-                                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-                                    Diagnostic required
-                                </p>
-
-                                <h1 className="mt-2 max-w-4xl text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-                                    Before you study the lessons, take the diagnostic exam.
-                                </h1>
-
-                                <p className="mt-4 max-w-3xl text-base leading-8 text-muted-foreground">
-                                    The lesson content is locked for now. Complete the diagnostic first to unlock the learning path.
-                                </p>
-                            </div>
+                        <div className="min-w-0 flex-1">
+                            <p className="rb-eyebrow">diagnostic required</p>
+                            <h1 className="rb-display rb-display-md mt-2 max-w-3xl">
+                                take the diagnostic before you start the lessons.
+                            </h1>
+                            <p className="rb-body mt-3 max-w-2xl text-sm">
+                                The lesson content stays locked until you submit it. It is
+                                not scored against you — it maps what you already know so
+                                your study plan starts in the right place.
+                            </p>
                         </div>
                     </div>
                 </section>
 
-                <section className="mt-8 rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8 lg:p-10">
+                <RebyuCard raised className="mt-6 p-6 sm:p-8">
                     <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
                         <div className="min-w-0">
-                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                            <p className="rb-eyebrow">
                                 {getCertificationTitle(certification)}
                             </p>
-
-                            <h2 className="mt-2 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+                            <h2 className="rb-display rb-display-md mt-2">
                                 {diagnosticAssessment
                                     ? getAssessmentTitle(diagnosticAssessment)
                                     : "Diagnostic Exam"}
                             </h2>
                         </div>
 
-                        <div className="grid gap-3 sm:grid-cols-3 lg:w-[520px]">
-                            <div className="rounded-2xl border border-border bg-muted p-4">
-                                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                    <FileQuestion className="size-4 text-primary" />
-                                    Items
-                                </div>
-                                <p className="mt-2 text-sm font-semibold text-foreground">
-                                    {questionCount ? `${questionCount} items` : "Not shown"}
-                                </p>
-                            </div>
-
-                            <div className="rounded-2xl border border-border bg-muted p-4">
-                                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                    <Clock3 className="size-4 text-primary" />
-                                    Time
-                                </div>
-                                <p className="mt-2 text-sm font-semibold text-foreground">
-                                    {getDurationText(diagnosticAssessment)}
-                                </p>
-                            </div>
-
-                            <div className="rounded-2xl border border-border bg-muted p-4">
-                                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                    <ShieldCheck className="size-4 text-primary" />
-                                    Access
-                                </div>
-                                <p className="mt-2 text-sm font-semibold text-foreground">
-                                    Required
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="mt-8 w-full rounded-3xl border border-dashed border-destructive/30 bg-destructive/5 p-6 shadow-sm sm:p-8">
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                            <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-card text-destructive shadow-sm ring-1 ring-destructive/20">
-                                <LockKeyhole className="size-6" />
-                            </div>
-
-                            <div className="min-w-0 flex-1">
-                                <p className="text-base font-semibold text-destructive">
-                                    Lesson content is locked
-                                </p>
-
-                                <p className="mt-2 max-w-4xl text-sm leading-7 text-destructive/80">
-                                    You can open the lessons after submitting the diagnostic exam. This area is full-width so you can later replace it with the actual locked lesson preview or exam-related content.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="mt-8 w-full rounded-3xl border border-border bg-muted/70 p-6 sm:p-8">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                            <div>
-                                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                                    <ClipboardCheck className="size-4 text-primary" />
-                                    Diagnostic content area
-                                </div>
-
-                                <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
-                                    This wide section can later be replaced with the diagnostic exam content.
-                                </p>
-                            </div>
-
-                            <span className="inline-flex w-fit items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground">
-                Locked for now
-              </span>
-                        </div>
-
-                        <div className="mt-6 grid gap-4 lg:grid-cols-3">
-                            <DiagnosticStep
-                                number="1"
-                                title="Take the diagnostic"
-                                description="Answer the questions based on what you currently know."
+                        <div className="grid gap-3 sm:grid-cols-3 lg:w-[480px]">
+                            <DiagnosticFact
+                                icon={FileQuestion}
+                                label="Items"
+                                value={questionCount ? `${questionCount} items` : "Not shown"}
                             />
-
-                            <DiagnosticStep
-                                number="2"
-                                title="Submit your answers"
-                                description="REBYU will record your diagnostic attempt."
+                            <DiagnosticFact
+                                icon={Clock3}
+                                label="Time"
+                                value={getDurationText(diagnosticAssessment)}
                             />
-
-                            <DiagnosticStep
-                                number="3"
-                                title="Unlock learning"
-                                description="After submission, the study content can open."
+                            <DiagnosticFact
+                                icon={ShieldCheck}
+                                label="Access"
+                                value="Required"
                             />
                         </div>
                     </div>
 
-                    <div className="mt-8 flex flex-col gap-4 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="min-w-0">
-                            <p className="text-xs font-medium text-muted-foreground">
-                                Progress unlocked after diagnostic
-                            </p>
+                    <div className="mt-8 grid gap-4 lg:grid-cols-3">
+                        <DiagnosticStep
+                            number="1"
+                            title="take the diagnostic"
+                            description="Answer from what you already know. Guessing helps nobody here."
+                        />
+                        <DiagnosticStep
+                            number="2"
+                            title="submit your answers"
+                            description="REBYU records the attempt and works out where you are strongest."
+                        />
+                        <DiagnosticStep
+                            number="3"
+                            title="unlock the lessons"
+                            description="The learning path opens, ordered by what you most need."
+                        />
+                    </div>
 
-                            <div className="mt-2 w-full sm:w-80">
-                                <ProgressBar value={0} />
-                            </div>
-                        </div>
+                    <div className="mt-8 flex flex-col gap-4 border-t-2 border-rb-swan pt-6 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="rb-caption max-w-md">
+                            {diagnosticAssessment
+                                ? "You can only sit this once, so give it the time it needs."
+                                : "Nothing to sit yet."}
+                        </p>
 
-                        <Button
+                        <TactileButton
                             type="button"
-                            size="lg"
                             disabled={!diagnosticAssessment || !takePath}
                             onClick={startDiagnostic}
-                            className="gap-2"
                         >
                             {diagnosticAssessment
-                                ? "Take Diagnostic Exam"
-                                : "No Diagnostic Exam Yet"}
-                            <ArrowRight className="size-4" />
-                        </Button>
+                                ? "take diagnostic exam"
+                                : "no diagnostic exam yet"}
+                            <ArrowRight className="size-5" aria-hidden="true" />
+                        </TactileButton>
                     </div>
 
                     {!diagnosticAssessment ? (
-                        <p className="mt-4 rounded-xl bg-rb-fox-wash px-4 py-3 text-sm leading-6 text-rb-fox-lip">
-                            The diagnostic exam is not found for this certification yet. Create a Diagnostic assessment in the admin Assessments tab first.
+                        <p className="mt-4 rounded-rb-tile border-2 border-rb-fox/45 bg-rb-fox-wash px-4 py-3 text-sm leading-6 text-rb-fox-lip">
+                            The diagnostic exam is not found for this certification yet.
+                            Create a Diagnostic assessment in the admin Assessments tab
+                            first.
                         </p>
                     ) : null}
-                </section>
-
-                <section className="mt-8 rounded-3xl border border-border bg-muted p-6 sm:p-8">
-                    <div className="flex items-start gap-3">
-                        <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary" />
-
-                        <div>
-                            <h2 className="font-semibold text-foreground">
-                                Ready to unlock your study path
-                            </h2>
-
-                            <p className="mt-2 text-sm leading-7 text-muted-foreground">
-                                Once you finish the diagnostic, the learning content can become available for this certification review.
-                            </p>
-                        </div>
-                    </div>
-                </section>
+                </RebyuCard>
             </article>
         </main>
     )

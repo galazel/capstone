@@ -2,28 +2,23 @@ import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import {
-  ArrowLeft,
   Building2,
+  Check,
   CheckCircle2,
+  ClipboardCheck,
   GraduationCap,
   Loader2,
+  Mail,
 } from "@/components/icons"
 import { toast } from "sonner"
 
-import { Badge } from "@/components/ui/badge"
 import { BrandLogo } from "@/components/brand-logo"
-import { Button } from "@/components/ui/button"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+  BackButton,
+  Chip,
+  RebyuCard,
+  TactileButton,
+} from "@/components/rebyu/rebyu-ui.jsx"
 import { Skeleton } from "@/components/ui/skeleton"
 import { getAllCertifications } from "@/services/certificationService.js"
 import { submitPublicPartnershipRequest } from "@/services/partnershipService.js"
@@ -37,6 +32,86 @@ const EMPTY_FORM = {
   contactNumber: "",
   organizationAddress: "",
   businessDescription: "",
+}
+
+/* `ShieldCheck` is not in the generated icon map, and the middle step is the
+   only place a verification glyph is wanted -- a local mark is cheaper than
+   another entry in a generated file. */
+function ShieldCheckMark(props) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M12 3l7 3v5.5c0 4.3-2.9 8.3-7 9.5-4.1-1.2-7-5.2-7-9.5V6l7-3z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  )
+}
+
+/* The three things that happen after the button is pressed. This used to be a
+   sentence inside the intro paragraph, which is the one place nobody reads it:
+   the anxiety of a partnership form is not knowing what you have just started,
+   and a three-step strip answers that before the first field. */
+const PROCESS = [
+  {
+    icon: ClipboardCheck,
+    title: "you submit",
+    body: "Organization details and the certifications your learners need. No account is created yet.",
+  },
+  {
+    icon: ShieldCheckMark,
+    title: "we review",
+    body: "Our team verifies your organization and the learner slots you asked for.",
+  },
+  {
+    icon: Mail,
+    title: "you hear back",
+    body: "We email the contact person once the request is approved or rejected.",
+  },
+]
+
+/** Section frame: icon tile, display heading, body, rule above. Used twice. */
+function FormSection({ icon: Icon, tone = "feather", title, description, children }) {
+  const TONES = {
+    feather: "bg-rb-feather-wash text-rb-feather-lip",
+    macaw: "bg-rb-macaw-wash text-rb-macaw-lip",
+  }
+
+  return (
+    <section className="border-t-2 border-rb-swan pt-10 first:border-t-0 first:pt-0">
+      <div className="flex items-start gap-4">
+        <span
+          className={`grid size-12 shrink-0 place-items-center rounded-rb-tile ${TONES[tone]}`}
+        >
+          <Icon className="size-6" aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <h2 className="rb-display rb-display-md">{title}</h2>
+          <p className="rb-body mt-1 text-sm">{description}</p>
+        </div>
+      </div>
+      <div className="mt-7">{children}</div>
+    </section>
+  )
+}
+
+/** Label + control pair. The label is the body face at 700, never the display face. */
+function Field({ id, label, hint, className = "", children }) {
+  return (
+    <div className={`space-y-2 ${className}`}>
+      <label htmlFor={id} className="block text-sm font-bold text-rb-eel">
+        {label}
+      </label>
+      {children}
+      {hint ? <p className="rb-caption">{hint}</p> : null}
+    </div>
+  )
 }
 
 export default function InstitutionRequestAccessPage() {
@@ -76,6 +151,15 @@ export default function InstitutionRequestAccessPage() {
 
   const setSlots = (certificationId, value) =>
     setSelected((current) => ({ ...current, [certificationId]: value }))
+
+  /* The stepper works on the number, but the field stays a string while the
+     visitor is typing -- nudging an empty or half-typed box starts from 0. */
+  const nudgeSlots = (certificationId, delta) =>
+    setSelected((current) => {
+      const parsed = Number(current[certificationId])
+      const base = Number.isFinite(parsed) ? parsed : 0
+      return { ...current, [certificationId]: String(Math.max(1, base + delta)) }
+    })
 
   const selectedItems = useMemo(
     () =>
@@ -133,9 +217,12 @@ export default function InstitutionRequestAccessPage() {
     if (!form.organizationAddress.trim()) return "Enter your organization address."
     if (!form.businessDescription.trim())
       return "Add a short description of your organization."
-    if (selectedItems.length === 0)
-      return "Select at least one certification."
-    if (selectedItems.some((item) => !Number.isFinite(item.requestedSlots) || item.requestedSlots < 1))
+    if (selectedItems.length === 0) return "Select at least one certification."
+    if (
+      selectedItems.some(
+        (item) => !Number.isFinite(item.requestedSlots) || item.requestedSlots < 1
+      )
+    )
       return "Each selected certification needs at least 1 learner slot."
     return ""
   }
@@ -154,280 +241,369 @@ export default function InstitutionRequestAccessPage() {
   // --- Confirmation screen ---------------------------------------------------
   if (confirmation) {
     return (
-      <div className="min-h-dvh bg-[#F6F9FC] px-5 py-12 text-[#273452]">
-        <div className="mx-auto max-w-xl pt-10">
-          <Card className="border-[#E0E7EF] shadow-none">
-            <CardHeader className="items-center text-center">
-              <span className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <CheckCircle2 className="size-6" aria-hidden="true" />
-              </span>
-              <CardTitle className="mt-2 text-2xl">Request submitted</CardTitle>
-              <CardDescription>
-                Your partnership request has been submitted.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 text-center">
-              <p className="text-sm leading-6 text-muted-foreground">
-                Our team will review your organization details and requested
-                certification access. You will receive an email after the
-                request is approved or rejected.
+      <main className="rebyu-ds rb-light-only flex min-h-dvh flex-col bg-rb-polar text-rb-eel">
+        <PublicHeader />
+        <div className="flex flex-1 items-center justify-center px-5 py-14 sm:px-8">
+          <RebyuCard className="w-full max-w-xl p-8 sm:p-10">
+            <span className="grid size-14 place-items-center rounded-rb-tile bg-rb-leaf-wash text-rb-leaf">
+              <CheckCircle2 className="size-7" aria-hidden="true" />
+            </span>
+            <h1 className="rb-display rb-display-md mt-5">request submitted</h1>
+            <p className="rb-body mt-3">
+              Our team will review your organization details and requested
+              certification access. You will receive an email at the address you
+              gave once the request is approved or rejected.
+            </p>
+
+            <div className="mt-7 rounded-rb-tile border-2 border-rb-swan bg-rb-polar p-5">
+              <p className="rb-eyebrow">your reference number</p>
+              <p className="rb-numeric mt-2 text-2xl">
+                {confirmation.referenceNumber}
               </p>
-              <div className="border-y border-[#E0E7EF] bg-[#F6F9FC] p-5">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Your reference number
-                </p>
-                <p className="mt-1 font-mono text-lg font-semibold">
-                  {confirmation.referenceNumber}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Keep this to check your request status later.
-                </p>
-              </div>
-              <Button asChild variant="outline" className="w-full">
-                <Link to="/">Back to home</Link>
-              </Button>
-            </CardContent>
-          </Card>
+              <p className="rb-caption mt-2">
+                Keep this to check your request status later.
+              </p>
+            </div>
+
+            <TactileButton asChild variant="ghost" className="mt-7 w-full">
+              <Link to="/">back to home</Link>
+            </TactileButton>
+          </RebyuCard>
         </div>
-      </div>
+      </main>
     )
   }
 
   // --- Request form ----------------------------------------------------------
   return (
-    <div className="min-h-dvh bg-[#F6F9FC] text-[#273452]">
-      <header className="border-b border-[#E0E7EF] bg-white">
-        <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between px-5 sm:px-8">
-          <Link to="/" className="flex items-center gap-2.5 font-heading text-lg font-bold tracking-tight">
-            <BrandLogo className="size-9" />
-            REBYU
-          </Link>
-          <Link to="/" className="inline-flex items-center gap-2 text-sm font-medium text-[#66758A] hover:text-[#2F7DD3]">
-            <ArrowLeft className="size-4" aria-hidden="true" />
-            Home
-          </Link>
-        </div>
-      </header>
+    <main className="rebyu-ds rb-light-only min-h-dvh bg-rb-snow text-rb-eel">
+      <PublicHeader />
 
-      <div className="mx-auto max-w-[1000px] px-5 py-10 sm:px-8 sm:py-14">
-
-        <div className="mb-6">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#2F7DD3]">Institution partnerships</p>
-          <h1 className="mt-3 font-heading text-3xl font-bold tracking-[-0.035em] sm:text-4xl">
-            Request institution access
+      {/* Hero band. Polar rather than Snow, so the page opens on the same
+          two-surface rhythm the landing page keeps between its sections. */}
+      <section className="border-b-2 border-rb-swan bg-rb-polar px-5 py-14 sm:px-8 lg:py-20">
+        <div className="mx-auto max-w-[1120px]">
+          <p className="rb-eyebrow">institution partnerships</p>
+          <h1 className="rb-display rb-display-lg mt-3 max-w-3xl">
+            bring your school onto rebyu.
           </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+          <p className="rb-body mt-4 max-w-2xl">
             Tell us about your organization and the certifications your learners
-            need. After you submit, our team reviews your request and emails you
-            once it is approved or rejected. No account is created yet.
+            need. Nothing is charged, and no account is created by this form.
           </p>
-        </div>
 
-        <form onSubmit={handleSubmit} className="mt-10 space-y-10">
-          {/* Organization details */}
-          <Card className="border-0 bg-transparent shadow-none">
-            <CardHeader className="border-b border-[#E0E7EF] px-0 pb-5">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Building2 className="size-5 text-primary" aria-hidden="true" />
-                Organization details
-              </CardTitle>
-              <CardDescription>
-                We use these to verify your organization.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-5 px-0 pt-6 sm:grid-cols-2">
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="org-name">Organization name</Label>
-                <Input
+          <ol className="mt-10 grid gap-4 sm:grid-cols-3">
+            {PROCESS.map((step, index) => (
+              <li key={step.title}>
+                <RebyuCard className="h-full">
+                  <div className="flex items-center gap-3">
+                    <span className="grid size-10 shrink-0 place-items-center rounded-rb-tile bg-rb-macaw-wash text-rb-macaw-lip">
+                      <step.icon className="size-5" aria-hidden="true" />
+                    </span>
+                    <span className="rb-numeric text-sm text-rb-hare">
+                      0{index + 1}
+                    </span>
+                  </div>
+                  <p className="rb-display rb-display-sm mt-3">{step.title}</p>
+                  <p className="rb-caption mt-1.5">{step.body}</p>
+                </RebyuCard>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      <form
+        onSubmit={handleSubmit}
+        className="mx-auto grid max-w-[1120px] gap-10 px-5 py-14 sm:px-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-12 lg:py-16"
+      >
+        <div className="space-y-10">
+          <FormSection
+            icon={Building2}
+            title="organization details"
+            description="We use these to verify your organization and to reach you about the request."
+          >
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field id="org-name" label="Organization name" className="sm:col-span-2">
+                <input
                   id="org-name"
+                  className="rb-input"
                   value={form.organizationName}
                   onChange={setField("organizationName")}
                   placeholder="Cebu Institute of Technology"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="org-email">Organization email</Label>
-                <Input
+              </Field>
+              <Field
+                id="org-email"
+                label="Organization email"
+                hint="The approval or rejection email goes here."
+              >
+                <input
                   id="org-email"
                   type="email"
+                  autoComplete="email"
+                  className="rb-input"
                   value={form.organizationEmail}
                   onChange={setField("organizationEmail")}
                   placeholder="partnerships@org.edu"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="contact-name">Contact person</Label>
-                <Input
+              </Field>
+              <Field id="contact-name" label="Contact person">
+                <input
                   id="contact-name"
+                  className="rb-input"
                   value={form.contactPersonName}
                   onChange={setField("contactPersonName")}
                   placeholder="Maria Santos"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="contact-number">Contact number</Label>
-                <Input
+              </Field>
+              <Field id="contact-number" label="Contact number">
+                <input
                   id="contact-number"
+                  type="tel"
+                  className="rb-input"
                   value={form.contactNumber}
                   onChange={setField("contactNumber")}
                   placeholder="+63 32 261 7741"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="org-address">Organization address</Label>
-                <Input
+              </Field>
+              <Field id="org-address" label="Organization address">
+                <input
                   id="org-address"
+                  className="rb-input"
                   value={form.organizationAddress}
                   onChange={setField("organizationAddress")}
                   placeholder="N. Bacalso Ave, Cebu City"
                 />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="org-description">
-                  Organization / business description
-                </Label>
-                <Textarea
+              </Field>
+              <Field
+                id="org-description"
+                label="Organization / business description"
+                className="sm:col-span-2"
+              >
+                <textarea
                   id="org-description"
-                  rows={3}
+                  rows={4}
+                  className="rb-input py-3 leading-relaxed"
                   value={form.businessDescription}
                   onChange={setField("businessDescription")}
                   placeholder="Briefly describe your organization and why you want to partner with REBYU."
                 />
-              </div>
-            </CardContent>
-          </Card>
+              </Field>
+            </div>
+          </FormSection>
 
-          {/* Certification selection */}
-          <Card className="border-0 bg-transparent shadow-none">
-            <CardHeader className="border-b border-[#E0E7EF] px-0 pb-5">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <GraduationCap
-                  className="size-5 text-primary"
-                  aria-hidden="true"
-                />
-                Requested certification access
-              </CardTitle>
-              <CardDescription>
-                Select the certifications and how many learner slots you need
-                for each.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2 px-0 pt-6">
-              {certificationsQuery.isLoading ? (
-                <div className="space-y-2">
-                  {Array.from({ length: 3 }).map((_, index) => (
-                    <Skeleton key={index} className="h-14 rounded-xl" />
-                  ))}
-                </div>
-              ) : certifications.length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">
-                  No certifications are available right now.
-                </p>
-              ) : (
-                certifications.map((certification) => {
-                  const id = certification.certificationId
-                  const isSelected = id in selected
-                  return (
-                    <div
-                      key={id}
-                      className={`flex flex-wrap items-center gap-3 border-b border-[#E0E7EF] px-1 py-4 transition-colors ${isSelected ? "bg-[#E8F3FC]/65" : "bg-transparent"}`}
-                    >
-                      <label className="flex flex-1 cursor-pointer items-center gap-3">
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={() => toggleCertification(id)}
-                          aria-label={`Select ${certification.title}`}
-                        />
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">
-                            {certification.title}
-                          </p>
-                          {certification.industry ? (
-                            <Badge variant="secondary" className="mt-0.5 text-[10px]">
-                              {certification.industry}
-                            </Badge>
-                          ) : null}
-                        </div>
-                      </label>
-                      {isSelected ? (
-                        <div className="flex items-center gap-2">
-                          <Label
-                            htmlFor={`slots-${id}`}
-                            className="text-xs text-muted-foreground"
-                          >
-                            Learner slots
-                          </Label>
-                          <Input
-                            id={`slots-${id}`}
-                            type="number"
-                            min={1}
-                            value={selected[id]}
-                            onChange={(event) => setSlots(id, event.target.value)}
-                            className="h-9 w-24"
-                          />
-                        </div>
-                      ) : null}
-                    </div>
-                  )
-                })
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Summary */}
-          {selectedItems.length > 0 ? (
-            <Card className="border-[#D8E7F2] bg-[#EAF3FA] shadow-none">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Request summary</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                {selectedItems.map((item) => (
-                  <div
-                    key={item.certificationId}
-                    className="flex items-center justify-between gap-2"
-                  >
-                    <span className="truncate">
-                      {item.certification?.title ??
-                        `Certification #${item.certificationId}`}
-                    </span>
-                    <span className="shrink-0 text-muted-foreground">
-                      {Number.isFinite(item.requestedSlots)
-                        ? item.requestedSlots
-                        : 0}{" "}
-                      slot(s)
-                    </span>
-                  </div>
-                ))}
-                <div className="flex items-center justify-between border-t pt-2 font-medium">
-                  <span>Total learner slots</span>
-                  <span>{totalSlots}</span>
-                </div>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {error ? (
-            <p className="text-sm text-destructive" role="alert">
-              {error}
-            </p>
-          ) : null}
-
-          <Button
-            type="submit"
-            className="h-11 w-full sm:ml-auto sm:flex sm:w-auto sm:min-w-64"
-            disabled={submitMutation.isPending}
+          <FormSection
+            icon={GraduationCap}
+            tone="macaw"
+            title="certification access"
+            description="Pick the certifications your learners will sit, and how many learner slots you need for each."
           >
-            {submitMutation.isPending ? (
-              <>
-                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                Submitting request...
-              </>
+            {certificationsQuery.isLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <Skeleton key={index} className="h-24 rounded-rb-card" />
+                ))}
+              </div>
+            ) : certifications.length === 0 ? (
+              <p className="rb-body rounded-rb-card border-2 border-dashed border-rb-swan px-5 py-10 text-center">
+                No certifications are open for partnership right now.
+              </p>
             ) : (
-              "Submit Partnership Request"
+              <div className="space-y-3">
+                {certifications.map((certification) => (
+                  <CertificationRow
+                    key={certification.certificationId}
+                    certification={certification}
+                    selected={certification.certificationId in selected}
+                    slots={selected[certification.certificationId] ?? ""}
+                    onToggle={() => toggleCertification(certification.certificationId)}
+                    onSlots={(value) => setSlots(certification.certificationId, value)}
+                    onNudge={(delta) => nudgeSlots(certification.certificationId, delta)}
+                  />
+                ))}
+              </div>
             )}
-          </Button>
-        </form>
+          </FormSection>
+        </div>
+
+        {/* The summary follows the form down the page: on a long form the
+            running total and the submit key are the two things you want within
+            reach at every scroll position, not only at the bottom. */}
+        <aside className="lg:sticky lg:top-28 lg:self-start">
+          <RebyuCard raised className="p-6">
+            <p className="rb-eyebrow">request summary</p>
+
+            {selectedItems.length === 0 ? (
+              <p className="rb-body mt-4 text-sm">
+                Nothing selected yet. Choose at least one certification to send a
+                request.
+              </p>
+            ) : (
+              <>
+                <ul className="mt-4 space-y-3">
+                  {selectedItems.map((item) => (
+                    <li
+                      key={item.certificationId}
+                      className="flex items-baseline justify-between gap-3 text-sm"
+                    >
+                      <span className="min-w-0 truncate font-bold text-rb-eel">
+                        {item.certification?.title ??
+                          `Certification #${item.certificationId}`}
+                      </span>
+                      <span className="rb-numeric shrink-0 text-sm text-rb-wolf">
+                        {Number.isFinite(item.requestedSlots) ? item.requestedSlots : 0}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-4 flex items-baseline justify-between gap-3 border-t-2 border-rb-swan pt-4">
+                  <span className="text-sm font-bold text-rb-eel">
+                    Total learner slots
+                  </span>
+                  <span className="rb-numeric text-xl">{totalSlots}</span>
+                </div>
+              </>
+            )}
+
+            {error ? (
+              <p
+                role="alert"
+                className="mt-5 rounded-rb-tile border-2 border-rb-cardinal bg-rb-cardinal-wash px-4 py-3 text-sm font-bold text-rb-cardinal-lip"
+              >
+                {error}
+              </p>
+            ) : null}
+
+            <TactileButton
+              type="submit"
+              className="mt-6 w-full"
+              disabled={submitMutation.isPending}
+            >
+              {submitMutation.isPending ? (
+                <>
+                  <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+                  submitting...
+                </>
+              ) : (
+                "submit request"
+              )}
+            </TactileButton>
+
+            <p className="rb-caption mt-4">
+              You get a reference number as soon as the request is in.
+            </p>
+          </RebyuCard>
+        </aside>
+      </form>
+    </main>
+  )
+}
+
+/* --- pieces ---------------------------------------------------------------- */
+
+function PublicHeader() {
+  return (
+    <header className="sticky top-0 z-50 w-full border-b-2 border-rb-swan bg-rb-snow">
+      <div className="mx-auto flex h-20 max-w-[1120px] items-center justify-between gap-6 px-5 sm:px-8">
+        <Link to="/" className="flex items-center gap-2.5">
+          <BrandLogo className="size-9" />
+          <span className="rb-display text-2xl leading-none">rebyu</span>
+        </Link>
+        <BackButton asChild size="sm" label="Back to home">
+          <Link to="/" />
+        </BackButton>
       </div>
+    </header>
+  )
+}
+
+/**
+ * One selectable certification. The toggle is a `role="checkbox"` button rather
+ * than a label wrapping a control, because the slot stepper sits in the same
+ * card -- inside a label, every press of "+" would also toggle the row off.
+ */
+function CertificationRow({ certification, selected, slots, onToggle, onSlots, onNudge }) {
+  const id = certification.certificationId
+
+  return (
+    <div
+      className={`rounded-rb-card border-2 transition-colors ${
+        selected
+          ? "border-rb-feather bg-rb-feather-wash"
+          : "border-rb-swan bg-rb-snow hover:border-rb-hare"
+      }`}
+    >
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={selected}
+        onClick={onToggle}
+        className="flex w-full items-start gap-4 p-5 text-left focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-rb-macaw"
+      >
+        <span
+          aria-hidden="true"
+          className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-[6px] border-2 transition-colors ${
+            selected
+              ? "border-rb-feather bg-rb-feather text-rb-snow"
+              : "border-rb-hare bg-rb-snow"
+          }`}
+        >
+          {selected ? <Check className="size-4" /> : null}
+        </span>
+
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="rb-display-sm text-rb-eel">{certification.title}</span>
+            {certification.industry ? (
+              <Chip tone={selected ? "macaw" : "neutral"}>{certification.industry}</Chip>
+            ) : null}
+          </span>
+          {certification.description ? (
+            <span className="rb-caption mt-1.5 line-clamp-2 block">
+              {certification.description}
+            </span>
+          ) : null}
+        </span>
+      </button>
+
+      {selected ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t-2 border-rb-swan px-5 py-4">
+          <label htmlFor={`slots-${id}`} className="text-sm font-bold text-rb-eel">
+            Learner slots
+          </label>
+          <div className="flex items-center gap-2">
+            <StepperKey label="Remove one learner slot" onClick={() => onNudge(-1)}>
+              &minus;
+            </StepperKey>
+            <input
+              id={`slots-${id}`}
+              type="number"
+              min={1}
+              value={slots}
+              onChange={(event) => onSlots(event.target.value)}
+              className="rb-input w-24 bg-rb-snow text-center font-bold"
+            />
+            <StepperKey label="Add one learner slot" onClick={() => onNudge(1)}>
+              +
+            </StepperKey>
+          </div>
+        </div>
+      ) : null}
     </div>
+  )
+}
+
+/* 56px square, matching the input beside it and the button ladder. */
+function StepperKey({ label, onClick, children }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      className="grid size-14 shrink-0 place-items-center rounded-rb-tile border-2 border-rb-swan bg-rb-snow text-xl font-bold text-rb-wolf transition-colors hover:border-rb-hare hover:text-rb-eel focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-rb-macaw"
+    >
+      {children}
+    </button>
   )
 }

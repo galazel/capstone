@@ -15,6 +15,7 @@ import {
   ServerCog,
   Search,
   Swords,
+  Target,
   Users,
   UsersRound,
   X,
@@ -48,6 +49,20 @@ const learnerNavigation = [
   // No Rankings entry: the XP leaderboard is a panel on Challenges now, beside
   // the challenge-points board. Two standings on two pages meant knowing which
   // board you wanted before you could find it.
+]
+
+/* The bottom bar carries one destination the top bar does not.
+ *
+ * On a desktop the mistake bank is a click away in the account menu, and the
+ * top nav is already five items of the product's main surfaces. On a phone
+ * that menu is behind an avatar in the corner, which is a poor place to keep
+ * the thing a learner opens straight after failing an attempt -- so the bar
+ * gets it, and the top nav is left alone. Labelled "Mistakes" rather than
+ * "Mistake bank": six labels share the width of a phone.
+ */
+const learnerMobileNavigation = [
+  ...learnerNavigation,
+  { label: "Mistakes", href: "/learner/mistakes", icon: Target },
 ]
 
 const adminGroups = [
@@ -289,7 +304,10 @@ export function PortalTopNavigation({ role, actions, organizationName, instituti
     role === "INSTITUTION_MEMBER" || (role === "INSTITUTION" && !isInstitutionOwner)
   const allGroups = role === "ADMIN" ? adminGroups : institutionGroups
   const groups = isInstitutionMember ? [] : allGroups
-  const commandItems = role === "LEARNER" ? learnerNavigation.map((item) => ({ ...item, group: "Learner" })) : groups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.label })))
+  /* The palette searches every learner destination, so it uses the longer of
+     the two lists -- a search box that cannot find a page the app has is worse
+     than useless. */
+  const commandItems = role === "LEARNER" ? learnerMobileNavigation.map((item) => ({ ...item, group: "Learner" })) : groups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.label })))
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -363,8 +381,8 @@ export function LearnerMobileNavigation() {
   const location = useLocation()
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden" aria-label="Mobile learner navigation">
-      <div className="grid h-16" style={{ gridTemplateColumns: `repeat(${learnerNavigation.length}, minmax(0, 1fr))` }}>
-        {learnerNavigation.map((item) => { const Icon = item.icon; const active = pathMatches(location.pathname, item); return <NavLink key={`${item.label}-${item.href}`} to={item.href} className={cn("flex min-w-0 flex-col items-center justify-center gap-1 text-[11px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", active ? "text-primary" : "text-muted-foreground")}><Icon className="size-5" /><span className="max-w-full truncate px-1">{item.label}</span></NavLink> })}
+      <div className="grid h-16" style={{ gridTemplateColumns: `repeat(${learnerMobileNavigation.length}, minmax(0, 1fr))` }}>
+        {learnerMobileNavigation.map((item) => { const Icon = item.icon; const active = pathMatches(location.pathname, item); return <NavLink key={`${item.label}-${item.href}`} to={item.href} className={cn("flex min-w-0 flex-col items-center justify-center gap-1 text-[11px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", active ? "text-primary" : "text-muted-foreground")}><Icon className="size-5" /><span className="max-w-full truncate px-1">{item.label}</span></NavLink> })}
       </div>
     </nav>
   )

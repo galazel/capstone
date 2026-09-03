@@ -1,24 +1,21 @@
+import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import {
-  ArrowLeftIcon,
   CheckCircle2Icon,
   ClockIcon,
   HourglassIcon,
   XCircleIcon,
 } from "@/components/icons"
 
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
+import {
+  BackButton,
+  Chip,
+  RebyuCard,
+  TactileButton,
+} from "@/components/rebyu/rebyu-ui.jsx"
 import CodeMirrorProgrammingWorkspace from "@/components/assessments/attempt/code-mirror-programming-workspace.jsx"
 import PerformanceBreakdown from "@/components/assessments/attempt/performance-breakdown.jsx"
 import {
@@ -36,41 +33,42 @@ import { FEATURES } from "@/services/subscriptionService.js"
 /**
  * Per-state colours for the answer review.
  *
- * `--primary` is Azure (#1b6ef3), so "correct" was rendering blue — the same
- * hue the page uses for links and neutral emphasis, which left a right answer
- * and a plain UI accent looking identical. Correct is green here, and every
- * state carries a tinted surface rather than the same muted grey, so the shape
- * of a run of answers is readable before any of the text is.
+ * These are design-system tokens now. They used to be literal emerald/amber
+ * Tailwind classes, on the stated grounds that the token set had no success or
+ * warning hue -- true when that comment was written, and no longer: `rb-leaf`
+ * is the green accent and `rb-fox` the amber one, each with a wash tuned to
+ * both themes. Spelling them as tokens is what keeps a correct answer here the
+ * same green as a correct answer in the attempt runner and the curriculum.
  *
- * Green/amber are literal palette classes rather than design-system tokens
- * because the token set has no success or warning hue — `--color-rb-feather` is
- * blue despite its Duolingo name. Both halves of each pair are declared so the
- * tints survive dark mode instead of washing out to near-black.
+ * `card` is the tinted surface the item sits on -- the shape of a run of
+ * answers is readable before any of the text is -- and `panel` is for blocks
+ * sitting *on* that surface, which go back to Snow so they do not disappear
+ * into it.
  */
 const ANSWER_TONES = {
   correct: {
-    card: "border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20",
-    panel: "border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30",
-    text: "text-emerald-700 dark:text-emerald-400",
-    badge: "border-transparent bg-emerald-600 text-white dark:bg-emerald-500",
+    card: "border-rb-leaf/45 bg-rb-leaf-wash",
+    panel: "border-rb-leaf/45 bg-rb-leaf-wash",
+    text: "text-rb-leaf",
+    badge: "bg-rb-leaf text-white",
   },
   incorrect: {
-    card: "border-destructive/30 bg-destructive/5",
-    panel: "border-destructive/30 bg-destructive/10",
-    text: "text-destructive",
-    badge: null, // the destructive Badge variant already covers this
+    card: "border-rb-cardinal/45 bg-rb-cardinal-wash",
+    panel: "border-rb-cardinal/45 bg-rb-cardinal-wash",
+    text: "text-rb-cardinal-lip",
+    badge: "bg-rb-cardinal text-white",
   },
   pending: {
-    card: "border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/20",
-    panel: "border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30",
-    text: "text-amber-700 dark:text-amber-400",
-    badge: "border-transparent bg-amber-500 text-white",
+    card: "border-rb-fox/45 bg-rb-fox-wash",
+    panel: "border-rb-fox/45 bg-rb-fox-wash",
+    text: "text-rb-fox-lip",
+    badge: "bg-rb-fox text-white",
   },
   neutral: {
-    card: "",
-    panel: "bg-muted/50",
-    text: "text-muted-foreground",
-    badge: null,
+    card: "border-rb-swan bg-rb-snow",
+    panel: "border-rb-swan bg-rb-polar",
+    text: "text-rb-wolf",
+    badge: "bg-rb-hare text-white",
   },
 }
 
@@ -82,8 +80,11 @@ function answerState(answer) {
   return answer.isCorrect ? "correct" : "incorrect"
 }
 
-function answerTone(answer) {
-  return ANSWER_TONES[answerState(answer)]
+const STATE_LABEL = {
+  correct: "Correct",
+  incorrect: "Incorrect",
+  pending: "Pending review",
+  neutral: "Unanswered",
 }
 
 function formatDuration(totalSeconds) {
@@ -93,10 +94,157 @@ function formatDuration(totalSeconds) {
   return `${minutes}m ${seconds}s`
 }
 
+function toNumber(value) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+/**
+ * The score, as a dial.
+ *
+ * The number used to be a 60px figure beside a thin rail. The dial carries the
+ * same two facts in one object: how much of the paper was earned, and where the
+ * line was -- the threshold is a notch cut through the ring, so a score that
+ * clears it still shows what it cleared. The arc grows from zero on mount;
+ * `prefers-reduced-motion` stills it with every other transition in the system.
+ */
+function ScoreDial({ percentage, passingScore, passed }) {
+  /* The first paint must land on 0 for the transition to have anywhere to
+     travel from, so the real value is set just after mount.
+
+     A timer rather than requestAnimationFrame: rAF does not run while the tab
+     is hidden, and a result opened in a background tab would then sit at a
+     hard zero -- an empty dial reporting a score of nothing -- until the
+     learner looked at it. A timer still fires, throttled, so the dial is always
+     showing the real number by the time it is seen. */
+  const [grown, setGrown] = useState(false)
+  useEffect(() => {
+    const timer = setTimeout(() => setGrown(true), 30)
+    return () => clearTimeout(timer)
+  }, [])
+
+  const size = 168
+  const stroke = 16
+  const radius = (size - stroke) / 2
+  const circumference = 2 * Math.PI * radius
+  const clamped = Math.min(100, Math.max(0, percentage))
+  const arc = (grown ? clamped : 0) / 100
+
+  const notchAngle =
+    passingScore != null ? (Math.min(100, Math.max(0, passingScore)) / 100) * 360 - 90 : null
+
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
+        aria-hidden="true"
+        className="-rotate-90"
+      >
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="var(--color-rb-swan)"
+          strokeWidth={stroke}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={passed ? "var(--color-rb-leaf)" : "var(--color-rb-cardinal)"}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference * (1 - arc)}
+          className="transition-[stroke-dashoffset] duration-1000 ease-out"
+        />
+        {notchAngle != null ? (
+          <line
+            x1={size / 2 + (radius - stroke / 2 - 1) * Math.cos((notchAngle * Math.PI) / 180)}
+            y1={size / 2 + (radius - stroke / 2 - 1) * Math.sin((notchAngle * Math.PI) / 180)}
+            x2={size / 2 + (radius + stroke / 2 + 1) * Math.cos((notchAngle * Math.PI) / 180)}
+            y2={size / 2 + (radius + stroke / 2 + 1) * Math.sin((notchAngle * Math.PI) / 180)}
+            stroke="var(--color-rb-eel)"
+            strokeWidth="3"
+            strokeLinecap="round"
+            /* Un-rotated with the group, so the notch is drawn at the angle the
+               maths puts it at rather than 90 degrees off. */
+            transform={`rotate(90 ${size / 2} ${size / 2})`}
+          />
+        ) : null}
+      </svg>
+
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span
+          className={cn(
+            "rb-numeric text-4xl leading-none",
+            passed ? "text-rb-leaf" : "text-rb-cardinal-lip"
+          )}
+        >
+          {percentage.toFixed(0)}%
+        </span>
+        <span
+          className={cn(
+            "mt-1.5 flex items-center gap-1 text-xs font-bold",
+            passed ? "text-rb-leaf" : "text-rb-cardinal-lip"
+          )}
+        >
+          {passed ? (
+            <>
+              <CheckCircle2Icon className="size-3.5" aria-hidden="true" />
+              Passed
+            </>
+          ) : (
+            <>
+              <XCircleIcon className="size-3.5" aria-hidden="true" />
+              Not passed
+            </>
+          )}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+/* Written out rather than interpolated: Tailwind scans source text for class
+   names, and `sm:grid-cols-${n}` is not a string it can find. */
+const STAT_COLUMNS = {
+  2: "sm:grid-cols-2",
+  3: "sm:grid-cols-3",
+  4: "sm:grid-cols-4",
+}
+
+/** One count in the result header. Zero-valued optional tiles are not rendered. */
+function StatTile({ label, value, tone }) {
+  const TONES = {
+    leaf: "border-rb-leaf/45 bg-rb-leaf-wash text-rb-leaf",
+    cardinal: "border-rb-cardinal/45 bg-rb-cardinal-wash text-rb-cardinal-lip",
+    fox: "border-rb-fox/45 bg-rb-fox-wash text-rb-fox-lip",
+    neutral: "border-rb-swan bg-rb-polar text-rb-wolf",
+  }
+
+  return (
+    <div className={cn("rounded-rb-tile border-2 px-3 py-2.5", TONES[tone])}>
+      <dt className="text-xs font-bold opacity-80">{label}</dt>
+      <dd className="rb-numeric mt-0.5 text-xl leading-none">{value ?? 0}</dd>
+    </div>
+  )
+}
+
 export default function LearnerAssessmentResultPage() {
   // Route param carries the server attempt id.
   const { examResultId: attemptId } = useParams()
   const navigate = useNavigate()
+
+  /* Which slice of the review is on screen. A learner who missed eleven items
+     out of sixty should not have to scroll the forty-nine they got right to
+     find them, and after a failed attempt "what did I get wrong" is the only
+     question being asked. */
+  const [reviewFilter, setReviewFilter] = useState("all")
 
   const identity = getCurrentLearnerIdentity()
   const currentLearnerQuery = useQuery({
@@ -115,33 +263,53 @@ export default function LearnerAssessmentResultPage() {
     retry: 1,
   })
 
+  const result = resultQuery.data
+  const answers = useMemo(() => result?.answers ?? [], [result])
+
+  const counts = useMemo(() => {
+    const tally = { all: answers.length, correct: 0, incorrect: 0, pending: 0, neutral: 0 }
+    answers.forEach((answer) => {
+      tally[answerState(answer)] += 1
+    })
+    return tally
+  }, [answers])
+
+  const visibleAnswers = useMemo(
+    () =>
+      reviewFilter === "all"
+        ? answers
+        : answers.filter((answer) => answerState(answer) === reviewFilter),
+    [answers, reviewFilter]
+  )
+
   if (resultQuery.isLoading || (learnerId == null && currentLearnerQuery.isLoading)) {
     return (
-      <div className="mx-auto max-w-4xl space-y-4 p-6">
-        <Skeleton className="h-10 w-2/3" />
-        <Skeleton className="h-40 w-full" />
-        <Skeleton className="h-64 w-full" />
+      <div className="rebyu-ds min-h-dvh bg-rb-polar">
+        <div className="mx-auto max-w-4xl space-y-4 p-6">
+          <Skeleton className="h-10 w-2/3 rounded-rb-tile" />
+          <Skeleton className="h-56 w-full rounded-rb-card" />
+          <Skeleton className="h-64 w-full rounded-rb-card" />
+        </div>
       </div>
     )
   }
 
-  const result = resultQuery.data
   if (resultQuery.isError || !result) {
     return (
-      <div className="flex min-h-dvh items-center justify-center p-6">
-        <div className="max-w-md rounded-2xl border bg-card p-8 text-center">
-          <p className="font-medium">Unable to load this result</p>
-          <p className="mt-1 text-sm text-muted-foreground">
+      <div className="rebyu-ds flex min-h-dvh items-center justify-center bg-rb-polar p-6">
+        <RebyuCard className="max-w-md p-8 text-center">
+          <p className="rb-display rb-display-sm">Unable to load this result</p>
+          <p className="rb-body mt-2 text-sm">
             The result may not exist, or the backend is unavailable.
           </p>
-          <Button
-            className="mt-4"
-            variant="outline"
+          <TactileButton
+            variant="ghost"
+            className="mt-6 w-full"
             onClick={() => navigate("/learner/progress")}
           >
-            Back to Progress
-          </Button>
-        </div>
+            back to progress
+          </TactileButton>
+        </RebyuCard>
       </div>
     )
   }
@@ -155,126 +323,117 @@ export default function LearnerAssessmentResultPage() {
   const passingScore =
     result.passingScore != null && Number.isFinite(rawPassingScore) ? rawPassingScore : null
 
+  const earnedPoints = toNumber(result.earnedPoints)
+  const totalPoints = toNumber(result.totalPoints)
+
+  const statTiles = [
+    { label: "Correct", value: result.correctCount, tone: "leaf" },
+    { label: "Incorrect", value: result.incorrectCount, tone: "cardinal" },
+    { label: "Pending", value: result.pendingCount, tone: "fox" },
+    { label: "Unanswered", value: result.unansweredCount, tone: "neutral" },
+  ].filter((tile) => tile.tone === "leaf" || tile.tone === "cardinal" || tile.value > 0)
+
+  const REVIEW_FILTERS = [
+    { key: "all", label: "All", count: counts.all, tone: "neutral" },
+    { key: "incorrect", label: "Incorrect", count: counts.incorrect, tone: "cardinal" },
+    { key: "pending", label: "Pending", count: counts.pending, tone: "fox" },
+    { key: "neutral", label: "Unanswered", count: counts.neutral, tone: "neutral" },
+    { key: "correct", label: "Correct", count: counts.correct, tone: "leaf" },
+  ].filter((option) => option.key === "all" || option.count > 0)
+
   return (
-    <div className="min-h-dvh bg-muted/30">
-      <header className="border-b bg-background px-4 py-3">
-        <div className="mx-auto flex max-w-4xl items-center gap-2">
-          <Button asChild variant="ghost" size="sm">
-            <Link to="/learner/progress">
-              <ArrowLeftIcon aria-hidden="true" />
-              Back to Progress
-            </Link>
-          </Button>
+    <div className="rebyu-ds min-h-dvh bg-rb-polar text-rb-eel">
+      <header className="sticky top-0 z-40 border-b-2 border-rb-swan bg-rb-snow">
+        <div className="mx-auto flex h-16 max-w-4xl items-center gap-3 px-4">
+          <BackButton asChild size="sm" label="Back to progress">
+            <Link to="/learner/progress" />
+          </BackButton>
+          <div className="min-w-0">
+            <p className="rb-eyebrow">attempt result</p>
+            <p className="truncate text-sm font-bold text-rb-eel">
+              {result.assessmentTitle}
+            </p>
+          </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-4xl space-y-6 px-4 py-6">
-        <Card>
-          <CardHeader>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">
-                {getAssessmentTypeLabel(result.assessmentType)}
-              </Badge>
-              <Badge variant="outline">Attempt {result.attemptNumber}</Badge>
-            </div>
-            <CardTitle className="text-2xl">{result.assessmentTitle}</CardTitle>
-            <CardDescription className="flex items-center gap-1.5">
+        {/* --- Score ------------------------------------------------------- */}
+        <RebyuCard raised className="p-6 sm:p-8">
+          <div className="flex flex-wrap items-center gap-2">
+            <Chip tone="macaw">{getAssessmentTypeLabel(result.assessmentType)}</Chip>
+            <Chip>Attempt {result.attemptNumber}</Chip>
+            <Chip>
               <ClockIcon className="size-3.5" aria-hidden="true" />
-              Time used: {formatDuration(result.durationSeconds)}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap items-start gap-x-8 gap-y-5">
-              <div className="shrink-0">
-                <p
-                  className={cn(
-                    "text-6xl font-bold leading-none tabular-nums",
-                    result.passed ? ANSWER_TONES.correct.text : "text-destructive"
-                  )}
-                >
-                  {percentage.toFixed(0)}%
-                </p>
-                <p
-                  className={cn(
-                    "mt-2 flex items-center gap-1.5 text-sm font-semibold",
-                    result.passed ? ANSWER_TONES.correct.text : "text-destructive"
-                  )}
-                >
-                  {result.passed ? (
-                    <>
-                      <CheckCircle2Icon className="size-4" aria-hidden="true" />
-                      Passed
-                    </>
-                  ) : (
-                    <>
-                      <XCircleIcon className="size-4" aria-hidden="true" />
-                      Not passed
-                    </>
-                  )}
-                </p>
-              </div>
+              {formatDuration(result.durationSeconds)}
+            </Chip>
+          </div>
 
-              <div className="min-w-[15rem] flex-1 space-y-4">
-                {/* The score against the mark it had to clear. "40%" and
-                    "passing score 70%" as two separate figures leave the reader
-                    to do the subtraction; the bar puts the gap on screen, which
-                    is the first thing anyone wants after not passing. */}
+          <h1 className="rb-display rb-display-md mt-4">{result.assessmentTitle}</h1>
+
+          <div className="mt-7 flex flex-col items-center gap-7 sm:flex-row sm:items-start">
+            <ScoreDial
+              percentage={percentage}
+              passingScore={passingScore}
+              passed={Boolean(result.passed)}
+            />
+
+            <div className="min-w-0 flex-1 space-y-5">
+              <div>
+                {/* The gap in words, since the dial already carries it as a
+                    shape. Stated in percentage points and named as such: this
+                    assessment also has real points, and calling both "points"
+                    is how "70 points short" ends up next to "0 / 10 pts". */}
                 {passingScore != null ? (
-                  <div>
-                    <div className="relative h-2.5 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className={cn(
-                          "h-full rounded-full",
-                          result.passed ? "bg-emerald-600 dark:bg-emerald-500" : "bg-destructive"
-                        )}
-                        style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }}
-                      />
-                      {/* The threshold marker sits above the fill, so a score
-                          that clears it still shows where the line was. */}
-                      <span
-                        className="absolute inset-y-0 w-0.5 bg-foreground/60"
-                        style={{ left: `${Math.min(100, Math.max(0, passingScore))}%` }}
-                        aria-hidden="true"
-                      />
-                    </div>
-
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Passing score {passingScore.toFixed(0)}%
+                  <>
+                    <p className="rb-display rb-display-sm">
                       {result.passed
-                        ? ` · cleared by ${(percentage - passingScore).toFixed(0)} points`
-                        : ` · ${(passingScore - percentage).toFixed(0)} points short`}
+                        ? `Cleared the ${passingScore.toFixed(0)}% mark`
+                        : `${(passingScore - percentage).toFixed(0)}% short of the ${passingScore.toFixed(0)}% mark`}
                     </p>
-                  </div>
+                    <p className="rb-caption mt-1">
+                      {result.passed
+                        ? `You scored ${percentage.toFixed(0)}%, ${(percentage - passingScore).toFixed(0)} percentage points above the passing score.`
+                        : `You scored ${percentage.toFixed(0)}%. The notch on the dial marks the passing score.`}
+                    </p>
+                  </>
                 ) : (
-                  <p className="text-xs text-muted-foreground">No passing score set.</p>
+                  <p className="rb-caption">
+                    This assessment has no passing score set.
+                  </p>
                 )}
 
-                <dl className="grid grid-cols-3 gap-3">
-                  {[
-                    { label: "Correct", value: result.correctCount, tone: ANSWER_TONES.correct.text },
-                    { label: "Incorrect", value: result.incorrectCount, tone: "text-destructive" },
-                    { label: "Pending", value: result.pendingCount, tone: "text-muted-foreground" },
-                  ].map((stat) => (
-                    <div key={stat.label} className="rounded-lg border p-3">
-                      <dt className="text-xs text-muted-foreground">{stat.label}</dt>
-                      <dd className={cn("mt-0.5 text-xl font-bold tabular-nums", stat.tone)}>
-                        {stat.value}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
+                {earnedPoints != null && totalPoints != null ? (
+                  <p className="mt-2 text-sm font-bold text-rb-eel">
+                    <span className="rb-numeric">{earnedPoints}</span>
+                    <span className="text-rb-wolf"> / {totalPoints} points</span>
+                  </p>
+                ) : null}
               </div>
+
+              {/* One row, however many tiles there are. A fixed three-column
+                  grid left a fourth tile stranded on a line of its own. */}
+              <dl className={cn("grid grid-cols-2 gap-3", STAT_COLUMNS[statTiles.length])}>
+                {statTiles.map((tile) => (
+                  <StatTile
+                    key={tile.label}
+                    label={tile.label}
+                    value={tile.value}
+                    tone={tile.tone}
+                  />
+                ))}
+              </dl>
             </div>
-            {result.pendingCount > 0 ? (
-              <p className="mt-4 flex items-center gap-1.5 rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
-                <HourglassIcon className="size-3.5 shrink-0" aria-hidden="true" />
-                {result.pendingCount} written, code, or diagram response(s)
-                await manual evaluation and are not included in the automatic
-                score yet.
-              </p>
-            ) : null}
-          </CardContent>
-        </Card>
+          </div>
+
+          {result.pendingCount > 0 ? (
+            <p className="rb-caption mt-6 flex items-start gap-2 rounded-rb-tile border-2 border-rb-fox/45 bg-rb-fox-wash p-3 text-rb-fox-lip">
+              <HourglassIcon className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+              {result.pendingCount} written, code, or diagram response(s) await
+              manual evaluation and are not included in the automatic score yet.
+            </p>
+          ) : null}
+        </RebyuCard>
 
         {/* Offered here, and nowhere along the way to the curriculum: the
             diagnostic is what a plan is built from, so this is the first moment
@@ -285,39 +444,25 @@ export default function LearnerAssessmentResultPage() {
         />
 
         {result.assessmentType === "DIAGNOSTIC" ? (
-          <div className="flex items-start gap-2 rounded-xl border border-primary/40 bg-primary/5 p-3 text-sm">
+          <div className="flex items-start gap-2.5 rounded-rb-card border-2 border-rb-leaf/45 bg-rb-leaf-wash p-4 text-sm">
             <CheckCircle2Icon
-              className="mt-0.5 size-4 shrink-0 text-primary"
+              className="mt-0.5 size-4 shrink-0 text-rb-leaf"
               aria-hidden="true"
             />
-            <p>
+            <p className="text-rb-eel">
               You've completed the diagnostic — your lesson content is now
               unlocked. Focus first on the recommended review topics below.
             </p>
           </div>
         ) : null}
 
-        <div className="flex flex-wrap gap-2">
-          {result.assessmentType !== "DIAGNOSTIC" ? (
-            <>
-              <Button asChild variant="outline">
-                <Link to={`/learner/assessments/${result.assessmentId}`}>
-                  Retake Assessment
-                </Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link to={`/learner/assessments/${result.assessmentId}/history`}>
-                  View All Attempts
-                </Link>
-              </Button>
-            </>
-          ) : null}
+        <div className="flex flex-wrap gap-3">
           {/* Back to the certification this attempt belongs to, not the list of
               every enrolled certification. The learner arrived here from one
               course and wants to carry on with it; dropping them on the index
               made them pick it out again. Falls back to the list only when the
               attempt carries no certification id. */}
-          <Button asChild>
+          <TactileButton asChild>
             <Link
               to={
                 result.certificationId != null
@@ -325,9 +470,23 @@ export default function LearnerAssessmentResultPage() {
                   : "/learner/learning"
               }
             >
-              Continue Learning
+              continue learning
             </Link>
-          </Button>
+          </TactileButton>
+          {result.assessmentType !== "DIAGNOSTIC" ? (
+            <>
+              <TactileButton asChild variant="ghost">
+                <Link to={`/learner/assessments/${result.assessmentId}`}>
+                  retake assessment
+                </Link>
+              </TactileButton>
+              <TactileButton asChild variant="ghost">
+                <Link to={`/learner/assessments/${result.assessmentId}/history`}>
+                  view all attempts
+                </Link>
+              </TactileButton>
+            </>
+          ) : null}
         </div>
 
         <LearnerPremiumGuard
@@ -340,34 +499,78 @@ export default function LearnerAssessmentResultPage() {
           <PerformanceBreakdown lessonBreakdown={result.lessonBreakdown} />
         </LearnerPremiumGuard>
 
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold">Answer review</h2>
+        {/* --- Answer review ------------------------------------------------ */}
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="rb-display rb-display-sm">Answer review</h2>
+            {REVIEW_FILTERS.length > 1 ? (
+              <div className="flex flex-wrap gap-2">
+                {REVIEW_FILTERS.map((option) => {
+                  const active = reviewFilter === option.key
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setReviewFilter(option.key)}
+                      /* Built from utilities rather than `rb-chip`: that class
+                         sets its own background and colour in an unlayered
+                         rule, which outranks any Tailwind bg/text put beside
+                         it, so a selected chip could only ever change its
+                         border. Geometry still matches the chip. */
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-rb-control border-2 px-3 py-1.5 text-[0.8125rem] font-bold transition-colors focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-rb-macaw",
+                        active
+                          ? "border-rb-feather bg-rb-feather text-white"
+                          : "border-rb-swan bg-rb-snow text-rb-wolf hover:border-rb-hare hover:text-rb-eel"
+                      )}
+                    >
+                      {option.label}
+                      <span className="rb-numeric text-xs opacity-70">
+                        {option.count}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            ) : null}
+          </div>
+
+          {visibleAnswers.length === 0 ? (
+            <RebyuCard className="py-10 text-center">
+              <p className="rb-body text-sm">Nothing in this group.</p>
+            </RebyuCard>
+          ) : null}
+
           <ol className="space-y-3">
-            {(result.answers ?? []).map((answer) => {
-              const tone = answerTone(answer)
+            {visibleAnswers.map((answer) => {
+              const state = answerState(answer)
+              const tone = ANSWER_TONES[state]
               return (
               <li key={answer.attemptQuestionId}>
-                <Card className={tone.card}>
-                  <CardContent className="space-y-3 pt-5">
+                <div className={cn("rounded-rb-card border-2 p-5", tone.card)}>
+                  <div className="space-y-3">
                     <div className="flex items-start justify-between gap-3">
-                      <p className="text-sm font-medium leading-6">
-                        <span className="mr-1.5 text-muted-foreground">
-                          {answer.displayOrder}.
+                      <p className="flex min-w-0 gap-3 text-sm font-medium leading-6 text-rb-eel">
+                        {/* The item number as a key, the same square the attempt
+                            navigator uses, so a learner comparing the two screens
+                            is looking at the same object. */}
+                        <span className="rb-numeric grid size-7 shrink-0 place-items-center rounded-rb-tile border-2 border-rb-swan bg-rb-snow text-xs text-rb-wolf">
+                          {answer.displayOrder}
                         </span>
-                        {answer.question}
+                        <span className="min-w-0">{answer.question}</span>
                       </p>
                       <div className="flex shrink-0 flex-col items-end gap-1">
-                        {answer.pendingManualEvaluation ? (
-                          <Badge className={ANSWER_TONES.pending.badge}>Pending review</Badge>
-                        ) : answer.isCorrect == null ? (
-                          <Badge variant="outline">Unanswered</Badge>
-                        ) : answer.isCorrect ? (
-                          <Badge className={ANSWER_TONES.correct.badge}>Correct</Badge>
-                        ) : (
-                          <Badge variant="destructive">Incorrect</Badge>
-                        )}
+                        <span
+                          className={cn(
+                            "rounded-rb-control px-2.5 py-1 text-xs font-bold",
+                            tone.badge
+                          )}
+                        >
+                          {STATE_LABEL[state]}
+                        </span>
                         {answer.points != null && answer.earnedPoints != null ? (
-                          <span className="text-xs tabular-nums text-muted-foreground">
+                          <span className="rb-numeric text-xs text-rb-wolf">
                             {Number(answer.earnedPoints)} / {Number(answer.points)} pts
                           </span>
                         ) : null}
@@ -375,27 +578,25 @@ export default function LearnerAssessmentResultPage() {
                     </div>
 
                     {answer.selectedChoiceText ? (
-                      <div className="space-y-1 text-sm">
-                        <p>
-                          <span className="text-muted-foreground">
-                            Your answer:{" "}
-                          </span>
+                      <div className="space-y-2 text-sm">
+                        <p className="text-rb-eel">
+                          <span className="text-rb-wolf">Your answer: </span>
                           {answer.selectedChoiceText}
                         </p>
                         {answer.isCorrect === false && answer.correctChoiceText ? (
-                          <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 dark:border-emerald-900 dark:bg-emerald-950/30">
-                            <span className={cn("font-medium", ANSWER_TONES.correct.text)}>
+                          <p className="rounded-rb-tile border-2 border-rb-leaf/45 bg-rb-leaf-wash p-2.5 text-rb-eel">
+                            <span className="font-bold text-rb-leaf">
                               Correct answer:{" "}
                             </span>
                             {answer.correctChoiceText}
                           </p>
                         ) : null}
                         {answer.explanation ? (
-                          <div className={cn("rounded-lg border p-2.5", tone.panel)}>
-                            <p className={cn("text-xs font-semibold", tone.text)}>
+                          <div className="rounded-rb-tile border-2 border-rb-swan bg-rb-snow p-3">
+                            <p className={cn("text-xs font-bold", tone.text)}>
                               Explanation
                             </p>
-                            <p className="mt-1 text-muted-foreground">{answer.explanation}</p>
+                            <p className="mt-1 text-rb-wolf">{answer.explanation}</p>
                           </div>
                         ) : null}
                       </div>
@@ -408,36 +609,32 @@ export default function LearnerAssessmentResultPage() {
                         {answer.subQuestionAnswers.map((sub, index) => (
                           <li
                             key={sub.subQuestionId}
-                            className="rounded-lg border p-2.5"
+                            className="rounded-rb-tile border-2 border-rb-swan bg-rb-snow p-3"
                           >
-                            <p className="font-medium">
-                              <span className="mr-1.5 text-muted-foreground">
-                                {index + 1}.
-                              </span>
+                            <p className="font-bold text-rb-eel">
+                              <span className="mr-1.5 text-rb-wolf">{index + 1}.</span>
                               {sub.questionText}
                             </p>
-                            <p className="mt-1.5 whitespace-pre-wrap rounded-lg bg-muted/50 p-2 text-muted-foreground">
+                            <p className="mt-1.5 whitespace-pre-wrap rounded-rb-tile bg-rb-polar p-2.5 text-rb-wolf">
                               {sub.learnerAnswer?.trim()
                                 ? sub.learnerAnswer
                                 : "No answer submitted."}
                             </p>
                             {sub.earnedPoints != null && sub.maxPoints != null ? (
-                              <p className="mt-1.5 text-xs tabular-nums text-muted-foreground">
+                              <p className="rb-numeric mt-1.5 text-xs text-rb-wolf">
                                 {Number(sub.earnedPoints)} / {Number(sub.maxPoints)} pts
                               </p>
                             ) : null}
                             {sub.feedback ? (
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                {sub.feedback}
-                              </p>
+                              <p className="rb-caption mt-1">{sub.feedback}</p>
                             ) : null}
                           </li>
                         ))}
                       </ol>
                     ) : answer.learnerAnswer && !answer.selectedChoiceText ? (
-                      <div className="space-y-1.5 text-sm">
-                        <p className="text-muted-foreground">Your answer:</p>
-                        <p className="mt-1 whitespace-pre-wrap rounded-lg bg-muted/50 p-2.5">
+                      <div className="space-y-2 text-sm">
+                        <p className="text-rb-wolf">Your answer:</p>
+                        <p className="whitespace-pre-wrap rounded-rb-tile border-2 border-rb-swan bg-rb-snow p-3 text-rb-eel">
                           {answer.learnerAnswer}
                         </p>
 
@@ -446,8 +643,8 @@ export default function LearnerAssessmentResultPage() {
                             so a wrong short answer showed the learner their own
                             wrong words and stopped there. */}
                         {answer.isCorrect === false && answer.correctChoiceText ? (
-                          <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 dark:border-emerald-900 dark:bg-emerald-950/30">
-                            <span className={cn("font-medium", ANSWER_TONES.correct.text)}>
+                          <p className="rounded-rb-tile border-2 border-rb-leaf/45 bg-rb-leaf-wash p-2.5 text-rb-eel">
+                            <span className="font-bold text-rb-leaf">
                               Correct answer:{" "}
                             </span>
                             {answer.correctChoiceText}
@@ -455,27 +652,29 @@ export default function LearnerAssessmentResultPage() {
                         ) : null}
 
                         {answer.explanation ? (
-                          <div className={cn("rounded-lg border p-2.5", tone.panel)}>
-                            <p className={cn("text-xs font-semibold", tone.text)}>Explanation</p>
-                            <p className="mt-1 text-muted-foreground">{answer.explanation}</p>
+                          <div className="rounded-rb-tile border-2 border-rb-swan bg-rb-snow p-3">
+                            <p className={cn("text-xs font-bold", tone.text)}>
+                              Explanation
+                            </p>
+                            <p className="mt-1 text-rb-wolf">{answer.explanation}</p>
                           </div>
                         ) : null}
                       </div>
                     ) : null}
 
                     {answer.feedback ? (
-                      <div className={cn("rounded-lg border p-2.5 text-sm", tone.panel)}>
-                        <p className={cn("text-xs font-semibold", tone.text)}>Feedback</p>
-                        <p className="mt-1 text-muted-foreground">{answer.feedback}</p>
+                      <div className="rounded-rb-tile border-2 border-rb-swan bg-rb-snow p-3 text-sm">
+                        <p className={cn("text-xs font-bold", tone.text)}>Feedback</p>
+                        <p className="mt-1 text-rb-wolf">{answer.feedback}</p>
                       </div>
                     ) : null}
 
                     {answer.submittedCode ? (
                       <div className="text-sm">
-                        <p className="mb-2 text-muted-foreground">
+                        <p className="mb-2 text-rb-wolf">
                           Your code ({answer.programmingLanguage ?? "code"}):
                         </p>
-                        <div className="h-64">
+                        <div className="h-64 overflow-hidden rounded-rb-tile border-2 border-rb-swan">
                           <CodeMirrorProgrammingWorkspace
                             value={answer.submittedCode}
                             language={answer.programmingLanguage ?? "Java"}
@@ -487,7 +686,7 @@ export default function LearnerAssessmentResultPage() {
 
                     {answer.diagramSubmitted && answer.diagramElements?.length > 0 ? (
                       <div className="space-y-2 text-sm">
-                        <p className="text-muted-foreground">
+                        <p className="text-rb-wolf">
                           Diagram comparison — required elements vs. what you drew:
                         </p>
                         <ul className="space-y-1.5">
@@ -495,34 +694,31 @@ export default function LearnerAssessmentResultPage() {
                             <li
                               key={index}
                               className={cn(
-                                "flex items-start gap-2 rounded-lg border p-2.5",
+                                "flex items-start gap-2 rounded-rb-tile border-2 p-2.5",
                                 element.matched
                                   ? ANSWER_TONES.correct.panel
-                                  : "border-destructive/30 bg-destructive/5"
+                                  : ANSWER_TONES.incorrect.panel
                               )}
                             >
                               {element.matched ? (
                                 <CheckCircle2Icon
-                                  className={cn(
-                                    "mt-0.5 size-4 shrink-0",
-                                    ANSWER_TONES.correct.text
-                                  )}
+                                  className="mt-0.5 size-4 shrink-0 text-rb-leaf"
                                   aria-hidden="true"
                                 />
                               ) : (
                                 <XCircleIcon
-                                  className="mt-0.5 size-4 shrink-0 text-destructive"
+                                  className="mt-0.5 size-4 shrink-0 text-rb-cardinal"
                                   aria-hidden="true"
                                 />
                               )}
                               <div className="min-w-0 flex-1">
-                                <p className="flex flex-wrap items-center gap-1.5 font-medium">
-                                  <Badge variant="outline" className="text-[10px]">
+                                <p className="flex flex-wrap items-center gap-1.5 font-bold text-rb-eel">
+                                  <span className="rounded-rb-control border-2 border-rb-swan bg-rb-snow px-1.5 py-0.5 text-[10px] text-rb-wolf">
                                     {element.kind === "EDGE" ? "Relationship" : "Node"}
-                                  </Badge>
+                                  </span>
                                   {element.expectedDescription}
                                 </p>
-                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                <p className="mt-0.5 text-xs text-rb-wolf">
                                   {element.matched
                                     ? `You drew: ${element.learnerDescription}`
                                     : "Missing from your diagram"}
@@ -536,12 +732,12 @@ export default function LearnerAssessmentResultPage() {
                         </ul>
                       </div>
                     ) : answer.diagramSubmitted ? (
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-rb-wolf">
                         A diagram answer was submitted and stored for review.
                       </p>
                     ) : null}
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               </li>
               )
             })}
