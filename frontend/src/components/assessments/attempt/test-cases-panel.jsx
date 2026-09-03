@@ -22,7 +22,7 @@ function TestRow({ test }) {
   const canExpand = test.sample && test.input != null
 
   return (
-    <li className="rounded-lg border">
+    <li className="rounded-[var(--radius-rb-control)] border">
       <button
         type="button"
         onClick={() => canExpand && setOpen((value) => !value)}
@@ -64,7 +64,7 @@ function TestRow({ test }) {
       {canExpand && open ? (
         <div className="border-t px-3 py-2">
           <p className="mb-1 text-xs font-medium text-muted-foreground">Input</p>
-          <pre className="max-h-40 overflow-auto rounded-md bg-muted/50 p-2 text-xs">
+          <pre className="max-h-40 overflow-auto rounded-[var(--radius-rb-control)] bg-muted/50 p-2 text-xs">
             {test.input}
           </pre>
         </div>
@@ -81,7 +81,7 @@ export default function TestCasesPanel({ tests, notice }) {
   return (
     <div className="space-y-3">
       {notice ? (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs leading-5 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+        <div className="flex items-start gap-2 rounded-[var(--radius-rb-control)] border border-amber-300 bg-amber-50 p-2.5 text-xs leading-5 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
           <InfoIcon className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
           <span>{notice}</span>
         </div>

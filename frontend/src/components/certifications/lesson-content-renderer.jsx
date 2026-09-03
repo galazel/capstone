@@ -120,10 +120,18 @@ const RB_INDEX_CHIP =
  * `getFileViewUrl` mangles it into `/files/view?key=https://...`, which the
  * file endpoint rejects -- that's what rendered as a broken image / blank
  * video. Absolute URLs are used as-is; anything else is treated as a key.
+ *
+ * A root-relative path is the third case: diagrams we draw ourselves and ship
+ * in `public/`. They are not storage keys and must not be signed -- and unlike
+ * the hotlinked search results, they cannot rot or 403 when the host that owns
+ * them decides it dislikes being embedded.
  */
 function resolveMediaSrc(key) {
   if (!key) return ""
   if (key.startsWith("http://") || key.startsWith("https://")) {
+    return key
+  }
+  if (key.startsWith("/")) {
     return key
   }
   return getFileViewUrl(key)

@@ -1678,3 +1678,50 @@ body.netacad-overlay-theme {
     display: none;
     -webkit-appearance: none;
 }
+
+/* ---------------------------------------------------------------------------
+   Lifted out of `styles/globals.css`, which is a second Tailwind entry point
+   (it imports tailwindcss and plugins of its own, one of them not installed)
+   and is not part of this bundle -- so everything in it, including these, has
+   never reached the browser.
+
+   `.rb-diagram-shell` is the one that bit. The diagram editor's loading
+   skeleton is `absolute inset-0`, which needs a positioned ancestor; without
+   `position: relative` here it sized itself against the page and covered the
+   whole viewport instead of the editor column.
+
+   react-drawio hardcodes the <iframe> style and ignores a style prop, so
+   making it fill its shell has to happen here, against its own class name.
+
+   This used to carry a shapes drawer as well: the iframe was made wider than
+   the shell and slid left so draw.io's palette sat outside the visible area,
+   with a REBYU-drawn handle on the seam to pull it back in. It was a second
+   way to open a palette that already opens itself, on a control that belonged
+   to no toolbar, over an editor that is not ours -- so the editor is now the
+   size of its shell and its own sidebar is the only sidebar.
+   --------------------------------------------------------------------------- */
+.rb-diagram-shell {
+    position: relative;
+    overflow: hidden;
+}
+
+.rb-diagram-shell > .diagrams-iframe {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+}
+
+/* An attempt owns the viewport: h-dvh, with its own internal scroll areas, so
+   the document must not scroll behind it. Without this the wheel scrolled the
+   document rather than the question column, carrying the header -- timer and
+   Finish Attempt -- off the top of the screen and stranding the footer in the
+   middle of a screenful of white. Taken on mount, released on unmount. */
+html:has(body.rb-attempt-lock),
+body.rb-attempt-lock {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+}

@@ -16,6 +16,7 @@ import {
   Search,
   Swords,
   Users,
+  UsersRound,
   X,
 } from "@/components/icons"
 
@@ -43,6 +44,7 @@ const learnerNavigation = [
   { label: "Certifications", href: "/learner/certifications", icon: Award },
   { label: "My Learning", href: "/learner/learning", match: ["/learner/learning", "/learner/lessons"], icon: BookOpenCheck },
   { label: "Challenges", href: "/learner/challenges", icon: Swords },
+  { label: "Community", href: "/learner/community", icon: UsersRound },
   // No Rankings entry: the XP leaderboard is a panel on Challenges now, beside
   // the challenge-points board. Two standings on two pages meant knowing which
   // board you wanted before you could find it.
@@ -78,6 +80,7 @@ const adminGroups = [
       // admin portal. Their pages and services still exist -- re-register the
       // routes in App.jsx and add the entries back here to bring them back.
       { label: "Learners", href: "/admin/learners", icon: Users },
+      { label: "Community", href: "/admin/community", icon: UsersRound },
     ],
   },
 ]

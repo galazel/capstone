@@ -55,9 +55,13 @@ function getLanguageExtension(language) {
   }
 }
 
-// CodeMirror-based programming answer workspace. This is an editor only — the
-// backend has no code-execution endpoint, so there are intentionally no
-// Run/Check/test-output controls. Code is submitted with the assessment.
+// CodeMirror-based programming answer workspace.
+//
+// `actions` is rendered into the toolbar's right-hand cluster, next to Reset
+// Code and fullscreen. Run Code lives there rather than on a strip above the
+// editor: it acts on the editor, so it belongs on the editor's own toolbar
+// beside the other controls that do, instead of on a second row that pushed
+// the editor down and read as page furniture.
 export default function CodeMirrorProgrammingWorkspace({
   value,
   language,
@@ -65,6 +69,7 @@ export default function CodeMirrorProgrammingWorkspace({
   onChange,
   onLanguageChange,
   readOnly = false,
+  actions = null,
 }) {
   const [fullscreen, setFullscreen] = useState(false)
   const [resetOpen, setResetOpen] = useState(false)
@@ -126,6 +131,7 @@ export default function CodeMirrorProgrammingWorkspace({
           ) : null}
         </div>
         <div className="flex items-center gap-1">
+          {actions}
           {!readOnly && starterCode ? (
             <Button
               type="button"

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { getFileViewUrl } from "@/services/fileService.js"
 import DiagramArea from "@/components/challenges/diagram-area.jsx"
@@ -10,9 +9,11 @@ import RubricPanel from "./rubric-panel.jsx"
 import SubQuestionTabs from "./sub-question-tabs.jsx"
 
 // Three-column diagram environment: problem | diagram editor | navigation +
-// rubric. There is no in-attempt Check: diagram grading compares against
-// `reference_diagram_xml`, which generation never fills (it writes
-// `reference_diagram_json`), so a Check could only report failure.
+// rubric. There is no in-attempt Check. It was removed because grading compares
+// against `reference_diagram_xml` and generation never filled it, so Check could
+// only report failure -- that is no longer true, generation now renders a
+// reference for every diagram question, and restoring Check is a product call
+// rather than a blocked one.
 //
 // `checker`, `attemptId`, `attemptQuestionId` and `learnerId` are kept on the
 // signature though nothing reads them now: they are exactly what a restored
@@ -45,9 +46,16 @@ export default function DiagramQuestionLayout({
   }, [question.attemptQuestionId, question.rubric])
 
   return (
-    <div className="grid h-full min-h-0 gap-4 lg:grid-cols-[minmax(240px,1fr)_minmax(0,1.5fr)_300px]">
+    // grid-rows is not decoration. Without a definite row the single implicit
+    // row is auto-sized to its tallest child, so the problem statement's own
+    // height becomes the row height, `max-h-full` resolves against that and
+    // never clips, and the column overflows the viewport with nothing to
+    // scroll. Briefs run to a couple of thousand characters now -- a scenario,
+    // lettered requirements and numbered tasks -- so the end of the question
+    // was simply unreachable.
+    <div className="grid h-full min-h-0 gap-4 lg:grid-cols-[minmax(240px,1fr)_minmax(0,1.5fr)_300px] lg:grid-rows-[minmax(0,1fr)]">
       {/* Left — problem statement */}
-      <ScrollArea className="max-h-full rounded-xl border bg-card">
+      <div className="min-h-0 overflow-y-auto rounded-[var(--radius-rb-card)] border bg-card">
         <div className="space-y-4 p-4">
           {/* Title and difficulty live here, at the head of the problem
               statement. An arena run used to carry them in a strip across the
@@ -94,12 +102,12 @@ export default function DiagramQuestionLayout({
             <img
               src={getFileViewUrl(question.questionImageKey)}
               alt="Problem reference"
-              className="w-full rounded-xl border"
+              className="w-full rounded-[var(--radius-rb-card)] border"
             />
           ) : null}
 
           {subQuestions.length > 0 ? (
-            <div className="rounded-xl border bg-background p-3">
+            <div className="rounded-[var(--radius-rb-card)] border bg-background p-3">
               <SubQuestionTabs
                 key={question.attemptQuestionId ?? question.questionId ?? index}
                 subQuestions={subQuestions.map((sub) => ({
@@ -120,20 +128,19 @@ export default function DiagramQuestionLayout({
             </div>
           ) : null}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Center — diagram editor */}
       <div className="flex min-h-0 flex-col gap-2">
-        {/* Check Diagram removed deliberately.
-            It offered a verdict the server cannot currently produce: diagram
-            grading compares the learner's drawing against
-            `reference_diagram_xml`, and generation writes the reference to
-            `reference_diagram_json` instead, leaving that column blank on
-            every generated question. So Check could only ever report failure
-            or nothing, which is worse than not offering it -- a learner who
-            presses it concludes their diagram is wrong.
+        {/* Check Diagram removed deliberately. It offered a verdict the server
+            could not produce: `reference_diagram_xml` was blank on every
+            generated question, so Check reported failure or nothing, and a
+            learner who pressed it concluded their diagram was wrong.
 
-            Restore it once the grader reads a reference that exists. */}
+            That reason has since gone -- generation renders a reference for
+            every diagram question and the grader has one to compare against.
+            Bringing Check back is now a decision about whether a learner should
+            get a verdict mid-attempt, not a technical blocker. */}
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-muted-foreground">
             Your diagram is saved automatically with your attempt.
@@ -142,7 +149,7 @@ export default function DiagramQuestionLayout({
 
         <div
           className={cn(
-            "min-h-[420px] flex-1 overflow-hidden rounded-xl border",
+            "min-h-[420px] flex-1 overflow-hidden rounded-[var(--radius-rb-card)] border",
             editingLocked && "pointer-events-none opacity-70"
           )}
         >
@@ -161,8 +168,8 @@ export default function DiagramQuestionLayout({
 
       {/* Right — navigation + rubric */}
       <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
-        <div className="rounded-xl border bg-card p-3">{navigator}</div>
-        <div className="rounded-xl border bg-card p-3">
+        <div className="rounded-[var(--radius-rb-card)] border bg-card p-3">{navigator}</div>
+        <div className="rounded-[var(--radius-rb-card)] border bg-card p-3">
           <RubricPanel rubric={rubric} notice={notice} />
         </div>
       </div>

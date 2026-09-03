@@ -8,7 +8,6 @@ import {
   CalendarDays,
   Check,
   CheckCircle2,
-  ChevronDown,
   ClipboardCheck,
   Clock,
   CircleHelp,
@@ -29,7 +28,6 @@ import {
 } from "@/components/ui/dialog"
 import { BackButton, TactileButton } from "@/components/rebyu/rebyu-ui.jsx"
 import {
-  Collapse,
   CountUp,
   Reveal,
   StaggerItem,
@@ -68,10 +66,21 @@ import { buildCurriculum, hasSatDiagnostic } from "./curriculum-model.js"
  * are not repeated here: the topic page is where they live, and listing them
  * twice is what made this page a directory in the first place.
  *
- * Ordering is not gating. Once the diagnostic is sat every stop is open, just
- * as every unit card was; the road states the order of study without enforcing
- * it. Before the diagnostic every stop is locked, shakes when pressed, and
- * opens the dialog that explains why.
+ * The road is walked in order. A unit opens only once every unit above it is
+ * finished, so unit two stands grey while unit one still has lessons in it.
+ * Ordering used to be a suggestion here -- but the order is the whole output of
+ * the diagnostic, and a priority order nobody has to follow is a ranking, not a
+ * plan. Before the diagnostic the entire road is locked. Either way a locked
+ * stop shakes when pressed and names the gate holding it.
+ *
+ * Every unit is on screen at once: one continuous scroll from the first topic
+ * to the final. No accordion, no "show all units" -- a road you have to unroll
+ * a section at a time is a table of contents wearing a path, and the lock is
+ * what keeps the whole thing from reading as a wall.
+ *
+ * Nothing on it is a card. Units are separated by a rule and a name in the
+ * unit's colour, not by a slab you press to open; the only objects on the page
+ * are the stops themselves.
  */
 
 const TONE = {
@@ -211,6 +220,44 @@ const PLINTH_D = 20
 const ICON_LIFT = 30
 const NODE_H = PLINTH_H + PLINTH_D + ICON_LIFT
 
+/* The final sits on a bigger plinth than anything else on the road.
+
+   It is not one more exam in a longer list -- it is the thing the whole
+   certification has been walking towards, and at the same size as the unit
+   exam above it the summit read as another stop that happened to come last.
+   One scale, applied to every dimension of the node at once, so the plinth
+   keeps its 2:1 isometric face and the icon keeps standing the same distance
+   above it. The row it occupies grows to match, or the taller plinth would
+   push into the stop above. */
+const NODE_SCALE_GRAND = 1.34
+const PATH_ROW_GRAND = 200
+
+/** Every measurement of one node, at its own size. */
+function nodeDims(node) {
+  const scale = node?.grand ? NODE_SCALE_GRAND : 1
+  const plinthH = Math.round(PLINTH_H * scale)
+  const plinthD = Math.round(PLINTH_D * scale)
+  const lift = Math.round(ICON_LIFT * scale)
+
+  return {
+    w: Math.round(NODE_W * scale),
+    plinthH,
+    plinthD,
+    lift,
+    h: plinthH + plinthD + lift,
+  }
+}
+
+/** How much vertical room a stop takes on the road. */
+function rowHeight(node) {
+  return node?.grand ? PATH_ROW_GRAND : PATH_ROW
+}
+
+/** The height of a whole stretch of road, for the box the nodes are laid in. */
+function stretchHeight(nodes) {
+  return nodes.reduce((total, node) => total + rowHeight(node), 0)
+}
+
 /* A two-position zig-zag, not the old eight-step swing.
 
    The swing existed to keep a *centred* column moving. Now that each stop
@@ -243,8 +290,8 @@ function labelSideAt(index) {
  * middle of the icons, so the nodes stand *on* it instead of being threaded
  * onto it.
  */
-function PathTrail({ count }) {
-  if (count < 2) return null
+function PathTrail({ items, start = 0 }) {
+  if (items.length < 2) return null
 
   /* The middle of the plinth's top face, not its bottom edge.
 
@@ -257,12 +304,18 @@ function PathTrail({ count }) {
      screen. Anchored half a face higher the cap is always beneath the plinth,
      so an occluded node takes its road end with it and the remaining curve is
      cut cleanly by the banner's edge instead of stopping in mid-air. */
-  const footY = ICON_LIFT + PLINTH_H / 2
+  /* Walked rather than multiplied, because the rows are no longer all the same
+     height: the final stands on a bigger plinth in a taller row, and a road
+     drawn on `PATH_ROW * index` would run to where that stop used to be. */
+  let top = 0
+  const points = items.map((node, index) => {
+    const dims = nodeDims(node)
+    const row = rowHeight(node)
+    const y = top + (row - dims.h) / 2 + dims.lift + dims.plinthH / 2
+    top += row
 
-  const points = Array.from({ length: count }, (_, index) => [
-    PATH_WIDTH / 2 + offsetAt(index),
-    PATH_ROW * index + (PATH_ROW - NODE_H) / 2 + footY,
-  ])
+    return [PATH_WIDTH / 2 + offsetAt(start + index), y]
+  })
 
   const d = points
     .map(([x, y], index) => {
@@ -277,7 +330,7 @@ function PathTrail({ count }) {
     <svg
       className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2"
       width={PATH_WIDTH}
-      height={PATH_ROW * count}
+      height={stretchHeight(items)}
       aria-hidden="true"
     >
       {/* Swan is the border grey and disappears against the page on its own;
@@ -345,11 +398,7 @@ function StartBubble({ tone }) {
  * `face`/`lip` are the unit's tone, so a plinth belongs to its unit the same
  * way the banner above it does.
  */
-function Plinth({ face, lip, top }) {
-  const w = NODE_W
-  const h = PLINTH_H
-  const d = PLINTH_D
-
+function Plinth({ face, lip, top, w, h, d }) {
   return (
     <svg
       className="absolute left-1/2 -translate-x-1/2"
@@ -414,6 +463,7 @@ function PathNode({ node, index, onSelect, onLocked }) {
   const locked = state === "locked"
   const done = state === "done"
   const current = state === "current"
+  const dims = nodeDims(node)
 
   /* A finished exam is not finished the way a finished topic is. Reading a
      topic is done once; an assessment can always be sat again, and the whole
@@ -429,7 +479,7 @@ function PathNode({ node, index, onSelect, onLocked }) {
       // The dialog explains the lock, but it opens elsewhere on screen. The
       // shake answers where the finger already is.
       shake.start({ x: [0, -8, 8, -6, 6, -3, 3, 0], transition: { duration: 0.45 } })
-      onLocked()
+      onLocked(node)
       return
     }
     onSelect(node)
@@ -470,7 +520,7 @@ function PathNode({ node, index, onSelect, onLocked }) {
   const side = labelSideAt(index)
 
   return (
-    <div className="relative" style={{ height: PATH_ROW }}>
+    <div className="relative" style={{ height: rowHeight(node) }}>
       {/* Sized to the node and nothing else. The name hangs off it absolutely
           rather than sitting beside it in flow: in flow the *pair* is what gets
           centred on the row, so a long topic name would drag the plinth off the
@@ -483,8 +533,8 @@ function PathNode({ node, index, onSelect, onLocked }) {
       <div
         className="absolute left-1/2 top-1/2"
         style={{
-          width: NODE_W,
-          height: NODE_H,
+          width: dims.w,
+          height: dims.h,
           transform: `translate(calc(-50% + ${offsetAt(index)}px), -50%)`,
         }}
       >
@@ -502,7 +552,7 @@ function PathNode({ node, index, onSelect, onLocked }) {
           {current ? (
             <motion.span
               className={`pointer-events-none absolute left-1/2 -translate-x-1/2 rounded-[50%] ${tone.face} opacity-25`}
-              style={{ top: ICON_LIFT - 6, width: NODE_W + 26, height: PLINTH_H + 20 }}
+              style={{ top: dims.lift - 6, width: dims.w + 26, height: dims.plinthH + 20 }}
               animate={{ scale: [1, 1.14, 1], opacity: [0.3, 0, 0.3] }}
               transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
               aria-hidden="true"
@@ -521,7 +571,14 @@ function PathNode({ node, index, onSelect, onLocked }) {
             }`}
             className="group absolute inset-0 block transition-transform duration-100 active:translate-y-[5px]"
           >
-            <Plinth top={faces.top} face={faces.face} lip={faces.lip} />
+            <Plinth
+              top={faces.top}
+              face={faces.face}
+              lip={faces.lip}
+              w={dims.w}
+              h={dims.plinthH}
+              d={dims.plinthD}
+            />
 
             {/* Standing on the plinth, not printed on it: the object is lifted
                 clear of the top face and carries its own drop shadow onto it,
@@ -537,7 +594,7 @@ function PathNode({ node, index, onSelect, onLocked }) {
                 plinth beneath it is what carries the state. */}
             <span
               className={`absolute left-1/2 grid -translate-x-1/2 place-items-center drop-shadow-[0_6px_3px_rgb(0_0_0/0.18)] ${iconInk}`}
-              style={{ top: 0, width: NODE_W, height: ICON_LIFT + PLINTH_H / 2 }}
+              style={{ top: 0, width: dims.w, height: dims.lift + dims.plinthH / 2 }}
             >
               {/* The icon always renders; the illustration covers it when there
                   is one. That order is what makes the fallback real -- an image
@@ -545,20 +602,20 @@ function PathNode({ node, index, onSelect, onLocked }) {
                   itself and uncovers the icon, rather than leaving an empty
                   plinth where a stop should be. */}
               {locked ? (
-                <Lock className="size-11" aria-hidden="true" />
+                <Lock className={node.grand ? "size-14" : "size-11"} aria-hidden="true" />
               ) : retakeable ? (
-                <RotateCcw className="size-11" aria-hidden="true" />
+                <RotateCcw className={node.grand ? "size-14" : "size-11"} aria-hidden="true" />
               ) : done ? (
-                <Check className="size-12" aria-hidden="true" />
+                <Check className={node.grand ? "size-16" : "size-12"} aria-hidden="true" />
               ) : (
-                <Icon className="size-11" aria-hidden="true" />
+                <Icon className={node.grand ? "size-14" : "size-11"} aria-hidden="true" />
               )}
 
               {node.art && !locked ? (
                 <img
                   src={node.art}
                   alt=""
-                  className="absolute size-14 object-contain"
+                  className={`absolute object-contain ${node.grand ? "size-20" : "size-14"}`}
                   onError={(event) => {
                     event.currentTarget.style.display = "none"
                   }}
@@ -572,7 +629,7 @@ function PathNode({ node, index, onSelect, onLocked }) {
             {node.urgent && !locked ? (
               <motion.span
                 className="absolute right-1 size-5 rounded-full bg-rb-cardinal ring-4 ring-rb-polar"
-                style={{ top: ICON_LIFT - 4 }}
+                style={{ top: dims.lift - 4 }}
                 animate={{ scale: [1, 1.3, 1] }}
                 transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
                 aria-hidden="true"
@@ -594,7 +651,7 @@ function PathNode({ node, index, onSelect, onLocked }) {
           className={`pointer-events-none absolute w-[210px] ${
             side === "right" ? "left-full ml-4 text-left" : "right-full mr-4 text-right"
           }`}
-          style={{ top: ICON_LIFT, height: PLINTH_H, display: "grid", alignContent: "center" }}
+          style={{ top: dims.lift, height: dims.plinthH, display: "grid", alignContent: "center" }}
         >
           <p className="font-rb-display text-[15px] font-extrabold leading-tight text-rb-eel">
             {node.label}
@@ -625,115 +682,91 @@ function PathNode({ node, index, onSelect, onLocked }) {
 }
 
 /**
- * The banner that opens a unit's stretch of road -- and the control that opens
- * the unit itself.
+ * Where one unit's stretch of road ends and the next begins.
  *
- * A certification with six units is six roads, and all of them unrolled at once
- * is a page you scroll for a minute to reach unit four. So the banner is the
- * accordion header: pressed, it reveals that unit's topics. The unit the
- * learner is up to is the one open when the page arrives, which is the only
- * one they asked for.
+ * A name and a rule, not a card. This was a saturated slab you pressed to
+ * unroll the unit beneath it -- which made every unit a poster, and made the
+ * page a stack of six of them with the road hidden inside. Nothing here is a
+ * control: the stops are the only things on this page you press, and the unit
+ * is a caption over the stretch they belong to.
  *
- * Sticky while its section is open, the way a section header is on Duolingo:
- * once the road is longer than the viewport the learner loses which unit the
- * nodes belong to about four stops in. The offset clears the one sticky thing
- * above it -- the portal nav (`top-0`, 4rem).
+ * Sticky, because the road is now one continuous scroll and a learner four
+ * stops down has no other way to know which unit they are in. It paints the
+ * page's own ground rather than sitting on a transparent offset, so the nodes
+ * disappear cleanly behind it instead of sliding through a gap above it. The
+ * offset clears the one sticky thing above it -- the portal nav (`top-0`, 4rem).
  *
- * The unit's colour lives here rather than on a card behind every node: one
- * saturated band per section, with the road on the page's own ground. That is
- * what stops a certification with six units reading as six posters.
+ * The unit's colour survives as the rule and the eyebrow. That is enough to
+ * tell two stretches apart without giving either one a poster.
  */
-function UnitBanner({ major, locked, exam, open, onToggle, onLocked, takenExamIds }) {
+function UnitMarker({ major, locked, complete, exam, examTaken }) {
   const tone = TONE[major.tone]
-  const examTaken = Boolean(exam && takenExamIds?.has(String(exam.examId)))
-  const shake = useAnimationControls()
-
-  function press() {
-    if (locked) {
-      shake.start({ x: [0, -8, 8, -6, 6, -3, 3, 0], transition: { duration: 0.45 } })
-      onLocked()
-      return
-    }
-    onToggle()
-  }
 
   return (
-    /* 4.25rem = the portal nav (4rem) plus a little air, now that this page
-       has no header bar of its own for the banner to clear.
-
-       That air is painted in the page's own colour rather than left
-       transparent. A bare offset showed the road sliding through the gap above
-       the banner, which reads as the card floating over a leak; painted, the
-       nodes disappear cleanly behind the header as they scroll up.
-
-       Only sticky while open -- a stack of collapsed banners would otherwise
-       pile up against the top of the window, each one pinning the next. */
-    <motion.div
-      animate={shake}
-      className={open ? "sticky top-[4.25rem] z-20 bg-rb-polar pb-1 pt-3" : ""}
-    >
-      <button
-        type="button"
-        onClick={press}
-        aria-expanded={locked ? undefined : open}
-        className={`flex w-full flex-wrap items-center gap-x-5 gap-y-3 rounded-rb-card border-[3px] border-black/10 px-7 py-6 text-left text-white shadow-[0_6px_0_rgb(0_0_0/0.16)] transition-[transform,box-shadow] duration-100 active:translate-y-[3px] active:shadow-[0_3px_0_rgb(0_0_0/0.16)] ${tone.face}`}
-      >
+    <div className="sticky top-[4.25rem] z-20 bg-rb-polar pb-2 pt-4">
+      <div className="flex items-end gap-4">
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-white/75">
+          <p
+            className={`text-[11px] font-extrabold uppercase tracking-[0.18em] ${
+              locked ? "text-rb-hare" : tone.ink
+            }`}
+          >
             unit {major.index}
           </p>
-          <h2 className="mt-1 truncate font-rb-display text-2xl font-extrabold lowercase leading-tight text-white sm:text-3xl">
+
+          <h2
+            className={`mt-0.5 truncate font-rb-display text-xl font-extrabold lowercase leading-tight sm:text-2xl ${
+              locked ? "text-rb-hare" : "text-rb-eel"
+            }`}
+          >
             {major.name}
           </h2>
         </div>
 
-        {/* One status, stated once. Lessons done while the unit is open, the
-            lock while it is not -- they are answers to the same question. */}
-        <span className="flex shrink-0 items-center gap-2 rounded-rb-pill bg-white/15 px-4 py-2 text-sm font-extrabold text-white">
-          {locked ? (
-            <>
-              <Lock className="size-4" aria-hidden="true" />
-              locked
-            </>
-          ) : (
-            <>
-              {major.doneCount}/{major.lessonCount} lessons
-              {examTaken ? " · exam sat" : ""}
-            </>
-          )}
-        </span>
-
-        {/* How many stops are behind this banner, so a collapsed unit still
-            says how much is in it. */}
-        {!locked ? (
-          <span className="hidden shrink-0 text-sm font-extrabold text-white/80 sm:block">
-            {major.middles.length} topic{major.middles.length === 1 ? "" : "s"}
-            {exam ? " · unit exam" : ""}
-          </span>
-        ) : null}
-
-        <motion.span
-          animate={{ rotate: open && !locked ? 180 : 0 }}
-          transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
-          className="grid size-11 shrink-0 place-items-center rounded-full bg-white/15"
-        >
-          <ChevronDown className="size-5" aria-hidden="true" />
-        </motion.span>
-      </button>
-
-      {/* Outside the button: a link inside a button is not a control anyone can
-          reach with a keyboard, and pressing it would toggle the unit too. */}
-      {exam && !locked && open ? (
-        <div className="flex justify-end pt-2">
-          <Link
-            to={`/learner/assessments/${exam.examId}/history`}
-            className="rounded-rb-pill px-2 text-xs font-bold text-rb-macaw-lip underline decoration-dotted underline-offset-4 hover:text-rb-macaw"
+        {/* One status, stated once: the gate while it is shut, the count while
+            it is open, and a receipt once there is nothing left in the unit. */}
+        <div className="shrink-0 text-right">
+          <p
+            className={`flex items-center justify-end gap-1.5 text-xs font-extrabold ${
+              locked ? "text-rb-hare" : complete ? tone.ink : "text-rb-wolf"
+            }`}
           >
-            unit exam attempts
-          </Link>
+            {locked ? (
+              <>
+                <Lock className="size-3.5" aria-hidden="true" />
+                locked
+              </>
+            ) : complete ? (
+              <>
+                <Check className="size-3.5" aria-hidden="true" />
+                unit complete
+              </>
+            ) : (
+              `${major.doneCount}/${major.lessonCount} lessons`
+            )}
+          </p>
+
+          {/* Outside any button, because there is no button any more -- the
+              marker is text, and this is the one link in it. Only once the
+              exam has actually been sat: history nobody has made yet is a
+              page of nothing. */}
+          {exam && examTaken && !locked ? (
+            <Link
+              to={`/learner/assessments/${exam.examId}/history`}
+              className="mt-0.5 inline-block rounded-rb-pill text-[11px] font-bold text-rb-macaw-lip underline decoration-dotted underline-offset-4 hover:text-rb-macaw"
+            >
+              unit exam attempts
+            </Link>
+          ) : null}
         </div>
-      ) : null}
-    </motion.div>
+      </div>
+
+      {/* The unit's colour, at the weight of a rule. Grey while the unit is
+          shut, so a locked stretch reads as grey from its caption down. */}
+      <span
+        className={`mt-2 block h-[3px] rounded-rb-pill ${locked ? "bg-rb-swan" : tone.face}`}
+      />
+    </div>
   )
 }
 
@@ -817,7 +850,7 @@ function unitNodes(major, takenExamIds, attemptsByExamId) {
  * one icon, centred in an otherwise blank box, with the page's real shape
  * nowhere in sight.
  *
- * This draws the shape instead -- the header bar, a unit banner, then the road
+ * This draws the shape instead -- the header bar, a unit caption, then the road
  * itself -- so the layout is already there and only the content arrives.
  * Nothing pretends to be data: no titles, no counts, just the blocks and the
  * circles they will occupy.
@@ -833,7 +866,16 @@ function CurriculumSkeleton() {
       </div>
 
       <div className="mx-auto max-w-[720px] px-5 py-10">
-        <div className="h-16 animate-pulse rounded-rb-card bg-rb-swan" />
+        {/* The unit caption: a name, a status, and the rule under them. Not a
+            slab -- the page it is standing in for has no slab. */}
+        <div className="flex items-end gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="h-2.5 w-14 animate-pulse rounded-full bg-rb-swan" />
+            <div className="mt-2 h-6 w-56 animate-pulse rounded bg-rb-swan" />
+          </div>
+          <div className="h-3 w-24 shrink-0 animate-pulse rounded-full bg-rb-swan" />
+        </div>
+        <div className="mt-2 h-[3px] animate-pulse rounded-rb-pill bg-rb-swan" />
 
         {/* Four stops on the same zig-zag the road uses, each a plinth-shaped
             block and a bar where its name will be -- so nothing moves when the
@@ -873,7 +915,18 @@ export default function LearnerCertificationCurriculumPage() {
   const { certificationId } = useParams()
   const { data } = useOutletContext()
 
-  const [dialogOpen, setDialogOpen] = useState(false)
+  /* Which gate the learner just walked into, or `null` for no dialog.
+   *
+   * Two kinds of lock now reach the same dialog -- the diagnostic that shuts
+   * the whole road, and the unfinished unit that shuts one stretch of it -- so
+   * the state carries which, and for a sequence lock the unit that has to be
+   * finished first. A boolean could only say "something is locked", which is
+   * the one thing the learner already knows. */
+  const [lock, setLock] = useState(null)
+
+  function openLock(node) {
+    setLock(node?.blockedBy ? { kind: "unit", unit: node.blockedBy } : { kind: "diagnostic" })
+  }
 
   const certification = (data?.enrolledCertifications ?? []).find(
     (item) => String(item.certificationId) === String(certificationId),
@@ -988,17 +1041,23 @@ export default function LearnerCertificationCurriculumPage() {
 
   /* ------------------------------------------------------------------ road
    *
-   * The whole certification as one ordered list of stops -- each unit's topics
-   * followed by its exam, and the mock at the end -- so "where am I up to" can
-   * be answered once, across the whole thing, rather than per unit. The first
-   * unfinished stop is `current`, and it is the only node that gets the start
-   * bubble; everything else is done, open, or (before the diagnostic) locked.
+   * The whole certification as one ordered walk -- each unit's topics followed
+   * by its exam, and the final at the end -- so "where am I up to" is answered
+   * once, across the whole thing, rather than per unit. The first unfinished
+   * stop is `current`, and it is the only node that gets the start bubble.
    *
-   * Nothing here gates access. Once the diagnostic is sat every stop is open,
-   * exactly as the unit cards were -- the road describes the order of study, it
-   * does not enforce it. A learner who wants to jump to unit three still can.
+   * The order is now enforced. A unit is shut until every unit above it is
+   * finished, and the final is shut until every unit is. Two gates, one lock
+   * icon: before the diagnostic nothing is open at all, and after it the road
+   * opens a unit at a time. `blockedBy` carries which unit is holding a stop
+   * shut, so the dialog can name it instead of saying "locked".
+   *
+   * An empty topic -- a middle category with no published lessons -- can never
+   * be `done`, so it is excluded from the completeness test as well as from
+   * `current`. Without that one unpublished topic would seal every unit under
+   * it for good.
    */
-  const { sections, finalNode, currentUnitId } = useMemo(() => {
+  const { sections, finalNode, finalIndex } = useMemo(() => {
     const built = (curriculum?.majors ?? []).map((major) => ({
       major,
       nodes: unitNodes(major, takenExamIds, attemptsByExamId),
@@ -1011,6 +1070,8 @@ export default function LearnerCertificationCurriculumPage() {
           exam: curriculum.mockExam,
           tone: "fox",
           icon: Trophy,
+          /* The one stop that is not the same size as the others. */
+          grand: true,
           label: curriculum.mockExam.title,
           meta: `final · ${curriculum.mockExam.totalQuestions} questions${attemptsSuffix(
             attemptsByExamId,
@@ -1021,78 +1082,63 @@ export default function LearnerCertificationCurriculumPage() {
         }
       : null
 
-    const ordered = [...built.flatMap((section) => section.nodes), ...(mock ? [mock] : [])]
-
+    /* One running index across the whole road, so the zig-zag never puts two
+       consecutive stops on the same side just because a unit boundary fell
+       between them. */
+    let index = 0
     let currentTaken = false
-    for (const node of ordered) {
-      if (!diagnosticDone) {
-        node.state = "locked"
-        continue
+    let previousUnitsComplete = true
+    let blocker = null
+
+    for (const section of built) {
+      section.start = index
+      index += section.nodes.length
+
+      section.complete = section.nodes.every((node) => node.done || node.empty)
+      section.locked = !diagnosticDone || !previousUnitsComplete
+      section.blockedBy = blocker
+
+      for (const node of section.nodes) {
+        if (section.locked) {
+          node.state = "locked"
+          node.blockedBy = blocker
+          continue
+        }
+        if (node.done) {
+          node.state = "done"
+          continue
+        }
+        // An empty topic cannot be the stop you are on -- there is nothing in
+        // it to do, so marking it current would strand the learner on a dead
+        // end.
+        if (!currentTaken && !node.empty) {
+          node.state = "current"
+          currentTaken = true
+          continue
+        }
+        node.state = "open"
       }
-      if (node.done) {
-        node.state = "done"
-        continue
-      }
-      // An empty topic cannot be the stop you are on -- there is nothing in it
-      // to do, so marking it current would strand the learner on a dead end.
-      if (!currentTaken && !node.empty) {
-        node.state = "current"
-        currentTaken = true
-        continue
-      }
-      node.state = "open"
+
+      if (!section.complete && !blocker) blocker = section.major
+      previousUnitsComplete = previousUnitsComplete && section.complete
     }
 
-    const currentSection = built.find((section) =>
-      section.nodes.some((node) => node.state === "current"),
-    )
+    if (mock) {
+      if (!diagnosticDone || !previousUnitsComplete) {
+        mock.state = "locked"
+        mock.blockedBy = blocker
+      } else if (mock.done) {
+        mock.state = "done"
+      } else if (!currentTaken) {
+        mock.state = "current"
+        currentTaken = true
+      } else {
+        mock.state = "open"
+      }
+    }
 
-    return { sections: built, finalNode: mock, currentUnitId: currentSection?.major.id ?? null }
+    return { sections: built, finalNode: mock, finalIndex: index }
   }, [curriculum, takenExamIds, attemptsByExamId, diagnosticDone])
-
-  /* Which units are unrolled.
-   *
-   * `null` means "nobody has chosen yet", which is not the same as "none are
-   * open" -- it is what lets the unit the learner is up to be open on arrival
-   * while still letting them close it. Storing the default as a real set on
-   * first render would freeze whichever unit was current when the page mounted,
-   * and it moves as they finish topics.
-   */
-  const [openUnitIds, setOpenUnitIds] = useState(null)
-  const openUnits = openUnitIds ?? new Set(currentUnitId ? [currentUnitId] : [])
-
-  /* One unit on screen: the one they are up to.
-   *
-   * Five units unrolled is five posters to scroll past to find the only one
-   * that is actionable, and the four below the fold are all the same answer --
-   * not yet. So the road shows the current unit and nothing else, and the rest
-   * are behind the toggle below it.
-   *
-   * They are a toggle rather than gone. The order of study is a
-   * recommendation here, not a rule -- a learner who wants to look ahead, or
-   * to go back to a unit they finished, still can. Hiding them by default is
-   * about what the page opens on, not about locking anything.
-   */
-  const [showAllUnits, setShowAllUnits] = useState(false)
-
-  /* No current unit means nothing is in progress -- a finished certification,
-     or a curriculum with no stops yet. There is no one unit to single out, so
-     the page falls back to the full list rather than rendering an empty road. */
-  const visibleSections =
-    showAllUnits || currentUnitId == null
-      ? sections
-      : sections.filter((section) => section.major.id === currentUnitId)
-
-  const hiddenUnitCount = sections.length - visibleSections.length
-
-  function toggleUnit(id) {
-    setOpenUnitIds(() => {
-      const next = new Set(openUnits)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
 
   /* The same figure the My Learning card and the analytics board show: lessons
      read and assessments passed, over what the certification requires. The
@@ -1251,7 +1297,7 @@ export default function LearnerCertificationCurriculumPage() {
   }
 
   function openDiagnostic() {
-    setDialogOpen(false)
+    setLock(null)
     navigate(
       curriculum.diagnostic
         ? `/learner/assessments/${curriculum.diagnostic.examId}`
@@ -1353,7 +1399,7 @@ export default function LearnerCertificationCurriculumPage() {
             </p>
           </div>
 
-          <TactileButton variant="fox" size="sm" onClick={() => setDialogOpen(true)}>
+          <TactileButton variant="fox" size="sm" onClick={() => setLock({ kind: "diagnostic" })}>
             <ClipboardCheck className="size-4" />
             take diagnostic
           </TactileButton>
@@ -1375,98 +1421,81 @@ export default function LearnerCertificationCurriculumPage() {
              width rather than being pinned into a narrow left lane beside
              nothing. */
           <StaggerList className="space-y-6" stagger={0.09}>
-            {/* The road. Every unit contributes a banner and a stretch of
+            {/* The road. Every unit contributes a caption and a stretch of
                 nodes, and the whole certification reads as one continuous
                 scroll from the first topic to the final -- which is the point:
                 the old stack of cards was a table of contents, and this is a
-                route. */}
+                route. Nothing is folded away; what is not yet available is
+                grey, in place, where the learner can see how far off it is. */}
             <StaggerItem variants={fadeUp}>
               <div className="mx-auto max-w-[820px]">
-                {visibleSections.map((section) => {
-                  const open = diagnosticDone && openUnits.has(section.major.id)
+                {sections.map((section, sectionIndex) => {
+                  /* The final rides on the last unit's stretch rather than in a
+                     box of its own, so the road runs into it instead of
+                     stopping short and leaving it stranded below the end. */
+                  const isLast = sectionIndex === sections.length - 1
+                  const stops =
+                    isLast && finalNode ? [...section.nodes, finalNode] : section.nodes
 
                   return (
-                    <section key={section.major.id} className="pb-4">
-                      <UnitBanner
+                    <section
+                      key={section.major.id}
+                      id={`unit-${section.major.id}`}
+                      /* Cleared past the portal nav and this page's own sticky
+                         caption, so "go to unit two" lands on the caption
+                         rather than underneath it. */
+                      className="scroll-mt-24"
+                    >
+                      <UnitMarker
                         major={section.major}
                         exam={section.major.assessment}
-                        locked={!diagnosticDone}
-                        open={open}
-                        onToggle={() => toggleUnit(section.major.id)}
-                        onLocked={() => setDialogOpen(true)}
-                        takenExamIds={takenExamIds}
+                        locked={section.locked}
+                        complete={section.complete}
+                        examTaken={Boolean(
+                          section.major.assessment
+                          && takenExamIds.has(String(section.major.assessment.examId)),
+                        )}
                       />
 
-                      <Collapse open={open}>
-                        {/* Headroom for the "start" bubble, which hangs above
-                            the first stop and therefore above this box. A
-                            margin rather than padding: the road's SVG and its
-                            nodes are positioned against this element, so
-                            padding would move the stops off the line the road
-                            is drawn along. */}
-                        <div
-                          className="relative mx-auto mt-6"
-                          style={{ width: PATH_WIDTH, height: PATH_ROW * section.nodes.length }}
-                        >
-                          <PathTrail count={section.nodes.length} />
+                      {/* Headroom for the "start" bubble, which hangs above the
+                          first stop and therefore above this box. A margin
+                          rather than padding: the road's SVG and its nodes are
+                          positioned against this element, so padding would move
+                          the stops off the line the road is drawn along. */}
+                      <div
+                        className="relative mx-auto mt-6"
+                        style={{ width: PATH_WIDTH, height: stretchHeight(stops) }}
+                      >
+                        <PathTrail items={stops} start={section.start} />
 
-                          {section.nodes.map((node, index) => (
-                            <PathNode
-                              key={node.key}
-                              node={node}
-                              index={index}
-                              onSelect={openNode}
-                              onLocked={() => setDialogOpen(true)}
-                            />
-                          ))}
-                        </div>
-                      </Collapse>
+                        {stops.map((node, nodeIndex) => (
+                          <PathNode
+                            key={node.key}
+                            node={node}
+                            index={section.start + nodeIndex}
+                            onSelect={openNode}
+                            onLocked={openLock}
+                          />
+                        ))}
+                      </div>
                     </section>
                   )
                 })}
 
-                {/* The way to the rest of the certification.
-
-                    Counted rather than just named: "show all units" alone does
-                    not say whether it opens one more or nine, and the number is
-                    the only thing that makes it worth pressing. Hidden entirely
-                    when there is nothing behind it -- a certification of one
-                    unit should not offer to show the others. */}
-                {hiddenUnitCount > 0 || showAllUnits ? (
-                  <div className="flex justify-center pb-4">
-                    <TactileButton
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowAllUnits((current) => !current)}
-                      aria-expanded={showAllUnits}
-                    >
-                      {showAllUnits
-                        ? "Show only my current unit"
-                        : `Show all units (${hiddenUnitCount} more)`}
-                      <ChevronDown
-                        className={`size-4 transition-transform duration-200 ${
-                          showAllUnits ? "rotate-180" : ""
-                        }`}
-                        aria-hidden="true"
-                      />
-                    </TactileButton>
+                {/* A certification with a final but no units at all still has
+                    one stop to draw. */}
+                {finalNode && sections.length === 0 ? (
+                  <div
+                    className="relative mx-auto mt-6"
+                    style={{ width: PATH_WIDTH, height: stretchHeight([finalNode]) }}
+                  >
+                    <PathNode
+                      node={finalNode}
+                      index={finalIndex}
+                      onSelect={openNode}
+                      onLocked={openLock}
+                    />
                   </div>
-                ) : null}
-
-                {/* The final, on the road rather than in a card of its own.
-                    It is the last stop, and a card after the path read as a
-                    separate feature rather than as the end of the journey. */}
-                {finalNode ? (
-                  <section className="pb-2">
-                    <div className="relative mx-auto" style={{ width: PATH_WIDTH, height: PATH_ROW }}>
-                      <PathNode
-                        node={finalNode}
-                        index={0}
-                        onSelect={openNode}
-                        onLocked={() => setDialogOpen(true)}
-                      />
-                    </div>
-                  </section>
                 ) : null}
               </div>
             </StaggerItem>
@@ -1475,57 +1504,108 @@ export default function LearnerCertificationCurriculumPage() {
         )}
       </main>
 
-      {/* -------------------------------------------------- diagnostic dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {/* -------------------------------------------------------- lock dialog
+          One dialog, two gates. A learner who presses a grey plinth is asking
+          the same question either way -- why not this one -- and the answer is
+          either "sit the diagnostic" or "finish unit two first". Two dialogs
+          would be two vocabularies for one word. */}
+      <Dialog open={lock != null} onOpenChange={(open) => !open && setLock(null)}>
         {/* `rebyu-ds` on the content itself: the dialog portals to <body>, so
             without it the `rb-btn` footer keys resolve to unstyled buttons. */}
         <DialogContent className="rebyu-ds sm:max-w-md">
-          <DialogHeader>
-            <div className="mb-2 grid size-14 place-items-center rounded-2xl bg-rb-fox-wash text-rb-fox-lip">
-              <ClipboardCheck className="size-7" aria-hidden="true" />
-            </div>
+          {lock?.kind === "unit" ? (
+            <>
+              <DialogHeader>
+                <div className="mb-2 grid size-14 place-items-center rounded-2xl bg-rb-swan text-rb-wolf">
+                  <Lock className="size-7" aria-hidden="true" />
+                </div>
 
-            <DialogTitle>Diagnostic exam</DialogTitle>
+                <DialogTitle>Unit {lock.unit.index} comes first</DialogTitle>
 
-            <DialogDescription>
-              The curriculum stays locked until we know where you are starting from. The diagnostic
-              samples every unit, so the result decides the order you study them in.
-            </DialogDescription>
-          </DialogHeader>
+                <DialogDescription>
+                  The road is walked in order. Finish {lock.unit.name} — every topic in it, and
+                  its unit exam — and the next unit opens on its own.
+                </DialogDescription>
+              </DialogHeader>
 
-          <ul className="space-y-2 rounded-rb-card border-2 border-rb-swan bg-rb-polar p-4">
-            {[
-              [
-                Clock,
-                curriculum.diagnostic?.durationMinutes
-                  ? `About ${curriculum.diagnostic.durationMinutes} minutes`
-                  : "Self-paced",
-              ],
-              [
-                CircleHelp,
-                curriculum.diagnostic
-                  ? `${curriculum.diagnostic.totalQuestions} questions across the certification`
-                  : "Questions across the certification",
-              ],
-              [CheckCircle2, "No pass mark — it only sets your plan"],
-            ].map(([Icon, text]) => (
-              <li key={text} className="flex items-center gap-3 text-sm font-bold text-rb-eel">
-                <Icon className="size-4 shrink-0 text-rb-wolf" aria-hidden="true" />
-                {text}
-              </li>
-            ))}
-          </ul>
+              <p className="text-sm font-bold text-rb-eel">
+                {lock.unit.doneCount}/{lock.unit.lessonCount} lessons read in that unit.
+              </p>
 
-          <DialogFooter>
-            <TactileButton variant="ghost" size="sm" onClick={() => setDialogOpen(false)}>
-              not now
-            </TactileButton>
+              <DialogFooter>
+                <TactileButton variant="ghost" size="sm" onClick={() => setLock(null)}>
+                  close
+                </TactileButton>
 
-            <TactileButton variant="fox" size="sm" onClick={openDiagnostic}>
-              start diagnostic
-              <ArrowRight className="size-4" />
-            </TactileButton>
-          </DialogFooter>
+                {/* Scrolled to rather than navigated to: the unit is already on
+                    this page, a few screens up, and reloading the route to
+                    reach something already rendered would throw the road away
+                    only to redraw it. */}
+                <TactileButton
+                  variant="macaw"
+                  size="sm"
+                  onClick={() => {
+                    const target = document.getElementById(`unit-${lock.unit.id}`)
+                    setLock(null)
+                    target?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  }}
+                >
+                  go to unit {lock.unit.index}
+                  <ArrowRight className="size-4" />
+                </TactileButton>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <div className="mb-2 grid size-14 place-items-center rounded-2xl bg-rb-fox-wash text-rb-fox-lip">
+                  <ClipboardCheck className="size-7" aria-hidden="true" />
+                </div>
+
+                <DialogTitle>Diagnostic exam</DialogTitle>
+
+                <DialogDescription>
+                  The curriculum stays locked until we know where you are starting from. The
+                  diagnostic samples every unit, so the result decides the order you study them
+                  in.
+                </DialogDescription>
+              </DialogHeader>
+
+              <ul className="space-y-2 rounded-rb-card border-2 border-rb-swan bg-rb-polar p-4">
+                {[
+                  [
+                    Clock,
+                    curriculum.diagnostic?.durationMinutes
+                      ? `About ${curriculum.diagnostic.durationMinutes} minutes`
+                      : "Self-paced",
+                  ],
+                  [
+                    CircleHelp,
+                    curriculum.diagnostic
+                      ? `${curriculum.diagnostic.totalQuestions} questions across the certification`
+                      : "Questions across the certification",
+                  ],
+                  [CheckCircle2, "No pass mark — it only sets your plan"],
+                ].map(([Icon, text]) => (
+                  <li key={text} className="flex items-center gap-3 text-sm font-bold text-rb-eel">
+                    <Icon className="size-4 shrink-0 text-rb-wolf" aria-hidden="true" />
+                    {text}
+                  </li>
+                ))}
+              </ul>
+
+              <DialogFooter>
+                <TactileButton variant="ghost" size="sm" onClick={() => setLock(null)}>
+                  not now
+                </TactileButton>
+
+                <TactileButton variant="fox" size="sm" onClick={openDiagnostic}>
+                  start diagnostic
+                  <ArrowRight className="size-4" />
+                </TactileButton>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 

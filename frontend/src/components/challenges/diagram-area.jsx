@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ChevronLeft, ChevronRight } from "@/components/icons"
 import { DrawIoEmbed } from "react-drawio"
 
 import { getDiagramToolPreset } from "./diagram-tool-presets.js"
@@ -53,35 +52,100 @@ if (
 }
 
 // draw.io renders inside an iframe Tailwind can't reach, but it does accept a
-// CSS blob over its configuration message. This restates the REBYU surface
-// tokens (Google Sans, swan borders, polar chrome, feather accent) as literals
-// so the embedded editor stops reading as a third-party tool bolted onto the
-// page.
+// stylesheet over its configuration message. Two config keys carry one: `css`
+// is injected ahead of the app's own stylesheets, `customCss` is appended to
+// the head after them. This sends the same sheet through both, because the
+// first version of this theme went through `css` alone and lost most of its
+// declarations to draw.io's own later rules -- the editor still came up in
+// stock grey, which is what "it looks like draw.io bolted onto the page" was.
+//
+// Everything below is `!important` and states REBYU's surface tokens as
+// literals (Google Sans, swan borders, snow panels, feather accent, polar
+// hover), since var() has no meaning inside that document.
 const DRAWIO_THEME_CSS = `
-  .geEditor, .geSidebarContainer, .geFormatContainer, .geToolbarContainer,
-  .geMenubarContainer, .geDialog, .mxWindow {
+  .geEditor, .geEditor *, .geDialog, .geDialog *, .mxWindow, .mxWindow *,
+  .geSidebarTooltip, .geSidebarTooltip * {
     font-family: "Google Sans", "Google Sans Flex", Arial, sans-serif !important;
   }
-  .geTabContainer { display: none !important; }
-  .geSidebarContainer, .geFormatContainer { background: #f7f7f7 !important; }
-  .geSidebarContainer { border-right: 1px solid #e5e5e5 !important; }
-  .geFormatContainer { border-left: 1px solid #e5e5e5 !important; }
+
+  /* Editor furniture an exam has no use for. The page tabs offer a second
+     canvas nobody grades; .geSidebarFooter is the "+ More Shapes" button,
+     which opens a dialog of eighty unrelated stencil libraries. */
+  .geTabContainer, .geSidebarFooter { display: none !important; }
+
   .geToolbarContainer, .geMenubarContainer {
     background: #ffffff !important;
     border-bottom: 1px solid #e5e5e5 !important;
     box-shadow: none !important;
   }
-  .geTitle, .geFormatSection { color: #4b4b4b !important; }
-  .geSidebar .geItem:hover { background: #e8f1fe !important; }
-  .geBtn, button.geBtn {
+  .geToolbarContainer .geButton, .geToolbarContainer a.geButton,
+  .geToolbarContainer .geMenuItem {
     border-radius: 10px !important;
-    font-weight: 700 !important;
+    color: #4b4b4b !important;
   }
-  .gePrimaryBtn, button.gePrimaryBtn {
-    background: #1b6ef3 !important;
-    border-color: #1553c4 !important;
+  .geToolbarContainer .geButton:hover, .geToolbarContainer a.geButton:hover,
+  .geToolbarContainer .geMenuItem:hover { background: #f7f7f7 !important; }
+
+  .geSidebarContainer {
+    background: #ffffff !important;
+    border-right: 1px solid #e5e5e5 !important;
+  }
+  .geSidebarContainer input, .geSidebarContainer input[type="text"] {
+    border: 2px solid #e5e5e5 !important;
+    border-radius: 12px !important;
+    padding: 7px 10px !important;
+    background: #ffffff !important;
+    color: #4b4b4b !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+  .geSidebarContainer input:focus { border-color: #1b6ef3 !important; }
+  .geTitle {
+    color: #777777 !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+    background: transparent !important;
+  }
+  .geSidebar .geItem:hover {
+    background: #e8f1fe !important;
+    border-radius: 10px !important;
+  }
+  .geSidebarTooltip {
+    border: 1px solid #e5e5e5 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1) !important;
+  }
+
+  .geFormatContainer {
+    background: #ffffff !important;
+    border-left: 1px solid #e5e5e5 !important;
+    color: #4b4b4b !important;
+  }
+  .geFormatSection { color: #4b4b4b !important; }
+
+  .geBtn, button.geBtn, .geFormatContainer button {
     border-radius: 10px !important;
     font-weight: 700 !important;
+    color: #4b4b4b !important;
+    border: 2px solid #e5e5e5 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+  }
+  .geBtn:hover, button.geBtn:hover, .geFormatContainer button:hover {
+    background: #f7f7f7 !important;
+  }
+  button.gePrimaryBtn, .gePrimaryBtn, .geBtn.gePrimaryBtn {
+    background: #1b6ef3 !important;
+    border: 2px solid #1553c4 !important;
+    color: #ffffff !important;
+  }
+
+  .geDialog, .mxWindow {
+    border-radius: 16px !important;
+    border: 1px solid #e5e5e5 !important;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14) !important;
   }
 `
 
@@ -99,9 +163,6 @@ export default function DiagramArea({
                                         className = "",
                                     }) {
     const [isLoading, setIsLoading] = useState(true)
-    // Collapsed to start: the palette is a menu, and a menu should not be the
-    // first thing between the learner and a blank canvas.
-    const [shapesOpen, setShapesOpen] = useState(false)
     const onChangeRef = useRef(onChange)
     const autosaveTimerRef = useRef(null)
     const embedRef = useRef(null)
@@ -172,7 +233,6 @@ export default function DiagramArea({
     return (
         <div
             className={`rb-diagram-shell h-full min-h-[420px] w-full bg-card ${className}`}
-            data-shapes={shapesOpen ? "open" : "closed"}
         >
             {isLoading && (
                 <div
@@ -212,23 +272,18 @@ export default function DiagramArea({
                             {/* Search field. */}
                             <div className="h-8 rounded-lg border border-rb-swan bg-card" />
 
-                            {/* Scratchpad: a titled group with a dashed drop
-                                area, which is the tallest thing in the panel
-                                and the one whose absence was most obvious. */}
-                            <div className="space-y-2">
-                                <div className="h-3 w-24 rounded bg-rb-swan motion-safe:animate-pulse" />
-                                <div className="h-11 rounded-lg border border-dashed border-rb-swan" />
-                            </div>
-
-                            {/* The collapsed shape groups. */}
-                            {Array.from({ length: 2 }).map((_, item) => (
+                            {/* The collapsed shape groups, and nothing else:
+                                the Scratchpad and the "More Shapes" pill this
+                                used to trace are both gone from the editor
+                                now, and drawing furniture the learner will
+                                never see is the same re-layout on load that
+                                the skeleton exists to avoid. */}
+                            {Array.from({ length: 3 }).map((_, item) => (
                                 <div
                                     key={item}
                                     className="h-3 w-20 rounded bg-rb-swan motion-safe:animate-pulse"
                                 />
                             ))}
-
-                            <div className="mx-auto mt-1 h-8 w-32 rounded-full bg-rb-swan motion-safe:animate-pulse" />
                         </div>
 
                         {/* Canvas. The grid is drawn rather than left blank so
@@ -267,7 +322,13 @@ export default function DiagramArea({
                 urlParameters={{
                     ui: "simple",
                     sidebar: 1,
-                    libraries: 1,
+                    // `libraries` is not the shape palette -- that is `sidebar`
+                    // plus `libs`. It is draw.io's *custom* library machinery:
+                    // the Scratchpad, "New Library", "Open Library". None of it
+                    // survives an attempt, and the Scratchpad's "Drag elements
+                    // here" drop zone sat at the top of the palette as the
+                    // first thing a learner saw.
+                    libraries: 0,
                     libs: toolPreset.libs,
                     format: 0,
                     noSaveBtn: 1,
@@ -292,39 +353,29 @@ export default function DiagramArea({
                         "exit",
                     ],
                     css: DRAWIO_THEME_CSS,
+                    // Same sheet, appended after draw.io's own stylesheets
+                    // instead of before them -- see DRAWIO_THEME_CSS.
+                    customCss: DRAWIO_THEME_CSS,
+                    // The Scratchpad, "New Library" and "Open Library". None of
+                    // it survives an attempt, and the Scratchpad's "Drag
+                    // elements here" drop zone sat at the top of the palette as
+                    // the first thing a learner saw.
+                    //
+                    // draw.io caches the whole configuration in localStorage
+                    // under `version`, so a browser that met an older build
+                    // keeps whatever that build said until the string moves --
+                    // which is why this reads v3 below and not v2.
+                    enableCustomLibraries: false,
                     defaultGridEnabled: true,
                     defaultGridSize: 10,
                     defaultPageVisible: false,
                     override: true,
-                    version: `rebyu-diagram-editor-${toolPreset.libs}`,
+                    // draw.io caches a configuration under its version string,
+                    // so this has to move whenever the theme does.
+                    version: `rebyu-diagram-editor-v3-${toolPreset.libs}`,
                 }}
             />
 
-            {/* The handle that pulls the shape library out. It rides the
-                sidebar's right edge, so it reads as the edge of the drawer
-                rather than a button parked on the canvas. Hidden while the
-                editor is still loading -- there is nothing to pull out yet. */}
-            {!isLoading && (
-                <button
-                    type="button"
-                    onClick={() => setShapesOpen((open) => !open)}
-                    aria-expanded={shapesOpen}
-                    aria-label={shapesOpen ? "Hide shapes" : "Show shapes"}
-                    title={shapesOpen ? "Hide shapes" : "Show shapes"}
-                    style={{ left: shapesOpen ? "var(--rb-shapes-w)" : 0 }}
-                    className="absolute top-1/2 z-20 flex h-28 w-7 -translate-y-1/2 flex-col items-center justify-center gap-1 rounded-r-lg border border-l-0 border-rb-swan bg-card text-rb-wolf transition-colors hover:bg-rb-polar hover:text-rb-eel focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rb-feather"
-                >
-                    {shapesOpen ? (
-                        <ChevronLeft className="size-3.5 shrink-0" aria-hidden="true" />
-                    ) : (
-                        <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
-                    )}
-
-                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] [writing-mode:vertical-rl]">
-                        Shapes
-                    </span>
-                </button>
-            )}
         </div>
     )
 }

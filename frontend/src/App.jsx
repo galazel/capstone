@@ -20,6 +20,7 @@ const AdminOrganizationDetail = lazy(() => import("./pages/admin/admin-organizat
 const ViewCertificationAdmin = lazy(() => import("./pages/admin/view-certification-admin-page.jsx"))
 const AdminDashboard = lazy(() => import("./pages/admin/admin-dashboard-page.jsx"))
 const PartnershipRequests = lazy(() => import("./pages/admin/partnership-requests-page.jsx"))
+const CommunityModeration = lazy(() => import("./pages/admin/community-moderation-page.jsx"))
 const AcceptInstitutionInvitationPage = lazy(() => import("./pages/admin/accept-institution-invitation-page.jsx"))
 const LandingPage = lazy(() => import("./pages/public/landing-page.jsx"))
 const CreateLessons = lazy(() => import("./pages/admin/create-lessons-page.jsx"))
@@ -34,6 +35,7 @@ const LearnerCertificationDetailPage = lazy(() => import("./pages/learner/learni
 const LearnerCertificationsPage = lazy(() => import("./pages/learner/learning/learner-certifications-page.jsx"))
 const LearnerChallengesPage = lazy(() => import("./pages/learner/learning/learner-challenges-page.jsx"))
 const LearnerFilesPage = lazy(() => import("./pages/learner/files/learner-files-page.jsx"))
+const LearnerCommunityPage = lazy(() => import("./pages/learner/community/learner-community-qa.jsx"))
 const LearnerAccountPage = lazy(() => import("./pages/learner/dashboard/learner-account-page.jsx"))
 const LearnerAssessmentAttemptPage = lazy(() => import("./pages/learner/assessments/learner-assessment-attempt-page.jsx"))
 // Dev-only screenshot harness for the landing hero. Never routed in a
@@ -250,9 +252,7 @@ export function App() {
                         element={<AdminOrganizationDetail />}
                     />
                     <Route path="partnership-requests" element={<PartnershipRequests />} />
-                    {/* Community moderation is withdrawn from the admin portal.
-                        The page and its service still exist -- re-register this
-                        route to bring it back. */}
+                    <Route path="community" element={<CommunityModeration />} />
                     {/* BKT delivery status is withdrawn from the admin portal.
                         The page and its service still exist -- re-register this
                         route to bring it back. */}
@@ -314,9 +314,7 @@ export function App() {
                     <Route path="challenges" element={<LearnerChallengesPage />} />
                     <Route path="subscription" element={<LearnerSubscriptionPage />} />
                     <Route path="library" element={<LearnerFilesPage />} />
-                    {/* Community Q&A is withdrawn from the learner portal. The
-                        page, hooks and services are kept -- re-register this
-                        route to bring it back. */}
+                    <Route path="community" element={<LearnerCommunityPage />} />
                     <Route path="account" element={<LearnerAccountPage />} />
                 </Route>
 

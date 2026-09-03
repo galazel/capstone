@@ -36,7 +36,7 @@ export default function SubQuestionTabs({
               aria-selected={isActive}
               onClick={() => setActiveId(question.questionId)}
               className={cn(
-                "shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "shrink-0 rounded-[var(--radius-rb-control)] border px-3 py-1.5 text-xs font-medium transition outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 isActive
                   ? "border-primary bg-primary text-primary-foreground"
                   : answered

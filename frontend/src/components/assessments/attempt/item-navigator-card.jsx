@@ -30,7 +30,10 @@ export default function ItemNavigatorCard({ item, index, isCurrent, onJump }) {
       aria-current={isCurrent ? "true" : undefined}
       aria-label={srLabel}
       className={cn(
-        "relative flex min-h-16 flex-col justify-between rounded-xl border-2 p-2 text-left font-bold outline-none transition",
+        // The control corner, taken from the token rather than from a literal,
+        // so this card rounds exactly like every button and follows the design
+        // system if that value ever moves.
+        "relative flex min-h-16 flex-col justify-between rounded-[var(--radius-rb-control)] border-2 p-2 text-left font-bold outline-none transition",
         "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-rb-macaw",
         "active:translate-y-[2px]",
         status.card

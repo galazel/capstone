@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { CheckCheckIcon, Loader2Icon, PlayIcon, TerminalIcon } from "@/components/icons"
+import { Loader2Icon, PlayIcon, TerminalIcon } from "@/components/icons"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
@@ -8,7 +8,6 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getFileViewUrl } from "@/services/fileService.js"
 import {
-  checkAttemptProgramming,
   getAttemptExecutions,
   runAttemptProgramming,
 } from "@/services/assessmentService.js"
@@ -21,7 +20,7 @@ import TestCasesPanel from "./test-cases-panel.jsx"
 // Run/Check hit real endpoints; the executor is stubbed server-side, so results
 // come back as "not run / unavailable" — nothing is fake-scored here.
 //
-// `runner` swaps where Run/Check go. An assessment attempt leaves it unset and
+// `runner` swaps where Run goes. An assessment attempt leaves it unset and
 // the attempt endpoints are used; an arena run — which has no attempt, no
 // attempt question and no learner id to send — passes its own
 // { run, check, listExecutions }. The layout is identical either way, which is
@@ -43,7 +42,6 @@ export default function ProgrammingQuestionLayout({
   const [notice, setNotice] = useState(null)
   const [output, setOutput] = useState(null)
   const [running, setRunning] = useState(false)
-  const [checking, setChecking] = useState(false)
   const [activeTab, setActiveTab] = useState("tests")
   const [executions, setExecutions] = useState([])
   const [executionsLoading, setExecutionsLoading] = useState(false)
@@ -53,7 +51,7 @@ export default function ProgrammingQuestionLayout({
   // Code" (in CodeMirrorProgrammingWorkspace) remains available as an
   // explicit, learner-initiated action when starter code exists.
   const code = answer?.submittedCode ?? ""
-  const busy = running || checking
+  const busy = running
   const subQuestions = question.subQuestions ?? []
 
   // Reset test/output panels when switching items.
@@ -79,13 +77,17 @@ export default function ProgrammingQuestionLayout({
     refreshExecutions()
   }, [refreshExecutions])
 
-  const execute = async (mode) => {
-    const setBusy = mode === "run" ? setRunning : setChecking
-    setBusy(true)
+  // Run only. Check Code was removed: it graded the code against the item's
+  // test cases mid-attempt, which is a verdict, and it is the same call the
+  // marker makes at submission -- so it either told a learner their answer was
+  // wrong before they had finished, or reported nothing when the runner was
+  // unavailable. Running code and seeing its output is the useful half.
+  const execute = async () => {
+    setRunning(true)
     try {
       const result = runner
-        ? await (mode === "run" ? runner.run : runner.check)(code, language)
-        : await (mode === "run" ? runAttemptProgramming : checkAttemptProgramming)(
+        ? await runner.run(code, language)
+        : await runAttemptProgramming(
             attemptId,
             attemptQuestionId,
             learnerId,
@@ -102,14 +104,14 @@ export default function ProgrammingQuestionLayout({
         error?.response?.data?.message ?? "Unable to run your code right now."
       )
     } finally {
-      setBusy(false)
+      setRunning(false)
     }
   }
 
   return (
     <div className="grid h-full min-h-0 gap-4 lg:grid-cols-[minmax(240px,1fr)_minmax(0,1.5fr)_300px]">
       {/* Left — problem statement */}
-      <ScrollArea className="max-h-full rounded-xl border bg-card">
+      <ScrollArea className="max-h-full rounded-[var(--radius-rb-card)] border bg-card">
         <div className="space-y-4 p-4">
           {/* Title and difficulty live here, at the head of the problem
               statement. An arena run used to carry them in a strip across the
@@ -154,12 +156,12 @@ export default function ProgrammingQuestionLayout({
             <img
               src={getFileViewUrl(question.questionImageKey)}
               alt="Problem reference"
-              className="w-full rounded-xl border"
+              className="w-full rounded-[var(--radius-rb-card)] border"
             />
           ) : null}
 
           {subQuestions.length > 0 ? (
-            <div className="rounded-xl border bg-background p-3">
+            <div className="rounded-[var(--radius-rb-card)] border bg-background p-3">
               <SubQuestionTabs
                 subQuestions={subQuestions.map((sub) => ({
                   questionId: sub.subQuestionId,
@@ -183,39 +185,6 @@ export default function ProgrammingQuestionLayout({
 
       {/* Center — code editor + actions + output */}
       <div className="flex min-h-0 flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => execute("run")}
-            disabled={busy || editingLocked}
-          >
-            {running ? (
-              <Loader2Icon className="animate-spin" aria-hidden="true" />
-            ) : (
-              <PlayIcon aria-hidden="true" />
-            )}
-            Run Code
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => execute("check")}
-            disabled={busy || editingLocked}
-          >
-            {checking ? (
-              <Loader2Icon className="animate-spin" aria-hidden="true" />
-            ) : (
-              <CheckCheckIcon aria-hidden="true" />
-            )}
-            Check Code
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            Code is saved automatically with your attempt.
-          </span>
-        </div>
-
         <div className="min-h-0 flex-1">
           <CodeMirrorProgrammingWorkspace
             value={code}
@@ -224,11 +193,27 @@ export default function ProgrammingQuestionLayout({
             readOnly={editingLocked}
             onChange={(next) => onAnswer({ submittedCode: next })}
             onLanguageChange={(next) => onAnswer({ programmingLanguage: next })}
+            actions={
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={execute}
+                disabled={busy || editingLocked}
+              >
+                {running ? (
+                  <Loader2Icon className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <PlayIcon aria-hidden="true" />
+                )}
+                Run Code
+              </Button>
+            }
           />
         </div>
 
         {output ? (
-          <div className="rounded-xl border bg-card">
+          <div className="rounded-[var(--radius-rb-card)] border bg-card">
             <div className="flex items-center gap-1.5 border-b px-3 py-1.5 text-xs font-medium text-muted-foreground">
               <TerminalIcon className="size-3.5" aria-hidden="true" />
               Output
@@ -242,12 +227,12 @@ export default function ProgrammingQuestionLayout({
 
       {/* Right — navigation + tests / executions */}
       <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
-        <div className="rounded-xl border bg-card p-3">{navigator}</div>
+        <div className="rounded-[var(--radius-rb-card)] border bg-card p-3">{navigator}</div>
 
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
-          className="rounded-xl border bg-card p-3"
+          className="rounded-[var(--radius-rb-card)] border bg-card p-3"
         >
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="tests">Tests</TabsTrigger>

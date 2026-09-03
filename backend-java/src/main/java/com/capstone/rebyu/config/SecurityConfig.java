@@ -138,6 +138,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/bkt/**").authenticated()
                         .requestMatchers("/api/admin/community/reports/**").authenticated()
                         .requestMatchers("/api/admin/gamification-settings/**").authenticated()
+                        // The learner-facing community fell through to permitAll and was
+                        // held shut only by every handler remembering to call me(jwt).
+                        // Anonymous access is blocked here so a new handler that forgets
+                        // is not publicly reachable.
+                        .requestMatchers("/api/community/**").authenticated()
                         // The question bank (including choices/correct answers) had no
                         // auth at all -- anyone could read, create, edit, or delete any
                         // question. Now admin- or institution-scoped at the controller;

@@ -77,35 +77,11 @@ input[type="search"]::-webkit-search-cancel-button {
    react-drawio hardcodes the <iframe> style and ignores a style prop, so the
    only way to size or move the editor is CSS against its own class name.
 
-   The shape library is collapsed by default. Rather than hide draw.io's
-   sidebar from the inside -- draw.io positions its canvas with JavaScript, so
-   a CSS-hidden sidebar just leaves a dead gutter the canvas never reclaims --
-   the iframe itself is made wider than its shell and slid left, so the sidebar
-   sits outside the visible area and the canvas fills it. draw.io keeps its own
-   layout intact and never learns anything changed.
-
-   --rb-shapes-w must match the width draw.io gives its shape sidebar. If a
-   sliver of the shape palette shows while collapsed, raise it; if the canvas
-   looks clipped on the left, lower it.
+   The editor fills its shell, sidebar included. There is no shapes drawer:
+   draw.io positions its canvas with JavaScript, so anything that hides the
+   sidebar from the outside has to move the whole iframe, and a palette that
+   slides in and out from a handle of our own was more editor furniture than
+   the one it was hiding.
    --------------------------------------------------------------------------- */
-.rb-diagram-shell {
-    --rb-shapes-w: 208px;
-    position: relative;
-    overflow: hidden;
-}
-
-.rb-diagram-shell > .diagrams-iframe {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    height: 100% !important;
-    min-width: 0 !important;
-    min-height: 0 !important;
-    width: calc(100% + var(--rb-shapes-w)) !important;
-    transform: translateX(calc(-1 * var(--rb-shapes-w)));
-}
-
-.rb-diagram-shell[data-shapes="open"] > .diagrams-iframe {
-    width: 100% !important;
-    transform: none;
-}
+/* `.rb-diagram-shell` moved to src/index.css, which is the stylesheet
+   this app actually bundles. */

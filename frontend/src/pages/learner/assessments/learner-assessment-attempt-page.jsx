@@ -42,11 +42,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { ASSESSMENT_XP } from "@/lib/xp.js"
 import { announceRewards, snapshotRewards } from "@/components/learner/xp-award-modal.jsx"
-import { ATTEMPT_MESSAGES, GRADING_MESSAGES, LoadingScreen } from "@/components/loading-screen.jsx"
+import { GRADING_MESSAGES, LoadingScreen } from "@/components/loading-screen.jsx"
 import DiagramArea from "@/components/challenges/diagram-area.jsx"
 import CodeMirrorProgrammingWorkspace from "@/components/assessments/attempt/code-mirror-programming-workspace.jsx"
 import DiagramQuestionLayout from "@/components/assessments/attempt/diagram-question-layout.jsx"
 import ProgrammingQuestionLayout from "@/components/assessments/attempt/programming-question-layout.jsx"
+import AttemptSkeleton from "@/components/assessments/attempt/attempt-skeleton.jsx"
 import QuestionNavigator from "@/components/assessments/attempt/question-navigator.jsx"
 import SubQuestionTabs from "@/components/assessments/attempt/sub-question-tabs.jsx"
 import { getFileViewUrl } from "@/services/fileService.js"
@@ -580,6 +581,16 @@ export default function LearnerAssessmentAttemptPage() {
 
   const questions = attempt?.questions ?? []
 
+  // The attempt owns the viewport: it is h-dvh with its own internal scroll
+  // areas, so the document must not scroll behind it. Without this the wheel
+  // scrolled the document instead of the question column, carrying the header
+  // -- timer, Finish Attempt -- off the top of the screen. Released on unmount
+  // so every other page scrolls normally.
+  useEffect(() => {
+    document.body.classList.add("rb-attempt-lock")
+    return () => document.body.classList.remove("rb-attempt-lock")
+  }, [])
+
   // ---------------------------------------------------------------
   // Debounced autosave of dirty answers
   // ---------------------------------------------------------------
@@ -843,7 +854,10 @@ export default function LearnerAssessmentAttemptPage() {
      page does not have until the questions are known, so it promised the wrong
      shape and then rearranged itself into the real one. */
   if (!attempt) {
-    return <LoadingScreen messages={ATTEMPT_MESSAGES} />
+    // The attempt's own shape, not a boot animation: same header, same padded
+    // workspace, same 288px navigator, same footer, so the arriving paper fills
+    // the frame in rather than replacing it.
+    return <AttemptSkeleton />
   }
 
   const currentQuestion = questions[currentIndex]
@@ -1089,7 +1103,10 @@ export default function LearnerAssessmentAttemptPage() {
                   ) : null}
                 </main>
 
-                <aside className="hidden min-h-0 w-64 shrink-0 overflow-hidden rounded-2xl border bg-background p-4 lg:block">
+                {/* w-72, not w-64: the navigator is a fixed five columns, and
+                    five cards plus their gaps need 288px here to keep each
+                    card's points and flag badge unclipped. */}
+                <aside className="hidden min-h-0 w-72 shrink-0 overflow-hidden rounded-2xl border bg-background p-4 lg:block">
                   {navigatorPanel}
                 </aside>
               </>

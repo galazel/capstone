@@ -644,7 +644,6 @@ function LessonView({
   readSections,
   lessonDone,
   completing,
-  showToc,
   onReadSection,
   onToggleSection,
   onReadLesson,
@@ -807,59 +806,6 @@ function LessonView({
         </div>
       ) : (
         <>
-          {/* Table of contents. Sections are also in the rail, but the rail is
-              collapsible (or, below xl, replaced by a Sheet) -- shown only when
-              the rail itself isn't already on screen, so the list never
-              appears twice at once. */}
-          {showToc ? (
-            <nav
-              className="mx-auto mt-5 w-full max-w-6xl rounded-rb-card border-2 border-rb-swan bg-rb-snow p-5"
-              aria-label="Table of contents"
-            >
-              <p className="rb-eyebrow">table of contents</p>
-
-              <ol className="mt-4 space-y-1">
-                {sections.map((section, index) => {
-                  const done = readSections.has(section.key)
-
-                  return (
-                    <li key={section.key}>
-                      <a
-                        href={`#${section.key}`}
-                        className="flex items-center gap-3 rounded-xl px-2 py-2 text-sm font-bold text-rb-eel transition hover:bg-rb-polar"
-                      >
-                        <span
-                          className={`grid size-7 shrink-0 place-items-center rounded-full text-xs ${
-                            done ? "bg-rb-feather text-white" : "rb-numeric bg-rb-swan"
-                          }`}
-                        >
-                          {done ? <Check className="size-3.5" aria-hidden="true" /> : index + 1}
-                        </span>
-                        <span className="min-w-0 flex-1">{section.name}</span>
-                        <ArrowRight className="size-3.5 shrink-0 text-rb-hare" aria-hidden="true" />
-                      </a>
-                    </li>
-                  )
-                })}
-
-                {lessonItem.quiz ? (
-                  <li>
-                    <a
-                      href={`#quiz-${lessonItem.quiz.examId}`}
-                      className="flex items-center gap-3 rounded-xl px-2 py-2 text-sm font-bold text-rb-eel transition hover:bg-rb-polar"
-                    >
-                      <span className="grid size-7 shrink-0 place-items-center rounded-full bg-rb-beetle-wash text-rb-beetle-lip">
-                        <CircleHelp className="size-3.5" aria-hidden="true" />
-                      </span>
-                      <span className="min-w-0 flex-1">Test your skills</span>
-                      <ArrowRight className="size-3.5 shrink-0 text-rb-hare" aria-hidden="true" />
-                    </a>
-                  </li>
-                ) : null}
-              </ol>
-            </nav>
-          ) : null}
-
           {/* Bled to the column edges with the same negative margins the
               sticky header and the quick-check band above already use, so a
               section reads as a full band of the page rather than one more
@@ -1643,7 +1589,6 @@ export default function LearnerTopicPage() {
               readSections={readSections}
               lessonDone={alreadyDone}
               completing={completing}
-              showToc={!isXl || outlineCollapsed}
               onReadSection={readSection}
               onToggleSection={toggleSection}
               onReadLesson={readLesson}

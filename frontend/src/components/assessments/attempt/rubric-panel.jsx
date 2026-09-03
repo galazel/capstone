@@ -33,7 +33,7 @@ export default function RubricPanel({ rubric, notice }) {
       </div>
 
       {notice ? (
-        <div className="flex items-start gap-2 rounded-lg border p-2.5 text-xs leading-5 text-muted-foreground">
+        <div className="flex items-start gap-2 rounded-[var(--radius-rb-control)] border p-2.5 text-xs leading-5 text-muted-foreground">
           <HourglassIcon className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
           <span>{notice}</span>
         </div>
@@ -48,7 +48,7 @@ export default function RubricPanel({ rubric, notice }) {
           {list.map((criterion, index) => {
             const scored = criterion.awardedPoints != null
             return (
-              <li key={index} className="rounded-lg border p-2.5">
+              <li key={index} className="rounded-[var(--radius-rb-control)] border p-2.5">
                 <div className="flex items-start justify-between gap-2">
                   <span className="text-sm font-medium">{criterion.name}</span>
                   <Badge variant={scored ? "default" : "outline"}>
