@@ -703,13 +703,16 @@ export default function AssessmentsTab({
               <AlertDialogCancel disabled={deleteMutation.isPending}>
                 Cancel
               </AlertDialogCancel>
+              {/* `variant`, not hand-painted colours: the destructive variant
+                  carries the border and lip the design system gives it, which a
+                  bare `bg-destructive` class silently skipped. */}
               <AlertDialogAction
+                  variant="destructive"
                   onClick={(event) => {
                     event.preventDefault()
                     deleteMutation.mutate(deleteTarget)
                   }}
                   disabled={deleteMutation.isPending}
-                  className="bg-destructive text-white hover:bg-destructive/90"
               >
                 {deleteMutation.isPending ? "Deleting..." : "Delete Assessment"}
               </AlertDialogAction>

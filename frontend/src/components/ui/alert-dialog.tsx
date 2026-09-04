@@ -155,7 +155,20 @@ function AlertDialogAction({
   return (
     <Button variant={variant} size={size} asChild>
       <AlertDialogPrimitive.Action
-        data-slot="alert-dialog-action"
+        /* `data-slot="button"`, not "alert-dialog-action".
+         *
+         * `asChild` merges the Button's props onto this element and the child's
+         * own values win, so a slot named anything else silently replaced the
+         * one the Button set -- and every global rule in index.css is keyed on
+         * `[data-slot="button"]`. The result was that no confirm dialog
+         * anywhere in the app got the design system's button treatment: no lip,
+         * a 16px radius instead of the control radius, and weight 500 instead
+         * of 700, while every other button on the same screen had all three.
+         *
+         * The alert-dialog identity moves to its own attribute so it is still
+         * addressable; nothing styles it today. */
+        data-slot="button"
+        data-alert-dialog="action"
         className={cn(className)}
         {...props}
       />
@@ -173,7 +186,9 @@ function AlertDialogCancel({
   return (
     <Button variant={variant} size={size} asChild>
       <AlertDialogPrimitive.Cancel
-        data-slot="alert-dialog-cancel"
+        // Same reason as the action above.
+        data-slot="button"
+        data-alert-dialog="cancel"
         className={cn(className)}
         {...props}
       />
