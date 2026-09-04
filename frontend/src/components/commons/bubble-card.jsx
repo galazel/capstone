@@ -93,6 +93,14 @@ export function toneForIndex(index) {
  * @param as        wrapper element — "article" (default), "button", or a Link via `asChild`-style usage
  * @param cap       "gradient" (default) or "flat" -- one colour, matching the
  *                  certification covers
+ * @param wordmark  a name set oversized and clipped into the cap's corner. The
+ *                  landing page's certification cards have always done this,
+ *                  and it is how a card gets an identity without a second hue:
+ *                  `toneForCertification` deliberately answers "feather" for
+ *                  every track (see learner-ui.jsx -- four palettes disagreeing
+ *                  across four surfaces is why it was collapsed), so two
+ *                  certifications side by side are the same blue rectangle and
+ *                  the only thing that can tell them apart is their name.
  * @param body      "wash" (default) paints the body in the tone's pastel; "card"
  *                  leaves it on the plain card surface, so the tone is carried
  *                  by the cap alone — the shape the certification cards use.
@@ -105,6 +113,7 @@ export function BubbleCard({
   chips = [],
   capHeight = "h-32",
   cap = "gradient",
+  wordmark,
   body = "wash",
   active = false,
   compact = false,
@@ -153,7 +162,7 @@ export function BubbleCard({
       {/* The cap. Bubbles are two oversized circles bled off opposite corners —
           they read as depth without an image to load. */}
       <div
-        className={`relative flex ${capHeight} shrink-0 items-center justify-center overflow-hidden`}
+        className={`relative flex ${capHeight} shrink-0 items-center justify-center overflow-hidden [container-type:inline-size]`}
         style={{ background: capFace }}
       >
         {(leftChips.length > 0 || rightChips.length > 0) && (
@@ -183,6 +192,24 @@ export function BubbleCard({
 
         <div className="pointer-events-none absolute -right-8 -top-8 size-28 rounded-full bg-white/10" />
         <div className="pointer-events-none absolute -bottom-10 -left-7 size-32 rounded-full bg-white/10" />
+
+        {/* Bled off the bottom-left corner, behind the medallion: the letters
+            are meant to run out of the cap rather than sit inside it, so the
+            card reads as branded rather than as a label in a box. Sized in
+            `cqw` so it scales with the card and not with the viewport -- a
+            wordmark set in vw is enormous in a four-column grid and invisible
+            in one. A long name is left to run off the edge rather than being
+            cut to a fixed character count: clipping mid-glyph reads as bleed,
+            while "it passpo" reads as a bug. */}
+        {wordmark ? (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -bottom-3 left-2 select-none whitespace-nowrap font-rb-display font-black lowercase leading-none text-white/20"
+            style={{ fontSize: compact ? "2.75rem" : "clamp(2.5rem, 22cqw, 5rem)" }}
+          >
+            {wordmark}
+          </span>
+        ) : null}
 
         {Icon ? (
           <span

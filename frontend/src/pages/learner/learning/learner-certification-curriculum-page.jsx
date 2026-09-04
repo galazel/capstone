@@ -601,14 +601,50 @@ function PathNode({ node, index, onSelect, onLocked }) {
                   that 404s or that a slow connection never delivers hides
                   itself and uncovers the icon, rather than leaving an empty
                   plinth where a stop should be. */}
-              {locked ? (
-                <Lock className={node.grand ? "size-14" : "size-11"} aria-hidden="true" />
+              {node.grand ? (
+                /* The final keeps its trophy in every state, and wears the
+                   state as a badge instead.
+                   
+                   The branches below swap a node's icon out for its state,
+                   which is right for a road of interchangeable topics: one
+                   locked lesson is much like another, and what you need to know
+                   is that it is shut. The mock exam is not interchangeable with
+                   anything -- it is the one stop the whole certification is
+                   pointing at -- and on a locked road it was rendering as the
+                   same grey padlock as the lesson two plinths above it, only
+                   bigger. The plinth still carries the state, and so does the
+                   badge; the trophy carries which stop this is. */
+                <span className="relative grid place-items-center">
+                  <Icon className="size-14" aria-hidden="true" />
+
+                  {locked || retakeable || done ? (
+                    <span
+                      className={`absolute -bottom-1.5 -right-3 grid size-7 place-items-center rounded-full border-2 border-rb-snow bg-rb-snow shadow-[0_2px_4px_rgb(0_0_0/0.18)] ${
+                        locked
+                          ? "text-rb-hare"
+                          : retakeable
+                            ? "text-rb-macaw"
+                            : "text-rb-leaf"
+                      }`}
+                    >
+                      {locked ? (
+                        <Lock className="size-4" aria-hidden="true" />
+                      ) : retakeable ? (
+                        <RotateCcw className="size-4" aria-hidden="true" />
+                      ) : (
+                        <Check className="size-4" aria-hidden="true" />
+                      )}
+                    </span>
+                  ) : null}
+                </span>
+              ) : locked ? (
+                <Lock className="size-11" aria-hidden="true" />
               ) : retakeable ? (
-                <RotateCcw className={node.grand ? "size-14" : "size-11"} aria-hidden="true" />
+                <RotateCcw className="size-11" aria-hidden="true" />
               ) : done ? (
-                <Check className={node.grand ? "size-16" : "size-12"} aria-hidden="true" />
+                <Check className="size-12" aria-hidden="true" />
               ) : (
-                <Icon className={node.grand ? "size-14" : "size-11"} aria-hidden="true" />
+                <Icon className="size-11" aria-hidden="true" />
               )}
 
               {node.art && !locked ? (

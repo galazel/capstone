@@ -31,6 +31,39 @@ import {
   toneForCertification,
 } from "@/components/learner/learner-ui.jsx"
 
+/**
+ * Grid or list, remembered on this device.
+ *
+ * It was component state, so it survived exactly as long as the page did:
+ * opening a certification and coming back put a learner who had chosen the list
+ * back on the grid, every time. Which view you want is a preference about the
+ * screen you are sitting at rather than about who you are -- the same reasoning
+ * `lib/sound.js` gives for keeping the sound toggle local -- so it lives in
+ * localStorage rather than on the account.
+ *
+ * Wrapped, because a blocked or full store throws: private windows and
+ * storage-blocking extensions would otherwise take the page down over a
+ * cosmetic preference. A failed read falls back to the default, and a failed
+ * write just means the choice lasts this session.
+ */
+const VIEW_MODE_KEY = "rebyu-my-learning-view"
+
+function readViewMode() {
+  try {
+    return window.localStorage.getItem(VIEW_MODE_KEY) === "LIST" ? "LIST" : "GRID"
+  } catch {
+    return "GRID"
+  }
+}
+
+function storeViewMode(mode) {
+  try {
+    window.localStorage.setItem(VIEW_MODE_KEY, mode)
+  } catch {
+    /* Not persisted; the toggle still works for this session. */
+  }
+}
+
 function getCertificationTitle(certification) {
   return certification?.title ?? "Untitled Certification"
 }
@@ -250,6 +283,11 @@ function CourseCard({ course, onOpen }) {
           cap="flat"
           body="card"
           icon={needsDiagnostic ? LockKeyhole : completed ? Award : CirclePlay}
+          /* The medallion says what state this course is in; the wordmark says
+             which course it is. Both belong on the cap -- without the second,
+             every enrolled card is the same blue with the same play button and
+             you have to read the title to tell them apart. */
+          wordmark={getCertificationTitle(certification)}
           eyebrow="REBYU Certification Review"
           title={
             <button
@@ -266,7 +304,7 @@ function CourseCard({ course, onOpen }) {
           footer={
             <div className="w-full space-y-2">
               <Button
-                  className="w-full rounded-full text-white hover:opacity-90"
+                  className="w-full text-white hover:opacity-90"
                   style={{ background: palette.solid }}
                   onClick={onOpen}
               >
@@ -282,14 +320,19 @@ function CourseCard({ course, onOpen }) {
           {getCertificationDescription(certification)}
         </p>
 
+        {/* Progress leads with the number, in the card's own tone.
+            It used to be a 12px grey figure at the end of a line of grey text,
+            which is the one fact a learner opens this page for. */}
         <div className="mt-4 space-y-2">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>
-              {completedLessons} of {totalLessons} lessons
-            </span>
-
-            <span className="font-medium text-foreground">
+          <div className="flex items-baseline justify-between gap-3">
+            <span
+                className="font-rb-display text-2xl font-extrabold leading-none tabular-nums"
+                style={{ color: palette.solid }}
+            >
               {progress}%
+            </span>
+            <span className="text-xs font-bold text-muted-foreground">
+              {completedLessons} of {totalLessons} lessons
             </span>
           </div>
 
@@ -308,6 +351,118 @@ function CourseCard({ course, onOpen }) {
                       : "Start learning"}
         </p>
       </BubbleCard>
+  )
+}
+
+/**
+ * The same course as a row, for the list view.
+ *
+ * List mode used to render the grid card at full width, which is not a list:
+ * the 128px cap became a 1400px banner, the wordmark stretched across it, the
+ * Continue button ran the width of the page, and four courses filled three
+ * screens. A row is the shape that view is for -- the cap shrinks to a tile,
+ * everything else moves onto one line, and the whole course fits in about a
+ * fifth of the height.
+ */
+function CourseRow({ course, onOpen }) {
+  const {
+    certification,
+    progress,
+    totalLessons,
+    completedLessons,
+    nextLesson,
+    diagnosticCompleted,
+    diagnosticAssessment,
+  } = course
+
+  const status = getCourseStatus(progress, completedLessons)
+  const needsDiagnostic = !diagnosticCompleted
+  const completed = progress >= 100
+  const tone = toneForCertification(certification)
+  const palette = BUBBLE_TONES[tone] ?? BUBBLE_TONES.macaw
+  const StateIcon = needsDiagnostic ? LockKeyhole : completed ? Award : CirclePlay
+
+  return (
+      <article
+          style={{ "--bubble-tone": palette.solid }}
+          className="flex flex-col gap-4 rounded-rb-card border-2 border-border bg-card p-4 transition-colors hover:border-[color:var(--bubble-tone)] sm:flex-row sm:items-center"
+      >
+        {/* The cap, at tile scale. Same face, same bled wordmark, same state
+            medallion -- so a course is recognisably the same object in both
+            views rather than two designs of the same thing. */}
+        <div
+            className="relative hidden size-20 shrink-0 place-items-center overflow-hidden rounded-rb-tile [container-type:inline-size] sm:grid"
+            style={{ background: palette.flat }}
+        >
+          <span
+              aria-hidden="true"
+              className="pointer-events-none absolute -bottom-1 left-1 select-none whitespace-nowrap font-rb-display text-[2rem] font-black lowercase leading-none text-white/25"
+          >
+            {getCertificationTitle(certification)}
+          </span>
+          <StateIcon className="relative size-8 text-white" strokeWidth={1.7} aria-hidden="true" />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-rb-display text-[10px] font-extrabold uppercase tracking-[0.16em] text-rb-feather-lip">
+              REBYU Certification Review
+            </p>
+            <span className={`rounded-rb-pill px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide ${palette.chip}`}>
+              {needsDiagnostic ? "Diagnostic required" : status}
+            </span>
+          </div>
+
+          <button
+              type="button"
+              onClick={onOpen}
+              className="mt-1 block max-w-full truncate rounded-sm text-left font-rb-display text-lg font-extrabold text-foreground hover:underline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--bubble-tone)]"
+          >
+            {getCertificationTitle(certification)}
+          </button>
+
+          <p className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <span className="font-bold text-foreground">
+              {completedLessons} of {totalLessons} lessons
+            </span>
+            <span className="truncate">
+              {needsDiagnostic
+                  ? diagnosticAssessment
+                      ? "Take the diagnostic before learning"
+                      : "Diagnostic exam is not configured yet"
+                  : nextLesson
+                      ? `Next: ${nextLesson.name ?? nextLesson.title}`
+                      : completed
+                          ? "Course completed"
+                          : "Start learning"}
+            </span>
+          </p>
+
+          <div className="mt-2 max-w-md">
+            <ProgressBar value={progress} color={palette.solid} />
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-4 sm:flex-col sm:items-end sm:gap-2">
+          <span
+              className="font-rb-display text-2xl font-extrabold leading-none tabular-nums"
+              style={{ color: palette.solid }}
+          >
+            {progress}%
+          </span>
+
+          {/* Sized to its label, not to the page. A Continue button 1400px wide
+              was the loudest thing on the screen and the least worth it. */}
+          <Button
+              className="min-w-32 text-white hover:opacity-90"
+              style={{ background: palette.solid }}
+              onClick={onOpen}
+          >
+            {needsDiagnostic ? <ClipboardCheck className="mr-2 size-3.5" /> : null}
+            {needsDiagnostic ? "Start" : completed ? "Review" : "Continue"}
+          </Button>
+        </div>
+      </article>
   )
 }
 
@@ -353,7 +508,13 @@ export default function LearnerLearningPage() {
   const [localSearch, setLocalSearch] = useState("")
   const [selectedIndustry, setSelectedIndustry] = useState("ALL")
   const [selectedStatus, setSelectedStatus] = useState("ALL")
-  const [viewMode, setViewMode] = useState("GRID")
+  // Lazy initialiser: read the stored choice once on mount, not every render.
+  const [viewMode, setViewMode] = useState(readViewMode)
+
+  const chooseViewMode = (mode) => {
+    setViewMode(mode)
+    storeViewMode(mode)
+  }
 
   const queryClient = useQueryClient()
   // The whole plan gate — lookup, dialog, save. Shared with the certifications
@@ -507,7 +668,7 @@ export default function LearnerLearningPage() {
                     <div className="flex overflow-hidden border border-input">
                       <button
                           type="button"
-                          onClick={() => setViewMode("GRID")}
+                          onClick={() => chooseViewMode("GRID")}
                           className={`flex size-10 items-center justify-center transition ${
                               viewMode === "GRID"
                                   ? "bg-primary text-primary-foreground"
@@ -520,7 +681,7 @@ export default function LearnerLearningPage() {
 
                       <button
                           type="button"
-                          onClick={() => setViewMode("LIST")}
+                          onClick={() => chooseViewMode("LIST")}
                           className={`flex size-10 items-center justify-center border-l border-input transition ${
                               viewMode === "LIST"
                                   ? "bg-primary text-primary-foreground"
@@ -571,20 +732,23 @@ export default function LearnerLearningPage() {
                                  breakpoints land both pages on a similar card
                                  width, which matters because it is the same card. */
                               ? "grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
-                              : "grid gap-4"
+                              : "grid gap-3"
                         }
                     >
-                      {filteredCourses.map((course) => (
-                          <CourseCard
-                              key={course.certification.certificationId}
-                              course={course}
-                              onOpen={() =>
-                                  openCertification(course.certification, {
-                                    diagnosticCompleted: course.diagnosticCompleted,
-                                  })
-                              }
-                          />
-                      ))}
+                      {filteredCourses.map((course) => {
+                        const Card = viewMode === "GRID" ? CourseCard : CourseRow
+                        return (
+                            <Card
+                                key={course.certification.certificationId}
+                                course={course}
+                                onOpen={() =>
+                                    openCertification(course.certification, {
+                                      diagnosticCompleted: course.diagnosticCompleted,
+                                    })
+                                }
+                            />
+                        )
+                      })}
                     </div>
                 )}
               </main>

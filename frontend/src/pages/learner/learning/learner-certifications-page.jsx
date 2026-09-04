@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react"
 import { useNavigate, useOutletContext } from "react-router-dom"
-import { Award, GraduationCap } from "@/components/icons"
+import { Award, BookOpen, GraduationCap, Layers3 } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { BUBBLE_TONES, BubbleCard } from "@/components/commons/bubble-card.jsx"
 import { LearnerEmptyState, toneForCertification } from "@/components/learner/learner-ui.jsx"
+import { getCertificationModules } from "@/services/learnerService.js"
 
 const INITIAL_VISIBLE_COUNT = 8
 const LOAD_MORE_COUNT = 8
@@ -20,6 +21,28 @@ function getCertificationTitle(certification) {
 
 function getCertificationCategory(certification) {
   return certification?.industry ?? certification?.category ?? "Technology"
+}
+
+/* Counted exactly as the certification's own page counts it -- majors, the
+   middle categories under them, and the lessons under those. The catalog was
+   the only surface that showed a certification without saying how big it is,
+   which is most of what "do I want this" turns on. */
+function getCertificationSize(certification) {
+  const majors = getCertificationModules(certification) ?? []
+  const modules = majors.reduce(
+      (total, major) => total + (major.middleCategory?.length ?? 0),
+      0
+  )
+  const lessons = majors.reduce(
+      (total, major) =>
+          total +
+          (major.middleCategory ?? []).reduce(
+              (count, middle) => count + (middle.lessons?.length ?? 0),
+              0
+          ),
+      0
+  )
+  return { majors: majors.length, modules, lessons }
 }
 
 function getCertificationDescription(certification) {
@@ -47,6 +70,7 @@ function CertificationCard({
   const tone = toneForCertification(certification)
   // Same tone the cap uses, so the button belongs to this card.
   const palette = BUBBLE_TONES[tone] ?? BUBBLE_TONES.macaw
+  const size = getCertificationSize(certification)
 
   return (
       <BubbleCard
@@ -54,6 +78,11 @@ function CertificationCard({
           cap="flat"
           body="card"
           icon={GraduationCap}
+          /* The certification's own name, bled off the cap. Every card in this
+             catalog is the same blue with the same mortarboard on it, so until
+             the eye reaches the title underneath there is nothing to tell one
+             track from another. */
+          wordmark={getCertificationTitle(certification)}
           eyebrow={category}
           title={
             <button
@@ -67,7 +96,10 @@ function CertificationCard({
           chips={[{ label: enrolled ? "Enrolled" : "Free to study" }]}
           footer={
             <Button
-                className="w-full rounded-full text-white hover:opacity-90"
+                /* 12px corners, not a pill: the system puts every rectangular
+                   control on the same radius so a button and a round node stay
+                   distinguishable shapes. */
+                className="w-full text-white hover:opacity-90"
                 style={{ background: palette.solid }}
                 onClick={onAction}
             >
@@ -78,65 +110,93 @@ function CertificationCard({
         <p className="mt-2 line-clamp-3 min-h-[60px] break-words text-sm leading-6 text-muted-foreground">
           {getCertificationDescription(certification)}
         </p>
+
+        {/* How big it is, in the words its own page uses. Hidden entirely when
+            the payload carries no curriculum rather than printing "0 lessons"
+            at a learner deciding whether to enrol. */}
+        {size.lessons > 0 ? (
+            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border pt-3 text-xs font-bold text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <Layers3 className="size-3.5" aria-hidden="true" />
+                {size.modules} module{size.modules === 1 ? "" : "s"}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <BookOpen className="size-3.5" aria-hidden="true" />
+                {size.lessons} lesson{size.lessons === 1 ? "" : "s"}
+              </span>
+            </div>
+        ) : null}
       </BubbleCard>
   )
 }
 
 function CategoryFilter({
                           categories,
+                          categoryCounts,
                           selectedCategories,
                           onToggleCategory,
                           onClear,
                         }) {
   return (
-      <aside className="border-b border-border pb-6 xl:min-h-[430px] xl:border-b-0 xl:border-r xl:pr-6">
+      <aside className="border-b-2 border-border pb-6 xl:min-h-[430px] xl:border-b-0 xl:border-r-2 xl:pr-6">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-foreground">
-            Filters
+          <h2 className="font-rb-display text-base font-extrabold lowercase text-foreground">
+            filters
           </h2>
 
           <button
               type="button"
               onClick={onClear}
               disabled={selectedCategories.size === 0}
-              className="text-sm text-muted-foreground transition hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-rb-tile text-xs font-bold text-muted-foreground transition hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Clear filters
+            Clear
           </button>
         </div>
 
-        <div className="mt-6">
-          <p className="text-sm font-semibold text-foreground">
-            Categories
-          </p>
+        <p className="mt-5 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+          Categories
+        </p>
 
-          <div className="mt-4 space-y-3">
-            {categories.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No categories available.
-                </p>
-            ) : (
-                categories.map((category) => {
-                  const checked = selectedCategories.has(category)
+        <div className="mt-3 space-y-1.5">
+          {categories.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No categories available.
+              </p>
+          ) : (
+              categories.map((category) => {
+                const checked = selectedCategories.has(category)
 
-                  return (
-                      <label
-                          key={category}
-                          className="flex cursor-pointer items-start gap-3 text-sm leading-5 text-muted-foreground"
-                      >
-                        <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => onToggleCategory(category)}
-                            className="mt-1 h-4 w-4 rounded border-border accent-primary"
-                        />
+                return (
+                    /* A selectable row rather than a bare checkbox on a line of
+                       grey text: the whole row is the target, it carries how
+                       many certifications are behind it, and a chosen one is
+                       filled rather than merely ticked -- the same treatment
+                       every other filter in the portal uses. */
+                    <label
+                        key={category}
+                        className={`flex cursor-pointer items-start gap-2.5 rounded-rb-tile border-2 px-2.5 py-2 text-sm leading-5 transition-colors ${
+                            checked
+                                ? "border-rb-feather bg-rb-feather-wash text-rb-feather-lip"
+                                : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/50"
+                        }`}
+                    >
+                      <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => onToggleCategory(category)}
+                          className="mt-0.5 size-4 shrink-0 rounded border-border accent-[color:var(--color-rb-feather)]"
+                      />
 
-                        <span>{category}</span>
-                      </label>
-                  )
-                })
-            )}
-          </div>
+                      <span className="min-w-0 flex-1 font-medium">{category}</span>
+
+                      <span className="shrink-0 text-xs tabular-nums opacity-70">
+                        {categoryCounts.get(category) ?? 0}
+                      </span>
+                    </label>
+                )
+              })
+          )}
         </div>
       </aside>
   )
@@ -195,6 +255,15 @@ export default function LearnerCertificationsPage() {
               .filter(Boolean)
       ),
     ].sort((first, second) => first.localeCompare(second))
+  }, [allCertifications])
+
+  const categoryCounts = useMemo(() => {
+    const counts = new Map()
+    allCertifications.forEach((certification) => {
+      const category = getCertificationCategory(certification)
+      counts.set(category, (counts.get(category) ?? 0) + 1)
+    })
+    return counts
   }, [allCertifications])
 
   const filteredCertifications = useMemo(() => {
@@ -290,11 +359,29 @@ export default function LearnerCertificationsPage() {
     navigate(`/learner/certifications/${getCertificationId(certification)}`)
   }
 
+  const enrolledCount = enrolledCertificationIds.size
+
   return (
       <div className="w-full min-w-0 space-y-7 pb-10">
-        <div className="grid gap-6 xl:grid-cols-[180px_minmax(0,1fr)]">
+        {/* The page had no heading at all -- it opened on a filter rail and a
+            row of cards, so the one screen in the portal that answers "what
+            can I study here" never said so. */}
+        <header>
+          <h1 className="font-rb-display text-2xl font-extrabold lowercase text-foreground">
+            certifications
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Every track REBYU prepares you for. Free to study
+            {enrolledCount > 0
+                ? ` — you are enrolled in ${enrolledCount} of them.`
+                : "; enrol from any certification's page."}
+          </p>
+        </header>
+
+        <div className="grid gap-6 xl:grid-cols-[200px_minmax(0,1fr)]">
           <CategoryFilter
               categories={categories}
+              categoryCounts={categoryCounts}
               selectedCategories={selectedCategories}
               onToggleCategory={toggleCategory}
               onClear={clearCategories}
@@ -379,7 +466,7 @@ export default function LearnerCertificationsPage() {
                                         currentCount + LOAD_MORE_COUNT
                                 )
                             }
-                            className="h-11 min-w-64 rounded-lg border border-border bg-card px-6 text-sm font-semibold text-foreground transition hover:border-primary hover:bg-primary hover:text-primary-foreground"
+                            className="h-11 min-w-64 rounded-rb-control border-2 border-border bg-card px-6 text-sm font-bold text-foreground transition hover:border-rb-feather hover:text-rb-feather-lip"
                         >
                           Load more certifications
                         </button>
