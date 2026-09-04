@@ -1,6 +1,19 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { ArrowLeftIcon, Bell, CheckCheck, ChevronRight, Loader2, Trash2 } from "@/components/icons"
+import {
+  ArrowLeftIcon,
+  Award,
+  Bell,
+  CheckCheck,
+  ChevronRight,
+  ClipboardCheck,
+  Handshake,
+  Loader2,
+  Mail,
+  RotateCcw,
+  Trash2,
+  Trophy,
+} from "@/components/icons"
 
 import {
   AlertDialog,
@@ -16,6 +29,63 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useNotifications } from "@/hooks/use-notifications.js"
+
+/**
+ * What kind of thing a notification is, and therefore what it looks like.
+ *
+ * Every row wore the same bell in the same blue, so a feed of forty was forty
+ * identical rows and the only way to tell an achievement from a graded exam was
+ * to read the sentence. The kind carries an icon and a tone instead, which is
+ * the fastest read on the page.
+ *
+ * Matched on the title, because the payload has no type: `NotificationDto` is
+ * `(id, title, body, href, createdAt, read)` and nothing upstream classifies
+ * these. The patterns below cover every producer there currently is -- the two
+ * in `assessment_events.py`, the four in `NotificationService`, and the two the
+ * learner layout synthesises -- and anything unrecognised keeps the bell, so a
+ * new producer degrades to today's appearance rather than to a hole. The
+ * honest fix is a `type` column on the notification; until there is one, this
+ * is a presentation-layer guess and is written to fail safely.
+ */
+const KINDS = [
+  {
+    test: /^results ready/i,
+    icon: ClipboardCheck,
+    tone: "bg-rb-macaw-wash text-rb-macaw-lip",
+  },
+  {
+    test: /^retake started|^attempt #/i,
+    icon: RotateCcw,
+    tone: "bg-rb-beetle-wash text-rb-beetle-lip",
+  },
+  {
+    test: /^achievement unlocked/i,
+    icon: Trophy,
+    tone: "bg-rb-bee-wash text-rb-bee-ink",
+  },
+  {
+    test: /invit/i,
+    icon: Mail,
+    tone: "bg-rb-feather-wash text-rb-feather-lip",
+  },
+  {
+    test: /partnership/i,
+    icon: Handshake,
+    tone: "bg-rb-fox-wash text-rb-fox-lip",
+  },
+  {
+    test: /certification/i,
+    icon: Award,
+    tone: "bg-rb-leaf-wash text-rb-leaf",
+  },
+]
+
+const DEFAULT_KIND = { icon: Bell, tone: "bg-rb-macaw-wash text-rb-macaw-lip" }
+
+function kindOf(item) {
+  const title = String(item?.title ?? "")
+  return KINDS.find((kind) => kind.test.test(title)) ?? DEFAULT_KIND
+}
 
 /* The clock time alone on the row, because the date is on the group heading
    above it. Every row carrying "Aug 17, 2026, 6:58 AM" spent a line of each
@@ -131,8 +201,8 @@ export default function NotificationsPage() {
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
-          <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">
-            Notifications
+          <h1 className="font-rb-display text-2xl font-extrabold lowercase text-foreground">
+            notifications
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {items.length
@@ -176,7 +246,7 @@ export default function NotificationsPage() {
         {isLoading ? (
           <div className="space-y-2" aria-busy="true" aria-label="Loading notifications">
             {[0, 1, 2, 3].map((row) => (
-              <Skeleton key={row} className="h-20 rounded-xl" />
+              <Skeleton key={row} className="h-20 rounded-rb-card" />
             ))}
           </div>
         ) : isError ? (
@@ -195,7 +265,9 @@ export default function NotificationsPage() {
             <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
               <Bell className="size-8 text-muted-foreground" aria-hidden="true" />
               <div>
-                <p className="font-medium text-foreground">No notifications yet</p>
+                <p className="font-rb-display font-extrabold lowercase text-foreground">
+                  nothing here yet
+                </p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Invitations, partnership updates, and other account activity land here.
                 </p>
@@ -213,7 +285,7 @@ export default function NotificationsPage() {
                 which would collide on the label alone. */}
             {groupByDay(items).map((group, index) => (
               <section key={`${group.label}-${index}`}>
-                <h2 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <h2 className="mb-1 font-rb-display text-xs font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
                   {group.label}
                 </h2>
 
@@ -229,17 +301,22 @@ export default function NotificationsPage() {
                       <button
                         type="button"
                         onClick={() => open(item)}
-                        className="flex min-w-0 flex-1 items-start gap-3 rounded-lg py-4 pl-3 pr-11 text-left transition-colors hover:bg-accent"
+                        className="flex min-w-0 flex-1 items-start gap-3 rounded-rb-tile py-4 pl-3 pr-11 text-left transition-colors hover:bg-accent"
                       >
                         {/* Unread as a dot on the icon, not a "New" badge after
                             the title: the badge sat in the text flow and moved
                             with every title length, so a column of them
                             zig-zagged down the page. */}
-                        <span className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                          <Bell className="size-4" aria-hidden="true" />
+                        <span
+                          className={`relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-rb-tile ${kindOf(item).tone}`}
+                        >
+                          {(() => {
+                            const KindIcon = kindOf(item).icon
+                            return <KindIcon className="size-4" aria-hidden="true" />
+                          })()}
                           {item.read ? null : (
                             <span
-                              className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-primary ring-2 ring-background"
+                              className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-rb-macaw ring-2 ring-background"
                               aria-hidden="true"
                             />
                           )}
@@ -309,7 +386,12 @@ export default function NotificationsPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
+            {/* Destructive, because the sentence above it says "permanently
+                removed. This cannot be undone." A confirm that reads as the
+                same friendly blue as "Save" gives the eye no warning that this
+                one is the irreversible one. */}
             <AlertDialogAction
+              variant="destructive"
               onClick={() => {
                 removeAll()
                 setConfirmClearAll(false)
