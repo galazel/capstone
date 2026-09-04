@@ -40,6 +40,16 @@ export function StudyNotesTile({ certificationId }) {
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState("")
 
+  /* Which note is open for editing, and the text as it is being retyped.
+     `updateNote` has always accepted a new body -- its own docstring says
+     "tick/untick, or edit the text" -- but nothing on the pad ever sent one, so
+     a typo in a note could only be fixed by deleting it and writing it again. */
+  const [editingId, setEditingId] = useState(null)
+  const [editDraft, setEditDraft] = useState("")
+
+  // The composer, so a click on the blank part of the sheet can land in it.
+  const composerRef = useRef(null)
+
   // Ids for notes that exist on the page but not yet in the database. Negative
   // and counted down, so they can never collide with a real server id.
   const pendingId = useRef(0)
@@ -128,6 +138,18 @@ export function StudyNotesTile({ certificationId }) {
     }),
   })
 
+  /* Body edits reuse the same endpoint as ticking; only the field differs. */
+  const editMutation = useMutation({
+    mutationFn: ({ noteId, body }) => updateNote(noteId, { body }),
+    ...optimistic({
+      message: "Could not save that note",
+      apply: (notes, { noteId, body }) =>
+        notes.map((note) => (note.noteId === noteId ? { ...note, body } : note)),
+      settle: (notes, updated) =>
+        notes.map((note) => (note.noteId === updated.noteId ? updated : note)),
+    }),
+  })
+
   const deleteMutation = useMutation({
     mutationFn: (noteId) => deleteNote(noteId),
     ...optimistic({
@@ -143,6 +165,21 @@ export function StudyNotesTile({ certificationId }) {
       apply: (notes, completedOnly) => (completedOnly ? notes.filter((note) => !note.done) : []),
     }),
   })
+
+  const startEditing = (note) => {
+    if (note.pending) return
+    setEditingId(note.noteId)
+    setEditDraft(note.body)
+  }
+
+  const commitEdit = (note) => {
+    const body = editDraft.trim()
+    setEditingId(null)
+    // An edit that changes nothing, or that empties the note, is a no-op:
+    // deleting is its own button, and a blank rule is not a note.
+    if (!body || body === note.body) return
+    editMutation.mutate({ noteId: note.noteId, body })
+  }
 
   const submit = (event) => {
     event.preventDefault()
@@ -216,12 +253,24 @@ export function StudyNotesTile({ certificationId }) {
           runs the whole height, but the ruling itself rides on the content
           inside it -- lines that stayed put while the notes scrolled past would
           read as a background texture rather than as paper. */}
-      <div className="relative min-h-0 flex-1 overflow-y-auto">
+      <div
+        className="relative min-h-0 flex-1 overflow-y-auto"
+        onClick={(event) => {
+          // Only when the sheet itself was hit -- clicks that landed on a note,
+          // its checkbox or its delete button have already been handled.
+          if (event.target === event.currentTarget) composerRef.current?.focus()
+        }}
+      >
         <div
           className="pointer-events-none absolute inset-y-0 left-10 w-px bg-[#cb3a2c]/45 dark:bg-[#ff7a6b]/40"
           aria-hidden="true"
         />
 
+        {/* The rest of the sheet is a target too. A pad with two notes on it is
+            mostly blank paper, and clicking blank paper on a pad should put you
+            in a position to write rather than do nothing at all. Purely an
+            affordance -- the composer is still there to be clicked directly --
+            so it is a bare div: nothing here is reachable only this way. */}
         {notesQuery.isLoading ? (
           <BentoSkeleton rows={3} className="mt-3 px-5" />
         ) : notes.length === 0 ? (
@@ -237,7 +286,12 @@ export function StudyNotesTile({ certificationId }) {
             </p>
           </div>
         ) : (
-          <ul className={`min-h-full pl-12 pr-3 ${RULED_PAPER}`}>
+          <ul
+            className={`min-h-full pl-12 pr-3 ${RULED_PAPER}`}
+            onClick={(event) => {
+              if (event.target === event.currentTarget) composerRef.current?.focus()
+            }}
+          >
             {notes.map((note) => (
               // A note still being saved has no server id yet, so it cannot be
               // ticked or deleted -- both address it by that id. It is written
@@ -259,23 +313,63 @@ export function StudyNotesTile({ certificationId }) {
                 />
 
                 {/* Crossed out in red pen, not greyed into the paper: a covered
-                    topic is still something you wrote down. */}
-                <span
-                  className={`min-w-0 flex-1 break-words text-sm leading-7 ${
-                    note.done
-                      ? "text-[#a49b8d] line-through decoration-[#cb3a2c]/70 decoration-2 dark:text-[#7d7566]"
-                      : "text-[#2b2620] dark:text-[#eae4d8]"
-                  }`}
-                >
-                  {note.body}
-                </span>
+                    topic is still something you wrote down.
 
+                    Clicking the text opens it for editing in place, on the same
+                    rule, in the same ink -- a note you can tick but not correct
+                    is a strange kind of note, and the endpoint has always taken
+                    a new body. Enter commits, Escape abandons, and clicking
+                    away commits too: this is a pad, and looking away from
+                    something you have just written down does not erase it. */}
+                {editingId === note.noteId ? (
+                  <input
+                    autoFocus
+                    value={editDraft}
+                    maxLength={500}
+                    onChange={(event) => setEditDraft(event.target.value)}
+                    onBlur={() => commitEdit(note)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault()
+                        commitEdit(note)
+                      } else if (event.key === "Escape") {
+                        event.preventDefault()
+                        setEditingId(null)
+                      }
+                    }}
+                    aria-label={`Edit note: ${note.body}`}
+                    /* h-7 and leading-7 hold the 28px band the ruling is drawn
+                       on, so the line does not jump when it becomes a field. */
+                    className="h-7 min-w-0 flex-1 border-0 bg-transparent p-0 text-sm leading-7 text-[#2b2620] outline-none focus:ring-0 dark:text-[#eae4d8]"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => startEditing(note)}
+                    disabled={note.pending}
+                    title="Click to edit"
+                    className={`min-w-0 flex-1 cursor-text break-words text-left text-sm leading-7 disabled:cursor-default ${
+                      note.done
+                        ? "text-[#a49b8d] line-through decoration-[#cb3a2c]/70 decoration-2 dark:text-[#7d7566]"
+                        : "text-[#2b2620] dark:text-[#eae4d8]"
+                    }`}
+                  >
+                    {note.body}
+                  </button>
+                )}
+
+                {/* Exactly one ruled band tall, like the checkbox and the text
+                    beside it. Padding plus an icon left this button 34px, which
+                    made the whole row 42px against a 28px ruling -- so every
+                    note sat a little further below its line than the one above
+                    it, and by the fourth note the writing was floating between
+                    the rules. A fixed 28px box cannot drift. */}
                 <button
                   type="button"
                   disabled={note.pending}
                   onClick={() => deleteMutation.mutate(note.noteId)}
                   aria-label={`Delete note: ${note.body}`}
-                  className="my-1 shrink-0 rounded-md p-1 text-[#a49b8d] opacity-0 transition hover:bg-rb-cardinal/10 hover:text-rb-cardinal focus-visible:opacity-100 group-hover:opacity-100 disabled:hidden"
+                  className="grid size-7 shrink-0 place-items-center rounded-md p-0 text-[#a49b8d] opacity-0 transition hover:bg-rb-cardinal/10 hover:text-rb-cardinal focus-visible:opacity-100 group-hover:opacity-100 disabled:hidden"
                 >
                   <Trash2 className="size-3.5" aria-hidden="true" />
                 </button>
@@ -302,6 +396,7 @@ export function StudyNotesTile({ certificationId }) {
         <NotebookPenIcon className="size-4 shrink-0 text-[#b3aa9c] dark:text-[#6f6759]" aria-hidden="true" />
 
         <input
+          ref={composerRef}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           maxLength={500}
