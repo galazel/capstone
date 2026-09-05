@@ -18,6 +18,24 @@ import {
 import { getLearnerPortalData } from "@/services/learnerService.js"
 
 const AuthContext = createContext(null)
+const AUTH_USER_SNAPSHOT_KEY = "rebyu:auth-user-snapshot"
+
+function readAuthUserSnapshot() {
+  try {
+    const raw = sessionStorage.getItem(AUTH_USER_SNAPSHOT_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function writeAuthUserSnapshot(user) {
+  try {
+    sessionStorage.setItem(AUTH_USER_SNAPSHOT_KEY, JSON.stringify(user))
+  } catch {
+    // Authentication validation must not depend on browser storage.
+  }
+}
 
 // Backend-confirmed authentication state. `user` is the safe DTO returned by
 // /api/auth/me — the routing and role authority while signed in. localStorage
@@ -35,9 +53,16 @@ export function AuthProvider({ children }) {
       return null
     }
     try {
+      const cachedUser = readAuthUserSnapshot()
+      if (cachedUser) {
+        setUser(cachedUser)
+        setStatus("authenticated")
+      }
+
       const currentUser = await syncCurrentUser()
       setUser(currentUser)
       setStatus("authenticated")
+      writeAuthUserSnapshot(currentUser)
       // Start the learner shell's larger snapshot while the router is loading
       // the destination chunk. The layout uses this exact key, so it joins the
       // in-flight request instead of waiting until after navigation.
@@ -75,6 +100,7 @@ export function AuthProvider({ children }) {
       }
       setUser(null)
       setStatus("anonymous")
+      sessionStorage.removeItem(AUTH_USER_SNAPSHOT_KEY)
       return null
     }
   }, [queryClient])
