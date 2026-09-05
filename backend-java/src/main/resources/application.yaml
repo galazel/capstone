@@ -156,6 +156,9 @@ management:
     web:
       exposure:
         include: health, info, metrics, circuitbreakers
+  health:
+    redis:
+      enabled: false
   endpoint:
     health:
       show-details: when-authorized

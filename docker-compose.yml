@@ -121,7 +121,7 @@ services:
     # of a dead run and a dead Docker.
     mem_limit: 768m
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/api/user-types"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 20
