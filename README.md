@@ -120,6 +120,14 @@ mounted:
 docker compose build frontend && docker compose up -d frontend
 ```
 
+For a deployment outside the local Compose stack, pass the public API origin
+at build time. Vite embeds this value in the static bundle; setting it only in
+the running nginx container is too late:
+
+```bash
+docker build --build-arg VITE_API_URL=https://your-api-host -t rebyu-frontend ./frontend
+```
+
 ### Configuration
 
 Each service reads its own `.env`, which is **not** in version control:
