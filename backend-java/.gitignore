@@ -32,3 +32,6 @@ build/
 
 .vscode/
 config/
+!src/main/java/com/capstone/rebyu/config/
+!src/main/java/com/capstone/rebyu/config/RedisResponseCacheConfig.java
+!src/main/java/com/capstone/rebyu/config/RedisResponseCacheFilter.java

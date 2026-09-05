@@ -93,6 +93,9 @@ services:
       RABBITMQ_PASSWORD: guest
       AI_SERVICE_URL: http://python-api:8000/api/v1/ai
       BKT_SERVICE_URL: http://python-api:8000/api/v1/bkt
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DATABASE: 2
       # Cap the JVM. Left alone it sizes its heap from what the Docker VM
       # reports -- 2.81 GB here -- and settles around 1 GB resident, which on
       # this host is a third of everything Docker has for eight containers.
@@ -124,6 +127,8 @@ services:
       retries: 20
       start_period: 100s
     depends_on:
+      redis:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     # Same public forwarders the python services already use, and for the same
