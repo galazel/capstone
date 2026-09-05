@@ -36,10 +36,12 @@ spring:
 
   data:
     redis:
+      url: ${REDIS_URL:}
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       database: ${REDIS_DATABASE:2}
-      timeout: ${REDIS_TIMEOUT:500ms}
+      timeout: ${REDIS_TIMEOUT:250ms}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:250ms}
 
   flyway:
     baseline-on-migrate: true
@@ -97,6 +99,7 @@ app:
   response-cache:
     enabled: ${RESPONSE_CACHE_ENABLED:true}
     ttl-seconds: ${RESPONSE_CACHE_TTL_SECONDS:30}
+    failure-cooldown-seconds: ${RESPONSE_CACHE_FAILURE_COOLDOWN_SECONDS:30}
   cognito:
     region: ${COGNITO_REGION:us-east-1}
     user-pool-id: ${COGNITO_USER_POOL_ID:us-east-1_YhXCAZ9HF}

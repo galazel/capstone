@@ -26,15 +26,21 @@ public class RedisResponseCacheConfig {
     public RedisResponseCacheFilter redisResponseCacheFilter(
             StringRedisTemplate redisResponseCacheTemplate,
             @Value("${app.response-cache.enabled:true}") boolean enabled,
-            @Value("${app.response-cache.ttl-seconds:30}") long ttlSeconds
+            @Value("${app.response-cache.ttl-seconds:30}") long ttlSeconds,
+            @Value("${app.response-cache.failure-cooldown-seconds:30}") long failureCooldownSeconds
     ) {
         if (ttlSeconds <= 0) {
             throw new IllegalArgumentException("app.response-cache.ttl-seconds must be greater than zero");
         }
+        if (failureCooldownSeconds <= 0) {
+            throw new IllegalArgumentException(
+                    "app.response-cache.failure-cooldown-seconds must be greater than zero");
+        }
         return new RedisResponseCacheFilter(
                 redisResponseCacheTemplate,
                 enabled,
-                Duration.ofSeconds(ttlSeconds)
+                Duration.ofSeconds(ttlSeconds),
+                Duration.ofSeconds(failureCooldownSeconds)
         );
     }
 }

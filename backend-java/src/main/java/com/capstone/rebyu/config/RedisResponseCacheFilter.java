@@ -6,6 +6,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.HexFormat;
+import java.util.concurrent.atomic.AtomicLong;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -29,15 +30,19 @@ public class RedisResponseCacheFilter extends OncePerRequestFilter {
     private final StringRedisTemplate redis;
     private final boolean enabled;
     private final Duration ttl;
+    private final Duration failureCooldown;
+    private final AtomicLong redisUnavailableUntilNanos = new AtomicLong();
 
     public RedisResponseCacheFilter(
             StringRedisTemplate redis,
             boolean enabled,
-            Duration ttl
+            Duration ttl,
+            Duration failureCooldown
     ) {
         this.redis = redis;
         this.enabled = enabled;
         this.ttl = ttl;
+        this.failureCooldown = failureCooldown;
     }
 
     @Override
@@ -59,13 +64,18 @@ public class RedisResponseCacheFilter extends OncePerRequestFilter {
             return;
         }
 
+        if (redisUnavailable()) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         String cacheKey;
         String cachedResponse;
         try {
             cacheKey = cacheKey(request);
             cachedResponse = redis.opsForValue().get(cacheKey);
         } catch (DataAccessException exception) {
-            log.warn("Redis response cache unavailable; serving {} directly", request.getRequestURI());
+            markRedisUnavailable(request.getRequestURI(), exception);
             filterChain.doFilter(request, response);
             return;
         }
@@ -92,7 +102,7 @@ public class RedisResponseCacheFilter extends OncePerRequestFilter {
                         ttl
                 );
             } catch (DataAccessException exception) {
-                log.warn("Could not store response cache entry for {}", request.getRequestURI());
+                markRedisUnavailable(request.getRequestURI(), exception);
             }
         }
         wrappedResponse.copyBodyToResponse();
@@ -134,11 +144,26 @@ public class RedisResponseCacheFilter extends OncePerRequestFilter {
     }
 
     private void invalidate() {
+        if (redisUnavailable()) {
+            return;
+        }
         try {
             redis.opsForValue().increment(VERSION_KEY);
         } catch (DataAccessException exception) {
-            log.warn("Could not invalidate Redis response cache after a write");
+            markRedisUnavailable("write invalidation", exception);
         }
+    }
+
+    private boolean redisUnavailable() {
+        return System.nanoTime() < redisUnavailableUntilNanos.get();
+    }
+
+    private void markRedisUnavailable(String operation, DataAccessException exception) {
+        long unavailableUntil = System.nanoTime()
+                + failureCooldown.toNanos();
+        redisUnavailableUntilNanos.set(unavailableUntil);
+        log.warn("Redis response cache unavailable; bypassing it for {} seconds ({}): {}",
+                failureCooldown.toSeconds(), operation, exception.getMostSpecificCause());
     }
 
     private static String sha256(String value) {
