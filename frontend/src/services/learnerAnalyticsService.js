@@ -1,7 +1,11 @@
 import { base } from "./base"
 
 // Kept for existing importers.
-export { getLearnerPortalData } from "./learnerService.js"
+export {
+  getLearnerPortalData,
+  readLearnerPortalSnapshot,
+  writeLearnerPortalSnapshot,
+} from "./learnerService.js"
 
 /**
  * Certification-scoped progress analytics for the authenticated learner.

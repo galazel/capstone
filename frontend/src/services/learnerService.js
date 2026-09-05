@@ -84,6 +84,25 @@ export function getLearnerPortalScoped() {
   return base("learners/me/portal")
 }
 
+const LEARNER_PORTAL_SNAPSHOT_KEY = "rebyu:learner-portal-snapshot"
+
+export function readLearnerPortalSnapshot() {
+  try {
+    const raw = sessionStorage.getItem(LEARNER_PORTAL_SNAPSHOT_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+export function writeLearnerPortalSnapshot(data) {
+  try {
+    sessionStorage.setItem(LEARNER_PORTAL_SNAPSHOT_KEY, JSON.stringify(data))
+  } catch {
+    // A full sessionStorage quota must not prevent the live request.
+  }
+}
+
 // The caller's own learner record (JWT-derived) -- use instead of fetching all learners.
 export function getCurrentLearner() {
   return base("learners/me")

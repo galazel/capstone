@@ -32,6 +32,8 @@ import {
   getLearnerPortalData,
   getProgressAnalytics,
   progressAnalyticsQueryKey,
+  readLearnerPortalSnapshot,
+  writeLearnerPortalSnapshot,
 } from "@/services/learnerAnalyticsService.js"
 import { useAuth } from "@/context/auth-context.jsx"
 import { NotificationBell } from "@/components/notification-bell.jsx"
@@ -83,6 +85,8 @@ export default function LearnerLayout() {
   const query = useQuery({
     queryKey: ["learner-portal-data"],
     queryFn: getLearnerPortalData,
+    initialData: readLearnerPortalSnapshot,
+    initialDataUpdatedAt: 0,
     staleTime: 30_000,
     /* This one gates the whole learner shell -- while it has no data at all,
        every page under it is a skeleton. Leaving the portal for longer than the
@@ -91,6 +95,12 @@ export default function LearnerLayout() {
        return is instant and the refresh happens behind the page already drawn. */
     gcTime: 60 * 60_000,
   })
+
+  useEffect(() => {
+    if (query.data) {
+      writeLearnerPortalSnapshot(query.data)
+    }
+  }, [query.data])
 
   /* Start the analytics board's own request now, next to the portal request,
      instead of after it.
