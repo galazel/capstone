@@ -15,7 +15,7 @@ COPY . .
 # The compose file explicitly passes an empty value for the local stack. Keep a
 # public default here as a safety net for production image builds that invoke
 # this Dockerfile directly instead of going through Compose.
-ARG VITE_API_URL="https://api.rebyu.online"
+ARG VITE_API_URL="https://backend-production-20f5.up.railway.app"
 ENV VITE_API_URL=$VITE_API_URL
 
 RUN npm run build
