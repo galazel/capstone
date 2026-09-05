@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "react-router-dom"
 import {
     ArrowUp,
@@ -81,6 +82,11 @@ const FEED_TABS = [
 ]
 
 /** Uploaded reviewer files: one feed tab, two post types (PDF and Word). */
+/* One key, named once: the seeding read below and the query itself must agree,
+   and two inline arrays are exactly the kind of thing that quietly stops
+   matching. */
+const COMMUNITY_FEED_KEY = ["community-feed"]
+
 const REVIEWER_TYPES = ["notes", "docx"]
 
 /* The feed follows the landing page's community section: a post is a tactile
@@ -352,8 +358,23 @@ function CommunityPost({
                             ) : null}
                         </div>
 
-                        <p className="mt-0.5 truncate text-xs font-semibold text-muted-foreground">
-                            {[post.community, linkedCircle?.topic, post.createdAt].filter(Boolean).join(" · ")}
+                        {/* The circle name is the way into the circle now that
+                            members no longer get the panel below. */}
+                        <p className="mt-0.5 flex min-w-0 items-center gap-1 truncate text-xs font-semibold text-muted-foreground">
+                            {linkedCircle ? (
+                                <button
+                                    type="button"
+                                    onClick={() => onOpenCircle(linkedCircle.circleId)}
+                                    className="max-w-full truncate rounded-sm hover:text-rb-macaw-lip hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rb-macaw"
+                                >
+                                    {post.community}
+                                </button>
+                            ) : (
+                                post.community
+                            )}
+                            {[linkedCircle?.topic, post.createdAt].filter(Boolean).map((part) => (
+                                <span key={part} className="shrink-0">· {part}</span>
+                            ))}
                         </p>
                     </div>
 
@@ -446,7 +467,18 @@ function CommunityPost({
                     />
                 ) : null}
 
-                {linkedCircle ? (
+                {/* The circle panel is an offer to join, so it only appears when
+                    joining is on offer.
+
+                    It used to render under every post that belonged to a circle,
+                    including the ones from circles you are already in -- where it
+                    repeated, in a 60px panel with its own avatar and a button
+                    that does nothing you want, the circle name already printed in
+                    the byline three lines above it. On a feed of posts from your
+                    own circle that was the heaviest element on every card, and it
+                    said nothing twice. Members get the byline; the panel is kept
+                    for the case where it is a door rather than a label. */}
+                {linkedCircle && !linkedCircle.joined && !linkedCircle.owner ? (
                     <div className="mt-4 flex flex-col gap-3 rounded-rb-tile border-2 border-border bg-muted/40 p-3 sm:flex-row sm:items-center">
                         <button
                             type="button"
@@ -584,10 +616,19 @@ function CommunityPost({
 
 export default function Community() {
     const navigate = useNavigate()
-    const [posts, setPosts] = useState([])
-    const [circles, setCircles] = useState([])
-    const [certifications, setCertifications] = useState([])
-    const [studyItems, setStudyItems] = useState([])
+    /* Seeded from the cache during the first render, not from an effect after
+       it. `useEffect` runs after paint, so on a return visit these would be
+       empty for one frame and the feed would flash its "nothing here yet"
+       state -- trading the spinner the learner complained about for an empty
+       page, which is worse. Reading the cache synchronously means the second
+       visit's first paint already has the posts. */
+    const queryClient = useQueryClient()
+    const cachedFeed = queryClient.getQueryData(COMMUNITY_FEED_KEY)
+
+    const [posts, setPosts] = useState(() => cachedFeed?.posts ?? [])
+    const [circles, setCircles] = useState(() => cachedFeed?.circles ?? [])
+    const [certifications, setCertifications] = useState(() => cachedFeed?.certifications ?? [])
+    const [studyItems, setStudyItems] = useState(() => cachedFeed?.studyItems ?? [])
     const [selectedStudyItemId, setSelectedStudyItemId] = useState("")
     const [activeTab, setActiveTab] = useState("for-you")
     const [showSavedOnly, setShowSavedOnly] = useState(false)
@@ -617,11 +658,11 @@ export default function Community() {
     const [openThreads, setOpenThreads] = useState([])
     const [commentsByPost, setCommentsByPost] = useState({})
     const [commentDrafts, setCommentDrafts] = useState({})
-    /* Scoped to the feed, not the page. The header, the circle rail and the
-       composer are all rendered from state this page already has, so blanking
-       them out while the posts arrive would replace a usable screen with a
-       placeholder of itself. Only the part that is actually waiting says so. */
-    const [isLoading, setIsLoading] = useState(true)
+    /* The loading state is scoped to the feed, not the page: the header, the
+       circle rail and the composer all render from state this page already has,
+       so blanking them out while the posts arrive would replace a usable screen
+       with a placeholder of itself. Only the part that is actually waiting says
+       so. (`isLoading` itself comes from the feed query further down.) */
     const [reportPostId, setReportPostId] = useState(null)
     const [reportReason, setReportReason] = useState("SPAM")
     const [reportDetails, setReportDetails] = useState("")
@@ -630,22 +671,69 @@ export default function Community() {
     const objectUrlsRef = useRef([])
     useEffect(() => () => objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url)), [])
 
+    /* Cached across visits, which is the whole reason this is a query rather
+       than the `useEffect` + `Promise.all` it used to be.
+       
+       Four endpoints were re-fetched from scratch on every mount, with the feed
+       showing its full "loading the feed" placeholder each time -- so stepping
+       into a post and pressing back put the learner through the whole wait
+       again, for a feed that had not changed in the four seconds they were
+       away. React Query hands back the previous data synchronously and
+       revalidates behind it: the second visit paints the feed it already has,
+       and any new posts arrive without the screen ever emptying.
+
+       One key for all four because they arrive together and the page has no
+       use for a partial answer -- a circle rail with no posts beside it is not
+       a state worth rendering. */
+    const feedQuery = useQuery({
+        queryKey: COMMUNITY_FEED_KEY,
+        queryFn: async () => {
+            const [nextPosts, nextCircles, nextCertifications, nextStudyItems] =
+                await Promise.all([
+                    getCommunityPosts(),
+                    getCommunityCircles(),
+                    getAllCertifications(),
+                    getLibraryItems(),
+                ])
+            return {
+                posts: Array.isArray(nextPosts) ? nextPosts : [],
+                circles: Array.isArray(nextCircles) ? nextCircles : [],
+                certifications: Array.isArray(nextCertifications) ? nextCertifications : [],
+                studyItems: (Array.isArray(nextStudyItems) ? nextStudyItems : []).filter(
+                    (item) => ["quiz", "flashcard"].includes(item.kind)
+                ),
+            }
+        },
+        staleTime: 60_000,
+        retry: 1,
+    })
+
+    /* The page owns the posts once they have arrived: every like, save, join,
+       comment and delete edits this list in place so the row answers instantly.
+       Seeding from the query rather than reading it directly is what keeps that
+       possible -- and it is keyed on `dataUpdatedAt`, so a background
+       revalidation that returns new posts replaces the list, while re-renders
+       in between leave the learner's own optimistic edits alone. */
     useEffect(() => {
-        setIsLoading(true)
-        Promise.all([getCommunityPosts(), getCommunityCircles(), getAllCertifications(), getLibraryItems()])
-            .then(([nextPosts, nextCircles, nextCertifications, nextStudyItems]) => {
-                setPosts(nextPosts)
-                setCircles(nextCircles)
-                setCertifications(Array.isArray(nextCertifications) ? nextCertifications : [])
-                setStudyItems((Array.isArray(nextStudyItems) ? nextStudyItems : []).filter((item) => ["quiz", "flashcard"].includes(item.kind)))
-                if (nextCircles[0]) setShareCommunity(String(nextCircles[0].circleId))
-            })
-            .catch((error) => toast.error(apiMessage(error, "The community could not be loaded.")))
-            /* `finally`, so a failed load stops loading too. Without it the
-               toast fires and the feed spins forever, which reads as "still
-               working" when nothing is. */
-            .finally(() => setIsLoading(false))
-    }, [])
+        const data = feedQuery.data
+        if (!data) return
+        setPosts(data.posts)
+        setCircles(data.circles)
+        setCertifications(data.certifications)
+        setStudyItems(data.studyItems)
+        setShareCommunity((current) =>
+            current || !data.circles[0] ? current : String(data.circles[0].circleId)
+        )
+    }, [feedQuery.dataUpdatedAt])
+
+    useEffect(() => {
+        if (feedQuery.isError) {
+            toast.error(apiMessage(feedQuery.error, "The community could not be loaded."))
+        }
+    }, [feedQuery.isError, feedQuery.error])
+
+    /* Only a first visit with nothing cached is a wait worth showing. */
+    const isLoading = feedQuery.isLoading
 
     const topicOptions = useMemo(() => {
         const titles = certifications
