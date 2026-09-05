@@ -11,6 +11,7 @@ import {
   StickyNote,
 } from "@/components/icons"
 import { useNavigate } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -26,6 +27,9 @@ import {
 } from "@/components/learner/learner-ui.jsx"
 
 const ALL_VALUE = "all"
+
+/* Named once: the query and the delete's cache write have to agree. */
+const LIBRARY_ITEMS_KEY = ["library-items"]
 
 /** What the library is: the study aids the tutor generated for this learner. */
 const LIBRARY_KINDS = new Set(["quiz", "flashcard"])
@@ -85,27 +89,56 @@ export default function LearnerFilesPage() {
   const [localSearch, setLocalSearch] = useState("")
   const [certificationId, setCertificationId] = useState("")
   const [category, setCategory] = useState(ALL_VALUE)
-  const [items, setItems] = useState([])
-  const [certifications, setCertifications] = useState([])
-  const [isLoading, setIsLoading] = useState(true)
-
-
   const [viewItem, setViewItem] = useState(null)
 
+  /* Cached, so coming back from a quiz does not re-fetch the library and put
+     the spinner up over a list that has not changed. The page holds no copy of
+     its own -- the one mutation writes through the cache below -- so there is
+     no second source of truth to keep in step, and a deleted item stays deleted
+     when the learner navigates back.
+
+     `certifications` deliberately shares the key the rest of the app uses for
+     the same call, so a page that has already fetched the catalog pays nothing
+     to show its names here. */
+  const queryClient = useQueryClient()
+
+  const libraryQuery = useQuery({
+    queryKey: LIBRARY_ITEMS_KEY,
+    queryFn: getLibraryItems,
+    staleTime: 60_000,
+    retry: 1,
+  })
+
+  const certificationsQuery = useQuery({
+    queryKey: ["certifications"],
+    queryFn: getAllCertifications,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  })
+
+  const items = Array.isArray(libraryQuery.data) ? libraryQuery.data : []
+  const certifications = Array.isArray(certificationsQuery.data)
+      ? certificationsQuery.data
+      : []
+
+  /* Only a first visit with nothing cached is a wait worth showing; a
+     background revalidation leaves the list on screen. */
+  const isLoading = libraryQuery.isLoading
+
   useEffect(() => {
-    Promise.all([getLibraryItems(), getAllCertifications()])
-        .then(([libraryItems, allCertifications]) => {
-          setItems(Array.isArray(libraryItems) ? libraryItems : [])
-          setCertifications(Array.isArray(allCertifications) ? allCertifications : [])
-        })
-        .catch(() => toast.error("Your library could not be loaded."))
-        .finally(() => setIsLoading(false))
-  }, [])
+    if (libraryQuery.isError || certificationsQuery.isError) {
+      toast.error("Your library could not be loaded.")
+    }
+  }, [libraryQuery.isError, certificationsQuery.isError])
 
   async function removeResource(item) {
     try {
       await deleteLibraryItem(item.id)
-      setItems((current) => current.filter((entry) => entry.id !== item.id))
+      // Written through the cache rather than into local state, so the removal
+      // survives leaving the page and coming back.
+      queryClient.setQueryData(LIBRARY_ITEMS_KEY, (current) =>
+          (Array.isArray(current) ? current : []).filter((entry) => entry.id !== item.id)
+      )
       toast.success("Resource removed.")
     } catch {
       toast.error("The resource could not be removed.")
