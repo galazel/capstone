@@ -78,7 +78,7 @@ export default function LearnerLayout() {
      empty gutter down both sides on a large screen and made the page look like
      a narrow column floating on the ground colour. It owns its own gutters. */
   const isCertificationDetailPage = /^\/learner\/certifications\/[^/]+$/.test(location.pathname)
-  const { logout: authLogout } = useAuth()
+  const { user: authUser, logout: authLogout } = useAuth()
   const [searchValue, setSearchValue] = useState("")
   const entitlements = useLearnerEntitlements()
 
@@ -137,8 +137,17 @@ export default function LearnerLayout() {
     })
   }, [queryClient, prefetchCertificationId])
 
-  const displayName = getLearnerDisplayName(query.data)
-  const email = query.data?.user?.email ?? query.data?.identity?.email ?? ""
+  const shellData = query.data ?? {
+    user: authUser,
+    identity: authUser,
+    learner: authUser,
+  }
+  const displayName = getLearnerDisplayName(shellData)
+  const email =
+    query.data?.user?.email ??
+    query.data?.identity?.email ??
+    authUser?.email ??
+    ""
   const invitationsQuery = useQuery({
     queryKey: ["learner-notification-invitations", email],
     queryFn: getLearnerInvitations,
@@ -148,7 +157,7 @@ export default function LearnerLayout() {
     retry: 1,
   })
   const certificationById = new Map(
-    (query.data?.certifications ?? []).map((certification) => [
+    (shellData.certifications ?? []).map((certification) => [
       String(certification.certificationId),
       certification,
     ])
@@ -169,7 +178,7 @@ export default function LearnerLayout() {
       createdAt: invitation.sentAt,
     }))
 
-  const assignmentNotifications = (query.data?.enrollments ?? [])
+  const assignmentNotifications = (shellData.enrollments ?? [])
     .filter((enrollment) => enrollment.source === "institution")
     .map((enrollment) => {
       const certification = certificationById.get(String(enrollment.certificationId))
@@ -216,12 +225,12 @@ export default function LearnerLayout() {
 
   const outletContext = useMemo(
     () => ({
-      data: query.data,
+      data: shellData,
       searchValue,
       setSearchValue,
       refetch: query.refetch,
     }),
-    [query.data, query.refetch, searchValue]
+    [query.data, query.refetch, searchValue, shellData]
   )
 
   const logout = async () => {
@@ -342,9 +351,7 @@ export default function LearnerLayout() {
               : ""
           }`}
         >
-          {query.isLoading ? (
-            <RouteSkeleton />
-          ) : query.isError ? (
+          {query.isError && !query.data ? (
             <LearnerErrorState error={query.error} onRetry={query.refetch} />
           ) : (
             /* Inside the shell, not around it. The nav, the status strip and
