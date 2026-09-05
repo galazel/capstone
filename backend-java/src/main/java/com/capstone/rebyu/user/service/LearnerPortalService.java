@@ -97,6 +97,14 @@ public class LearnerPortalService {
         java.math.BigDecimal coinBalance = java.math.BigDecimal.valueOf(rewardBalance.coins());
         Long aiCreditsRemaining = (long) rewardBalance.aiCredits();
 
+        // Reuse these learner-scoped reads throughout the portal response.
+        // The portal is a cold-load endpoint, so repeating the same queries
+        // after calculating progress adds latency without changing the result.
+        List<LearnerCertification> learnerCertifications =
+                learnerCertificationRepository.findByLearner_LearnerId(learnerId);
+        List<com.capstone.rebyu.progress.entity.LearnerCompletedLesson> completedLessons =
+                completedLessonRepository.findByLearner_LearnerId(learnerId);
+
         // Fetch BKT mastery state per certification (stubbed for now)
         Map<Long, Integer> masteryByCertification = new java.util.HashMap<>();
 
@@ -111,8 +119,7 @@ public class LearnerPortalService {
          * ProgressAnalyticsService.progressFor) -- so it stays a handful of
          * queries per certification rather than the analytics board's work. */
         Set<Long> enrolledCertificationIds = new LinkedHashSet<>();
-        for (LearnerCertification enrollment
-                : learnerCertificationRepository.findByLearner_LearnerId(learnerId)) {
+        for (LearnerCertification enrollment : learnerCertifications) {
             if (enrollment.getStatus() == LearnerCertification.Status.active
                     && enrollment.getCertification() != null) {
                 enrolledCertificationIds.add(enrollment.getCertification().getCertificationId());
@@ -133,9 +140,9 @@ public class LearnerPortalService {
         return new LearnerPortalDto(
                 learnerRepository.findById(learnerId).map(learnerMapper::toDto).orElse(null),
                 userRepository.findById(userId).map(userMapper::toDto).orElse(null),
-                learnerCertificationRepository.findByLearner_LearnerId(learnerId).stream()
+                learnerCertifications.stream()
                         .map(learnerCertificationMapper::toDto).toList(),
-                completedLessonRepository.findByLearner_LearnerId(learnerId).stream()
+                completedLessons.stream()
                         .map(completedLessonMapper::toDto).toList(),
                 activityLogRepository.findByUser_UserId(userId).stream()
                         .map(activityLogMapper::toDto).toList(),
