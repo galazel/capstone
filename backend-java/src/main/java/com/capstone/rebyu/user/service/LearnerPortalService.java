@@ -34,6 +34,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Learner-scoped read model for the learner portal. Every list is filtered to the
@@ -133,8 +134,17 @@ public class LearnerPortalService {
             }
         }
 
-        List<CertificationProgressDto> certificationProgress = enrolledCertificationIds.stream()
-                .map(certificationId -> progressAnalyticsService.progressFor(learnerId, certificationId))
+        // Each progress calculation is independent and performs its own
+        // learner-scoped reads. Run them concurrently so several enrolled
+        // certifications do not turn one portal request into a serial chain
+        // of database round trips. The list order remains enrollment order.
+        List<CompletableFuture<CertificationProgressDto>> progressFutures =
+                enrolledCertificationIds.stream()
+                        .map(certificationId -> CompletableFuture.supplyAsync(
+                                () -> progressAnalyticsService.progressFor(learnerId, certificationId)))
+                        .toList();
+        List<CertificationProgressDto> certificationProgress = progressFutures.stream()
+                .map(CompletableFuture::join)
                 .toList();
 
         return new LearnerPortalDto(
