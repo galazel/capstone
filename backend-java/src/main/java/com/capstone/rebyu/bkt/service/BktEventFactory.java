@@ -43,6 +43,9 @@ public class BktEventFactory {
             Map.entry("DIAGNOSTIC_EXAM", "DIAGNOSTIC"),
             Map.entry("QUIZ", "LESSON_QUIZ"),
             Map.entry("LESSON_QUIZ", "LESSON_QUIZ"),
+            // Recall sessions are learner-generated quizzes. FastAPI uses the
+            // LESSON_QUIZ parameter class for this kind of evidence.
+            Map.entry("RECALL", "LESSON_QUIZ"),
             Map.entry("PRACTICE", "LESSON_QUIZ"),
             Map.entry("REVIEW", "LESSON_QUIZ"),
             Map.entry("BATTLE", "LESSON_QUIZ"),

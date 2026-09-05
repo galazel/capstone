@@ -36,7 +36,9 @@ spring:
 
   data:
     redis:
-      url: ${REDIS_URL:}
+      # Use host/port rather than spring.data.redis.url so an empty or
+      # malformed deployment variable cannot prevent the application from
+      # starting. Railway supplies REDIS_HOST from the Redis private domain.
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       database: ${REDIS_DATABASE:2}
