@@ -361,7 +361,7 @@ public class CommunityService {
     @Transactional(readOnly = true)
     public List<Comment> comments(Long learnerId, Long postId) {
         requirePostVisible(postId);
-        return commentRepository.findByPost_PostIdOrderByCreatedAtAsc(postId).stream()
+        return commentRepository.findByPostIdWithAuthors(postId).stream()
                 .map(c -> mapComment(c, learnerId))
                 .toList();
     }
