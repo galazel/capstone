@@ -1,85 +1,86 @@
-import { lazy, Suspense, useEffect, useRef } from "react"
+import { Suspense, useEffect, useRef } from "react"
+import { RouteErrorBoundary, lazyRoute } from "@/lib/lazy-route.jsx"
 import { Navigate, Routes, Route, useLocation } from "react-router-dom"
 import ProtectedRoute from "./components/ProtectedRoute"
 import { LoadingScreen } from "./components/loading-screen.jsx"
 import { roleHomePath, useAuth } from "./context/auth-context.jsx"
 
-const DashboardLayout = lazy(() => import("./layouts/DashboardLayout"))
-const LearnerLayout = lazy(() => import("./layouts/learner-layout.jsx"))
-const InstitutionLayout = lazy(() => import("./layouts/institution-layout.jsx"))
-const LoginPage = lazy(() => import("./pages/auth/login-page.jsx"))
-const RegisterPage = lazy(() => import("./pages/auth/register-page.jsx"))
-const VerifyEmailPage = lazy(() => import("./pages/auth/verify-email-page.jsx"))
-const ForgotPasswordPage = lazy(() => import("./pages/auth/forgot-password-page.jsx"))
-const SetNewPasswordPage = lazy(() => import("@/pages/auth/set-new-password-page.jsx"))
-const Certifications = lazy(() => import("./pages/admin/certifications-page.jsx"))
-const Challenges = lazy(() => import("./pages/admin/challenges-page.jsx"))
-const Learners = lazy(() => import("./pages/admin/learners-page.jsx"))
-const Organizations = lazy(() => import("./pages/admin/organizations-page.jsx"))
-const AdminOrganizationDetail = lazy(() => import("./pages/admin/admin-organization-detail-page.jsx"))
-const ViewCertificationAdmin = lazy(() => import("./pages/admin/view-certification-admin-page.jsx"))
-const AdminDashboard = lazy(() => import("./pages/admin/admin-dashboard-page.jsx"))
-const PartnershipRequests = lazy(() => import("./pages/admin/partnership-requests-page.jsx"))
-const CommunityModeration = lazy(() => import("./pages/admin/community-moderation-page.jsx"))
-const AcceptInstitutionInvitationPage = lazy(() => import("./pages/admin/accept-institution-invitation-page.jsx"))
-const LandingPage = lazy(() => import("./pages/public/landing-page.jsx"))
-const CreateLessons = lazy(() => import("./pages/admin/create-lessons-page.jsx"))
-const LearnerProgressPage = lazy(() => import("./pages/learner/dashboard/learner-progress-page.jsx"))
-const LearnerStudyPlanCalendarPage = lazy(() => import("./components/learner/learner-study-plan-modal.jsx"))
-const LearnerLearningPage = lazy(() => import("./pages/learner/learning/learner-learning-page.jsx"))
-const LearnerDiagnosticGatePage = lazy(() => import("./pages/learner/assessments/learner-diagnostic-page.jsx"))
-const LearnerLessonPage = lazy(() => import("./pages/learner/learning/learner-lesson-page.jsx"))
-const LearnerSubscriptionPage = lazy(() => import("./pages/learner/subscription/learner-subscription-page.jsx"))
-const SubscriptionCheckoutResultPage = lazy(() => import("./pages/learner/subscription/subscription-checkout-result-page.jsx"))
-const LearnerCertificationDetailPage = lazy(() => import("./pages/learner/learning/learner-certification-detail-page.jsx"))
-const LearnerCertificationsPage = lazy(() => import("./pages/learner/learning/learner-certifications-page.jsx"))
-const LearnerChallengesPage = lazy(() => import("./pages/learner/learning/learner-challenges-page.jsx"))
-const LearnerFilesPage = lazy(() => import("./pages/learner/files/learner-files-page.jsx"))
-const LearnerMistakeBankPage = lazy(() => import("./pages/learner/mistakes/learner-mistake-bank-page.jsx"))
-const LearnerCommunityPage = lazy(() => import("./pages/learner/community/learner-community-qa.jsx"))
-const LearnerAccountPage = lazy(() => import("./pages/learner/dashboard/learner-account-page.jsx"))
-const LearnerAssessmentAttemptPage = lazy(() => import("./pages/learner/assessments/learner-assessment-attempt-page.jsx"))
+const DashboardLayout = lazyRoute(() => import("./layouts/DashboardLayout"))
+const LearnerLayout = lazyRoute(() => import("./layouts/learner-layout.jsx"))
+const InstitutionLayout = lazyRoute(() => import("./layouts/institution-layout.jsx"))
+const LoginPage = lazyRoute(() => import("./pages/auth/login-page.jsx"))
+const RegisterPage = lazyRoute(() => import("./pages/auth/register-page.jsx"))
+const VerifyEmailPage = lazyRoute(() => import("./pages/auth/verify-email-page.jsx"))
+const ForgotPasswordPage = lazyRoute(() => import("./pages/auth/forgot-password-page.jsx"))
+const SetNewPasswordPage = lazyRoute(() => import("@/pages/auth/set-new-password-page.jsx"))
+const Certifications = lazyRoute(() => import("./pages/admin/certifications-page.jsx"))
+const Challenges = lazyRoute(() => import("./pages/admin/challenges-page.jsx"))
+const Learners = lazyRoute(() => import("./pages/admin/learners-page.jsx"))
+const Organizations = lazyRoute(() => import("./pages/admin/organizations-page.jsx"))
+const AdminOrganizationDetail = lazyRoute(() => import("./pages/admin/admin-organization-detail-page.jsx"))
+const ViewCertificationAdmin = lazyRoute(() => import("./pages/admin/view-certification-admin-page.jsx"))
+const AdminDashboard = lazyRoute(() => import("./pages/admin/admin-dashboard-page.jsx"))
+const PartnershipRequests = lazyRoute(() => import("./pages/admin/partnership-requests-page.jsx"))
+const CommunityModeration = lazyRoute(() => import("./pages/admin/community-moderation-page.jsx"))
+const AcceptInstitutionInvitationPage = lazyRoute(() => import("./pages/admin/accept-institution-invitation-page.jsx"))
+const LandingPage = lazyRoute(() => import("./pages/public/landing-page.jsx"))
+const CreateLessons = lazyRoute(() => import("./pages/admin/create-lessons-page.jsx"))
+const LearnerProgressPage = lazyRoute(() => import("./pages/learner/dashboard/learner-progress-page.jsx"))
+const LearnerStudyPlanCalendarPage = lazyRoute(() => import("./components/learner/learner-study-plan-modal.jsx"))
+const LearnerLearningPage = lazyRoute(() => import("./pages/learner/learning/learner-learning-page.jsx"))
+const LearnerDiagnosticGatePage = lazyRoute(() => import("./pages/learner/assessments/learner-diagnostic-page.jsx"))
+const LearnerLessonPage = lazyRoute(() => import("./pages/learner/learning/learner-lesson-page.jsx"))
+const LearnerSubscriptionPage = lazyRoute(() => import("./pages/learner/subscription/learner-subscription-page.jsx"))
+const SubscriptionCheckoutResultPage = lazyRoute(() => import("./pages/learner/subscription/subscription-checkout-result-page.jsx"))
+const LearnerCertificationDetailPage = lazyRoute(() => import("./pages/learner/learning/learner-certification-detail-page.jsx"))
+const LearnerCertificationsPage = lazyRoute(() => import("./pages/learner/learning/learner-certifications-page.jsx"))
+const LearnerChallengesPage = lazyRoute(() => import("./pages/learner/learning/learner-challenges-page.jsx"))
+const LearnerFilesPage = lazyRoute(() => import("./pages/learner/files/learner-files-page.jsx"))
+const LearnerMistakeBankPage = lazyRoute(() => import("./pages/learner/mistakes/learner-mistake-bank-page.jsx"))
+const LearnerCommunityPage = lazyRoute(() => import("./pages/learner/community/learner-community-qa.jsx"))
+const LearnerAccountPage = lazyRoute(() => import("./pages/learner/dashboard/learner-account-page.jsx"))
+const LearnerAssessmentAttemptPage = lazyRoute(() => import("./pages/learner/assessments/learner-assessment-attempt-page.jsx"))
 // Dev-only screenshot harness for the landing hero. Never routed in a
 // production build (see the guarded <Route> below), so this chunk is only ever
 // requested by a developer opening the preview URL.
-const AttemptPreviewPage = lazy(() => import("./pages/dev/attempt-preview-page.jsx"))
-const LearnerAssessmentResultPage = lazy(() => import("./pages/learner/assessments/learner-assessment-result-page.jsx"))
-const LearnerAssessmentHistoryPage = lazy(() => import("./pages/learner/assessments/learner-assessment-history-page.jsx"))
-const LearnerPracticeAttemptPage = lazy(() => import("./pages/learner/practice/learner-practice-attempt-page.jsx"))
-const LearnerFlashcardAttemptPage = lazy(() => import("./pages/learner/practice/learner-flashcard-attempt-page.jsx"))
-const LearnerPracticeHistoryPage = lazy(() => import("./pages/learner/practice/learner-practice-history-page.jsx"))
-const LearnerPracticeReviewPage = lazy(() => import("./pages/learner/practice/learner-practice-review-page.jsx"))
-const InstitutionDashboardPage = lazy(() => import("./pages/institution/dashboard/institution-dashboard-page.jsx"))
-const InstitutionMemberDashboardPage = lazy(() => import("./pages/institution/dashboard/institution-member-dashboard-page.jsx"))
-const InstitutionGroupWorkspacePage = lazy(() => import("./pages/institution/groups/institution-group-workspace-page.jsx"))
-const InstitutionGroupLearnerPage = lazy(() => import("./pages/institution/groups/institution-group-learner-page.jsx"))
-const InstitutionLearnersPage = lazy(() => import("./pages/institution/groups/institution-learners-page.jsx"))
-const InstitutionCertificationsPage = lazy(() => import("./pages/institution/certifications/institution-certifications-page.jsx"))
-const InstitutionCertificationDetailPage = lazy(() => import("./pages/institution/certifications/institution-certification-detail-page.jsx"))
-const InstitutionCertificationViewerPage = lazy(() => import("./pages/institution/certifications/institution-certification-viewer-page.jsx"))
-const InstitutionAssessmentBuilderPage = lazy(() => import("./pages/institution/certifications/institution-assessment-builder-page.jsx"))
-const InstitutionGroupsPage = lazy(() => import("./pages/institution/groups/institution-groups-page.jsx"))
+const AttemptPreviewPage = lazyRoute(() => import("./pages/dev/attempt-preview-page.jsx"))
+const LearnerAssessmentResultPage = lazyRoute(() => import("./pages/learner/assessments/learner-assessment-result-page.jsx"))
+const LearnerAssessmentHistoryPage = lazyRoute(() => import("./pages/learner/assessments/learner-assessment-history-page.jsx"))
+const LearnerPracticeAttemptPage = lazyRoute(() => import("./pages/learner/practice/learner-practice-attempt-page.jsx"))
+const LearnerFlashcardAttemptPage = lazyRoute(() => import("./pages/learner/practice/learner-flashcard-attempt-page.jsx"))
+const LearnerPracticeHistoryPage = lazyRoute(() => import("./pages/learner/practice/learner-practice-history-page.jsx"))
+const LearnerPracticeReviewPage = lazyRoute(() => import("./pages/learner/practice/learner-practice-review-page.jsx"))
+const InstitutionDashboardPage = lazyRoute(() => import("./pages/institution/dashboard/institution-dashboard-page.jsx"))
+const InstitutionMemberDashboardPage = lazyRoute(() => import("./pages/institution/dashboard/institution-member-dashboard-page.jsx"))
+const InstitutionGroupWorkspacePage = lazyRoute(() => import("./pages/institution/groups/institution-group-workspace-page.jsx"))
+const InstitutionGroupLearnerPage = lazyRoute(() => import("./pages/institution/groups/institution-group-learner-page.jsx"))
+const InstitutionLearnersPage = lazyRoute(() => import("./pages/institution/groups/institution-learners-page.jsx"))
+const InstitutionCertificationsPage = lazyRoute(() => import("./pages/institution/certifications/institution-certifications-page.jsx"))
+const InstitutionCertificationDetailPage = lazyRoute(() => import("./pages/institution/certifications/institution-certification-detail-page.jsx"))
+const InstitutionCertificationViewerPage = lazyRoute(() => import("./pages/institution/certifications/institution-certification-viewer-page.jsx"))
+const InstitutionAssessmentBuilderPage = lazyRoute(() => import("./pages/institution/certifications/institution-assessment-builder-page.jsx"))
+const InstitutionGroupsPage = lazyRoute(() => import("./pages/institution/groups/institution-groups-page.jsx"))
 // Profile, Partnership, License, Billing and Files are one tabbed page --
 // see institution-account-page.jsx. The five paths are kept so existing links
 // still resolve; each one opens its own tab.
-const InstitutionAccountPage = lazy(() => import("./pages/institution/account/institution-account-page.jsx"))
-const InstitutionQuestionBankPage = lazy(() => import("./pages/institution/certifications/institution-question-bank-page.jsx"))
-const InstitutionRequestAccessPage = lazy(() => import("./pages/public/institution-request-access-page.jsx"))
-const CompilerArea = lazy(() => import("./pages/challenges/compiler-area-page.jsx"))
-const CodeStrikePage = lazy(() => import("./pages/learner/challenges/codestrike-page.jsx"))
-const BlueprintArenaPage = lazy(() => import("./pages/learner/challenges/blueprint-arena-page.jsx"))
-const WorldCupPage = lazy(() => import("./pages/learner/challenges/world-cup-page.jsx"))
-const LearnerCertificationCurriculumPage = lazy(() =>
+const InstitutionAccountPage = lazyRoute(() => import("./pages/institution/account/institution-account-page.jsx"))
+const InstitutionQuestionBankPage = lazyRoute(() => import("./pages/institution/certifications/institution-question-bank-page.jsx"))
+const InstitutionRequestAccessPage = lazyRoute(() => import("./pages/public/institution-request-access-page.jsx"))
+const CompilerArea = lazyRoute(() => import("./pages/challenges/compiler-area-page.jsx"))
+const CodeStrikePage = lazyRoute(() => import("./pages/learner/challenges/codestrike-page.jsx"))
+const BlueprintArenaPage = lazyRoute(() => import("./pages/learner/challenges/blueprint-arena-page.jsx"))
+const WorldCupPage = lazyRoute(() => import("./pages/learner/challenges/world-cup-page.jsx"))
+const LearnerCertificationCurriculumPage = lazyRoute(() =>
     import("./pages/learner/learning/learner-certification-curriculum-page.jsx")
 )
-const LearnerTopicPage = lazy(() => import("./pages/learner/learning/learner-topic-page.jsx"))
-const ArenaConfig = lazy(() => import("./pages/admin/arena-config-page.jsx"))
-const ArenaDetail = lazy(() => import("./pages/admin/arena-detail-page.jsx"))
-const CertificationQuestionBank = lazy(() => import("./pages/admin/certification-question-bank-page.jsx"))
-const CertificationAssessments = lazy(() => import("./pages/admin/certification-assessments-page.jsx"))
-const NotificationsPage = lazy(() => import("./pages/notifications-page.jsx"))
-const NotFoundPage = lazy(() => import("./pages/public/not-found-page.jsx"))
-const ForbiddenPage = lazy(() => import("./pages/public/forbidden-page.jsx"))
+const LearnerTopicPage = lazyRoute(() => import("./pages/learner/learning/learner-topic-page.jsx"))
+const ArenaConfig = lazyRoute(() => import("./pages/admin/arena-config-page.jsx"))
+const ArenaDetail = lazyRoute(() => import("./pages/admin/arena-detail-page.jsx"))
+const CertificationQuestionBank = lazyRoute(() => import("./pages/admin/certification-question-bank-page.jsx"))
+const CertificationAssessments = lazyRoute(() => import("./pages/admin/certification-assessments-page.jsx"))
+const NotificationsPage = lazyRoute(() => import("./pages/notifications-page.jsx"))
+const NotFoundPage = lazyRoute(() => import("./pages/public/not-found-page.jsx"))
+const ForbiddenPage = lazyRoute(() => import("./pages/public/forbidden-page.jsx"))
 
 // Owners land on the institution dashboard; Institution Members (group leaders)
 // land on their own "My Groups" workspace list -- they never see the
@@ -158,6 +159,9 @@ function RouteTransition({ children }) {
 
 export function App() {
     return (
+      /* Outside Suspense, so it catches the import failures Suspense re-throws
+         rather than sitting inside the tree that unmounts. */
+      <RouteErrorBoundary>
       <Suspense fallback={<LoadingScreen />}>
         <RouteTransition>
         <Routes>
@@ -437,6 +441,7 @@ export function App() {
         </Routes>
         </RouteTransition>
       </Suspense>
+      </RouteErrorBoundary>
     )
 }
 
