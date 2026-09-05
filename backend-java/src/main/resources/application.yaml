@@ -127,10 +127,12 @@ resilience4j:
 logging:
   level:
     root: INFO
-    com.capstone.rebyu: DEBUG
+    # Keep Railway's log stream useful under normal traffic. SQL and bind
+    # parameter logging can emit dozens of lines for a single API request.
+    com.capstone.rebyu: ${APP_LOG_LEVEL:INFO}
     org.springframework.security: INFO
-    org.hibernate.SQL: DEBUG
-    org.hibernate.orm.jdbc.bind: TRACE
+    org.hibernate.SQL: ${HIBERNATE_SQL_LOG_LEVEL:WARN}
+    org.hibernate.orm.jdbc.bind: ${HIBERNATE_BIND_LOG_LEVEL:OFF}
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 

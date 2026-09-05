@@ -6,6 +6,7 @@ import {
   useMemo,
   useState,
 } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 
 import {
   getAccessToken,
@@ -14,6 +15,7 @@ import {
   syncCurrentUser,
   completeTemporaryPassword,
 } from "@/services/authService.js"
+import { getLearnerPortalData } from "@/services/learnerService.js"
 
 const AuthContext = createContext(null)
 
@@ -21,6 +23,7 @@ const AuthContext = createContext(null)
 // /api/auth/me — the routing and role authority while signed in. localStorage
 // is never treated as an authority here.
 export function AuthProvider({ children }) {
+  const queryClient = useQueryClient()
   const [user, setUser] = useState(null)
   const [status, setStatus] = useState("loading") // loading | authenticated | anonymous
 
@@ -35,6 +38,20 @@ export function AuthProvider({ children }) {
       const currentUser = await syncCurrentUser()
       setUser(currentUser)
       setStatus("authenticated")
+      // Start the learner shell's larger snapshot while the router is loading
+      // the destination chunk. The layout uses this exact key, so it joins the
+      // in-flight request instead of waiting until after navigation.
+      if (
+        String(currentUser?.role ?? "").toUpperCase() === "LEARNER" &&
+        currentUser?.learnerId != null
+      ) {
+        void queryClient.prefetchQuery({
+          queryKey: ["learner-portal-data"],
+          queryFn: getLearnerPortalData,
+          staleTime: 30_000,
+          gcTime: 60 * 60_000,
+        })
+      }
       // Keep legacy keys in sync so existing pages that read them keep
       // working; they are display hints only, never authorities.
       if (currentUser?.learnerId != null) {
@@ -60,7 +77,7 @@ export function AuthProvider({ children }) {
       setStatus("anonymous")
       return null
     }
-  }, [])
+  }, [queryClient])
 
   useEffect(() => {
     refresh()
