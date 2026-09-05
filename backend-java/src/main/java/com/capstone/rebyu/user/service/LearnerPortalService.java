@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Learner-scoped read model for the learner portal. Every list is filtered to the
@@ -46,6 +47,9 @@ import java.util.concurrent.CompletableFuture;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class LearnerPortalService {
+
+    private static final long HOT_CACHE_TTL_MILLIS = 30_000L;
+    private static final Map<String, CachedPortal> HOT_CACHE = new ConcurrentHashMap<>();
 
     private final LearnerRepository learnerRepository;
     private final LearnerMapper learnerMapper;
@@ -78,6 +82,12 @@ public class LearnerPortalService {
     // XP balance lookup was added.
     @Transactional
     public LearnerPortalDto portal(Long learnerId, Long userId) {
+        String cacheKey = learnerId + ":" + userId;
+        CachedPortal cached = HOT_CACHE.get(cacheKey);
+        if (cached != null && cached.expiresAt() > System.currentTimeMillis()) {
+            return cached.value();
+        }
+
         List<OrganizationCertificationLearner> orgCertLearnerEntities =
                 orgCertLearnerRepository.findByLearner_LearnerId(learnerId);
 
@@ -147,7 +157,7 @@ public class LearnerPortalService {
                 .map(CompletableFuture::join)
                 .toList();
 
-        return new LearnerPortalDto(
+        LearnerPortalDto result = new LearnerPortalDto(
                 learnerRepository.findById(learnerId).map(learnerMapper::toDto).orElse(null),
                 userRepository.findById(userId).map(userMapper::toDto).orElse(null),
                 learnerCertifications.stream()
@@ -166,5 +176,9 @@ public class LearnerPortalService {
                 aiCreditsRemaining,
                 masteryByCertification,
                 certificationProgress);
+        HOT_CACHE.put(cacheKey, new CachedPortal(result, System.currentTimeMillis() + HOT_CACHE_TTL_MILLIS));
+        return result;
     }
+
+    private record CachedPortal(LearnerPortalDto value, long expiresAt) {}
 }
