@@ -1,10 +1,30 @@
 import { base } from "./base"
 
+const COMMUNITY_FEED_SNAPSHOT_KEY = "rebyu:community-feed-snapshot"
+
+export function readCommunityFeedSnapshot() {
+  try {
+    const raw = sessionStorage.getItem(COMMUNITY_FEED_SNAPSHOT_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+export function writeCommunityFeedSnapshot(data) {
+  try {
+    sessionStorage.setItem(COMMUNITY_FEED_SNAPSHOT_KEY, JSON.stringify(data))
+  } catch {
+    // Storage is an optional fast path; live API data remains authoritative.
+  }
+}
+
 const relativeHours = (value) => {
   const time = value ? new Date(value).getTime() : NaN
   if (!Number.isFinite(time)) {
     return "recently"
   }
+
   const hoursAgo = Math.max(0, Math.round((Date.now() - time) / 3600000))
   return new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(-hoursAgo, "hour")
 }

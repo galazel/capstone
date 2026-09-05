@@ -70,6 +70,8 @@ import {
     shareCommunityStudyItem,
     startSharedCommunityPractice,
     reportCommunityPost,
+    readCommunityFeedSnapshot,
+    writeCommunityFeedSnapshot,
 } from "@/services/communityService"
 
 const FEED_TABS = [
@@ -623,7 +625,7 @@ export default function Community() {
        page, which is worse. Reading the cache synchronously means the second
        visit's first paint already has the posts. */
     const queryClient = useQueryClient()
-    const cachedFeed = queryClient.getQueryData(COMMUNITY_FEED_KEY)
+    const cachedFeed = queryClient.getQueryData(COMMUNITY_FEED_KEY) ?? readCommunityFeedSnapshot()
 
     const [posts, setPosts] = useState(() => cachedFeed?.posts ?? [])
     const [circles, setCircles] = useState(() => cachedFeed?.circles ?? [])
@@ -704,9 +706,17 @@ export default function Community() {
                 ),
             }
         },
+        initialData: readCommunityFeedSnapshot,
+        initialDataUpdatedAt: 0,
         staleTime: 60_000,
         retry: 1,
     })
+
+    useEffect(() => {
+        if (feedQuery.data) {
+            writeCommunityFeedSnapshot(feedQuery.data)
+        }
+    }, [feedQuery.data])
 
     /* The page owns the posts once they have arrived: every like, save, join,
        comment and delete edits this list in place so the row answers instantly.
