@@ -54,7 +54,35 @@ export function apiMessage(error, fallback) {
   return typeof message === "string" && message.trim() ? message : fallback
 }
 
+const inFlightGetRequests = new Map()
+
 export async function base(endpoint, options = {}) {
+  const method = (options.method || "GET").toUpperCase()
+  if (method !== "GET") {
+    return request(endpoint, options)
+  }
+
+  const headers = { ...(options.headers ?? {}) }
+  if (!headers.Authorization) {
+    const token = await currentAccessToken()
+    if (token) {
+      headers.Authorization = `Bearer ${token}`
+    }
+  }
+
+  const requestKey = `${method}:${endpoint}:${headers.Authorization ?? ""}`
+  const existing = inFlightGetRequests.get(requestKey)
+  if (existing) {
+    return existing
+  }
+
+  const promise = request(endpoint, { ...options, headers })
+  inFlightGetRequests.set(requestKey, promise)
+  promise.finally(() => inFlightGetRequests.delete(requestKey))
+  return promise
+}
+
+async function request(endpoint, options = {}) {
   const headers = { ...(options.headers ?? {}) }
   if (!headers.Authorization) {
     const token = await currentAccessToken()
