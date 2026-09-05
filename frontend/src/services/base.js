@@ -9,6 +9,29 @@ export const API = import.meta.env.DEV
   ? "/api"
   : `${deployedApiOrigin || "http://localhost:8080"}/api`
 
+/* The localhost fallback above is right for the local Docker stack, where the
+   browser really is on localhost and the API really is on 8080. Anywhere else
+   it is a build that was never told where its API lives, and the way that
+   failure presents -- a CORS error naming localhost, from a page served over
+   https -- points at the server rather than at the missing build argument.
+   
+   So it says so itself, once, at startup. Checked against the page's own host
+   rather than a mode flag: `import.meta.env.DEV` is already false in every
+   built image, including the one that is correctly using localhost. */
+if (
+  !import.meta.env.DEV &&
+  !deployedApiOrigin &&
+  typeof window !== "undefined" &&
+  !["localhost", "127.0.0.1"].includes(window.location.hostname)
+) {
+  console.error(
+    `[REBYU] This build has no VITE_API_URL, so it is calling ${API} — the ` +
+      `machine running the browser, not the server. Rebuild the frontend image ` +
+      `with --build-arg VITE_API_URL=https://your-api-host (Vite inlines it at ` +
+      `build time; setting it in the container's environment has no effect).`
+  )
+}
+
 // Attaches the Cognito access token when a session exists. Exported because
 // the SSE notification stream needs the same bearer token but is opened with
 // fetch (not axios), so it can't go through base() below.

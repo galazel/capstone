@@ -329,6 +329,11 @@ services:
     build:
       context: frontend
       dockerfile: Dockerfile
+      args:
+        # Empty locally: the browser and the API are both on localhost, which is
+        # what the build's own fallback assumes. Set it for anything published
+        # under a real domain.
+        VITE_API_URL: "${VITE_API_URL:-}"
     ports:
       - "3000:80"
     depends_on:
