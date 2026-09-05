@@ -80,8 +80,9 @@ export function getAllExams() {
 // Tenant-scoped learner snapshot: the caller's own learner/user record, enrollments,
 // completed lessons, activity logs, exam results, and org allocations (learnerId/userId
 // resolved from the JWT). Replaces fetching global lists and filtering in the browser.
-export function getLearnerPortalScoped() {
-  return base("learners/me/portal")
+export function getLearnerPortalScoped(options = {}) {
+  const query = options.includeProgress === false ? "?includeProgress=false" : ""
+  return base(`learners/me/portal${query}`)
 }
 
 const LEARNER_PORTAL_SNAPSHOT_KEY = "rebyu:learner-portal-snapshot"
@@ -201,7 +202,7 @@ export async function getLearnerPortalData() {
   // All learner-private data comes pre-scoped from the backend (learnerId/userId
   // resolved from the JWT); only the certification/exam catalogs are public.
   const [portal, certifications, exams] = await Promise.all([
-    getLearnerPortalScoped(),
+    getLearnerPortalScoped({ includeProgress: false }),
     base("certifications"),
     getAllExams(),
   ])

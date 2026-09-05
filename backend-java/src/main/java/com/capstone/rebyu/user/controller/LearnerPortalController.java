@@ -10,6 +10,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -26,9 +27,11 @@ public class LearnerPortalController {
     private final CognitoAuthService auth;
 
     @GetMapping("/portal")
-    public LearnerPortalDto portal(@AuthenticationPrincipal Jwt jwt) {
+    public LearnerPortalDto portal(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(defaultValue = "true") boolean includeProgress) {
         CurrentUserDto me = requireLearner(jwt);
-        return portalService.portal(me.learnerId(), me.userId());
+        return portalService.portal(me.learnerId(), me.userId(), includeProgress);
     }
 
     /** The caller's own learner record (JWT-derived) -- replaces fetching the global learners list. */

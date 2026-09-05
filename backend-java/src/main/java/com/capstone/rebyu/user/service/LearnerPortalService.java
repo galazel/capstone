@@ -34,7 +34,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -82,7 +81,12 @@ public class LearnerPortalService {
     // XP balance lookup was added.
     @Transactional
     public LearnerPortalDto portal(Long learnerId, Long userId) {
-        String cacheKey = learnerId + ":" + userId;
+        return portal(learnerId, userId, true);
+    }
+
+    @Transactional
+    public LearnerPortalDto portal(Long learnerId, Long userId, boolean includeProgress) {
+        String cacheKey = learnerId + ":" + userId + ":" + includeProgress;
         CachedPortal cached = HOT_CACHE.get(cacheKey);
         if (cached != null && cached.expiresAt() > System.currentTimeMillis()) {
             return cached.value();
@@ -144,18 +148,11 @@ public class LearnerPortalService {
             }
         }
 
-        // Each progress calculation is independent and performs its own
-        // learner-scoped reads. Run them concurrently so several enrolled
-        // certifications do not turn one portal request into a serial chain
-        // of database round trips. The list order remains enrollment order.
-        List<CompletableFuture<CertificationProgressDto>> progressFutures =
-                enrolledCertificationIds.stream()
-                        .map(certificationId -> CompletableFuture.supplyAsync(
-                                () -> progressAnalyticsService.progressFor(learnerId, certificationId)))
-                        .toList();
-        List<CertificationProgressDto> certificationProgress = progressFutures.stream()
-                .map(CompletableFuture::join)
-                .toList();
+        List<CertificationProgressDto> certificationProgress = includeProgress
+                ? enrolledCertificationIds.stream()
+                        .map(certificationId -> progressAnalyticsService.progressFor(learnerId, certificationId))
+                        .toList()
+                : List.of();
 
         LearnerPortalDto result = new LearnerPortalDto(
                 learnerRepository.findById(learnerId).map(learnerMapper::toDto).orElse(null),
