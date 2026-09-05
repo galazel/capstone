@@ -353,13 +353,23 @@ export default function LearnerLayout() {
         >
           {query.isError && !query.data ? (
             <LearnerErrorState error={query.error} onRetry={query.refetch} />
+          ) : !query.data ? (
+            <RouteSkeleton />
           ) : (
             /* Inside the shell, not around it. The nav, the status strip and
                the mobile bar stay painted while the next page's chunk loads --
                only the content region waits. */
-            <Suspense fallback={<RouteSkeleton />}>
-              <Outlet context={outletContext} />
-            </Suspense>
+            <>
+              {query.isFetching ? (
+                <div className="mb-4 flex items-center gap-2 rounded-rb-card border border-border bg-card/80 px-4 py-2 text-xs text-muted-foreground">
+                  <span className="size-2 animate-pulse rounded-full bg-rb-macaw-lip" />
+                  Updating your learner data...
+                </div>
+              ) : null}
+              <Suspense fallback={<RouteSkeleton />}>
+                <Outlet context={outletContext} />
+              </Suspense>
+            </>
           )}
         </main>
       {!isTopicPage ? <LearnerMobileNavigation /> : null}
