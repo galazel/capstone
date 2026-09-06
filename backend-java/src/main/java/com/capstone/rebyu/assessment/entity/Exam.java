@@ -17,7 +17,11 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "exams")
+@Table(
+        name = "exams",
+        /* Assessment lists and the diagnostic gate both filter exams by
+           certification. */
+        indexes = @Index(name = "ix_exam_certification", columnList = "certification_id"))
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

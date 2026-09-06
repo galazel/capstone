@@ -29,6 +29,51 @@ public interface ExamRepository extends JpaRepository<Exam, Long> {
             Long certificationId, String examTypeText);
 
     /**
+     * Whether this certification has a PUBLISHED, official diagnostic.
+     *
+     * <p>The gate that asks this used to read every exam on the platform back
+     * as entities and filter them in Java, on every assessment page load and
+     * every attempt start. The predicate is three columns wide and belongs in
+     * SQL: {@code ownerGroup IS NULL} is what "official" means (a group's own
+     * assessment must never gate learners outside -- or inside -- that group),
+     * and a null status is DRAFT, matching {@code Exam.effectiveStatus()}.
+     */
+    @Query("""
+            SELECT COUNT(e) > 0 FROM Exam e
+            WHERE e.certification.certificationId = :certificationId
+              AND e.ownerGroup IS NULL
+              AND e.examType.examTypeText = :examTypeText
+              AND e.status = :status
+            """)
+    boolean existsOfficialPublishedByType(
+            @Param("certificationId") Long certificationId,
+            @Param("examTypeText") String examTypeText,
+            @Param("status") Exam.Status status);
+
+    /**
+     * Whether this learner has a submitted attempt of an official exam of the
+     * given type in this certification.
+     *
+     * <p>Answers the diagnostic gate's "has this learner actually sat it?" in
+     * one round trip. Read as entities, the same question cost one query for
+     * the attempt list and then one more per attempt to resolve the lazy exam
+     * behind it just to read its type.
+     */
+    @Query("""
+            SELECT COUNT(a) > 0 FROM AssessmentAttempt a
+            WHERE a.learnerId = :learnerId
+              AND a.exam.certification.certificationId = :certificationId
+              AND a.status = :attemptStatus
+              AND a.exam.ownerGroup IS NULL
+              AND a.exam.examType.examTypeText = :examTypeText
+            """)
+    boolean existsSubmittedAttemptOfOfficialType(
+            @Param("learnerId") Long learnerId,
+            @Param("certificationId") Long certificationId,
+            @Param("examTypeText") String examTypeText,
+            @Param("attemptStatus") com.capstone.rebyu.assessment.entity.AssessmentAttempt.Status attemptStatus);
+
+    /**
      * When this learner was last served an exam of a given type -- the pop-up
      * knowledge check's cooldown reads this so a learner cannot be interrupted
      * twice in the same sitting. The minted exam is itself the record that a

@@ -13,7 +13,16 @@ import java.math.BigDecimal;
  * never contains answer keys, rubrics, or reference diagram data.
  */
 @Entity
-@Table(name = "assessment_attempt_questions")
+@Table(
+        name = "assessment_attempt_questions",
+        /* Postgres does not index a foreign key column just because it is one,
+           and `ddl-auto: update` only creates what is declared here. Every read
+           of a paper -- start, resume, submit, result, analytics -- filters on
+           assessment_attempt_id, so without this each of them is a sequential
+           scan of every attempt question ever recorded. */
+        indexes = @Index(
+                name = "ix_attempt_question_attempt",
+                columnList = "assessment_attempt_id"))
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

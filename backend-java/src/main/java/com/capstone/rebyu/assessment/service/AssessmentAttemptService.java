@@ -20,6 +20,7 @@ import com.capstone.rebyu.progress.service.AchievementAwardService;
 import com.capstone.rebyu.certification.entity.Lesson;
 import com.capstone.rebyu.certification.repository.LessonRepository;
 import com.capstone.rebyu.common.BusinessRuleException;
+import com.capstone.rebyu.common.PhaseTimer;
 import com.capstone.rebyu.enrollment.entity.LearnerCertification;
 import com.capstone.rebyu.enrollment.entity.OrganizationCertificationLearner;
 import com.capstone.rebyu.enrollment.repository.LearnerCertificationRepository;
@@ -226,6 +227,8 @@ public class AssessmentAttemptService {
             }
         }
 
+        PhaseTimer timer = PhaseTimer.start("startAttempt exam=" + examId, log);
+
         Exam exam = examRepository.findById(examId)
                 .orElseThrow(() -> new EntityNotFoundException("Assessment not found: " + examId));
         if (exam.effectiveStatus() != Exam.Status.PUBLISHED) {
@@ -242,6 +245,7 @@ public class AssessmentAttemptService {
         }
 
         String lockReason = resolveLockReason(exam, learnerId);
+        PhaseTimer.mark(timer, "access gate");
         if (lockReason != null) {
             throw new BusinessRuleException.AssessmentLockedException(lockReason);
         }
@@ -308,6 +312,7 @@ public class AssessmentAttemptService {
                     adaptiveRetakeQuestionSelectionService.select(exam, learnerId, examQuestions);
             questionsToUse = selection.questions();
             retakeBasisJson = selection.retakeBasisJson();
+            PhaseTimer.mark(timer, "select new questions");
         } else {
             /* Fetched in one query with choices and the type configs, rather
                than by dereferencing each ExamQuestion's lazy question. Question
@@ -323,6 +328,7 @@ public class AssessmentAttemptService {
                     .map(baselineById::get)
                     .filter(Objects::nonNull)
                     .toList();
+            PhaseTimer.mark(timer, "load questions");
         }
 
         LocalDateTime now = LocalDateTime.now();
@@ -342,6 +348,20 @@ public class AssessmentAttemptService {
                 .retakeBasis(retakeBasisJson)
                 .build();
         attempt = attemptRepository.save(attempt);
+        PhaseTimer.mark(timer, "create attempt");
+
+        /* Everything the per-question snapshot needs that is not already on the
+           question entity, for the WHOLE paper, in two queries.
+
+           buildLearnerSafeSnapshot used to ask the database four times per
+           question -- programming config, diagram config, sub-questions,
+           rubric criteria -- so a 64-item paper spent 256 round trips building
+           its snapshots. Against this database (~50ms away) that alone was
+           most of the time a learner waited for an assessment to open. The two
+           configs are already on the entity: findForAttemptByIdIn fetches them
+           in its entity graph, so reading them costs nothing. The other two
+           are batched here and looked up in memory. */
+        SnapshotContext snapshotContext = buildSnapshotContext(questionsToUse);
 
         int order = 1;
         for (Question question : questionsToUse) {
@@ -357,12 +377,14 @@ public class AssessmentAttemptService {
                     .sourceQuestionId(question.getQuestionId())
                     .questionType(normalizeQuestionType(question.getQuestionType()))
                     .questionTextSnapshot(question.getQuestionText())
-                    .questionDataSnapshot(buildLearnerSafeSnapshot(question))
+                    .questionDataSnapshot(buildLearnerSafeSnapshot(question, snapshotContext))
                     .displayOrder(order++)
                     .points(points)
                     .lessonId(question.getLesson().getLessonId())
                     .build());
         }
+
+        PhaseTimer.mark(timer, "snapshot questions");
 
         if (nextAttemptNumber > 1) {
             // Lightweight RabbitMQ trigger (ids only) alongside the
@@ -373,7 +395,10 @@ public class AssessmentAttemptService {
 
         log.info("Started attempt {} (#{}) of exam {} for learner {}",
                 attempt.getAssessmentAttemptId(), nextAttemptNumber, examId, learnerId);
-        return buildStartResponse(attempt, false);
+        AssessmentAttemptStartResponseDto response = buildStartResponse(attempt, false);
+        PhaseTimer.mark(timer, "build response");
+        PhaseTimer.finish(timer);
+        return response;
     }
 
     // ------------------------------------------------------------------
@@ -468,6 +493,8 @@ public class AssessmentAttemptService {
             upsertAnswers(attempt, request.answers());
         }
 
+        PhaseTimer timer = PhaseTimer.start("submitAttempt attempt=" + attemptId, log);
+
         List<AssessmentAttemptQuestion> questions = attemptQuestionRepository
                 .findByAttempt_AssessmentAttemptIdOrderByDisplayOrderAsc(attemptId);
         Map<Long, AssessmentAttemptAnswer> answersByQuestion = new HashMap<>();
@@ -499,11 +526,26 @@ public class AssessmentAttemptService {
                 .stream()
                 .collect(Collectors.toMap(Question::getQuestionId, q -> q, (a, b) -> a));
 
+        /* The parts of every question on this paper that has parts, in one
+           query. Three graders need them -- fill-in-the-blank, the analytical
+           critical-thinking request, and the critical-thinking mark itself --
+           and each used to ask per question, so a paper of blanks paid three
+           round trips apiece to grade items it had already loaded. */
+        Map<Long, List<Question>> subQuestionsByParentId = sourceQuestions.isEmpty()
+                ? Map.of()
+                : questionRepository.findSubQuestionsByParentIdIn(sourceQuestions.keySet()).stream()
+                        .collect(Collectors.groupingBy(
+                                sub -> sub.getParentQuestion().getQuestionId(),
+                                LinkedHashMap::new, Collectors.toList()));
+
         /* Every expensive grader for this paper, run per family and
            concurrently within each, before a single answer is scored. The loop
            below then reads the results instead of making the calls itself. */
-        GradingBatch gradingBatch =
-                prepareGradingBatch(questions, answersByQuestion, sourceQuestions);
+        PhaseTimer.mark(timer, "load paper");
+
+        GradingBatch gradingBatch = prepareGradingBatch(
+                questions, answersByQuestion, sourceQuestions, subQuestionsByParentId);
+        PhaseTimer.mark(timer, "graders (ai/code/diagram)");
 
         BigDecimal totalPoints = BigDecimal.ZERO;
         BigDecimal earnedPoints = BigDecimal.ZERO;
@@ -519,7 +561,8 @@ public class AssessmentAttemptService {
             if (answer == null) {
                 continue;
             }
-            scoreAnswer(attemptQuestion, answer, points, gradingBatch, sourceQuestions);
+            scoreAnswer(attemptQuestion, answer, points, gradingBatch,
+                    sourceQuestions, subQuestionsByParentId);
             attemptAnswerRepository.save(answer);
             // Partial credit (AI-graded descriptive/critical-thinking, future
             // diagram grading) sets earnedPoints without isCorrect=TRUE, so
@@ -547,6 +590,7 @@ public class AssessmentAttemptService {
         attempt.setDurationSeconds((int) Duration
                 .between(attempt.getStartedAt(), now).getSeconds());
         attemptRepository.save(attempt);
+        PhaseTimer.mark(timer, "score + persist");
 
         awardAssessmentXp(attempt);
         streakService.recordActivity(attempt.getLearnerId());
@@ -567,9 +611,14 @@ public class AssessmentAttemptService {
         // flow above -- Phase 6 wires the consumer.
         assessmentEventProducer.publishAssessmentSubmitted(attemptId);
 
+        PhaseTimer.mark(timer, "rewards + progress");
+
         log.info("Attempt {} submitted: {}% ({} / {} points)",
                 attemptId, percentage, earnedPoints, totalPoints);
-        return getResult(attemptId, request.learnerId());
+        AssessmentAttemptResultDto result = getResult(attemptId, request.learnerId());
+        PhaseTimer.mark(timer, "build result");
+        PhaseTimer.finish(timer);
+        return result;
     }
 
     /**
@@ -615,6 +664,7 @@ public class AssessmentAttemptService {
 
     @Transactional(readOnly = true)
     public AssessmentAttemptResultDto getResult(Long attemptId, Long learnerId) {
+        PhaseTimer timer = PhaseTimer.start("getResult attempt=" + attemptId, log);
         AssessmentAttempt attempt = requireOwnedAttempt(attemptId, learnerId);
         if (attempt.getStatus() == AssessmentAttempt.Status.IN_PROGRESS) {
             throw new BusinessRuleException.InvalidAssessmentSubmissionException(
@@ -633,6 +683,38 @@ public class AssessmentAttemptService {
             answersByQuestion.put(answer.getAttemptQuestion().getAttemptQuestionId(), answer);
         }
 
+        /* Every source question this review reads, in one query.
+
+           This loop used to call questionRepository.findById() per item. A
+           Question drags three EAGER inverse-side one-to-one configs behind it
+           that Hibernate cannot proxy, so that is four round trips per
+           question before the MCQ choices collection adds a fifth -- and the
+           sub-question and text-config lookups below each added another. A
+           64-item paper spent over four hundred round trips, ~50ms apiece,
+           building one result page. Submit pays it too: it ends by calling
+           this method.
+
+           findForAttemptByIdIn is the loader startAttempt and submitAttempt
+           already use for exactly this, entity graph and all. */
+        List<Long> sourceQuestionIds = questions.stream()
+                .map(AssessmentAttemptQuestion::getSourceQuestionId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<Long, Question> sourceQuestions = sourceQuestionIds.isEmpty()
+                ? Map.of()
+                : questionRepository.findForAttemptByIdIn(sourceQuestionIds).stream()
+                        .collect(Collectors.toMap(Question::getQuestionId, q -> q, (a, b) -> a));
+        // The parts of every question that has parts, in one more query.
+        Map<Long, List<Question>> subQuestionsByParentId = sourceQuestionIds.isEmpty()
+                ? Map.of()
+                : questionRepository.findSubQuestionsByParentIdIn(sourceQuestionIds).stream()
+                        .collect(Collectors.groupingBy(
+                                sub -> sub.getParentQuestion().getQuestionId(),
+                                LinkedHashMap::new, Collectors.toList()));
+
+        PhaseTimer.mark(timer, "load questions + answers");
+
         List<AttemptAnswerReviewDto> reviews = new ArrayList<>();
         int correct = 0;
         int incorrect = 0;
@@ -647,8 +729,7 @@ public class AssessmentAttemptService {
         for (AssessmentAttemptQuestion attemptQuestion : questions) {
             AssessmentAttemptAnswer answer =
                     answersByQuestion.get(attemptQuestion.getAttemptQuestionId());
-            Question source = questionRepository
-                    .findById(attemptQuestion.getSourceQuestionId()).orElse(null);
+            Question source = sourceQuestions.get(attemptQuestion.getSourceQuestionId());
 
             Long lessonId = attemptQuestion.getLessonId();
             if (lessonId != null) {
@@ -695,8 +776,9 @@ public class AssessmentAttemptService {
                  * "what should I have written?" with six near-identical
                  * strings reads as six different answers.
                  */
-                correctChoiceText = textQuestionConfigRepository
-                        .findByQuestion_QuestionId(source.getQuestionId())
+                // Read off the entity rather than re-queried: findForAttemptByIdIn
+                // fetches textQuestionConfig in its graph, so this is already here.
+                correctChoiceText = Optional.ofNullable(source.getTextQuestionConfig())
                         .map(TextQuestionConfig::getCorrectAnswer)
                         .filter(text -> text != null && !text.isBlank())
                         .orElse(null);
@@ -730,10 +812,18 @@ public class AssessmentAttemptService {
                     answer == null ? null : answer.getProgrammingLanguage(),
                     answer != null && answer.getDiagramSubmissionData() != null,
                     answer == null ? null : answer.getFeedback(),
-                    buildSubQuestionAnswerReviews(source, answer),
+                    buildSubQuestionAnswerReviews(source, answer, subQuestionsByParentId),
                     buildDiagramElementReviews(answer, releaseAnswers)
             ));
         }
+
+        // Lesson names in one query. findById per lesson was cheap only because
+        // the persistence context deduped repeats -- it was still one round
+        // trip per distinct lesson on the paper.
+        Map<Long, String> lessonNames = lessonPossible.isEmpty()
+                ? Map.of()
+                : lessonRepository.findAllById(lessonPossible.keySet()).stream()
+                        .collect(Collectors.toMap(Lesson::getLessonId, Lesson::getName, (a, b) -> a));
 
         List<LessonPerformanceDto> lessonBreakdown = new ArrayList<>();
         for (Map.Entry<Long, BigDecimal> entry : lessonPossible.entrySet()) {
@@ -743,12 +833,14 @@ public class AssessmentAttemptService {
             BigDecimal lessonPercentage = possible.signum() > 0
                     ? earned.multiply(BigDecimal.valueOf(100)).divide(possible, 2, RoundingMode.HALF_UP)
                     : BigDecimal.ZERO;
-            String title = lessonRepository.findById(lessonId)
-                    .map(Lesson::getName).orElse("Lesson " + lessonId);
+            String title = lessonNames.getOrDefault(lessonId, "Lesson " + lessonId);
             lessonBreakdown.add(new LessonPerformanceDto(
                     lessonId, title, possible, earned, lessonPercentage,
                     lessonPending.getOrDefault(lessonId, 0)));
         }
+
+        PhaseTimer.mark(timer, "build review");
+        PhaseTimer.finish(timer);
 
         Exam exam = attempt.getExam();
         return new AssessmentAttemptResultDto(
@@ -936,27 +1028,24 @@ public class AssessmentAttemptService {
         if (enrollment != null && enrollment.getDiagnosticCompletedAt() != null) {
             return true;
         }
-        return attemptRepository
-                .findByLearnerIdAndExam_Certification_CertificationIdAndStatus(
-                        learnerId, certificationId, AssessmentAttempt.Status.SUBMITTED)
-                .stream()
-                .anyMatch(attempt -> attempt.getExam() != null
-                        // Same scope as the gate itself: only the official
-                        // diagnostic counts, never a group's own copy.
-                        && attempt.getExam().getOwnerGroup() == null
-                        && attempt.getExam().getExamType() != null
-                        && TYPE_DIAGNOSTIC.equals(attempt.getExam().getExamType().getExamTypeText()));
+        // Same scope as the gate itself: only the official diagnostic counts,
+        // never a group's own copy. Asked as one COUNT rather than by reading
+        // every submitted attempt back and resolving each one's lazy exam to
+        // look at its type -- that was a round trip per attempt, on a gate that
+        // runs before every assessment page and every attempt start.
+        return examRepository.existsSubmittedAttemptOfOfficialType(
+                learnerId, certificationId, TYPE_DIAGNOSTIC, AssessmentAttempt.Status.SUBMITTED);
     }
 
+    /**
+     * Only the OFFICIAL diagnostic gates the curriculum. A group's own
+     * assessment is its own content and must never gate learners outside (or
+     * inside) that group -- which is the {@code ownerGroup IS NULL} in the
+     * query this delegates to.
+     */
     private boolean publishedDiagnosticExists(Long certificationId) {
-        return examRepository.findAll().stream()
-                // Only the OFFICIAL diagnostic gates the curriculum. A group's
-                // own assessment is its own content and must never gate
-                // learners outside (or inside) that group.
-                .filter(exam -> exam.getOwnerGroup() == null)
-                .anyMatch(exam -> exam.getCertification().getCertificationId().equals(certificationId)
-                        && TYPE_DIAGNOSTIC.equals(exam.getExamType().getExamTypeText())
-                        && exam.effectiveStatus() == Exam.Status.PUBLISHED);
+        return examRepository.existsOfficialPublishedByType(
+                certificationId, TYPE_DIAGNOSTIC, Exam.Status.PUBLISHED);
     }
 
     private Long findEnrollmentId(Exam exam, Long learnerId) {
@@ -1113,7 +1202,8 @@ public class AssessmentAttemptService {
             AssessmentAttemptAnswer answer,
             BigDecimal points,
             GradingBatch batch,
-            Map<Long, Question> sourceQuestions) {
+            Map<Long, Question> sourceQuestions,
+            Map<Long, List<Question>> subQuestionsByParentId) {
 
         String type = attemptQuestion.getQuestionType();
         Question source = sourceQuestions.get(attemptQuestion.getSourceQuestionId());
@@ -1131,7 +1221,7 @@ public class AssessmentAttemptService {
         }
 
         if ("SHORT_ANSWER".equals(type) && source != null
-                && gradeFillInTheBlank(source, answer, points)) {
+                && gradeFillInTheBlank(source, answer, points, subQuestionsByParentId)) {
             return;
         }
 
@@ -1179,7 +1269,8 @@ public class AssessmentAttemptService {
             String criticalThinkingType = resolveCriticalThinkingType(source);
 
             if (criticalThinkingType == null
-                    && gradeCriticalThinkingAnswer(attemptQuestion, source, answer, points, batch)) {
+                    && gradeCriticalThinkingAnswer(
+                            attemptQuestion, source, answer, points, batch, subQuestionsByParentId)) {
                 return;
             }
 
@@ -1277,7 +1368,8 @@ public class AssessmentAttemptService {
     private GradingBatch prepareGradingBatch(
             List<AssessmentAttemptQuestion> questions,
             Map<Long, AssessmentAttemptAnswer> answersByQuestion,
-            Map<Long, Question> sourceQuestions) {
+            Map<Long, Question> sourceQuestions,
+            Map<Long, List<Question>> subQuestionsByParentId) {
 
         AttemptGradingBatchService.Workload workload = new AttemptGradingBatchService.Workload();
 
@@ -1309,7 +1401,8 @@ public class AssessmentAttemptService {
 
                 if (criticalThinkingType == null) {
                     AnswerGradingRequestDto request =
-                            criticalThinkingGradingRequest(attemptQuestion, source, answer, points);
+                            criticalThinkingGradingRequest(
+                                    attemptQuestion, source, answer, points, subQuestionsByParentId);
                     if (request != null) {
                         workload.ai(key, () -> gradeWithRetry(request));
                     }
@@ -1709,9 +1802,10 @@ public class AssessmentAttemptService {
      * three quarters, not zero.
      */
     private boolean gradeFillInTheBlank(
-            Question source, AssessmentAttemptAnswer answer, BigDecimal points) {
-        List<Question> blanks = questionRepository
-                .findByParentQuestion_QuestionIdOrderByQuestionIdAsc(source.getQuestionId());
+            Question source, AssessmentAttemptAnswer answer, BigDecimal points,
+            Map<Long, List<Question>> subQuestionsByParentId) {
+        List<Question> blanks = subQuestionsByParentId
+                .getOrDefault(source.getQuestionId(), List.of());
         if (blanks.isEmpty()) {
             return false;
         }
@@ -1775,9 +1869,10 @@ public class AssessmentAttemptService {
             AssessmentAttemptQuestion attemptQuestion,
             Question source,
             AssessmentAttemptAnswer answer,
-            BigDecimal points) {
-        List<Question> subQuestions = questionRepository
-                .findByParentQuestion_QuestionIdOrderByQuestionIdAsc(source.getQuestionId());
+            BigDecimal points,
+            Map<Long, List<Question>> subQuestionsByParentId) {
+        List<Question> subQuestions = subQuestionsByParentId
+                .getOrDefault(source.getQuestionId(), List.of());
         if (subQuestions.isEmpty()) {
             return null;
         }
@@ -1804,9 +1899,10 @@ public class AssessmentAttemptService {
             Question source,
             AssessmentAttemptAnswer answer,
             BigDecimal points,
-            GradingBatch batch) {
-        List<Question> subQuestions = questionRepository
-                .findByParentQuestion_QuestionIdOrderByQuestionIdAsc(source.getQuestionId());
+            GradingBatch batch,
+            Map<Long, List<Question>> subQuestionsByParentId) {
+        List<Question> subQuestions = subQuestionsByParentId
+                .getOrDefault(source.getQuestionId(), List.of());
         if (subQuestions.isEmpty()) {
             return false;
         }
@@ -1969,7 +2065,8 @@ public class AssessmentAttemptService {
      * read — grading never re-runs here.
      */
     private List<SubQuestionAnswerReviewDto> buildSubQuestionAnswerReviews(
-            Question source, AssessmentAttemptAnswer answer) {
+            Question source, AssessmentAttemptAnswer answer,
+            Map<Long, List<Question>> subQuestionsByParentId) {
         // Any parent with parts, not just workspace ones.
         //
         // Gated on isWorkspaceType, a fill-in-the-blank came back with an
@@ -1977,13 +2074,13 @@ public class AssessmentAttemptService {
         // blanks at all -- not what they typed, not what was right, on the
         // screen whose whole purpose is to tell them.
         //
-        // A question with no parts still returns an empty list, and the one
-        // extra query only happens for a question that has some.
+        // A question with no parts still returns an empty list. The parts of the
+        // whole paper arrive in one query from getResult; this only reads them.
         if (source == null) {
             return List.of();
         }
-        List<Question> subQuestions = questionRepository
-                .findByParentQuestion_QuestionIdOrderByQuestionIdAsc(source.getQuestionId());
+        List<Question> subQuestions = subQuestionsByParentId
+                .getOrDefault(source.getQuestionId(), List.of());
         if (subQuestions.isEmpty()) {
             return List.of();
         }
@@ -2123,11 +2220,65 @@ public class AssessmentAttemptService {
     }
 
     /**
+     * The parts of a paper's snapshots that do not live on the question rows,
+     * gathered for every question at once.
+     *
+     * <p>Two queries, whatever the paper's size. See its use in
+     * {@link #startAttempt} for why the per-question form it replaces was the
+     * dominant cost of opening an assessment.
+     */
+    private record SnapshotContext(
+            Map<Long, List<Question>> subQuestionsByParentId,
+            Map<Long, List<QuestionRubricCriterion>> rubricByQuestionId) {
+
+        static SnapshotContext empty() {
+            return new SnapshotContext(Map.of(), Map.of());
+        }
+
+        List<Question> subQuestionsOf(Long questionId) {
+            return subQuestionsByParentId.getOrDefault(questionId, List.of());
+        }
+
+        List<QuestionRubricCriterion> rubricOf(Long questionId) {
+            return rubricByQuestionId.getOrDefault(questionId, List.of());
+        }
+    }
+
+    private SnapshotContext buildSnapshotContext(List<Question> questions) {
+        List<Long> questionIds = questions.stream()
+                .map(Question::getQuestionId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (questionIds.isEmpty()) {
+            return SnapshotContext.empty();
+        }
+        Map<Long, List<Question>> subQuestions = questionRepository
+                .findSubQuestionsByParentIdIn(questionIds).stream()
+                .collect(Collectors.groupingBy(
+                        sub -> sub.getParentQuestion().getQuestionId(),
+                        LinkedHashMap::new, Collectors.toList()));
+        Map<Long, List<QuestionRubricCriterion>> rubric = rubricCriterionRepository
+                .findByQuestion_QuestionIdInOrderByQuestion_QuestionIdAscDisplayOrderAsc(questionIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        criterion -> criterion.getQuestion().getQuestionId(),
+                        LinkedHashMap::new, Collectors.toList()));
+        return new SnapshotContext(subQuestions, rubric);
+    }
+
+    /**
      * Builds the learner-safe snapshot JSON for one question: choices without
      * correct flags/explanations, starter code, diagram type + instructions,
      * and sub-question prompts. Answer keys never enter the snapshot.
+     *
+     * <p>Reads only what it was handed: the question entity (loaded with its
+     * choices and its three type configs by
+     * {@link QuestionRepository#findForAttemptByIdIn}) and the batched
+     * {@link SnapshotContext}. It issues no query of its own -- see
+     * {@link #buildSnapshotContext}.
      */
-    private String buildLearnerSafeSnapshot(Question question) {
+    private String buildLearnerSafeSnapshot(Question question, SnapshotContext context) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("questionImageKey", question.getImageKey());
 
@@ -2144,37 +2295,34 @@ public class AssessmentAttemptService {
         }
 
         if (isWorkspaceType(question.getQuestionType())) {
-            programmingQuestionConfigRepository
-                    .findByQuestion_QuestionId(question.getQuestionId())
-                    .ifPresent(config -> {
-                        data.put("criticalThinkingType", "PROGRAMMING");
-                        data.put("starterCode", config.getStarterCode());
-                        // Learner-safe test metadata: sample inputs may show;
-                        // hidden cases are label-only, never expected output.
-                        List<Map<String, Object>> tests = new ArrayList<>();
-                        int index = 1;
-                        int sampleNo = 1;
-                        int hiddenNo = 1;
-                        for (ProgrammingTestCase testCase : config.getTestCases()) {
-                            Map<String, Object> safe = new LinkedHashMap<>();
-                            boolean sample = testCase.isSample();
-                            safe.put("index", index++);
-                            safe.put("sample", sample);
-                            safe.put("label", sample ? "Sample " + (sampleNo++) : "Hidden " + (hiddenNo++));
-                            safe.put("input", sample ? testCase.getInputData() : null);
-                            tests.add(safe);
-                        }
-                        data.put("testCases", tests);
-                    });
-            diagramQuestionConfigRepository
-                    .findByQuestion_QuestionId(question.getQuestionId())
-                    .ifPresent(config -> {
-                        data.put("criticalThinkingType", "DIAGRAM");
-                        data.put("diagramType", config.getDiagramType());
-                        data.put("instructions", config.getInstructions());
-                        // reference diagram XML/JSON is the answer key — excluded
-                    });
-
+            ProgrammingQuestionConfig programmingConfig = question.getProgrammingQuestionConfig();
+            if (programmingConfig != null) {
+                data.put("criticalThinkingType", "PROGRAMMING");
+                data.put("starterCode", programmingConfig.getStarterCode());
+                // Learner-safe test metadata: sample inputs may show;
+                // hidden cases are label-only, never expected output.
+                List<Map<String, Object>> tests = new ArrayList<>();
+                int index = 1;
+                int sampleNo = 1;
+                int hiddenNo = 1;
+                for (ProgrammingTestCase testCase : programmingConfig.getTestCases()) {
+                    Map<String, Object> safe = new LinkedHashMap<>();
+                    boolean sample = testCase.isSample();
+                    safe.put("index", index++);
+                    safe.put("sample", sample);
+                    safe.put("label", sample ? "Sample " + (sampleNo++) : "Hidden " + (hiddenNo++));
+                    safe.put("input", sample ? testCase.getInputData() : null);
+                    tests.add(safe);
+                }
+                data.put("testCases", tests);
+            }
+            DiagramQuestionConfig diagramConfig = question.getDiagramQuestionConfig();
+            if (diagramConfig != null) {
+                data.put("criticalThinkingType", "DIAGRAM");
+                data.put("diagramType", diagramConfig.getDiagramType());
+                data.put("instructions", diagramConfig.getInstructions());
+                // reference diagram XML/JSON is the answer key -- excluded
+            }
         }
 
         // Snapshotted for ANY question that has parts, not just workspace ones.
@@ -2187,8 +2335,7 @@ public class AssessmentAttemptService {
         //
         // A question with no parts still gets an empty list, exactly as before.
         List<Map<String, Object>> subQuestions = new ArrayList<>();
-        for (Question sub : questionRepository
-                .findByParentQuestion_QuestionIdOrderByQuestionIdAsc(question.getQuestionId())) {
+        for (Question sub : context.subQuestionsOf(question.getQuestionId())) {
             Map<String, Object> safe = new LinkedHashMap<>();
             safe.put("subQuestionId", sub.getQuestionId());
             safe.put("questionText", sub.getQuestionText());
@@ -2198,8 +2345,7 @@ public class AssessmentAttemptService {
 
         // Backend-driven rubric (diagram/descriptive): learner-safe name + max
         // points only. Awarded points are never snapshotted.
-        List<QuestionRubricCriterion> criteria = rubricCriterionRepository
-                .findByQuestion_QuestionIdOrderByDisplayOrderAsc(question.getQuestionId());
+        List<QuestionRubricCriterion> criteria = context.rubricOf(question.getQuestionId());
         if (!criteria.isEmpty()) {
             List<Map<String, Object>> rubric = new ArrayList<>();
             for (QuestionRubricCriterion criterion : criteria) {

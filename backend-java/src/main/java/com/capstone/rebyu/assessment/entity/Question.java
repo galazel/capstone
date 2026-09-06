@@ -18,7 +18,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "questions")
+@Table(
+        name = "questions",
+        /* lesson_id backs every scope resolution (a certification's candidate
+           pool is resolved through it); parent_question_id backs the
+           sub-question lookups the snapshot and the result review both make. */
+        indexes = {
+                @Index(name = "ix_question_lesson", columnList = "lesson_id"),
+                @Index(name = "ix_question_parent", columnList = "parent_question_id")
+        })
 @Getter
 @Setter
 @NoArgsConstructor

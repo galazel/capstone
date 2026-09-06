@@ -7,7 +7,11 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "choices")
+@Table(
+        name = "choices",
+        /* Loaded once per paper as `question_id IN (...)`; unindexed that is a
+           full scan of the choice table for every assessment opened. */
+        indexes = @Index(name = "ix_choice_question", columnList = "question_id"))
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

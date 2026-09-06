@@ -21,6 +21,23 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     // ordered list rather than in arbitrary fetch order.
     List<Question> findByParentQuestion_QuestionIdOrderByQuestionIdAsc(Long questionId);
 
+    /**
+     * The sub-questions of MANY parents, in one query.
+     *
+     * <p>The per-parent method above is right for one question and ruinous for
+     * a paper: both the start snapshot and the result review walk every item
+     * asking for its parts, which is one round trip per question against a
+     * database that is ~50ms away, for the ~10% of questions that actually have
+     * parts. Callers holding a whole paper's ids ask once and group the answer
+     * by {@code parentQuestion.questionId}.
+     */
+    @Query("""
+            SELECT q FROM Question q
+            WHERE q.parentQuestion.questionId IN :parentIds
+            ORDER BY q.parentQuestion.questionId ASC, q.questionId ASC
+            """)
+    List<Question> findSubQuestionsByParentIdIn(@Param("parentIds") Collection<Long> parentIds);
+
     // Scope-derived eligibility (top-level questions only; sub-questions ride
     // with their parent). Ordered for stable picker display.
     List<Question> findByParentQuestionIsNullAndLesson_LessonIdOrderByQuestionIdAsc(Long lessonId);

@@ -223,7 +223,11 @@ class AssessmentAttemptServiceTest {
                 .findByAttempt_AssessmentAttemptIdOrderByDisplayOrderAsc(77L))
                 .thenReturn(List.of(snapshot));
         when(attemptQuestionRepository.findById(1L)).thenReturn(Optional.of(snapshot));
-        when(questionRepository.findById(100L)).thenReturn(Optional.of(mcqQuestion));
+        lenient().when(questionRepository.findById(100L)).thenReturn(Optional.of(mcqQuestion));
+        // getResult loads the paper's source questions in ONE batched query now,
+        // not findById per item -- see AssessmentAttemptService.getResult.
+        lenient().when(questionRepository.findForAttemptByIdIn(List.of(100L)))
+                .thenReturn(List.of(mcqQuestion));
 
         List<AssessmentAttemptAnswer> answers = new ArrayList<>();
         when(attemptAnswerRepository
@@ -304,7 +308,11 @@ class AssessmentAttemptServiceTest {
         when(attemptQuestionRepository
                 .findByAttempt_AssessmentAttemptIdOrderByDisplayOrderAsc(82L))
                 .thenReturn(List.of(snapshot));
-        when(questionRepository.findById(100L)).thenReturn(Optional.of(mcqQuestion));
+        lenient().when(questionRepository.findById(100L)).thenReturn(Optional.of(mcqQuestion));
+        // getResult loads the paper's source questions in ONE batched query now,
+        // not findById per item -- see AssessmentAttemptService.getResult.
+        lenient().when(questionRepository.findForAttemptByIdIn(List.of(100L)))
+                .thenReturn(List.of(mcqQuestion));
 
         AssessmentAttemptAnswer answer = AssessmentAttemptAnswer.builder()
                 .attemptAnswerId(900L)
@@ -403,7 +411,11 @@ class AssessmentAttemptServiceTest {
                 .findByAttempt_AssessmentAttemptIdOrderByDisplayOrderAsc(78L))
                 .thenReturn(List.of(snapshot));
         when(attemptQuestionRepository.findById(2L)).thenReturn(Optional.of(snapshot));
-        when(questionRepository.findById(200L)).thenReturn(Optional.of(descriptiveQuestion));
+        lenient().when(questionRepository.findById(200L)).thenReturn(Optional.of(descriptiveQuestion));
+        // getResult loads the paper's source questions in ONE batched query now,
+        // not findById per item -- see AssessmentAttemptService.getResult.
+        lenient().when(questionRepository.findForAttemptByIdIn(List.of(200L)))
+                .thenReturn(List.of(descriptiveQuestion));
 
         List<AssessmentAttemptAnswer> answers = new ArrayList<>();
         when(attemptAnswerRepository
@@ -461,7 +473,11 @@ class AssessmentAttemptServiceTest {
                 .build();
         when(programmingQuestionConfigRepository.findByQuestion_QuestionId(300L))
                 .thenReturn(Optional.of(config));
-        when(questionRepository.findById(300L)).thenReturn(Optional.of(programmingParent));
+        lenient().when(questionRepository.findById(300L)).thenReturn(Optional.of(programmingParent));
+        // getResult loads the paper's source questions in ONE batched query now,
+        // not findById per item -- see AssessmentAttemptService.getResult.
+        lenient().when(questionRepository.findForAttemptByIdIn(List.of(300L)))
+                .thenReturn(List.of(programmingParent));
         // Neither config resolves for the diagram check, so this parent is
         // correctly routed to Judge0 (analytical/diagram detection in
         // resolveCriticalThinkingType only trips on the diagram config).
@@ -566,7 +582,11 @@ class AssessmentAttemptServiceTest {
                 .thenReturn(Optional.of(diagramConfig));
         lenient().when(programmingQuestionConfigRepository.findByQuestion_QuestionId(400L))
                 .thenReturn(Optional.empty());
-        when(questionRepository.findById(400L)).thenReturn(Optional.of(diagramParent));
+        lenient().when(questionRepository.findById(400L)).thenReturn(Optional.of(diagramParent));
+        // getResult loads the paper's source questions in ONE batched query now,
+        // not findById per item -- see AssessmentAttemptService.getResult.
+        lenient().when(questionRepository.findForAttemptByIdIn(List.of(400L)))
+                .thenReturn(List.of(diagramParent));
 
         AssessmentAttempt attempt = AssessmentAttempt.builder()
                 .assessmentAttemptId(81L)
@@ -649,7 +669,11 @@ class AssessmentAttemptServiceTest {
                 .thenReturn(Optional.of(diagramConfig));
         lenient().when(programmingQuestionConfigRepository.findByQuestion_QuestionId(401L))
                 .thenReturn(Optional.empty());
-        when(questionRepository.findById(401L)).thenReturn(Optional.of(diagramParent));
+        lenient().when(questionRepository.findById(401L)).thenReturn(Optional.of(diagramParent));
+        // getResult loads the paper's source questions in ONE batched query now,
+        // not findById per item -- see AssessmentAttemptService.getResult.
+        lenient().when(questionRepository.findForAttemptByIdIn(List.of(401L)))
+                .thenReturn(List.of(diagramParent));
 
         AssessmentAttempt attempt = AssessmentAttempt.builder()
                 .assessmentAttemptId(83L)

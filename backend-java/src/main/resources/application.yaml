@@ -65,6 +65,22 @@ spring:
           batch_size: 25
         order_inserts: true
         order_updates: true
+        # Batched lazy loading, applied to every association in the app.
+        #
+        # This database is a Neon instance in ap-southeast-1: a round trip
+        # costs ~50ms, so what makes a page slow here is the NUMBER of queries,
+        # not the work in any one of them (the biggest table in the assessment
+        # engine is a few thousand rows). Without this, resolving N lazy
+        # proxies of the same type -- the exam behind each attempt in a list,
+        # the choices of each question on a paper -- is N separate round trips.
+        # With it Hibernate collects them and issues one `... WHERE id IN (?)`
+        # per batch instead.
+        #
+        # The hot paths batch explicitly (see AssessmentAttemptService and
+        # QuestionRepository.findForAttemptByIdIn); this is the floor under
+        # everything else, so a lazy dereference somewhere no one profiled
+        # degrades to one extra query rather than to one per row.
+        default_batch_fetch_size: 100
 
 
   websocket:

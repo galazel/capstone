@@ -25,6 +25,14 @@ import java.time.LocalDateTime;
                         name = "uq_attempt_idempotency_key",
                         columnNames = {"idempotency_key"}
                 )
+        },
+        /* uq_attempt_exam_learner_no leads with exam_id, so it cannot serve the
+           learner-first reads: the attempt history list, the diagnostic gate,
+           and every analytics rollup all filter on learner_id alone or on
+           (learner_id, status). */
+        indexes = {
+                @Index(name = "ix_attempt_learner", columnList = "learner_id"),
+                @Index(name = "ix_attempt_learner_status", columnList = "learner_id, status")
         }
 )
 @Data

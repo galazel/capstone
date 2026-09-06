@@ -9,7 +9,11 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 
 @Entity
-@Table(name = "exam_questions")
+@Table(
+        name = "exam_questions",
+        /* The exam's authored question list, read on every start and on every
+           eligibility check. */
+        indexes = @Index(name = "ix_exam_question_exam", columnList = "exam_id"))
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

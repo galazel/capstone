@@ -765,29 +765,48 @@ export default function LearnerAssessmentAttemptPage() {
     // never did -- this route renders outside LearnerLayout, so on a direct
     // load there is otherwise nothing cached to diff against.
     onMutate: () => snapshotRewards(queryClient),
-    onSuccess: async (result, _variables, before) => {
+    onSuccess: (result, _variables, before) => {
       sessionStorage.removeItem(`rebyu-attempt-key-${examId}-${learnerId}`)
-      // Refetches the portal payload -- which credits the header's XP counter,
-      // unlocks lessons behind a diagnostic gate this attempt may have just
-      // satisfied, and reports what the award actually paid. First Quiz /
-      // First Perfect Score / Exam Ready are all decided by this submission
-      // server-side; the modal is hosted at the app root, so those survive the
-      // navigation to the results page below.
-      await announceRewards({
+
+      /* The submit response IS the result. Seeding the result page's query
+         with it means that page renders the moment it mounts instead of
+         opening on a skeleton and asking the server for the review it was
+         just handed -- a second full grade-review round trip, on the slowest
+         endpoint in the engine, for data already in this browser. The key
+         must match learner-assessment-result-page.jsx exactly, and attemptId
+         is a route param there, so it is seeded as a string. */
+      queryClient.setQueryData(
+        ["attempt-result", String(result.assessmentAttemptId), learnerId],
+        result
+      )
+
+      /* Navigate first, then settle the rest.
+       *
+       * These refetches -- the portal payload behind the XP counter and the
+       * diagnostic gate, the analytics board, the streak -- were all awaited
+       * before navigating, so the learner sat on the grading screen through
+       * three more round trips after their score already existed. None of
+       * them feeds the results page: the portal payload belongs to the app
+       * shell and the analytics board to a page they are not on. The XP modal
+       * is hosted at the app root and so survives this navigation, which is
+       * what lets the announcement land after it.
+       */
+      navigate(`/learner/results/${result.assessmentAttemptId}`, {
+        replace: true,
+      })
+
+      announceRewards({
         queryClient,
         before,
         title: "Assessment submitted",
         fallback: "You had already earned the XP for this assessment.",
-      })
+      }).catch(() => {})
       // Refresh the analytics view so mastery/scores reflect this attempt
       // without the learner needing to log out or clear cache.
-      await queryClient.invalidateQueries({
+      queryClient.invalidateQueries({
         queryKey: ["learner-progress-analytics", String(result.certificationId)],
       })
-      await queryClient.invalidateQueries({ queryKey: ["learner-streak"] })
-      navigate(`/learner/results/${result.assessmentAttemptId}`, {
-        replace: true,
-      })
+      queryClient.invalidateQueries({ queryKey: ["learner-streak"] })
     },
     onError: (error) => {
       toast.error(
