@@ -1,6 +1,7 @@
 package com.capstone.rebyu.aigateway.client;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -33,7 +34,7 @@ public class WorkflowClient {
 
     private final WebClient webClient;
 
-    public WorkflowClient(WebClient aiWebClient) {
+    public WorkflowClient(@Qualifier("aiWebClient") WebClient aiWebClient) {
         this.webClient = aiWebClient;
     }
 

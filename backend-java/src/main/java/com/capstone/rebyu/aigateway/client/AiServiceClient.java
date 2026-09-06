@@ -9,6 +9,7 @@ import com.capstone.rebyu.aigateway.dto.ConversationResponseDto;
 import com.capstone.rebyu.aigateway.dto.LessonGenerationDraftResponseDto;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.stereotype.Component;
@@ -41,7 +42,7 @@ public class AiServiceClient {
 
     private final WebClient webClient;
 
-    public AiServiceClient(WebClient aiWebClient) {
+    public AiServiceClient(@Qualifier("aiWebClient") WebClient aiWebClient) {
         this.webClient = aiWebClient;
     }
 

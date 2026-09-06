@@ -6,6 +6,7 @@ import com.capstone.rebyu.bkt.dto.LearnerMasteryView;
 import com.capstone.rebyu.bkt.dto.LessonPriorityView;
 import com.capstone.rebyu.bkt.dto.MasteryHistoryView;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -25,7 +26,7 @@ public class BktClient {
 
     private final WebClient webClient;
 
-    public BktClient(WebClient bktWebClient) {
+    public BktClient(@Qualifier("bktWebClient") WebClient bktWebClient) {
         this.webClient = bktWebClient;
     }
 
