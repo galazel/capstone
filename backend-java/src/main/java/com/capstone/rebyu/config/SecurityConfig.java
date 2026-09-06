@@ -125,6 +125,36 @@ public class SecurityConfig {
                         // learnerId is now JWT-derived at the controller instead of a
                         // client-supplied request param; block anonymous access here too.
                         .requestMatchers("/api/learner/analytics/**").authenticated()
+                        /*
+                         * The REST of /api/learner -- everything that is not
+                         * /analytics -- had no authentication at all.
+                         *
+                         * Only the analytics subtree above was ever listed, so the
+                         * three other controllers mounted on this prefix fell through
+                         * to the permitAll default and were reachable by anyone on the
+                         * internet, with the acting learner named in a query parameter
+                         * or request body:
+                         *
+                         *   LearnerAssessmentController  -- read any learner's
+                         *     assessment, START an attempt as them, write answers into
+                         *     it, SUBMIT it, and read the graded result (answer keys
+                         *     included, where the exam releases them). Its programming
+                         *     /run endpoint also handed anonymous callers a Judge0
+                         *     code-execution backend.
+                         *   LearnerEnrollmentController  -- PURCHASE a certification as
+                         *     any learner and confirm payment on any transaction.
+                         *   LearnerEntitlementController -- read any learner's
+                         *     subscription and entitlement state.
+                         *
+                         * A prefix is a poor place to keep a security boundary when new
+                         * controllers keep arriving under it, so this matches the whole
+                         * subtree rather than each controller's own paths. The
+                         * controllers additionally resolve the learner from the token
+                         * and ignore whatever id the client sent, so authentication
+                         * here and authorization there are independent -- neither alone
+                         * is load-bearing.
+                         */
+                        .requestMatchers("/api/learner/**").authenticated()
                         // Generic scaffolding CRUD for partnership requests/items was
                         // previously fully public and unfiltered -- anyone could read
                         // every organization's contact info across every tenant with
