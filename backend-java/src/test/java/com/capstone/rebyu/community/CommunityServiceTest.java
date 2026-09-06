@@ -174,11 +174,39 @@ class CommunityServiceTest {
 
     // ---- deletePost / reportPost guards ----
 
+    /*
+     * deletePost stopped expressing "not yours" as a zero-row delete and now
+     * loads the post to authorise BEFORE touching it -- the engagement wipe it
+     * delegates to is unconditional, so it must never run for someone else's
+     * post. This test still asserts the guard; it stubs the read the service
+     * actually makes rather than the delete-by-owner it no longer calls.
+     */
     @Test
     void deletePost_notOwner_throws() {
-        when(postRepository.deleteByPostIdAndAuthor_LearnerId(POST_ID, LEARNER_ID)).thenReturn(0L);
+        CommunityPost someoneElsesPost = visiblePost();
+        someoneElsesPost.setAuthor(Learner.builder().learnerId(LEARNER_ID + 1).build());
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(someoneElsesPost));
 
         assertThrows(IllegalArgumentException.class, () -> service.deletePost(LEARNER_ID, POST_ID));
+        // The point of the guard: nothing is deleted.
+        verify(postRepository, never()).deletePostWithEngagement(any());
+    }
+
+    @Test
+    void deletePost_owner_deletesWithEngagement() {
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.of(visiblePost()));
+
+        service.deletePost(LEARNER_ID, POST_ID);
+
+        verify(postRepository).deletePostWithEngagement(POST_ID);
+    }
+
+    @Test
+    void deletePost_missingPost_throws() {
+        when(postRepository.findById(POST_ID)).thenReturn(Optional.empty());
+
+        assertThrows(EntityNotFoundException.class, () -> service.deletePost(LEARNER_ID, POST_ID));
+        verify(postRepository, never()).deletePostWithEngagement(any());
     }
 
     @Test

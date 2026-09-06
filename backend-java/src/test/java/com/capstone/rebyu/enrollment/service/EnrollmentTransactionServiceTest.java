@@ -19,6 +19,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import jakarta.persistence.EntityNotFoundException;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -128,27 +130,24 @@ class EnrollmentTransactionServiceTest {
         verify(enrollmentRepository, never()).save(any());
     }
 
+    /*
+     * The "paid purchase stays pending" half of this test was deleted rather
+     * than repaired: `purchase` cannot produce a pending order any more.
+     * Certification prices are legacy data and access is gated by subscriptions
+     * now, so the method pins `price = BigDecimal.ZERO` and completes a free
+     * enrollment on every call -- which is what
+     * `freeEnrollmentCreatesOneCompletedTransactionAndActiveEnrollment` above
+     * asserts. Keeping the old expectation would have meant asserting a branch
+     * that no longer exists.
+     *
+     * The payment-verification guard is a different matter: `confirmPayment` is
+     * still reachable for orders that ARE pending (the PayMongo checkout flow
+     * creates them), and it must still refuse to enroll anyone on an
+     * unverified reference. That half survives here, given a pending order
+     * directly instead of trying to get `purchase` to make one.
+     */
     @Test
-    void paidPurchaseStaysPendingAndUnverifiedPaymentIsRejected() {
-        when(certificationRepository.findById(1L)).thenReturn(Optional.of(certification));
-        when(learnerRepository.findById(2L)).thenReturn(Optional.of(learner));
-        when(enrollmentRepository
-                .existsByLearner_LearnerIdAndCertification_CertificationIdAndStatus(
-                        anyLong(), anyLong(), any()))
-                .thenReturn(false);
-        when(orderRepository.save(any())).thenAnswer(inv -> {
-            LearnerOrder order = inv.getArgument(0);
-            order.setOrderId(11L);
-            return order;
-        });
-        when(orderDetailRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        PurchaseTransactionDto pending = service.purchase(1L, 2L, null);
-        assertEquals("pending", pending.status());
-        assertTrue(pending.requiresPayment());
-        verify(enrollmentRepository, never()).save(any());
-
-        // Confirming with a bad reference must not enroll.
+    void unverifiedPaymentIsRejectedAndEnrollsNobody() {
         LearnerOrder order = LearnerOrder.builder()
                 .orderId(11L)
                 .orderNumber("ORD-PAID")
@@ -172,6 +171,23 @@ class EnrollmentTransactionServiceTest {
         assertThrows(
                 BusinessRuleException.PaymentVerificationException.class,
                 () -> service.confirmPayment(11L, 2L, "WRONG"));
+        verify(enrollmentRepository, never()).save(any());
+    }
+
+    /** An order belonging to someone else is not confirmable, and is not even acknowledged. */
+    @Test
+    void confirmingAnotherLearnersOrderIsRefused() {
+        LearnerOrder order = LearnerOrder.builder()
+                .orderId(12L)
+                .orderNumber("ORD-OTHER")
+                .learner(learner)          // learnerId 2
+                .orderedAt(LocalDateTime.now())
+                .status(LearnerOrder.Status.pending)
+                .build();
+        when(orderRepository.findById(12L)).thenReturn(Optional.of(order));
+
+        assertThrows(EntityNotFoundException.class,
+                () -> service.confirmPayment(12L, 999L, "ANY"));
         verify(enrollmentRepository, never()).save(any());
     }
 }

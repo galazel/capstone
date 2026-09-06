@@ -52,6 +52,11 @@ class LearnerPortalServiceTest {
 
     @BeforeEach
     void setUp() {
+        // LearnerPortalService caches portals in a STATIC map for 30s, so
+        // without this each test answers from whatever the previous one cached
+        // for the same (learner, user) and the suite passes or fails on order.
+        LearnerPortalService.clearHotCacheForTests();
+
         learnerRepository = mock(LearnerRepository.class);
         userRepository = mock(UserRepository.class);
         learnerCertRepository = mock(LearnerCertificationRepository.class);

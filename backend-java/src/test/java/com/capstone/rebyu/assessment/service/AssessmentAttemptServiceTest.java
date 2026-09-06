@@ -578,7 +578,15 @@ class AssessmentAttemptServiceTest {
                 .referenceDiagramXml(diagramXml("Student", "Course", "enrolls in 1..*"))
                 .referenceDiagramJson("{}")
                 .build();
-        when(diagramQuestionConfigRepository.findByQuestion_QuestionId(400L))
+        // The config has to be ON the entity, not only behind the repository.
+        // resolveCriticalThinkingType reads source.getDiagramQuestionConfig()
+        // to decide this is a DIAGRAM item at all, and in production the entity
+        // arrives carrying it -- findForAttemptByIdIn fetches it in its graph.
+        // Stubbing only the repository left the config invisible to that check,
+        // so the item was never queued for structural grading and came back
+        // unscored with no element breakdown.
+        diagramParent.setDiagramQuestionConfig(diagramConfig);
+        lenient().when(diagramQuestionConfigRepository.findByQuestion_QuestionId(400L))
                 .thenReturn(Optional.of(diagramConfig));
         lenient().when(programmingQuestionConfigRepository.findByQuestion_QuestionId(400L))
                 .thenReturn(Optional.empty());
@@ -665,7 +673,15 @@ class AssessmentAttemptServiceTest {
                 .referenceDiagramXml(diagramXml("Student", "Course", "enrolls in 1..*"))
                 .referenceDiagramJson("{}")
                 .build();
-        when(diagramQuestionConfigRepository.findByQuestion_QuestionId(401L))
+        // The config has to be ON the entity, not only behind the repository.
+        // resolveCriticalThinkingType reads source.getDiagramQuestionConfig()
+        // to decide this is a DIAGRAM item at all, and in production the entity
+        // arrives carrying it -- findForAttemptByIdIn fetches it in its graph.
+        // Stubbing only the repository left the config invisible to that check,
+        // so the item was never queued for structural grading and came back
+        // unscored with no element breakdown.
+        diagramParent.setDiagramQuestionConfig(diagramConfig);
+        lenient().when(diagramQuestionConfigRepository.findByQuestion_QuestionId(401L))
                 .thenReturn(Optional.of(diagramConfig));
         lenient().when(programmingQuestionConfigRepository.findByQuestion_QuestionId(401L))
                 .thenReturn(Optional.empty());

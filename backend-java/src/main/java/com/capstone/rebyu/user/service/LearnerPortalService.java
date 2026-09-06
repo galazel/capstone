@@ -178,4 +178,23 @@ public class LearnerPortalService {
     }
 
     private record CachedPortal(LearnerPortalDto value, long expiresAt) {}
+
+    /**
+     * Empties the hot cache.
+     *
+     * <p>The cache is {@code static}, so it outlives any one instance of this
+     * service -- including between tests in the same JVM, where one test's
+     * portal answers the next one's call for the same (learner, user) and the
+     * second test silently asserts against the first test's data. That is what
+     * it did: the dedup test read back an empty org-certificate list built by
+     * the test above it, and passed or failed on execution order.
+     *
+     * <p>Exposed for that, and only that. Nothing in production should clear
+     * this -- entries expire on their own after
+     * {@value #HOT_CACHE_TTL_MILLIS}ms, and a caller that needs certainly-fresh
+     * data should not be reading a 30-second cache in the first place.
+     */
+    static void clearHotCacheForTests() {
+        HOT_CACHE.clear();
+    }
 }

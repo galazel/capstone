@@ -3,6 +3,7 @@ package com.capstone.rebyu.user.service;
 import com.capstone.rebyu.certification.entity.Certification;
 import com.capstone.rebyu.common.InvitationAcceptanceException;
 import com.capstone.rebyu.enrollment.entity.OrganizationCertificationLearner;
+import com.capstone.rebyu.enrollment.repository.LearnerCertificationRepository;
 import com.capstone.rebyu.enrollment.repository.OrganizationCertificationLearnerRepository;
 import com.capstone.rebyu.institutiongroup.repository.InstitutionGroupAssigneeRepository;
 import com.capstone.rebyu.institutiongroup.repository.InstitutionGroupRepository;
@@ -16,7 +17,6 @@ import com.capstone.rebyu.user.dto.AcceptInvitationResponse;
 import com.capstone.rebyu.user.entity.Learner;
 import com.capstone.rebyu.user.mapper.LearnerMapper;
 import com.capstone.rebyu.user.repository.LearnerRepository;
-import com.capstone.rebyu.user.service.LearnerDeletionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -51,9 +51,11 @@ class LearnerServiceAcceptInvitationTest {
         orgCertRepository = mock(OrganizationCertificateRepository.class);
         service = new LearnerService(
                 learnerRepository, mock(LearnerMapper.class), invitationRepository,
-                enrollmentRepository, orgCertRepository, new InvitationTokenService(),
+                enrollmentRepository, orgCertRepository,
+                mock(LearnerCertificationRepository.class),
+                new InvitationTokenService(),
                 mock(InstitutionGroupAssigneeRepository.class),
-                mock(LearnerDeletionService.class),
+                mock(AccountDeletionService.class),
                 mock(InstitutionGroupRepository.class),
                 mock(NotificationService.class));
     }
