@@ -36,6 +36,7 @@ const LearnerCertificationDetailPage = lazyRoute(() => import("./pages/learner/l
 const LearnerCertificationsPage = lazyRoute(() => import("./pages/learner/learning/learner-certifications-page.jsx"))
 const LearnerChallengesPage = lazyRoute(() => import("./pages/learner/learning/learner-challenges-page.jsx"))
 const LearnerFilesPage = lazyRoute(() => import("./pages/learner/files/learner-files-page.jsx"))
+const LearnerWorkspacePage = lazyRoute(() => import("./pages/learner/workspace/learner-workspace-page.jsx"))
 const LearnerMistakeBankPage = lazyRoute(() => import("./pages/learner/mistakes/learner-mistake-bank-page.jsx"))
 const LearnerCommunityPage = lazyRoute(() => import("./pages/learner/community/learner-community-qa.jsx"))
 const LearnerAccountPage = lazyRoute(() => import("./pages/learner/dashboard/learner-account-page.jsx"))
@@ -204,6 +205,22 @@ export function App() {
                 <Route path="/__preview/attempt/:examId" element={<AttemptPreviewPage />} />
             ) : null}
 
+            {/* Dev-only: the study workspace, outside the login gate so the
+                screen can be reviewed while it is still UI-only. Wrapped in the
+                two classes the learner shell carries -- without `rebyu-ds` the
+                design-system tokens do not resolve and the page reviews in the
+                wrong colours. Stripped from production builds. */}
+            {import.meta.env.DEV ? (
+                <Route
+                    path="/__preview/workspace"
+                    element={
+                        <div className="netacad-portal rebyu-ds min-h-dvh bg-rb-snow">
+                            <LearnerWorkspacePage />
+                        </div>
+                    }
+                />
+            ) : null}
+
             {/* Dev-only: the boot screen, held on screen. It normally shows for
                 a few hundred milliseconds during Suspense, which is not long
                 enough to review it. Stripped from production builds. */}
@@ -319,6 +336,10 @@ export function App() {
                     <Route path="challenges" element={<LearnerChallengesPage />} />
                     <Route path="subscription" element={<LearnerSubscriptionPage />} />
                     <Route path="library" element={<LearnerFilesPage />} />
+                    {/* Own-material study: upload a document and work through it
+                        with the tutor. Sits beside the library because both are the
+                        learner's own material rather than the curriculum. */}
+                    <Route path="workspace" element={<LearnerWorkspacePage />} />
                     <Route path="mistakes" element={<LearnerMistakeBankPage />} />
                     <Route path="community" element={<LearnerCommunityPage />} />
                     <Route path="account" element={<LearnerAccountPage />} />

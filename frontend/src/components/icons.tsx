@@ -94,7 +94,6 @@ import {
   faFlag,
   faFloppyDisk,
   faFolderOpen,
-  faFolderTree,
   faFont,
   faForwardFast,
   faForwardStep,
@@ -126,6 +125,7 @@ import {
   faMagnifyingGlass,
   faMedal,
   faMicrochip,
+  faMinus,
   faMoon,
   faNetworkWired,
   faNoteSticky,
@@ -135,6 +135,7 @@ import {
   faPlay,
   faPlugCircleXmark,
   faPlus,
+  faPrint,
   faReceipt,
   faRepeat,
   faRightFromBracket,
@@ -258,7 +259,6 @@ export const Building2Icon = icon(faCity, "Building2Icon")
 export const CalendarDays = icon(faCalendarDays, "CalendarDays")
 export const Check = icon(faCheck, "Check")
 export const CheckCheck = icon(faCheckDouble, "CheckCheck")
-export const CheckCheckIcon = icon(faCheckDouble, "CheckCheckIcon")
 export const CheckCircle = icon(faCircleCheck, "CheckCircle")
 export const CheckCircle2 = icon(faCircleCheck, "CheckCircle2")
 export const CheckCircle2Icon = icon(faCircleCheck, "CheckCircle2Icon")
@@ -326,7 +326,6 @@ export const Flame = icon(faFire, "Flame")
 export const FlipHorizontal = icon(faArrowRightArrowLeft, "FlipHorizontal")
 export const FolderOpen = icon(faFolderOpen, "FolderOpen")
 export const FolderOpenIcon = icon(faFolderOpen, "FolderOpenIcon")
-export const FolderTree = icon(faFolderTree, "FolderTree")
 export const Gauge = icon(faGauge, "Gauge")
 export const GaugeIcon = icon(faGauge, "GaugeIcon")
 export const Gift = icon(faGift, "Gift")
@@ -384,6 +383,7 @@ export const MegaphoneIcon = icon(faBullhorn, "MegaphoneIcon")
 export const Menu = icon(faBars, "Menu")
 export const MessageCircle = icon(faComment, "MessageCircle")
 export const Minimize2Icon = icon(faCompress, "Minimize2Icon")
+export const Minus = icon(faMinus, "Minus")
 export const MinusCircleIcon = icon(faCircleMinus, "MinusCircleIcon")
 export const MoonIcon = icon(faMoon, "MoonIcon")
 export const MoreHorizontal = icon(faEllipsis, "MoreHorizontal")
@@ -404,6 +404,7 @@ export const PlayIcon = icon(faPlay, "PlayIcon")
 export const Plus = icon(faPlus, "Plus")
 export const PlusCircleIcon = icon(faCirclePlus, "PlusCircleIcon")
 export const PlusIcon = icon(faPlus, "PlusIcon")
+export const Printer = icon(faPrint, "Printer")
 export const Radio = icon(faTowerBroadcast, "Radio")
 export const ReceiptTextIcon = icon(faReceipt, "ReceiptTextIcon")
 export const RefreshCw = icon(faArrowsRotate, "RefreshCw")
