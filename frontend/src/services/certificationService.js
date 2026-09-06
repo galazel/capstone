@@ -5,7 +5,26 @@ import { base } from "./base"
 // Institution-Member-authored content -- the caller must be able to act on
 // that group (its leader, or the institution owner), enforced server-side.
 export async function getAllCertifications(includeGroupId) {
-    const query = includeGroupId != null ? `?includeGroupId=${includeGroupId}` : ""
+    /* Only a real id is forwarded.
+     *
+     * React Query calls `queryFn` with a context object, so `queryFn:
+     * getAllCertifications` -- rather than `queryFn: () =>
+     * getAllCertifications()` -- hands that object in as the group id. It
+     * interpolated as the literal string "[object Object]", which the server
+     * cannot bind to a Long, and the certifications read 500ed. That is what
+     * emptied the learner Library page: the bare form is used at twenty-odd
+     * call sites and is only a bug at the one place this function is passed
+     * by reference, so it went unnoticed until a page that needed both queries
+     * failed on one of them.
+     *
+     * Guarding here rather than only at that call site: the mistake is
+     * invisible at the call site (it looks like every other queryFn) and the
+     * blast radius is a 500 on a page that then shows nothing.
+     */
+    const groupId = Number(includeGroupId)
+    const query = Number.isFinite(groupId) && includeGroupId != null
+        ? `?includeGroupId=${groupId}`
+        : ""
     return await base(`certifications${query}`)
 }
 

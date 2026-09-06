@@ -111,7 +111,9 @@ export default function LearnerFilesPage() {
 
   const certificationsQuery = useQuery({
     queryKey: ["certifications"],
-    queryFn: getAllCertifications,
+    // Wrapped, not passed by reference: React Query would otherwise call this
+    // with its own context object as the group id (see getAllCertifications).
+    queryFn: () => getAllCertifications(),
     staleTime: 5 * 60_000,
     retry: 1,
   })
