@@ -228,8 +228,13 @@ export default function QuizBuilderPage() {
               questions.map((question, index) => (
                 <RebyuCard key={question.id} className="p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="rb-nav-label text-rb-hare">
-                      Question {index + 1}
+                    <span className="flex items-center gap-2">
+                      <span className="grid size-7 place-items-center rounded-rb-control border-2 border-rb-macaw-lip/40 font-rb-display text-xs font-extrabold text-rb-macaw-lip">
+                        {index + 1}
+                      </span>
+                      <span className="font-rb-display text-xs font-extrabold uppercase tracking-[0.2em] text-rb-macaw-lip">
+                        Question
+                      </span>
                     </span>
                     <div className="flex items-center gap-2">
                       {/* Says what is missing, rather than only that something is. */}
@@ -258,33 +263,55 @@ export default function QuizBuilderPage() {
                     </div>
                   </div>
 
+                  {/* The question reads in the display face at the size the
+                      runner asks it, so a prompt too long to sit well on the
+                      attempt screen looks too long here too. */}
                   <textarea
                     rows={2}
                     value={question.prompt}
                     onChange={(event) => update(question.id, { prompt: event.target.value })}
                     placeholder="Which technique surfaces requirements from a group at once?"
-                    className="mt-3 w-full resize-y rounded-rb-control border-2 border-border bg-white p-3 text-sm font-medium leading-6 text-rb-eel outline-none placeholder:text-rb-hare focus-visible:border-rb-macaw"
+                    className="mt-3 w-full resize-y rounded-rb-card border-2 border-border bg-white p-4 font-rb-display text-lg font-extrabold leading-snug text-rb-eel outline-none placeholder:font-medium placeholder:text-rb-hare focus-visible:border-rb-macaw"
                   />
 
                   <fieldset className="mt-3">
-                    <legend className="mb-1.5 text-xs font-bold text-rb-hare">
+                    <legend className="mb-2 font-rb-display text-xs font-extrabold uppercase tracking-[0.2em] text-rb-hare">
                       Options — tick the correct one
                     </legend>
+
+                    {/* The design system's own answer tile -- `rb-answer` and
+                        `rb-answer-key`, the same 64px surface, keycap and solid
+                        lip the practice runner draws, and its `correct` state
+                        for the marked answer. So the editor shows an option
+                        exactly as the learner will meet it, rather than a
+                        lookalike that drifts the next time the runner changes.
+
+                        Written as a div rather than the `AnswerOption`
+                        component: that renders a <button>, and this tile has to
+                        hold a text field. Interactive content inside a button
+                        is invalid HTML and the field would not reliably take
+                        focus. The CSS keys off the classes, not the element, so
+                        a div gets the identical treatment -- only the pointer
+                        cursor, which belongs to a whole-tile button, is
+                        dropped. */}
                     <div className="space-y-2">
                       {question.options.map((option, optionIndex) => {
                         const correct = question.answer === optionIndex
                         return (
-                          <div key={optionIndex} className="flex items-center gap-2">
+                          <div
+                            key={optionIndex}
+                            data-state={correct ? "correct" : "idle"}
+                            className="rb-answer !cursor-default"
+                          >
+                            {/* The keycap is the control: pressing A marks A
+                                correct. One target, in the place the learner
+                                already reads the letter from. */}
                             <button
                               type="button"
                               onClick={() => update(question.id, { answer: optionIndex })}
                               aria-label={`Mark option ${OPTION_LABELS[optionIndex]} correct`}
                               aria-pressed={correct}
-                              className={`grid size-9 shrink-0 place-items-center rounded-rb-control border-2 text-xs font-extrabold transition-colors ${
-                                correct
-                                  ? "border-rb-feather bg-rb-feather text-white"
-                                  : "border-border bg-white text-rb-wolf hover:border-rb-feather"
-                              }`}
+                              className="rb-answer-key cursor-pointer transition-transform hover:scale-105 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-rb-macaw"
                             >
                               {correct ? (
                                 <Check className="size-4" aria-hidden="true" />
@@ -292,13 +319,15 @@ export default function QuizBuilderPage() {
                                 OPTION_LABELS[optionIndex]
                               )}
                             </button>
+
                             <input
                               value={option}
                               onChange={(event) =>
                                 updateOption(question.id, optionIndex, event.target.value)
                               }
                               placeholder={`Option ${OPTION_LABELS[optionIndex]}`}
-                              className="h-10 min-w-0 flex-1 rounded-rb-control border-2 border-border bg-white px-3 text-sm font-medium text-rb-eel outline-none placeholder:text-rb-hare focus-visible:border-rb-macaw"
+                              aria-label={`Option ${OPTION_LABELS[optionIndex]} text`}
+                              className="min-w-0 flex-1 border-0 bg-transparent p-0 text-base font-medium text-current outline-none placeholder:text-rb-hare"
                             />
                           </div>
                         )

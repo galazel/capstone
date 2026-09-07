@@ -193,9 +193,18 @@ export default function FlashcardBuilderPage() {
               </RebyuCard>
             ) : (
               cards.map((card, index) => (
-                <RebyuCard key={card.id} className="p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="rb-nav-label text-rb-hare">Card {index + 1}</span>
+                <RebyuCard key={card.id} className="overflow-hidden p-0">
+                  {/* Head in the deck's own colour, so a row in the editor
+                      reads as the same object the learner will study. */}
+                  <div className="flex items-center justify-between gap-3 border-b-2 border-border bg-rb-beetle-wash px-4 py-2.5">
+                    <span className="flex items-center gap-2">
+                      <span className="grid size-7 place-items-center rounded-rb-control border-2 border-rb-beetle-lip/40 font-rb-display text-xs font-extrabold text-rb-beetle-lip">
+                        {index + 1}
+                      </span>
+                      <span className="font-rb-display text-xs font-extrabold uppercase tracking-[0.2em] text-rb-beetle-lip">
+                        Card
+                      </span>
+                    </span>
                     <TactileButton
                       variant="ghost"
                       size="sm"
@@ -207,29 +216,34 @@ export default function FlashcardBuilderPage() {
                     </TactileButton>
                   </div>
 
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <label className="block">
-                      <span className="mb-1.5 block text-xs font-bold text-rb-hare">
-                        Front — the prompt
+                  {/* The two faces, side by side and labelled the way the study
+                      screen labels them: Question in feather on white, Answer
+                      white-on-feather. Editing a card should look like the card. */}
+                  <div className="grid gap-px bg-border sm:grid-cols-2">
+                    <label className="block bg-white p-4">
+                      <span className="mb-2 flex items-center gap-1.5 font-rb-display text-xs font-extrabold uppercase tracking-[0.2em] text-rb-feather-lip">
+                        <Layers className="size-3.5" aria-hidden="true" />
+                        Question
                       </span>
                       <textarea
                         rows={3}
                         value={card.front}
                         onChange={(event) => updateCard(card.id, "front", event.target.value)}
                         placeholder="What is coupling?"
-                        className="w-full resize-y rounded-rb-control border-2 border-border bg-white p-3 text-sm font-medium leading-6 text-rb-eel outline-none placeholder:text-rb-hare focus-visible:border-rb-macaw"
+                        className="w-full resize-y border-0 bg-transparent p-0 font-rb-display text-base font-extrabold leading-7 text-rb-eel outline-none placeholder:font-medium placeholder:text-rb-hare"
                       />
                     </label>
-                    <label className="block">
-                      <span className="mb-1.5 block text-xs font-bold text-rb-hare">
-                        Back — the answer
+
+                    <label className="block bg-rb-feather p-4">
+                      <span className="mb-2 block font-rb-display text-xs font-extrabold uppercase tracking-[0.2em] text-white/75">
+                        Answer
                       </span>
                       <textarea
                         rows={3}
                         value={card.back}
                         onChange={(event) => updateCard(card.id, "back", event.target.value)}
                         placeholder="How dependent one module is on another."
-                        className="w-full resize-y rounded-rb-control border-2 border-border bg-white p-3 text-sm font-medium leading-6 text-rb-eel outline-none placeholder:text-rb-hare focus-visible:border-rb-macaw"
+                        className="w-full resize-y border-0 bg-transparent p-0 font-rb-display text-base font-extrabold leading-7 text-white outline-none placeholder:font-medium placeholder:text-white/60"
                       />
                     </label>
                   </div>
@@ -246,22 +260,42 @@ export default function FlashcardBuilderPage() {
             <p className="rb-nav-label mb-2 text-rb-hare">Preview</p>
             {previewCard ? (
               <>
+                {/* The card the study screen actually shows: 2rem radius,
+                    white front, feather back, flipped in 3D. A preview that did
+                    not look like the real thing would not be a preview. */}
                 <button
                   type="button"
                   onClick={() => setFlipped((value) => !value)}
-                  className="grid min-h-[13rem] w-full place-items-center rounded-rb-card border-2 border-border bg-white p-6 text-center transition-colors hover:border-rb-beetle"
+                  className="block w-full [perspective:1400px]"
+                  aria-label={flipped ? "Show the question" : "Reveal the answer"}
                 >
-                  <span>
-                    <span className="rb-nav-label block text-rb-hare">
-                      {flipped ? "Back" : "Front"}
-                    </span>
-                    <span className="mt-3 block text-base font-bold leading-7 text-rb-eel">
-                      {flipped ? previewCard.back : previewCard.front}
-                    </span>
-                    <span className="mt-4 block text-xs font-bold text-rb-hare">
-                      Tap to flip
-                    </span>
-                  </span>
+                  <div
+                    className={`relative min-h-[15rem] w-full transition-transform duration-500 [transform-style:preserve-3d] ${
+                      flipped ? "[transform:rotateY(180deg)]" : ""
+                    }`}
+                  >
+                    <div className="absolute inset-0 flex flex-col items-center justify-center overflow-y-auto rounded-[2rem] border-2 border-border bg-white p-6 text-center shadow-lg [backface-visibility:hidden]">
+                      <Layers className="size-7 text-rb-feather" aria-hidden="true" />
+                      <p className="mt-4 font-rb-display text-xs font-extrabold uppercase tracking-[0.2em] text-rb-feather-lip">
+                        Question
+                      </p>
+                      <p className="mt-3 font-rb-display text-lg font-extrabold leading-snug text-rb-eel">
+                        {previewCard.front}
+                      </p>
+                      <p className="mt-5 text-xs font-medium text-rb-hare">
+                        Tap the card to reveal the answer
+                      </p>
+                    </div>
+
+                    <div className="absolute inset-0 flex flex-col items-center justify-center overflow-y-auto rounded-[2rem] bg-rb-feather p-6 text-center text-white shadow-lg [backface-visibility:hidden] [transform:rotateY(180deg)]">
+                      <p className="font-rb-display text-xs font-extrabold uppercase tracking-[0.2em] text-white/75">
+                        Answer
+                      </p>
+                      <p className="mt-3 font-rb-display text-lg font-extrabold leading-snug">
+                        {previewCard.back}
+                      </p>
+                    </div>
+                  </div>
                 </button>
 
                 <div className="mt-3 flex items-center justify-between">
