@@ -6,7 +6,6 @@ import {
   LogOutIcon,
   FilesIcon,
   SettingsIcon,
-  Sparkles,
   Target,
   UserIcon,
 } from "@/components/icons"
@@ -321,13 +320,6 @@ export default function LearnerLayout() {
                 <DropdownMenuItem onClick={() => navigate("/learner/library")}>
                   <FilesIcon />
                   Library
-                </DropdownMenuItem>
-                {/* Directly under the library: both hold the learner's own
-                    material rather than the curriculum, and the workspace is
-                    where that material gets turned into something to study. */}
-                <DropdownMenuItem onClick={() => navigate("/learner/workspace")}>
-                  <Sparkles />
-                  Study workspace
                 </DropdownMenuItem>
                 {/* Next to the library because it is the other thing the
                     learner accumulates rather than a setting: everything they

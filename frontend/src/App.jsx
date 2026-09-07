@@ -37,6 +37,9 @@ const LearnerCertificationsPage = lazyRoute(() => import("./pages/learner/learni
 const LearnerChallengesPage = lazyRoute(() => import("./pages/learner/learning/learner-challenges-page.jsx"))
 const LearnerFilesPage = lazyRoute(() => import("./pages/learner/files/learner-files-page.jsx"))
 const LearnerWorkspacePage = lazyRoute(() => import("./pages/learner/workspace/learner-workspace-page.jsx"))
+const FlashcardBuilderPage = lazyRoute(() => import("./pages/learner/workspace/flashcard-builder-page.jsx"))
+const QuizBuilderPage = lazyRoute(() => import("./pages/learner/workspace/quiz-builder-page.jsx"))
+const UploadAndLearnPage = lazyRoute(() => import("./pages/learner/workspace/upload-and-learn-page.jsx"))
 const LearnerMistakeBankPage = lazyRoute(() => import("./pages/learner/mistakes/learner-mistake-bank-page.jsx"))
 const LearnerCommunityPage = lazyRoute(() => import("./pages/learner/community/learner-community-qa.jsx"))
 const LearnerAccountPage = lazyRoute(() => import("./pages/learner/dashboard/learner-account-page.jsx"))
@@ -211,14 +214,40 @@ export function App() {
                 design-system tokens do not resolve and the page reviews in the
                 wrong colours. Stripped from production builds. */}
             {import.meta.env.DEV ? (
-                <Route
-                    path="/__preview/workspace"
-                    element={
-                        <div className="netacad-portal rebyu-ds min-h-dvh bg-rb-snow">
-                            <LearnerWorkspacePage />
-                        </div>
-                    }
-                />
+                <>
+                    <Route
+                        path="/__preview/workspace"
+                        element={
+                            <div className="netacad-portal rebyu-ds min-h-dvh bg-rb-snow">
+                                <LearnerWorkspacePage />
+                            </div>
+                        }
+                    />
+                    <Route
+                        path="/__preview/workspace/flashcards"
+                        element={
+                            <div className="netacad-portal rebyu-ds min-h-dvh bg-rb-snow">
+                                <FlashcardBuilderPage />
+                            </div>
+                        }
+                    />
+                    <Route
+                        path="/__preview/workspace/quiz"
+                        element={
+                            <div className="netacad-portal rebyu-ds min-h-dvh bg-rb-snow">
+                                <QuizBuilderPage />
+                            </div>
+                        }
+                    />
+                    <Route
+                        path="/__preview/workspace/learn"
+                        element={
+                            <div className="netacad-portal rebyu-ds min-h-dvh bg-rb-snow">
+                                <UploadAndLearnPage />
+                            </div>
+                        }
+                    />
+                </>
             ) : null}
 
             {/* Dev-only: the boot screen, held on screen. It normally shows for
@@ -339,7 +368,23 @@ export function App() {
                     {/* Own-material study: upload a document and work through it
                         with the tutor. Sits beside the library because both are the
                         learner's own material rather than the curriculum. */}
-                    <Route path="workspace" element={<LearnerWorkspacePage />} />
+                    {/* The study workspace (Flashcard Builder, Quiz Builder,
+                        Upload & Learn) is BUILT BUT NOT RELEASED. Its learner
+                        routes are withheld deliberately -- the three screens are
+                        the interface only, with no extraction or tutor behind
+                        them, so shipping them would put a feature in front of
+                        learners that cannot do what it says.
+
+                        The pages stay in the tree and stay reviewable at
+                        /__preview/workspace* in development. To release: restore
+                        the four <Route> lines below and the "Study workspace"
+                        item in learner-layout.jsx's account menu.
+
+                        <Route path="workspace" element={<LearnerWorkspacePage />} />
+                        <Route path="workspace/flashcards" element={<FlashcardBuilderPage />} />
+                        <Route path="workspace/quiz" element={<QuizBuilderPage />} />
+                        <Route path="workspace/learn" element={<UploadAndLearnPage />} />
+                    */}
                     <Route path="mistakes" element={<LearnerMistakeBankPage />} />
                     <Route path="community" element={<LearnerCommunityPage />} />
                     <Route path="account" element={<LearnerAccountPage />} />
